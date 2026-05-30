@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Injeção — Lightwall SC</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <div class="topbar-logo">⬡ Lightwall</div>
+    <div class="topbar-sub">Sistema de Injeção V1.0</div>
+    <div class="topbar-right">
+      <span id="topbar-date"></span>
+      <span class="topbar-clock" id="topbar-clock">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- ============ SIDEBAR ============ -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Principal</div>
+    <button class="nav-item active" data-page="menu" onclick="showPage('menu',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Menu Principal
+    </button>
+
+    <div class="sidebar-label" style="margin-top:8px">Operação</div>
+    <button class="nav-item" data-page="operacao" onclick="showPage('operacao',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Registrar Injeção
+    </button>
+
+    <div class="sidebar-label" style="margin-top:8px">Análise</div>
+    <button class="nav-item" data-page="dashboard" onclick="showPage('dashboard',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Dashboard Geral
+    </button>
+    <button class="nav-item" data-page="turnos" onclick="showPage('turnos',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Desempenho Turnos
+    </button>
+    <button class="nav-item" data-page="registro" onclick="showPage('registro',this)">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Registro de Baterias
+    </button>
+  </nav>
+
+  <!-- ============ PAGE: MENU ============ -->
+  <main class="main active" id="page-menu">
+    <div style="padding:40px 32px">
+      <div style="margin-bottom:40px">
+        <h1 style="font-size:2.6rem;margin-bottom:6px">Sistema de <span style="color:var(--accent)">Injeção</span></h1>
+        <p style="color:var(--text-3);font-size:.9rem;text-transform:uppercase;letter-spacing:.08em">Lightwall SC — Controle de produção industrial</p>
+      </div>
+      <div class="menu-grid">
+        <div class="menu-card" onclick="showPage('operacao')">
+          <div class="menu-card-icon">⏱</div>
+          <div class="menu-card-title">Registrar Injeção</div>
+          <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e controle de tempo.</div>
+        </div>
+        <div class="menu-card" onclick="showPage('dashboard')">
+          <div class="menu-card-icon">📊</div>
+          <div class="menu-card-title">Dashboard Geral</div>
+          <div class="menu-card-desc">Visão consolidada com KPIs de produção, gráficos de baterias por dia e insights do período.</div>
+        </div>
+        <div class="menu-card" onclick="showPage('turnos')">
+          <div class="menu-card-icon">🏭</div>
+          <div class="menu-card-title">Desempenho Turnos</div>
+          <div class="menu-card-desc">Comparativo de produtividade, atrasos e eficiência operacional por turno de trabalho.</div>
+        </div>
+        <div class="menu-card" onclick="showPage('registro')">
+          <div class="menu-card-icon">📋</div>
+          <div class="menu-card-title">Registro de Baterias</div>
+          <div class="menu-card-desc">Histórico completo de todas as injeções registradas com filtros e exportação em CSV.</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ PAGE: OPERAÇÃO ============ -->
+  <main class="main" id="page-operacao">
+    <div class="page-header">
+      <h1 class="page-title">Registro de <span>Injeção</span></h1>
+      <p class="page-desc" id="op-data">Carregando...</p>
+    </div>
+
+    <div class="page-body">
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start">
+
+        <!-- Left: Main form -->
+        <div style="display:flex;flex-direction:column;gap:20px">
+
+          <!-- Status bar -->
+          <div class="card" style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <div id="status-banner"><span class="badge badge-gray">⬤ Aguardando início</span></div>
+            <div style="display:flex;align-items:center;gap:24px">
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">Tempo decorrido</div>
+                <div class="timer-display" id="timer-display">00:00</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">Limite</div>
+                <div style="font-family:var(--font-mono);font-size:1.4rem;color:var(--text-3)">59:00</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Identificação -->
+          <div class="card">
+            <div class="card-title">Identificação da Bateria</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+              <div class="form-group">
+                <label class="form-label">Data <span class="required">*</span></label>
+                <input class="form-input auto-filled" id="op-data-val" readonly
+                  value="" style="color:var(--accent)">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Turno <span class="required">*</span></label>
+                <select class="form-select" id="op-turno">
+                  <option>1º TURNO</option>
+                  <option>2º TURNO</option>
+                  <option>3º TURNO</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">ID da Bateria <span class="required">*</span></label>
+                <select class="form-select" id="op-id-bateria">
+                  <option value="">— Selecione —</option>
+                  <option>B1</option><option>B2</option><option>B3</option><option>B4</option>
+                  <option>B5-7,5cm</option><option>B6-12cm</option><option>B7</option>
+                  <option>B8</option><option>B9</option><option>B10</option>
+                  <option>B11</option><option>B12</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dimensão (Tipo) <span class="required">*</span></label>
+                <select class="form-select" id="op-dimensao">
+                  <option value="">— Selecione —</option>
+                  <option>7,5 cm</option>
+                  <option>9 cm</option>
+                  <option>12 cm</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Capacidade (Berços)</label>
+                <input class="form-input auto-filled" id="op-capacidade" readonly>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tipo de Montagem <span class="required">*</span></label>
+                <select class="form-select" id="op-montagem">
+                  <option value="">— Selecione —</option>
+                  <option>2/P</option>
+                  <option>S/P</option>
+                  <option>HÍBRIDA</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Berços Injetados (Real)</label>
+                <input class="form-input" type="number" id="op-bercos-reais"
+                  placeholder="Deixe vazio para usar capacidade total" min="1" max="22">
+              </div>
+            </div>
+          </div>
+
+          <!-- Cronômetro de injeção -->
+          <div class="card">
+            <div class="card-title">Controle de Injeção</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+              <div class="form-group">
+                <label class="form-label">Início da Injeção</label>
+                <div style="display:flex;gap:8px">
+                  <input class="form-input auto-filled" id="op-inicio" readonly placeholder="—">
+                  <button class="btn btn-success btn-sm" id="btn-iniciar" title="Iniciar injeção">▶</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fim da Injeção</label>
+                <div style="display:flex;gap:8px">
+                  <input class="form-input auto-filled" id="op-fim" readonly placeholder="—">
+                  <button class="btn btn-danger btn-sm" id="btn-finalizar" disabled title="Finalizar injeção">■</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tempo Total</label>
+                <div class="form-input auto-filled" id="op-tempo-total" style="display:flex;align-items:center">—</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Atraso</label>
+                <div id="op-atraso" style="display:flex;align-items:center;height:38px">—</div>
+              </div>
+            </div>
+            <div id="op-motivo-row" style="display:none;margin-top:14px">
+              <div class="form-group" style="flex-direction:row;align-items:center;gap:16px">
+                <div style="flex:1">
+                  <label class="form-label">Motivo do Atraso <span class="required">*</span></label>
+                  <input class="form-input" id="op-motivo"
+                    placeholder="Descreva o motivo do atraso (>59min)">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Produção calculada -->
+          <div class="card">
+            <div class="card-title">Produção Calculada</div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;text-align:center">
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Painéis</div>
+                <div style="font-family:var(--font-display);font-size:1.8rem;font-weight:800;color:var(--accent)" id="op-paineis-total">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Painéis 2/P</div>
+                <div style="font-family:var(--font-display);font-size:1.8rem;font-weight:800;color:var(--blue)" id="op-paineis-2p">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Painéis S/P</div>
+                <div style="font-family:var(--font-display);font-size:1.8rem;font-weight:800;color:var(--green)" id="op-paineis-sp">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">m² Total</div>
+                <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--text)" id="op-m2-total">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">m² 2/P</div>
+                <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--blue)" id="op-m2-2p">—</div>
+              </div>
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">m² S/P</div>
+                <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--green)" id="op-m2-sp">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Traços -->
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between">
+              <span>Traços de Injeção</span>
+            </div>
+            <div class="traco-section" id="tracos-container"></div>
+            <button class="traco-add-btn mt-4" id="btn-add-traco">
+              + Adicionar Traço
+            </button>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-lg" id="btn-registrar" disabled>
+              ✓ Registrar Operação
+            </button>
+            <button class="btn btn-ghost" id="btn-resetar">
+              ↺ Resetar
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Right: Pendências -->
+        <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:16px">
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between">
+              Pendência de Dados
+              <span id="pendencia-badge"></span>
+            </div>
+            <div class="pendency-list" id="pendencia-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Referência Rápida</div>
+            <div style="font-size:.8rem;color:var(--text-2);display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between">
+                <span>7,5 cm</span><span style="color:var(--text-3)">22 berços → 44 painéis</span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span>9 cm</span><span style="color:var(--text-3)">20 berços → 40 painéis</span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span>12 cm</span><span style="color:var(--text-3)">16 berços → 32 painéis</span>
+              </div>
+              <hr class="divider" style="margin:6px 0">
+              <div style="color:var(--text-3);font-size:.75rem">
+                Limite de injeção: <span style="color:var(--accent)">59 minutos</span><br>
+                m² por painel: <span style="color:var(--accent)">1,83 m²</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ PAGE: DASHBOARD ============ -->
+  <main class="main" id="page-dashboard">
+    <div class="page-header">
+      <h1 class="page-title">Dashboard <span>Geral</span></h1>
+      <p class="page-desc">Visão consolidada da produção e injeção</p>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Filtros -->
+      <div class="card mb-4" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+            <label class="form-label" style="white-space:nowrap">De</label>
+            <input class="form-input" type="date" id="dash-data-inicio" style="width:150px">
+          </div>
+          <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+            <label class="form-label" style="white-space:nowrap">Até</label>
+            <input class="form-input" type="date" id="dash-data-fim" style="width:150px">
+          </div>
+          <button class="btn btn-outline-accent" id="btn-dash-filtrar">Filtrar</button>
+        </div>
+      </div>
+
+      <!-- KPIs Row 1 -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Baterias</div>
+          <div class="kpi-value accent" id="kpi-total-baterias">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Painéis</div>
+          <div class="kpi-value" id="kpi-total-paineis">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">m² Produzido</div>
+          <div class="kpi-value" id="kpi-total-m2">—</div>
+        </div>
+        <div class="kpi-card red">
+          <div class="kpi-label">% Atraso</div>
+          <div class="kpi-value red" id="kpi-pct-atraso">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Tempo Médio</div>
+          <div class="kpi-value" style="font-size:1.6rem" id="kpi-tempo-medio">—</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-label">Dias de Produção</div>
+          <div class="kpi-value green" id="kpi-dias-prod">—</div>
+        </div>
+        <div class="kpi-card blue">
+          <div class="kpi-label">Média Traços</div>
+          <div class="kpi-value blue" id="kpi-media-tracos">—</div>
+        </div>
+      </div>
+
+      <!-- KPIs Row 2 -->
+      <div class="kpi-grid" style="grid-template-columns:1fr 1fr;margin-bottom:24px">
+        <div class="kpi-card blue">
+          <div class="kpi-label">Painéis 2/P</div>
+          <div class="kpi-value blue" id="kpi-paineis-2p">—</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-label">Painéis S/P</div>
+          <div class="kpi-value green" id="kpi-paineis-sp">—</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap:20px;margin-bottom:20px">
+        <!-- Chart baterias/dia -->
+        <div class="card">
+          <div class="card-title">Baterias por Dia</div>
+          <canvas id="chart-baterias" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+        <!-- Chart atrasos/dia -->
+        <div class="card">
+          <div class="card-title">Atrasos por Dia</div>
+          <canvas id="chart-atrasos" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap:20px;margin-bottom:20px">
+        <!-- Donut tipos montagem -->
+        <div class="card">
+          <div class="card-title">Distribuição por Montagem</div>
+          <div style="display:flex;align-items:center;gap:24px">
+            <canvas id="chart-tipos"></canvas>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px;font-size:.85rem">
+                <div style="width:12px;height:12px;border-radius:3px;background:var(--accent)"></div>
+                <span>Híbrida</span>
+                <strong style="margin-left:auto" id="donut-hibrida">—</strong>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:.85rem">
+                <div style="width:12px;height:12px;border-radius:3px;background:var(--blue)"></div>
+                <span>2/P</span>
+                <strong style="margin-left:auto" id="donut-2p">—</strong>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:.85rem">
+                <div style="width:12px;height:12px;border-radius:3px;background:var(--green)"></div>
+                <span>S/P</span>
+                <strong style="margin-left:auto" id="donut-sp">—</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Insights -->
+        <div class="card">
+          <div class="card-title">Insights do Período</div>
+          <div class="insight-box" id="dash-insights"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ============ PAGE: TURNOS ============ -->
+  <main class="main" id="page-turnos">
+    <div class="page-header">
+      <h1 class="page-title">Desempenho por <span>Turnos</span></h1>
+      <p class="page-desc">Comparativo de produtividade, atrasos e eficiência operacional</p>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Filtros + melhor/pior turno -->
+      <div class="card mb-4" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">De</label>
+              <input class="form-input" type="date" id="turnos-data-inicio" style="width:150px">
+            </div>
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">Até</label>
+              <input class="form-input" type="date" id="turnos-data-fim" style="width:150px">
+            </div>
+            <button class="btn btn-outline-accent" id="btn-turnos-filtrar">Filtrar</button>
+          </div>
+          <div style="display:flex;gap:20px;font-size:.85rem">
+            <div>🏆 Mais eficiente: <strong style="color:var(--accent)" id="melhor-turno">—</strong></div>
+            <div>🐢 Menos eficiente: <strong style="color:var(--text-2)" id="pior-turno">—</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Turno cards -->
+      <div class="grid-3" style="gap:20px;margin-bottom:20px">
+        <!-- T1 -->
+        <div class="card" style="border-top:3px solid var(--accent)">
+          <div class="card-title">1º Turno</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div class="kpi-label">Baterias</div><div class="kpi-value accent" id="t1-baterias">—</div></div>
+            <div><div class="kpi-label">m² Prod.</div><div class="kpi-value" style="font-size:1.6rem" id="t1-m2">—</div></div>
+            <div><div class="kpi-label">Painéis</div><div class="kpi-value" style="font-size:1.6rem" id="t1-paineis">—</div></div>
+            <div><div class="kpi-label">% Atraso</div><div class="kpi-value red" style="font-size:1.6rem" id="t1-atraso">—</div></div>
+            <div><div class="kpi-label">Tempo Médio</div><div style="font-family:var(--font-mono);font-size:.9rem;color:var(--text-2);margin-top:4px" id="t1-tempo">—</div></div>
+            <div><div class="kpi-label">2/P / S/P</div><div style="font-size:.8rem;color:var(--text-2);margin-top:4px"><span id="t1-2p">—</span> / <span id="t1-sp">—</span></div></div>
+          </div>
+        </div>
+        <!-- T2 -->
+        <div class="card" style="border-top:3px solid var(--blue)">
+          <div class="card-title">2º Turno</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div class="kpi-label">Baterias</div><div class="kpi-value blue" id="t2-baterias">—</div></div>
+            <div><div class="kpi-label">m² Prod.</div><div class="kpi-value" style="font-size:1.6rem" id="t2-m2">—</div></div>
+            <div><div class="kpi-label">Painéis</div><div class="kpi-value" style="font-size:1.6rem" id="t2-paineis">—</div></div>
+            <div><div class="kpi-label">% Atraso</div><div class="kpi-value red" style="font-size:1.6rem" id="t2-atraso">—</div></div>
+            <div><div class="kpi-label">Tempo Médio</div><div style="font-family:var(--font-mono);font-size:.9rem;color:var(--text-2);margin-top:4px" id="t2-tempo">—</div></div>
+            <div><div class="kpi-label">2/P / S/P</div><div style="font-size:.8rem;color:var(--text-2);margin-top:4px"><span id="t2-2p">—</span> / <span id="t2-sp">—</span></div></div>
+          </div>
+        </div>
+        <!-- T3 -->
+        <div class="card" style="border-top:3px solid var(--green)">
+          <div class="card-title">3º Turno</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div class="kpi-label">Baterias</div><div class="kpi-value green" id="t3-baterias">—</div></div>
+            <div><div class="kpi-label">m² Prod.</div><div class="kpi-value" style="font-size:1.6rem" id="t3-m2">—</div></div>
+            <div><div class="kpi-label">Painéis</div><div class="kpi-value" style="font-size:1.6rem" id="t3-paineis">—</div></div>
+            <div><div class="kpi-label">% Atraso</div><div class="kpi-value red" style="font-size:1.6rem" id="t3-atraso">—</div></div>
+            <div><div class="kpi-label">Tempo Médio</div><div style="font-family:var(--font-mono);font-size:.9rem;color:var(--text-2);margin-top:4px" id="t3-tempo">—</div></div>
+            <div><div class="kpi-label">2/P / S/P</div><div style="font-size:.8rem;color:var(--text-2);margin-top:4px"><span id="t3-2p">—</span> / <span id="t3-sp">—</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts turnos -->
+      <div class="grid-2" style="gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-title">m² por Turno</div>
+          <canvas id="chart-turnos-m2" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Atrasos por Turno</div>
+          <canvas id="chart-turnos-atraso" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Insights — Desempenho de Turno</div>
+        <div class="insight-box" id="turnos-insights"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ============ PAGE: REGISTRO DE BATERIAS ============ -->
+  <main class="main" id="page-registro">
+    <div class="page-header">
+      <h1 class="page-title">Registro de <span>Baterias</span></h1>
+      <p class="page-desc">Histórico completo de injeções</p>
+    </div>
+
+    <div class="page-body">
+
+      <div class="card mb-4" style="padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between">
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <input class="form-input" type="text" id="reg-busca"
+              placeholder="Buscar por ID, data, motivo..." style="width:260px">
+            <select class="form-select" id="reg-turno" style="width:160px">
+              <option value="">Todos os turnos</option>
+              <option>1º TURNO</option>
+              <option>2º TURNO</option>
+              <option>3º TURNO</option>
+            </select>
+            <button class="btn btn-outline-accent" id="btn-registro-filtrar">Filtrar</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
+            <button class="btn btn-ghost btn-sm" onclick="LWDash.exportCSV()">⬇ Exportar CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Turno</th>
+              <th>ID Bateria</th>
+              <th>Dimensão</th>
+              <th>Montagem</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Duração</th>
+              <th>Painéis</th>
+              <th>m²</th>
+              <th>Traços</th>
+              <th>Atraso</th>
+            </tr>
+          </thead>
+          <tbody id="registro-tbody">
+            <tr><td colspan="12" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+
+</div><!-- .app-shell -->
+
+<!-- ============ SUCCESS MODAL ============ -->
+<div id="success-modal" style="
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:999;align-items:center;justify-content:center
+">
+  <div style="
+    background:var(--bg-card);border:1px solid var(--border);
+    border-radius:var(--radius-lg);padding:36px;width:420px;max-width:90vw;
+    box-shadow:0 24px 80px rgba(0,0,0,.6)
+  ">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:3rem;margin-bottom:12px">✅</div>
+      <h2 style="font-family:var(--font-display);font-size:1.6rem;color:var(--green)">Operação Registrada!</h2>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-label">Bateria</div>
+        <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--accent)" id="modal-bateria">—</div>
+      </div>
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-label">Duração</div>
+        <div style="font-family:var(--font-mono);font-size:1rem;color:var(--text);margin-top:4px" id="modal-tempo">—</div>
+      </div>
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-label">Painéis</div>
+        <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--text)" id="modal-paineis">—</div>
+      </div>
+      <div class="kpi-card" style="padding:14px">
+        <div class="kpi-label">m² Produzido</div>
+        <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:var(--text)" id="modal-m2">—</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <span style="color:var(--text-2);font-size:.85rem">Atraso:</span>
+      <span id="modal-atraso"></span>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-success" style="flex:1" onclick="LWOp.closeModal()">Nova Operação</button>
+      <button class="btn btn-ghost" onclick="LWOp.closeModal();showPage('registro')">Ver Registro</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCRIPTS ============ -->
+<script src="data.js"></script>
+<script src="operacao.js"></script>
+<script src="dashboard.js"></script>
+<script>
+
+  // ---- Navigation ----
+  function showPage(pageId, navEl) {
+    document.querySelectorAll('.main').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+    document.getElementById('page-' + pageId).classList.add('active');
+
+    if (navEl) {
+      navEl.classList.add('active');
+    } else {
+      const btn = document.querySelector(`[data-page="${pageId}"]`);
+      if (btn) btn.classList.add('active');
+    }
+
+    // Init page if needed
+    if (pageId === 'dashboard' && !window._dashInit) {
+      window._dashInit = true;
+      LWDash.initDashboard();
+    }
+    if (pageId === 'turnos' && !window._turnosInit) {
+      window._turnosInit = true;
+      LWDash.initTurnos();
+    }
+    if (pageId === 'registro') {
+      LWDash.initRegistro();
+    }
+    if (pageId === 'dashboard') {
+      // redraw charts on tab switch (canvas needs layout)
+      setTimeout(() => LWDash.initDashboard(), 50);
+    }
+  }
+
+  // ---- Boot ----
+  document.addEventListener('DOMContentLoaded', () => {
+    // Set date in topbar and op form
+    const now = new Date();
+    document.getElementById('topbar-date').textContent = now.toLocaleDateString('pt-BR', {
+      weekday: 'short', day: '2-digit', month: 'short'
+    });
+    const opDataVal = document.getElementById('op-data-val');
+    if (opDataVal) opDataVal.value = now.toLocaleDateString('pt-BR');
+
+    // Seed historical data from original spreadsheet
+    LW.seedHistoricalData();
+
+    // Init operation page
+    LWOp.init();
+  });
+
+</script>
+</body>
+</html>
