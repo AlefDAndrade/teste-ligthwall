@@ -306,20 +306,27 @@
       <tr>
         <td class="mono">${b.data ? b.data.split('-').reverse().join('/') : '—'}</td>
         <td><span class="badge badge-gray">${b.turno||'—'}</span></td>
-        <td>${b.id_bateria||'—'}</td>
         <td>${b.dimensao||'—'}</td>
-        <td><span class="badge ${b.tipo_montagem==='2/P'?'badge-blue':b.tipo_montagem==='S/P'?'badge-green':'badge-amber'}">${b.tipo_montagem||'—'}</span></td>
+        <td>${b.capacidade || '—'}</td>
+        <td>${b.id_bateria||'—'}</td>
         <td class="mono">${b.inicio ? LW.formatTime(b.inicio) : '—'}</td>
         <td class="mono">${b.fim    ? LW.formatTime(b.fim)    : '—'}</td>
         <td class="mono">${LW.formatDuration(b.tempo_min)}</td>
-        <td>${b.total_paineis||0}</td>
-        <td>${(b.m2_total||0).toFixed(2)}</td>
         <td>${b.qtd_tracos||0}</td>
         <td>
           ${b.houve_atraso === 'SIM'
             ? `<span class="badge badge-red" title="${b.motivo_atraso||''}">⚠ SIM</span>`
             : '<span class="badge badge-green">✓ NÃO</span>'}
         </td>
+        <td>${b.motivo_atraso || '—'}</td>
+        <td><span class="badge ${b.tipo_montagem==='2/P'?'badge-blue':b.tipo_montagem==='S/P'?'badge-green':'badge-amber'}">${b.tipo_montagem||'—'}</span></td>
+        <td>${b.total_paineis||0}</td>
+        <td>${b.paineis_2p ? b.paineis_2p : 0}</td>
+        <td>${b.paineis_sp ? b.paineis_sp : 0}</td>
+        <td>${(b.m2_total||0).toFixed(2)}</td>
+        <td>${(b.m2_2p||0).toFixed(2)}</td>
+        <td>${(b.m2_sp||0).toFixed(2)}</td>
+        <td>${b.bercos_reais || '—'}</td>
       </tr>
     `).join('');
 
