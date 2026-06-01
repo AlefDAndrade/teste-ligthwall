@@ -1,0 +1,54 @@
+{
+  "baterias": {
+    "ids": [
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5-7,5cm",
+      "B6-12cm",
+      "B7",
+      "B8",
+      "B9",
+      "B10",
+      "B11",
+      "B12",
+      "B13"
+    ]
+  },
+  "dimensoes": {
+    "opcoes": [
+      {
+        "label": "7,5 cm",
+        "bercos": 22
+      },
+      {
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "label": "12 cm",
+        "bercos": 18
+      }
+    ]
+  },
+  "tipos_montagem": {
+    "opcoes": [
+      {
+        "label": "2/P",
+        "paineis_2p_por_berco": 2,
+        "paineis_sp_por_berco": 0
+      },
+      {
+        "label": "S/P",
+        "paineis_2p_por_berco": 0,
+        "paineis_sp_por_berco": 2
+      },
+      {
+        "label": "HÍBRIDA",
+        "paineis_2p_por_berco": 1,
+        "paineis_sp_por_berco": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "lightwall-sc",
+  "version": "1.0.0",
+  "description": "Lightwall SC — Sistema de Injeção",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
