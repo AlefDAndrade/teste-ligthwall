@@ -113,10 +113,10 @@
     renderDashboard();
   }
 
-  function renderDashboard() {
+  async function renderDashboard() {
     const inicio = document.getElementById('dash-data-inicio').value;
     const fim = document.getElementById('dash-data-fim').value;
-    const s = LW.getStats({ dataInicio: inicio, dataFim: fim });
+    const s = await LW.getStats({ dataInicio: inicio, dataFim: fim });
 
     // KPIs
     document.getElementById('kpi-total-baterias').textContent = s.total_baterias;
@@ -218,10 +218,10 @@
     renderTurnos();
   }
 
-  function renderTurnos() {
+  async function renderTurnos() {
     const inicio = document.getElementById('turnos-data-inicio').value;
     const fim = document.getElementById('turnos-data-fim').value;
-    const s = LW.getStats({ dataInicio: inicio, dataFim: fim });
+    const s = await LW.getStats({ dataInicio: inicio, dataFim: fim });
 
     const turnos = ['1º TURNO', '2º TURNO', '3º TURNO'];
     const ids = ['t1', 't2', 't3'];
@@ -280,10 +280,10 @@
     renderRegistro();
   }
 
-  function renderRegistro() {
+  async function renderRegistro() {
     const busca = document.getElementById('reg-busca').value.toLowerCase();
     const turno = document.getElementById('reg-turno').value;
-    const s = LW.getStats();
+    const s = await LW.getStats();
     let data = s.data;
 
     if (busca) data = data.filter(b =>
@@ -331,8 +331,8 @@
     `).join('');
     document.getElementById('reg-count').textContent = data.length + ' registros';
   }
-  function renderRelatorio() {
-    const s = LW.getStats();
+  async function renderRelatorio() {
+    const s = await LW.getStats();
     let data = [...s.data].sort((a, b) =>
       b.data.localeCompare(a.data) || (b.inicio || '').localeCompare(a.inicio || '')
     );
@@ -370,8 +370,8 @@
 
   // ---- Export CSV ----
 
-  function exportCSV() {
-    const s = LW.getStats();
+  async function exportCSV() {
+    const s = await LW.getStats();
     const cols = ['data', 'turno', 'id_bateria', 'dimensao', 'tipo_montagem', 'inicio', 'fim',
       'tempo_min', 'qtd_tracos', 'houve_atraso', 'motivo_atraso',
       'total_paineis', 'paineis_2p', 'paineis_sp', 'm2_total', 'm2_2p', 'm2_sp'];
@@ -397,4 +397,3 @@
   window.LWDash = { initDashboard, initTurnos, initRegistro, exportCSV, renderRelatorio };
 
 })();
-

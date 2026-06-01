@@ -338,16 +338,17 @@
       tracos: state.tracos,
     };
 
-    const db = LW.loadDB(LW.DB_KEY_BATERIAS);
-    db.push(record);
-    LW.saveDB(LW.DB_KEY_BATERIAS, db);
-
-    LW.clearOperacaoAtual();
-    clearInterval(timerInterval);
-
-    showSuccessModal(record);
-    resetState();
-    renderAll();
+    LW.registrarOperacao(record)
+      .then(() => {
+        LW.clearOperacaoAtual();
+        clearInterval(timerInterval);
+        showSuccessModal(record);
+        resetState();
+        renderAll();
+      })
+      .catch(err => {
+        alert('Erro ao salvar operação: ' + err.message);
+      });
   }
 
   function showSuccessModal(record) {

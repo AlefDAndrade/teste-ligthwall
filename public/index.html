@@ -907,7 +907,7 @@
     }
 
     // ---- Boot ----
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       // Set date in topbar and op form
       const now = new Date();
       document.getElementById('topbar-date').textContent = now.toLocaleDateString('pt-BR', {
@@ -915,9 +915,6 @@
       });
       const opDataVal = document.getElementById('op-data-val');
       if (opDataVal) opDataVal.value = now.toLocaleDateString('pt-BR');
-
-      // Seed historical data from original spreadsheet
-      LW.seedHistoricalData();
 
       // Init operation page
       LWOp.init();

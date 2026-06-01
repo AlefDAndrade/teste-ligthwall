@@ -32,6 +32,30 @@ http.createServer((req, res) => {
     return;
   }
 
+  // Registrar operação — faz append no historico.json
+  if (req.method === 'POST' && req.url === '/registrar-operacao') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const record = JSON.parse(body);
+        const historicoPath = path.join(DIR, 'historico.json');
+        let historico = [];
+        try {
+          historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8'));
+        } catch (_) { /* arquivo ainda não existe ou está vazio */ }
+        historico.push(record);
+        fs.writeFileSync(historicoPath, JSON.stringify(historico, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
   // Servir arquivos estáticos normalmente
   let filePath = path.join(DIR, req.url === '/' ? 'login.html' : req.url);
   const ext = path.extname(filePath);
