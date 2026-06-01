@@ -56,6 +56,43 @@ http.createServer((req, res) => {
     return;
   }
 
+  // Importar lote de registros — merge no historico.json com deduplicação
+  if (req.method === 'POST' && req.url === '/importar-historico') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const novos = JSON.parse(body);
+        if (!Array.isArray(novos)) throw new Error('Payload deve ser um array');
+
+        const historicoPath = path.join(DIR, 'historico.json');
+        let historico = [];
+        try { historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8')); } catch(_) {}
+
+        // Chave de deduplicação: data + id_bateria + turno
+        const existentes = new Set(historico.map(r => r.data + '|' + r.id_bateria + '|' + r.turno));
+        let inseridos = 0, duplicatas = 0;
+
+        novos.forEach(r => {
+          const chave = r.data + '|' + r.id_bateria + '|' + r.turno;
+          if (existentes.has(chave)) { duplicatas++; }
+          else { historico.push(r); existentes.add(chave); inseridos++; }
+        });
+
+        // Ordena por data
+        historico.sort((a, b) => (a.data > b.data ? 1 : -1));
+
+        fs.writeFileSync(historicoPath, JSON.stringify(historico, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, inseridos, duplicatas }));
+      } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
   // Servir arquivos estáticos normalmente
   let filePath = path.join(DIR, req.url === '/' ? 'login.html' : req.url);
   const ext = path.extname(filePath);
