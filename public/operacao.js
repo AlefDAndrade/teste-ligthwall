@@ -18,8 +18,6 @@
     fim: null,
     status: 'idle',      // idle | running | finished
     tracos: [],
-    silo: '',
-    expansao: '',
   };
 
   let timerInterval = null;
@@ -50,26 +48,17 @@
   function populateSelects() {
     // ID da bateria
     const selBateria = document.getElementById('op-id-bateria');
-    selBateria.innerHTML = '<option value="">— Selecione —</option>';
+    selBateria.innerHTML = '<option selected disabled hidden></option>';
     LW.BATERIA_IDS.forEach(id => {
       const opt = document.createElement('option');
-      opt.value = id; opt.textContent = id;
+      // Como id agora é um objeto {id, label, bercos}
+      opt.value = id.id; opt.textContent = id.id;
       selBateria.appendChild(opt);
-    });
-
-    // Dimensão
-    const selDim = document.getElementById('op-dimensao');
-    selDim.innerHTML = '<option value="">— Selecione —</option>';
-    LW.DIMENSAO_OPTS.forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d.label;
-      opt.textContent = d.label;
-      selDim.appendChild(opt);
     });
 
     // Tipo de montagem
     const selMont = document.getElementById('op-montagem');
-    selMont.innerHTML = '<option value="">— Selecione —</option>';
+    selMont.innerHTML = '<option selected disabled hidden></option>';
     LW.MONTAGEM_OPTS.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m; opt.textContent = m;
@@ -81,7 +70,7 @@
   }
 
   function renderReferencia() {
-    const el = document.getElementById('ref-rapida');
+    const el = document.getElementById('ref-rapida-list');
     if (!el) return;
     el.innerHTML = LW.DIMENSAO_OPTS.map(d =>
       '<div style="display:flex;justify-content:space-between">' +
@@ -95,29 +84,27 @@
     $('op-turno').addEventListener('change', e => {
       state.turno = e.target.value; persist();
     });
-    $('op-dimensao').addEventListener('change', e => {
-      state.dimensao = e.target.value;
-      updateCapacidade();
-      recalcPaineis();
-      persist();
-    });
     $('op-montagem').addEventListener('change', e => {
       state.tipo_montagem = e.target.value;
       recalcPaineis();
       persist();
     });
     $('op-id-bateria').addEventListener('change', e => {
-      state.id_bateria = e.target.value; persist(); updatePendencias();
+      state.id_bateria = e.target.value;
+      updateCapacidade();
+      recalcPaineis();
+      persist();
+      updatePendencias();
     });
     $('op-bercos-reais').addEventListener('input', e => {
       state.bercos_reais = e.target.value;
       recalcPaineis();
       persist();
     });
-    $('op-silo').addEventListener('change', e => {
+    if (document.getElementById('op-silo')) $('op-silo').addEventListener('change', e => {
       state.silo = e.target.value; persist();
     });
-    $('op-expansao').addEventListener('change', e => {
+    if (document.getElementById('op-expansao')) $('op-expansao').addEventListener('change', e => {
       state.expansao = e.target.value; persist();
     });
     $('op-motivo').addEventListener('input', e => {
@@ -136,13 +123,22 @@
   }
 
   function updateCapacidade() {
-    const d = LW.DIMENSAO_OPTS.find(o => o.label === state.dimensao);
-    $('op-capacidade').value = d ? d.bercos + ' berços' : '';
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    if (bateria) {
+      state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
+      $('op-capacidade').value = `${bateria.bercos} berços`;
+      if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
+    } else {
+      state.dimensao = '';
+      $('op-capacidade').value = '';
+      if ($('op-dimensao')) $('op-dimensao').value = '';
+    }
   }
 
   function recalcPaineis() {
-    const bercos = parseInt(state.bercos_reais) ||
-      (LW.DIMENSAO_OPTS.find(o => o.label === state.dimensao)?.bercos || 0);
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
+
     if (!bercos || !state.tipo_montagem) {
       $('op-paineis-total').textContent = '—';
       $('op-paineis-2p').textContent = '—';
@@ -150,6 +146,7 @@
       $('op-m2-total').textContent = '—';
       $('op-m2-2p').textContent = '—';
       $('op-m2-sp').textContent = '—';
+      $('op-placas-cimenticia').textContent = '—';
       return;
     }
     const r = LW.calcPaineis(state.tipo_montagem, bercos);
@@ -159,6 +156,7 @@
     $('op-m2-total').textContent = r.m2_total.toFixed(2) + ' m²';
     $('op-m2-2p').textContent = r.m2_2p.toFixed(2) + ' m²';
     $('op-m2-sp').textContent = r.m2_sp.toFixed(2) + ' m²';
+    $('op-placas-cimenticia').textContent = r.placas_cimenticia;
   }
 
   function iniciarInjecao() {
@@ -225,7 +223,18 @@
 
   function addTraco() {
     const num = state.tracos.length + 1;
-    state.tracos.push({ id: 'traco_' + Date.now() + '_' + num, num, berco_ini: '', berco_fim: '', densidade: '', flow: '', obs: '' });
+    state.tracos.push({
+      id: 'traco_' + Date.now() + '_' + num,
+      num,
+      berco_ini: '',
+      berco_fim: '',
+      densidade: '',
+      flow: '',
+      obs: '',
+      silo: '',
+      expansao: '',
+      densidadeEPS: ''
+    });
     renderTracos();
     persist();
   }
@@ -277,12 +286,38 @@
           <button class="btn btn-ghost btn-sm" onclick="LWOp.removeTraco(${i})" title="Remover traço"
             style="padding:8px;color:var(--red);border-color:var(--red-dim)">✕</button>
         </div>
+        <div class="form-group" style="grid-column:2/4">
+          <label class="form-label">Silo<span class="required">*</span></label>
+          <select class="form-select" onchange="LWOp.updateTraco(${i}, 'silo', this.value)">
+            <option value=""></option>
+            <option value="Silo 1" ${t.silo === 'Silo 1' ? 'selected' : ''}>Silo 1</option>
+            <option value="Silo 2" ${t.silo === 'Silo 2' ? 'selected' : ''}>Silo 2</option>
+            <option value="Silo 3" ${t.silo === 'Silo 3' ? 'selected' : ''}>Silo 3</option>
+            <option value="Silo 4" ${t.silo === 'Silo 4' ? 'selected' : ''}>Silo 4</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:span 2">
+          <label class="form-label">Expansão do EPS <span class="required">*</span></label>
+          <select class="form-select" onchange="LWOp.updateTraco(${i}, 'expansao', this.value)">
+            <option value=""></option>
+            <option value="1ª expansão" ${t.expansao === '1ª expansão' ? 'selected' : ''}>1ª expansão</option>
+            <option value="2ª expansão" ${t.expansao === '2ª expansão' ? 'selected' : ''}>2ª expansão</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Densidade EPS</label>
+          <input class="form-input" type="number" step="0.01" value="${t.densidadeEPS}"
+            oninput="LWOp.updateTraco(${i},'densidadeEPS',this.value)" placeholder="">
+        </div>
       `;
       container.appendChild(row);
     });
   }
 
   function updatePendencias() {
+    const tracosComSilo = state.tracos.length > 0 && state.tracos.every(t => !!t.silo);
+    const tracosComExp = state.tracos.length > 0 && state.tracos.every(t => !!t.expansao);
+    const tracosComDensidadeEPS = state.tracos.length > 0 && state.tracos.every(t => !!t.densidadeEPS);
     const checks = [
       { label: 'Turno definido', ok: !!state.turno },
       { label: 'Dimensão da bateria', ok: !!state.dimensao },
@@ -292,8 +327,9 @@
       { label: 'Injeção finalizada', ok: !!state.fim },
       { label: 'Motivo do atraso', ok: state.houve_atraso === 'NÃO' || !!state.motivo_atraso },
       { label: 'Ao menos 1 traço', ok: state.tracos.length > 0 },
-      { label: 'Silo de EPS informado', ok: !!state.silo },
-      { label: 'Expansão informada', ok: !!state.expansao },
+      { label: 'Silo em todos os traços', ok: tracosComSilo },
+      { label: 'Expansão em todos os traços', ok: tracosComExp },
+      { label: 'Densidade EPS em todos os traços', ok: tracosComDensidadeEPS }
     ];
 
     const allOk = checks.every(c => c.ok);
@@ -317,8 +353,8 @@
   }
 
   function registrarOperacao() {
-    const bercos = parseInt(state.bercos_reais) ||
-      (LW.DIMENSAO_OPTS.find(o => o.label === state.dimensao)?.bercos || 0);
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
 
     const calc = LW.calcPaineis(state.tipo_montagem, bercos);
 
@@ -334,7 +370,7 @@
       data: dataLocal,
       turno: state.turno,
       dimensao: state.dimensao,
-      capacidade: LW.DIMENSAO_OPTS.find(o => o.label === state.dimensao)?.bercos || 0,
+      capacidade: bateria?.bercos || 0,
       id_bateria: state.id_bateria,
       inicio: state.inicio,
       fim: state.fim,
@@ -342,8 +378,6 @@
       qtd_tracos: state.tracos.length,
       houve_atraso: state.houve_atraso,
       motivo_atraso: state.motivo_atraso || '',
-      silo: state.silo || '',
-      expansao: state.expansao || '',
       tipo_montagem: state.tipo_montagem,
       bercos_reais: bercos,
       ...calc,
@@ -397,8 +431,6 @@
       fim: null,
       status: 'idle',
       tracos: [],
-      silo: '',
-      expansao: '',
     };
   }
 
@@ -406,12 +438,11 @@
     // Set form values
     $('op-turno').value = state.turno || '1º TURNO';
     $('op-dimensao').value = state.dimensao || '';
+
     $('op-montagem').value = state.tipo_montagem || '';
     $('op-id-bateria').value = state.id_bateria || '';
     $('op-bercos-reais').value = state.bercos_reais || '';
-    $('op-silo').value = state.silo || '';
     $('op-motivo').value = state.motivo_atraso || '';
-    $('op-expansao').value = state.expansao || '';
 
     updateCapacidade();
 

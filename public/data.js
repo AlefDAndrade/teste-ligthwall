@@ -28,7 +28,18 @@ async function loadConfig() {
     if (!res.ok) throw new Error('config.json não encontrado');
     const cfg = await res.json();
 
-    DIMENSAO_OPTS = cfg.dimensoes.opcoes.map(d => ({ label: d.label, bercos: d.bercos }));
+    // Se não houver chave 'dimensoes', extraímos das baterias (nova estrutura)
+    if (cfg.dimensoes?.opcoes) {
+      DIMENSAO_OPTS = cfg.dimensoes.opcoes.map(d => ({ label: d.label, bercos: d.bercos }));
+    } else if (cfg.baterias?.ids) {
+      const uniqueDims = new Map();
+      cfg.baterias.ids.forEach(b => {
+        if (b.label && b.bercos) {
+          uniqueDims.set(b.label, b.bercos);
+        }
+      });
+      DIMENSAO_OPTS = Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
+    }
 
     MONTAGEM_OPTS = cfg.tipos_montagem.opcoes.map(t => t.label);
     MONTAGEM_MAP = {};
@@ -139,7 +150,8 @@ function calcPaineis(tipoMontagem, bercos) {
   const m2_total = paineis_total * M2_POR_PAINEL;
   const m2_2p = paineis_2p * M2_POR_PAINEL;
   const m2_sp = paineis_sp * M2_POR_PAINEL;
-  return { total_paineis: paineis_total, paineis_2p, paineis_sp, m2_total, m2_2p, m2_sp };
+  const placas_cimenticia = paineis_2p * 2;
+  return { total_paineis: paineis_total, paineis_2p, paineis_sp, m2_total, m2_2p, m2_sp, placas_cimenticia };
 }
 
 function formatTime(date) {
@@ -192,6 +204,9 @@ async function registrarRelatorioInjecao(record) {
     densidade: t.densidade || '',
     flow: t.flow || '',
     obs: t.obs || '',
+    silo: t.silo || '',
+    expansao: t.expansao || '',
+    densidade_eps: t.densidadeEPS || '',
   }));
 
   if (!linhas.length) return; // sem traços, nada a salvar

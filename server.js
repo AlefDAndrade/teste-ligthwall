@@ -122,13 +122,13 @@ http.createServer((req, res) => {
         const historicoPath = path.join(DIR, 'historico.json');
         let historico = [];
         try { historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8')); } catch(_) {}
-
-        // Chave de deduplicação: data + id_bateria + turno
-        const existentes = new Set(historico.map(r => r.data + '|' + r.id_bateria + '|' + r.turno));
+        
+        // Chave de deduplicação: id único ou composição mais específica
+        const existentes = new Set(historico.map(r => r.id || (r.data + '|' + r.id_bateria + '|' + r.turno)));
         let inseridos = 0, duplicatas = 0;
 
         novos.forEach(r => {
-          const chave = r.data + '|' + r.id_bateria + '|' + r.turno;
+          const chave = r.id || (r.data + '|' + r.id_bateria + '|' + r.turno);
           if (existentes.has(chave)) { duplicatas++; }
           else { historico.push(r); existentes.add(chave); inseridos++; }
         });

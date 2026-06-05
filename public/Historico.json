@@ -1,6 +1,6 @@
 [
   {
-    "id": "imp_1780355212821_4",
+    "id": "imp_1780694731102_4",
     "data": "2026-01-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -12,7 +12,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "reinjeção de perfis que vazaram",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -22,7 +22,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_3",
+    "id": "imp_1780694731102_3",
     "data": "2026-01-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -34,7 +34,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -44,7 +44,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_2",
+    "id": "imp_1780694731102_2",
     "data": "2026-01-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -56,7 +56,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "vasamento de berço, reinjeção",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -66,7 +66,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_1",
+    "id": "imp_1780694731102_1",
     "data": "2026-01-06",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -78,7 +78,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -88,7 +88,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_0",
+    "id": "imp_1780694731102_0",
     "data": "2026-01-06",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -100,7 +100,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -110,7 +110,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_10",
+    "id": "imp_1780694731102_10",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -122,7 +122,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento de mangueiras",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -132,7 +132,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_9",
+    "id": "imp_1780694731102_9",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -144,7 +144,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -154,7 +154,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_8",
+    "id": "imp_1780694731102_8",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -166,7 +166,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -176,7 +176,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_7",
+    "id": "imp_1780694731102_7",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -188,7 +188,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -198,7 +198,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_6",
+    "id": "imp_1780694731102_6",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -210,7 +210,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "lavagem do funil",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -220,7 +220,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_5",
+    "id": "imp_1780694731102_5",
     "data": "2026-01-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -232,7 +232,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -242,7 +242,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_13",
+    "id": "imp_1780694731102_13",
     "data": "2026-01-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -254,7 +254,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -264,7 +264,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_12",
+    "id": "imp_1780694731102_12",
     "data": "2026-01-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -276,7 +276,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "reinjeção",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -286,7 +286,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_11",
+    "id": "imp_1780694731102_11",
     "data": "2026-01-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -298,7 +298,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -308,7 +308,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_16",
+    "id": "imp_1780694731103_16",
     "data": "2026-01-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -320,7 +320,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "problema no hidraulico",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -330,7 +330,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_15",
+    "id": "imp_1780694731103_15",
     "data": "2026-01-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -342,7 +342,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "reinjeção",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -352,7 +352,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_14",
+    "id": "imp_1780694731103_14",
     "data": "2026-01-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -364,7 +364,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -374,7 +374,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_23",
+    "id": "imp_1780694731103_23",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -386,7 +386,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -396,7 +396,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_22",
+    "id": "imp_1780694731103_22",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -408,7 +408,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -418,7 +418,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_21",
+    "id": "imp_1780694731103_21",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -430,7 +430,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -440,7 +440,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_20",
+    "id": "imp_1780694731103_20",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -452,7 +452,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -462,7 +462,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_19",
+    "id": "imp_1780694731103_19",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -474,7 +474,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -484,7 +484,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_18",
+    "id": "imp_1780694731103_18",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -496,7 +496,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "AJUSTES ELEVADOS NO TRAÇO",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -506,7 +506,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212821_17",
+    "id": "imp_1780694731103_17",
     "data": "2026-01-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -518,7 +518,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -528,7 +528,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_28",
+    "id": "imp_1780694731103_28",
     "data": "2026-01-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -540,7 +540,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -550,7 +550,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_27",
+    "id": "imp_1780694731103_27",
     "data": "2026-01-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -562,7 +562,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -572,7 +572,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_26",
+    "id": "imp_1780694731103_26",
     "data": "2026-01-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -584,7 +584,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento bico 1",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -594,7 +594,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_25",
+    "id": "imp_1780694731103_25",
     "data": "2026-01-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -606,7 +606,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "problema no hidraulico",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -616,7 +616,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_24",
+    "id": "imp_1780694731103_24",
     "data": "2026-01-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -628,7 +628,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -638,7 +638,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_37",
+    "id": "imp_1780694731103_37",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -650,7 +650,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -660,7 +660,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_36",
+    "id": "imp_1780694731103_36",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -672,7 +672,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "PROBLEMA NNO HIDRAULICO",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -682,7 +682,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_35",
+    "id": "imp_1780694731103_35",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -694,7 +694,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -704,7 +704,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_34",
+    "id": "imp_1780694731103_34",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -716,7 +716,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -726,7 +726,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_33",
+    "id": "imp_1780694731103_33",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -738,7 +738,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -748,7 +748,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_32",
+    "id": "imp_1780694731103_32",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -760,7 +760,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "ajuste de traço",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -770,7 +770,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_31",
+    "id": "imp_1780694731103_31",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -782,7 +782,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -792,7 +792,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_30",
+    "id": "imp_1780694731103_30",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -804,7 +804,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -814,7 +814,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_29",
+    "id": "imp_1780694731103_29",
     "data": "2026-01-14",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -826,7 +826,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -836,7 +836,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_42",
+    "id": "imp_1780694731103_42",
     "data": "2026-01-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -848,7 +848,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -858,7 +858,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_41",
+    "id": "imp_1780694731103_41",
     "data": "2026-01-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -870,7 +870,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -880,7 +880,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_40",
+    "id": "imp_1780694731103_40",
     "data": "2026-01-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -892,7 +892,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -902,7 +902,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_39",
+    "id": "imp_1780694731103_39",
     "data": "2026-01-15",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -914,7 +914,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -924,7 +924,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_38",
+    "id": "imp_1780694731103_38",
     "data": "2026-01-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -936,7 +936,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "problema de expansão do eps",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -946,7 +946,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_48",
+    "id": "imp_1780694731103_48",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -958,7 +958,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -968,7 +968,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_47",
+    "id": "imp_1780694731103_47",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -980,7 +980,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -990,7 +990,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_46",
+    "id": "imp_1780694731103_46",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1002,7 +1002,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1012,7 +1012,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_45",
+    "id": "imp_1780694731103_45",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1024,7 +1024,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1034,7 +1034,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_44",
+    "id": "imp_1780694731103_44",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1046,7 +1046,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1056,7 +1056,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_43",
+    "id": "imp_1780694731103_43",
     "data": "2026-01-16",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1068,7 +1068,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1078,7 +1078,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_55",
+    "id": "imp_1780694731103_55",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1090,7 +1090,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1100,7 +1100,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_54",
+    "id": "imp_1780694731103_54",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1112,7 +1112,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1122,7 +1122,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_53",
+    "id": "imp_1780694731103_53",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1134,7 +1134,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1144,7 +1144,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_52",
+    "id": "imp_1780694731103_52",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1156,7 +1156,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1166,7 +1166,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_51",
+    "id": "imp_1780694731103_51",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1178,7 +1178,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1188,7 +1188,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_50",
+    "id": "imp_1780694731103_50",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1200,7 +1200,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1210,7 +1210,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_49",
+    "id": "imp_1780694731103_49",
     "data": "2026-01-19",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1222,7 +1222,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -1232,7 +1232,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_58",
+    "id": "imp_1780694731103_58",
     "data": "2026-01-20",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1244,7 +1244,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 22,
+    "total_paineis": 0,
     "paineis_2p": 11,
     "paineis_sp": 11,
     "m2_total": 40.260000000000005,
@@ -1254,7 +1254,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_57",
+    "id": "imp_1780694731103_57",
     "data": "2026-01-20",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1266,7 +1266,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento no bico 1",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1276,7 +1276,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_56",
+    "id": "imp_1780694731103_56",
     "data": "2026-01-20",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1288,7 +1288,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento no bico 1",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -1298,7 +1298,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_64",
+    "id": "imp_1780694731103_64",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1310,7 +1310,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1320,7 +1320,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_63",
+    "id": "imp_1780694731103_63",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1332,7 +1332,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1342,7 +1342,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_62",
+    "id": "imp_1780694731103_62",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1354,7 +1354,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1364,7 +1364,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_61",
+    "id": "imp_1780694731103_61",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1376,7 +1376,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1386,7 +1386,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_60",
+    "id": "imp_1780694731103_60",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1398,7 +1398,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1408,7 +1408,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_59",
+    "id": "imp_1780694731103_59",
     "data": "2026-01-22",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1420,7 +1420,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "problema ao puxar o cimento (demora para puxar) / problema no hidraulico",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1430,7 +1430,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_72",
+    "id": "imp_1780694731103_72",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1442,7 +1442,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1452,7 +1452,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_71",
+    "id": "imp_1780694731103_71",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1464,7 +1464,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1474,7 +1474,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_70",
+    "id": "imp_1780694731103_70",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1486,7 +1486,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1496,7 +1496,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_69",
+    "id": "imp_1780694731103_69",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1508,7 +1508,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1518,7 +1518,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_68",
+    "id": "imp_1780694731103_68",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1530,7 +1530,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1540,7 +1540,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_67",
+    "id": "imp_1780694731103_67",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1552,7 +1552,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1562,7 +1562,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_66",
+    "id": "imp_1780694731103_66",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1574,7 +1574,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -1584,7 +1584,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_65",
+    "id": "imp_1780694731103_65",
     "data": "2026-01-23",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1596,7 +1596,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1606,7 +1606,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_77",
+    "id": "imp_1780694731103_77",
     "data": "2026-01-26",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1618,7 +1618,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "p",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1628,7 +1628,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_76",
+    "id": "imp_1780694731103_76",
     "data": "2026-01-26",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1640,7 +1640,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1650,7 +1650,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_75",
+    "id": "imp_1780694731103_75",
     "data": "2026-01-26",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1662,7 +1662,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento no bico 1",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1672,7 +1672,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_74",
+    "id": "imp_1780694731103_74",
     "data": "2026-01-26",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1684,7 +1684,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 12,
+    "total_paineis": 0,
     "paineis_2p": 6,
     "paineis_sp": 6,
     "m2_total": 21.96,
@@ -1694,7 +1694,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_73",
+    "id": "imp_1780694731103_73",
     "data": "2026-01-26",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1706,7 +1706,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1716,7 +1716,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_84",
+    "id": "imp_1780694731103_84",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1728,7 +1728,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1738,7 +1738,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_83",
+    "id": "imp_1780694731103_83",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1750,7 +1750,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1760,7 +1760,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_82",
+    "id": "imp_1780694731103_82",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1772,7 +1772,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -1782,7 +1782,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_81",
+    "id": "imp_1780694731103_81",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1794,7 +1794,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1804,7 +1804,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_80",
+    "id": "imp_1780694731103_80",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1816,7 +1816,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1826,7 +1826,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_78",
+    "id": "imp_1780694731103_78",
     "data": "2026-01-27",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1838,7 +1838,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1848,7 +1848,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_92",
+    "id": "imp_1780694731103_92",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1860,7 +1860,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1870,7 +1870,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_91",
+    "id": "imp_1780694731103_91",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -1882,7 +1882,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -1892,7 +1892,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_90",
+    "id": "imp_1780694731103_90",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -1904,7 +1904,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -1914,7 +1914,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_89",
+    "id": "imp_1780694731103_89",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1926,7 +1926,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1936,7 +1936,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_88",
+    "id": "imp_1780694731103_88",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1948,7 +1948,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1958,7 +1958,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_87",
+    "id": "imp_1780694731103_87",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1970,7 +1970,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -1980,7 +1980,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_86",
+    "id": "imp_1780694731103_86",
     "data": "2026-01-28",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -1992,7 +1992,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2002,7 +2002,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_95",
+    "id": "imp_1780694731103_95",
     "data": "2026-01-29",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2014,7 +2014,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "NOVA PESSAGEM DE EPS",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2024,7 +2024,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_94",
+    "id": "imp_1780694731103_94",
     "data": "2026-01-29",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2036,7 +2036,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2046,7 +2046,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_93",
+    "id": "imp_1780694731103_93",
     "data": "2026-01-29",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2058,7 +2058,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2068,7 +2068,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_101",
+    "id": "imp_1780694731103_101",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2080,7 +2080,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2090,7 +2090,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_100",
+    "id": "imp_1780694731103_100",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -2102,7 +2102,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -2112,7 +2112,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_99",
+    "id": "imp_1780694731103_99",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -2124,7 +2124,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -2134,7 +2134,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_98",
+    "id": "imp_1780694731103_98",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2146,7 +2146,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2156,7 +2156,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_97",
+    "id": "imp_1780694731103_97",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2168,7 +2168,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2178,7 +2178,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_96",
+    "id": "imp_1780694731103_96",
     "data": "2026-01-30",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2190,7 +2190,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2200,7 +2200,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_110",
+    "id": "imp_1780694731103_110",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2212,7 +2212,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2222,7 +2222,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_109",
+    "id": "imp_1780694731103_109",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -2234,7 +2234,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -2244,7 +2244,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_108",
+    "id": "imp_1780694731103_108",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -2256,7 +2256,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -2266,7 +2266,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_107",
+    "id": "imp_1780694731103_107",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2278,7 +2278,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento no bico 1 / lavagem do misturador",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2288,7 +2288,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_106",
+    "id": "imp_1780694731103_106",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2300,7 +2300,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2310,7 +2310,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_105",
+    "id": "imp_1780694731103_105",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2322,7 +2322,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2332,7 +2332,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_104",
+    "id": "imp_1780694731103_104",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2344,7 +2344,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2354,7 +2354,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_103",
+    "id": "imp_1780694731103_103",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2366,7 +2366,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2376,7 +2376,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_102",
+    "id": "imp_1780694731103_102",
     "data": "2026-02-03",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2388,7 +2388,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2398,7 +2398,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_117",
+    "id": "imp_1780694731103_117",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -2410,7 +2410,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -2420,7 +2420,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_116",
+    "id": "imp_1780694731103_116",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2432,7 +2432,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2442,7 +2442,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_115",
+    "id": "imp_1780694731103_115",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2454,7 +2454,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2464,7 +2464,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_114",
+    "id": "imp_1780694731103_114",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2476,7 +2476,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2486,7 +2486,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_113",
+    "id": "imp_1780694731103_113",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2498,7 +2498,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2508,7 +2508,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_112",
+    "id": "imp_1780694731103_112",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2520,7 +2520,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2530,7 +2530,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_111",
+    "id": "imp_1780694731103_111",
     "data": "2026-02-04",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2542,7 +2542,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2552,7 +2552,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_126",
+    "id": "imp_1780694731103_126",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -2564,7 +2564,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -2574,7 +2574,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_125",
+    "id": "imp_1780694731103_125",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2586,7 +2586,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2596,7 +2596,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_124",
+    "id": "imp_1780694731103_124",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2608,7 +2608,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2618,7 +2618,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_123",
+    "id": "imp_1780694731103_123",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2630,7 +2630,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2640,7 +2640,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_122",
+    "id": "imp_1780694731103_122",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2652,7 +2652,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2662,7 +2662,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_121",
+    "id": "imp_1780694731103_121",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2674,7 +2674,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2684,7 +2684,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_120",
+    "id": "imp_1780694731103_120",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2696,7 +2696,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2706,7 +2706,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_119",
+    "id": "imp_1780694731103_119",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2718,7 +2718,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2728,7 +2728,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_118",
+    "id": "imp_1780694731103_118",
     "data": "2026-02-05",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -2740,7 +2740,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -2750,7 +2750,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_135",
+    "id": "imp_1780694731103_135",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -2762,7 +2762,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -2772,7 +2772,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_134",
+    "id": "imp_1780694731103_134",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2784,7 +2784,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2794,7 +2794,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_133",
+    "id": "imp_1780694731103_133",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2806,7 +2806,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2816,7 +2816,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_132",
+    "id": "imp_1780694731103_132",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2828,7 +2828,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2838,7 +2838,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_131",
+    "id": "imp_1780694731103_131",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2850,7 +2850,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "lavagem do misturador e funil",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2860,7 +2860,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_130",
+    "id": "imp_1780694731103_130",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2872,7 +2872,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2882,7 +2882,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_129",
+    "id": "imp_1780694731103_129",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2894,7 +2894,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2904,7 +2904,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_128",
+    "id": "imp_1780694731103_128",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2916,7 +2916,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2926,7 +2926,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_127",
+    "id": "imp_1780694731103_127",
     "data": "2026-02-06",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -2938,7 +2938,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -2948,7 +2948,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_139",
+    "id": "imp_1780694731104_139",
     "data": "2026-02-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2960,7 +2960,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2970,7 +2970,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_138",
+    "id": "imp_1780694731103_138",
     "data": "2026-02-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -2982,7 +2982,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -2992,7 +2992,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_137",
+    "id": "imp_1780694731103_137",
     "data": "2026-02-07",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3004,7 +3004,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3014,7 +3014,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_144",
+    "id": "imp_1780694731104_144",
     "data": "2026-02-09",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -3026,7 +3026,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -3036,7 +3036,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_143",
+    "id": "imp_1780694731104_143",
     "data": "2026-02-09",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -3048,7 +3048,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -3058,7 +3058,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_142",
+    "id": "imp_1780694731104_142",
     "data": "2026-02-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3070,7 +3070,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3080,7 +3080,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_141",
+    "id": "imp_1780694731104_141",
     "data": "2026-02-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3092,7 +3092,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3102,7 +3102,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_140",
+    "id": "imp_1780694731104_140",
     "data": "2026-02-09",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3114,7 +3114,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3124,7 +3124,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_149",
+    "id": "imp_1780694731104_149",
     "data": "2026-02-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3136,7 +3136,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3146,7 +3146,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_148",
+    "id": "imp_1780694731104_148",
     "data": "2026-02-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3158,7 +3158,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3168,7 +3168,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_147",
+    "id": "imp_1780694731104_147",
     "data": "2026-02-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3180,7 +3180,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "ajuste de traço",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3190,7 +3190,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_146",
+    "id": "imp_1780694731104_146",
     "data": "2026-02-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3202,7 +3202,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3212,7 +3212,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_145",
+    "id": "imp_1780694731104_145",
     "data": "2026-02-10",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3224,7 +3224,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "bico 1 entupido",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3234,7 +3234,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_158",
+    "id": "imp_1780694731104_158",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3246,7 +3246,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3256,7 +3256,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_157",
+    "id": "imp_1780694731104_157",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3268,7 +3268,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3278,7 +3278,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_156",
+    "id": "imp_1780694731104_156",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3290,7 +3290,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "erro operacional",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3300,7 +3300,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_155",
+    "id": "imp_1780694731104_155",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3312,7 +3312,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3322,7 +3322,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_154",
+    "id": "imp_1780694731104_154",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3334,7 +3334,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "Lavagem do misturdor",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3344,7 +3344,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_153",
+    "id": "imp_1780694731104_153",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -3356,7 +3356,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -3366,7 +3366,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_152",
+    "id": "imp_1780694731104_152",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -3378,7 +3378,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -3388,7 +3388,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_151",
+    "id": "imp_1780694731104_151",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3400,7 +3400,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3410,7 +3410,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_150",
+    "id": "imp_1780694731104_150",
     "data": "2026-02-11",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3422,7 +3422,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3432,7 +3432,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_164",
+    "id": "imp_1780694731104_164",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3444,7 +3444,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3454,7 +3454,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_163",
+    "id": "imp_1780694731104_163",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3466,7 +3466,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3476,7 +3476,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_162",
+    "id": "imp_1780694731104_162",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -3488,7 +3488,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -3498,7 +3498,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_161",
+    "id": "imp_1780694731104_161",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -3510,7 +3510,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -3520,7 +3520,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_160",
+    "id": "imp_1780694731104_160",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3532,7 +3532,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3542,7 +3542,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_159",
+    "id": "imp_1780694731104_159",
     "data": "2026-02-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3554,7 +3554,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3564,7 +3564,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_171",
+    "id": "imp_1780694731104_171",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "12 cm",
@@ -3576,7 +3576,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 32,
+    "total_paineis": 0,
     "paineis_2p": 16,
     "paineis_sp": 16,
     "m2_total": 58.56,
@@ -3586,7 +3586,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_170",
+    "id": "imp_1780694731104_170",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "7,5 cm",
@@ -3598,7 +3598,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "2/P",
-    "total_paineis": 44,
+    "total_paineis": 0,
     "paineis_2p": 44,
     "paineis_sp": 0,
     "m2_total": 80.52000000000001,
@@ -3608,7 +3608,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_169",
+    "id": "imp_1780694731104_169",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3620,7 +3620,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3630,7 +3630,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_168",
+    "id": "imp_1780694731104_168",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3642,7 +3642,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "parada pra lavagem",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3652,7 +3652,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_167",
+    "id": "imp_1780694731104_167",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3664,7 +3664,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3674,7 +3674,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_166",
+    "id": "imp_1780694731104_166",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3686,7 +3686,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3696,7 +3696,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_165",
+    "id": "imp_1780694731104_165",
     "data": "2026-02-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3708,7 +3708,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3718,7 +3718,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_176",
+    "id": "imp_1780694731104_176",
     "data": "2026-05-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3730,7 +3730,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -3740,7 +3740,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_175",
+    "id": "imp_1780694731104_175",
     "data": "2026-05-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3752,7 +3752,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "lavagem do mesturador,e troca de bateria",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3762,7 +3762,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_174",
+    "id": "imp_1780694731104_174",
     "data": "2026-05-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3774,7 +3774,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3784,7 +3784,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_173",
+    "id": "imp_1780694731104_173",
     "data": "2026-05-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3796,7 +3796,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3806,7 +3806,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_172",
+    "id": "imp_1780694731104_172",
     "data": "2026-05-12",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3818,7 +3818,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "entupimento das mangueiras + erro de descarga na valvula do cimento + ajuste do traço",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 2,
+    "total_paineis": 0,
     "paineis_2p": 1,
     "paineis_sp": 1,
     "m2_total": 3.66,
@@ -3828,7 +3828,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_179",
+    "id": "imp_1780694731104_179",
     "data": "2026-05-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3840,7 +3840,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3850,7 +3850,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_178",
+    "id": "imp_1780694731104_178",
     "data": "2026-05-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3862,7 +3862,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -3872,7 +3872,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212822_177",
+    "id": "imp_1780694731104_177",
     "data": "2026-05-13",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3884,7 +3884,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3894,7 +3894,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_182",
+    "id": "imp_1780694731104_182",
     "data": "2026-05-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3906,7 +3906,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -3916,7 +3916,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_181",
+    "id": "imp_1780694731104_181",
     "data": "2026-05-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3928,7 +3928,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -3938,7 +3938,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_180",
+    "id": "imp_1780694731104_180",
     "data": "2026-05-14",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3950,7 +3950,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "HÍBRIDA",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 20,
     "paineis_sp": 20,
     "m2_total": 73.2,
@@ -3960,7 +3960,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_187",
+    "id": "imp_1780694731104_187",
     "data": "2026-05-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3972,7 +3972,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -3982,7 +3982,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_186",
+    "id": "imp_1780694731104_186",
     "data": "2026-05-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -3994,7 +3994,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4004,7 +4004,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_185",
+    "id": "imp_1780694731104_185",
     "data": "2026-05-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4016,7 +4016,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4026,7 +4026,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_184",
+    "id": "imp_1780694731104_184",
     "data": "2026-05-15",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4038,7 +4038,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4048,7 +4048,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_192",
+    "id": "imp_1780694731104_192",
     "data": "2026-05-18",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4060,7 +4060,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4070,7 +4070,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_191",
+    "id": "imp_1780694731104_191",
     "data": "2026-05-18",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4082,7 +4082,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "lavagem do misturador",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4092,7 +4092,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_190",
+    "id": "imp_1780694731104_190",
     "data": "2026-05-18",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4104,7 +4104,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4114,7 +4114,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_189",
+    "id": "imp_1780694731104_189",
     "data": "2026-05-18",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4126,7 +4126,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4136,7 +4136,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_188",
+    "id": "imp_1780694731104_188",
     "data": "2026-05-18",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4148,7 +4148,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "ajuste de traço",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4158,7 +4158,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_194",
+    "id": "imp_1780694731104_194",
     "data": "2026-05-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4170,7 +4170,7 @@
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4180,7 +4180,7 @@
     "tempo_min": 0
   },
   {
-    "id": "imp_1780355212823_193",
+    "id": "imp_1780694731104_193",
     "data": "2026-05-19",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
@@ -4192,7 +4192,7 @@
     "houve_atraso": "SIM",
     "motivo_atraso": "ajuste no traço",
     "tipo_montagem": "S/P",
-    "total_paineis": 40,
+    "total_paineis": 0,
     "paineis_2p": 0,
     "paineis_sp": 40,
     "m2_total": 73.2,
@@ -4202,42 +4202,75 @@
     "tempo_min": 0
   },
   {
-    "id": "op_1780446020583",
-    "data": "2026-06-02",
+    "id": "op_1780695145394",
+    "data": "2026-06-05",
     "turno": "1º TURNO",
     "dimensao": "9 cm",
     "capacidade": 20,
-    "id_bateria": "B3",
-    "inicio": "2026-06-03T00:19:38.255Z",
-    "fim": "2026-06-03T00:20:18.783Z",
-    "tempo_min": 0.6754666666666667,
-    "qtd_tracos": 2,
+    "id_bateria": "B1",
+    "inicio": "2026-06-05T21:31:50.122Z",
+    "fim": "2026-06-05T21:32:23.466Z",
+    "tempo_min": 0.5557333333333333,
+    "qtd_tracos": 1,
     "houve_atraso": "NÃO",
     "motivo_atraso": "",
-    "tipo_montagem": "HÍBRIDA",
+    "tipo_montagem": "2/P",
     "bercos_reais": 20,
     "total_paineis": 40,
-    "paineis_2p": 20,
-    "paineis_sp": 20,
+    "paineis_2p": 40,
+    "paineis_sp": 0,
     "m2_total": 73.2,
-    "m2_2p": 36.6,
-    "m2_sp": 36.6,
+    "m2_2p": 73.2,
+    "m2_sp": 0,
+    "placas_cimenticia": 80,
     "tracos": [
       {
+        "id": "traco_1780695117874_1",
         "num": 1,
         "berco_ini": "1",
-        "berco_fim": "10",
+        "berco_fim": "20",
         "densidade": "455",
         "flow": "45",
-        "obs": "nada"
-      },
+        "obs": "tutututu",
+        "silo": "Silo 1",
+        "expansao": "1ª expansão"
+      }
+    ]
+  },
+  {
+    "id": "op_1780698287362",
+    "data": "2026-06-05",
+    "turno": "1º TURNO",
+    "dimensao": "9 cm",
+    "capacidade": 20,
+    "id_bateria": "B2",
+    "inicio": "2026-06-05T22:24:43.218Z",
+    "fim": "2026-06-05T22:24:46.058Z",
+    "tempo_min": 0.04733333333333333,
+    "qtd_tracos": 1,
+    "houve_atraso": "NÃO",
+    "motivo_atraso": "",
+    "tipo_montagem": "2/P",
+    "bercos_reais": 20,
+    "total_paineis": 40,
+    "paineis_2p": 40,
+    "paineis_sp": 0,
+    "m2_total": 73.2,
+    "m2_2p": 73.2,
+    "m2_sp": 0,
+    "placas_cimenticia": 80,
+    "tracos": [
       {
-        "num": 2,
-        "berco_ini": "11",
-        "berco_fim": "19",
+        "id": "traco_1780698154234_1",
+        "num": 1,
+        "berco_ini": "1",
+        "berco_fim": "25",
         "densidade": "455",
         "flow": "45",
-        "obs": " ver"
+        "obs": "",
+        "silo": "Silo 1",
+        "expansao": "1ª expansão",
+        "densidadeEPS": "45"
       }
     ]
   }

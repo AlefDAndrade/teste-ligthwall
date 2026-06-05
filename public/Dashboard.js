@@ -290,6 +290,7 @@
     data_inicio: null, data_fim: null,
     id_bateria: new Set(), num_traco: new Set(),
     dimensao: new Set(), turno: new Set(),
+    silo: new Set(), expansao: new Set(),
   };
 
   // ---- Extrai valores únicos não-vazios de uma lista de objetos ----
@@ -317,6 +318,8 @@
       { key: 'num_traco', label: 'Nº Traço', opcoes: _unicos(linhas, 'num_traco').map(String) },
       { key: 'dimensao', label: 'Dimensão', opcoes: _unicos(linhas, 'dimensao') },
       { key: 'turno', label: 'Turno', opcoes: _unicos(linhas, 'turno') },
+      { key: 'silo', label: 'Silo', opcoes: _unicos(linhas, 'silo') },
+      { key: 'expansao', label: 'Expansão', opcoes: _unicos(linhas, 'expansao') },
     ].filter(c => c.opcoes.length > 0);
   }
 
@@ -507,7 +510,7 @@
     document.getElementById('reg-count').textContent = data.length + ' registros';
 
     if (!data.length) {
-      tbody.innerHTML = `<tr><td colspan="19" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="20" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado</td></tr>`;
       return;
     }
 
@@ -534,6 +537,7 @@
         <td>${(b.m2_2p || 0).toFixed(2)}</td>
         <td>${(b.m2_sp || 0).toFixed(2)}</td>
         <td>${b.bercos_reais || '—'}</td>
+        <td>${b.placas_cimenticia || 0}</td>
       </tr>
     `).join('');
   }
@@ -567,7 +571,7 @@
     const tbody = document.getElementById('relatorio-tbody');
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:20px">Carregando...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:20px">Carregando...</td></tr>`;
 
     let linhas = await LW.getRelatorioInjecao();
 
@@ -578,11 +582,13 @@
     if (f.num_traco.size) linhas = linhas.filter(l => f.num_traco.has(String(l.num_traco)));
     if (f.dimensao.size) linhas = linhas.filter(l => f.dimensao.has(l.dimensao));
     if (f.turno.size) linhas = linhas.filter(l => f.turno.has(l.turno));
+    if (f.silo.size) linhas = linhas.filter(l => f.silo.has(l.silo));
+    if (f.expansao.size) linhas = linhas.filter(l => f.expansao.has(l.expansao));
 
     document.getElementById('rel-count').textContent = linhas.length + ' registros';
 
     if (!linhas.length) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado</td></tr>`;
       return;
     }
 
@@ -601,6 +607,9 @@
         <td class="mono">${l.berco_fim || '—'}</td>
         <td>${l.densidade || '—'}</td>
         <td>${l.flow || '—'}</td>
+        <td>${l.densidade_eps || '—'}</td>
+        <td><span class="badge badge-gray">${l.silo || '—'}</span></td>
+        <td><span class="badge badge-blue">${l.expansao || '—'}</span></td>
         <td>${l.obs || '—'}</td>
       </tr>
     `).join('');
@@ -628,9 +637,8 @@
     { campo: 'qtd_tracos', header: 'Qtd Traços', padrao: true },
     { campo: 'houve_atraso', header: 'Houve Atraso', padrao: true },
     { campo: 'motivo_atraso', header: 'Motivo Atraso', padrao: true },
-    { campo: 'silo', header: 'Silo EPS', padrao: false },
-    { campo: 'expansao', header: 'Expansão EPS', padrao: false },
     { campo: 'bercos_reais', header: 'Berços Reais', padrao: true },
+    { campo: 'placas_cimenticia', header: 'Placas Cimenticia', padrao: true, fmt: v => v || '—' },
     { campo: 'total_paineis', header: 'Total Painéis', padrao: true },
     { campo: 'paineis_2p', header: 'Painéis 2/P', padrao: true },
     { campo: 'paineis_sp', header: 'Painéis S/P', padrao: true },

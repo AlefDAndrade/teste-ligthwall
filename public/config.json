@@ -1,34 +1,71 @@
 {
   "baterias": {
     "ids": [
-      "B1",
-      "B2",
-      "B3",
-      "B4",
-      "B5-7,5cm",
-      "B6-12cm",
-      "B7",
-      "B8",
-      "B9",
-      "B10",
-      "B11",
-      "B12",
-      "B13"
-    ]
-  },
-  "dimensoes": {
-    "opcoes": [
       {
-        "label": "7,5 cm",
-        "bercos": 22
-      },
-      {
+        "id": "B1",
         "label": "9 cm",
         "bercos": 20
       },
       {
+        "id": "B2",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B3",
+         "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B4",
+        "label": "9 cm",
+        "bercos": 20
+
+      },
+      {
+        "id": "B5-7,5cm",
+        "label": "7,5 cm",
+        "bercos": 22
+      },
+      {
+        "id": "B6-12cm",
         "label": "12 cm",
         "bercos": 18
+      },
+      {
+        "id": "B7",
+        "label": "9 cm",
+        "bercos": 20  
+      },
+      {
+        "id": "B8",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B9",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B10",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B11",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B12",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B13",
+        "label": "9 cm",
+        "bercos": 20
       }
     ]
   },

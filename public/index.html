@@ -198,10 +198,8 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Dimensão (Tipo) <span class="required">*</span></label>
-                  <select class="form-select" id="op-dimensao">
-                    <option value="">Carregando...</option>
-                  </select>
+                  <label class="form-label">Dimensão (Tipo)</label>
+                  <input class="form-input auto-filled" id="op-dimensao" readonly placeholder="Definido pela bateria">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Capacidade (Berços)</label>
@@ -218,25 +216,8 @@
                   <input class="form-input" type="number" id="op-bercos-reais"
                     placeholder="Deixe vazio para usar capacidade total" min="1" max="22">
                 </div>
-                <div class="form-group">
-                  <label class="form-label">Silo de EPS <span class="required">*</span></label>
-                  <select class="form-select" id="op-silo">
-                    <option value="">— Selecione —</option>
-                    <option value="Silo 1">Silo 1</option>
-                    <option value="Silo 2">Silo 2</option>
-                    <option value="Silo 3">Silo 3</option>
-                    <option value="Silo 4">Silo 4</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Expansão do EPS <span class="required">*</span></label>
-                  <select class="form-select" id="op-expansao">
-                    <option value="">— Selecione —</option>
-                    <option value="Primeira expansão">Primeira expansão</option>
-                    <option value="Segunda expansão">Segunda expansão</option>
-                  </select>
-                </div>
-              </div>
+              </div> <!-- Certifique-se de manter este fechamento do Grid -->
+                
             </div>
 
             <!-- Cronômetro de injeção -->
@@ -281,7 +262,7 @@
             <!-- Produção calculada -->
             <div class="card">
               <div class="card-title">Produção Calculada</div>
-              <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;text-align:center">
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:12px;text-align:center">
                 <div>
                   <div
                     style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">
@@ -324,6 +305,13 @@
                   <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--green)"
                     id="op-m2-sp">—</div>
                 </div>
+                <div>
+                  <div
+                    style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">
+                    P cimenticia</div>
+                  <div style="font-family:var(--font-display);font-size:1.8rem;font-weight:800;color:var(--green)"
+                    id="op-placas-cimenticia">—</div>
+                </div>
               </div>
             </div>
 
@@ -364,6 +352,7 @@
               <div class="card-title">Referência Rápida</div>
               <div id="ref-rapida"
                 style="font-size:.8rem;color:var(--text-2);display:flex;flex-direction:column;gap:8px">
+                <div id="ref-rapida-list" style="display:flex;flex-direction:column;gap:8px"></div>
                 <hr class="divider" style="margin:6px 0">
                 <div style="color:var(--text-3);font-size:.75rem">
                   Limite de injeção: <span style="color:var(--accent)">59 minutos</span><br>
@@ -698,11 +687,12 @@
                 <th>m² 2/P</th> <!-- Coluna m² 2/P -->
                 <th>m² S/P</th> <!-- Coluna m² S/P -->
                 <th>Berços Reais</th> <!-- Nova -->
+                <th>Placas Cimenticia</th>
               </tr>
             </thead>
             <tbody id="registro-tbody">
               <tr>
-                <td colspan="12" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+                <td colspan="20" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
               </tr>
             </tbody>
           </table>
@@ -751,12 +741,15 @@
                 <th>Berços fim</th> <!-- Nova -->
                 <th>Densidade</th>
                 <th>Flow</th>
+                <th>Densidade EPS</th>
+                <th>Silo EPS</th>
+                <th>Expansão</th>
                 <th>Observações</th> <!-- Nova -->
               </tr>
             </thead>
             <tbody id="relatorio-tbody">
               <tr>
-                <td colspan="12" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+                <td colspan="11" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
               </tr>
             </tbody>
           </table>
@@ -997,6 +990,7 @@
       { key: 'm2_sp', label: 'm² S/P', required: false },
       { key: 'bercos_reais', label: 'Berços Reais', required: false },
       { key: 'tempo_min', label: 'Tempo (min)', required: false },
+      { key: 'placas_cimenticia', label: 'Placas Cimentícia', required: false },
     ];
 
     let _importSheetHeaders = [];
@@ -1032,7 +1026,10 @@
           { key: 'berco_fim', label: 'Berço Fim', required: false },
           { key: 'densidade', label: 'Densidade', required: false },
           { key: 'flow', label: 'Flow', required: false },
+          { key: 'densidade_eps', label: 'Densidade EPS', required: false },
           { key: 'obs', label: 'Observação', required: false },
+          { key: 'silo', label: 'Silo EPS', required: false },
+          { key: 'expansao', label: 'Expansão', required: false },
         ];
       } else {
         _activeImportFields = IMPORT_FIELDS; // campos originais do historico
@@ -1165,7 +1162,10 @@
             berco_fim: mapa['berco_fim'] ? String(row[mapa['berco_fim']]).trim() : '',
             densidade: mapa['densidade'] ? String(row[mapa['densidade']]).trim() : '',
             flow: mapa['flow'] ? String(row[mapa['flow']]).trim() : '',
+            densidade_eps: mapa['densidade_eps'] ? String(row[mapa['densidade_eps']]).trim() : '',
             obs: mapa['obs'] ? String(row[mapa['obs']]).trim() : '',
+            silo: mapa['silo'] ? String(row[mapa['silo']]).trim() : '',
+            expansao: mapa['expansao'] ? String(row[mapa['expansao']]).trim() : '',
           };
         });
       } else {
@@ -1206,15 +1206,16 @@
             m2_sp: mapa['m2_sp'] ? parseFloat(row[mapa['m2_sp']]) || 0 : 0,
             bercos_reais: mapa['bercos_reais'] ? parseInt(row[mapa['bercos_reais']]) || capacidade : capacidade,
             tempo_min: tempoMin,
+            placas_cimenticia: mapa['placas_cimenticia'] ? (parseInt(row[mapa['placas_cimenticia']]) || 0) : (mapa['paineis_2p'] ? (parseInt(row[mapa['paineis_2p']]) || 0) * 2 : 0),
           };
         });
       }
 
       const cols = _importDestino === 'relatorio_injecao'
-        ? ['data', 'id_bateria', 'num_traco', 'berco_ini', 'berco_fim', 'densidade', 'flow', 'obs']
+        ? ['data', 'id_bateria', 'num_traco', 'berco_ini', 'berco_fim', 'densidade', 'flow', 'densidade_eps', 'obs']
         : ['data', 'turno', 'id_bateria', 'dimensao', 'tipo_montagem', 'total_paineis', 'm2_total', 'houve_atraso'];
       const labels = _importDestino === 'relatorio_injecao'
-        ? { data: 'Data', id_bateria: 'Bateria', num_traco: 'Traço', berco_ini: 'B.Início', berco_fim: 'B.Fim', densidade: 'Densidade', flow: 'Flow', obs: 'Obs' }
+        ? { data: 'Data', id_bateria: 'Bateria', num_traco: 'Traço', berco_ini: 'B.Início', berco_fim: 'B.Fim', densidade: 'Densidade', flow: 'Flow', densidade_eps: 'D. EPS', obs: 'Obs' }
         : { data: 'Data', turno: 'Turno', id_bateria: 'Bateria', dimensao: 'Dimensão', tipo_montagem: 'Montagem', total_paineis: 'Painéis', m2_total: 'm²', houve_atraso: 'Atraso' };
       const preview = _importRegistros.slice(0, 8);
 
