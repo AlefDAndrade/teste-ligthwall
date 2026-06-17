@@ -1585,3 +1585,164 @@ td.mono {
 .ao-popover.active {
   display: block;
 }
+/* ============================================================
+   ESTILOS PARA TRAÇOS REAPROVEITADOS
+   ============================================================ */
+
+/* Indicador visual no cabeçalho do card */
+.readonly-reaproveitado-wrapper .form-label {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.traco-reaproveitado-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.traco-reaproveitado-badge .main-text {
+  display: block;
+  line-height: 1.2;
+}
+
+.traco-reaproveitado-badge .sub-text {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* Estilos para campos bloqueados (readonly/disabled) */
+.form-group.readonly-reaproveitado-wrapper .form-input,
+.form-input.readonly-reaproveitado,
+.form-select.readonly-reaproveitado,
+.form-textarea.readonly-reaproveitado {
+  background-color: var(--bg-2);
+  opacity: 0.7;
+  cursor: not-allowed;
+  border-color: var(--border-2);
+}
+
+.form-input.readonly-reaproveitado:focus,
+.form-select.readonly-reaproveitado:focus,
+.form-textarea.readonly-reaproveitado:focus {
+  box-shadow: none;
+  border-color: var(--border-2);
+}
+
+.form-group.readonly-reaproveitado-wrapper .btn-ajuste,
+/* Botões de ajuste desabilitados */
+.btn-ajuste.readonly-reaproveitado,
+.btn-ajuste-tempo.readonly-reaproveitado {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none; /* Impede cliques */
+  background: var(--bg-3); /* Cor de fundo para indicar desabilitação */
+  background-color: var(--bg-3); /* Cor de fundo para indicar desabilitação */
+  border-color: var(--border-2);
+}
+
+/* Estilo para o modal de confirmação de exclusão */
+.modal-confirmacao-exclusao {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-confirmacao-exclusao > div {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: 460px;
+  max-width: 92vw;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+}
+
+.modal-confirmacao-exclusao h2 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--red);
+  margin: 0;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.modal-confirmacao-exclusao p {
+  color: var(--text-2);
+  text-align: center;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.modal-confirmacao-exclusao ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  color: var(--text-2);
+  text-align: left;
+}
+
+.modal-confirmacao-exclusao ul li {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.modal-confirmacao-exclusao ul li::before {
+  content: '•';
+  color: var(--red);
+  font-weight: bold;
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.modal-confirmacao-exclusao .modal-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.modal-confirmacao-exclusao .modal-btns button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.modal-confirmacao-exclusao .modal-btns .btn-cancelar {
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.modal-confirmacao-exclusao .modal-btns .btn-cancelar:hover {
+  background: var(--bg-3);
+}
+
+.modal-confirmacao-exclusao .modal-btns .btn-excluir {
+  background: var(--red);
+  color: #fff;
+}
+
+.modal-confirmacao-exclusao .modal-btns .btn-excluir:hover {
+  background: var(--red-dark);
+}

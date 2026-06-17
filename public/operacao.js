@@ -300,14 +300,14 @@
       num,
       berco_ini: sugeridoIni,
       berco_fim: '',
-      cimento_real:      { original: '', ajustes: [] },
-      agua_real:         { original: '', ajustes: [] },
-      eps_real:          { original: '', ajustes: [] },
-      superplast_real:   { original: '', ajustes: [] },
+      cimento_real: { original: '', ajustes: [] },
+      agua_real: { original: '', ajustes: [] },
+      eps_real: { original: '', ajustes: [] },
+      superplast_real: { original: '', ajustes: [] },
       incorporador_real: { original: '', ajustes: [] },
-      tempo_batida:      { original: '', ajustes: [] },
-      densidade_insumo:  { original: '', ajustes: [] },
-      flow_insumo:       { original: '', ajustes: [] },
+      tempo_batida: { original: '', ajustes: [] },
+      densidade_insumo: { original: '', ajustes: [] },
+      flow_insumo: { original: '', ajustes: [] },
       densidade: '',
       flow: '',
       obs: '',
@@ -337,21 +337,21 @@
       berco_ini: sugeridoIni,
       berco_fim: '',
       // Receita carregada da sobra
-      cimento_real:      receita.cimento_real      || { original: '', ajustes: [] },
-      agua_real:         receita.agua_real          || { original: '', ajustes: [] },
-      eps_real:          receita.eps_real           || { original: '', ajustes: [] },
-      superplast_real:   receita.superplast_real    || { original: '', ajustes: [] },
-      incorporador_real: receita.incorporador_real  || { original: '', ajustes: [] },
-      tempo_batida:      receita.tempo_batida       || { original: '', ajustes: [] },
+      cimento_real: receita.cimento_real || { original: '', ajustes: [] },
+      agua_real: receita.agua_real || { original: '', ajustes: [] },
+      eps_real: receita.eps_real || { original: '', ajustes: [] },
+      superplast_real: receita.superplast_real || { original: '', ajustes: [] },
+      incorporador_real: receita.incorporador_real || { original: '', ajustes: [] },
+      tempo_batida: receita.tempo_batida || { original: '', ajustes: [] },
       // Flow e densidade carregados — o operador pode registrar o novo resultado medido
-      densidade_insumo:  (sobra.densidade !== undefined && sobra.densidade !== null)
+      densidade_insumo: (sobra.densidade !== undefined && sobra.densidade !== null)
         ? { original: String(sobra.densidade), ajustes: [] }
         : { original: '', ajustes: [] },
-      flow_insumo:       (sobra.flow !== undefined && sobra.flow !== null)
+      flow_insumo: (sobra.flow !== undefined && sobra.flow !== null)
         ? { original: String(sobra.flow), ajustes: [] }
         : { original: '', ajustes: [] },
       densidade: (sobra.densidade !== undefined && sobra.densidade !== null) ? sobra.densidade : '',
-      flow:      (sobra.flow !== undefined && sobra.flow !== null) ? sobra.flow : '',
+      flow: (sobra.flow !== undefined && sobra.flow !== null) ? sobra.flow : '',
       obs: receita.obs || '',
       silo: receita.silo || '',
       expansao: receita.expansao || '',
@@ -434,7 +434,7 @@
           <br>Deseja utilizar este restante?
         </p>
         <div style="background:var(--bg-2);border-radius:var(--radius);padding:14px;margin-bottom:24px;font-size:.82rem;color:var(--text-2)">
-          ${sobra.flow     ? `<div>Flow: <strong style="color:var(--text)">${sobra.flow} mm</strong></div>` : ''}
+          ${sobra.flow ? `<div>Flow: <strong style="color:var(--text)">${sobra.flow} mm</strong></div>` : ''}
           ${sobra.densidade ? `<div>Densidade: <strong style="color:var(--text)">${sobra.densidade} kg/m³</strong></div>` : ''}
           <div style="color:var(--text-3);font-size:.75rem;margin-top:4px">${new Date(sobra.data).toLocaleString('pt-BR')}</div>
         </div>
@@ -459,7 +459,7 @@
       // Adiciona o traço reaproveitado ao state
       _adicionarTracoDeSobra(sobra);
       // Marca sobra como utilizada (em segundo plano para não travar a UI)
-      try { await LW.desativarSobra('utilizada'); } catch (_) {}
+      try { await LW.desativarSobra('utilizada'); } catch (_) { }
     });
 
     document.getElementById('btn-criar-novo-traco').addEventListener('click', () => {
@@ -513,7 +513,7 @@
 
     document.getElementById('btn-descartar-sobra').addEventListener('click', async () => {
       modal.remove();
-      try { await LW.desativarSobra('descartada'); } catch (_) {}
+      try { await LW.desativarSobra('descartada'); } catch (_) { }
       callbackProsseguir();
     });
 
@@ -581,19 +581,19 @@
         ativa: true,
         tracoId: ultimoTraco.id,
         operacaoOrigem: record.id,
-        flow:      totalInsumo(ultimoTraco.flow_insumo,      'flow')      || ultimoTraco.flow      || '',
+        flow: totalInsumo(ultimoTraco.flow_insumo, 'flow') || ultimoTraco.flow || '',
         densidade: totalInsumo(ultimoTraco.densidade_insumo, 'densidade') || ultimoTraco.densidade || '',
         receita: {
-          cimento_real:      ultimoTraco.cimento_real,
-          agua_real:         ultimoTraco.agua_real,
-          eps_real:          ultimoTraco.eps_real,
-          superplast_real:   ultimoTraco.superplast_real,
+          cimento_real: ultimoTraco.cimento_real,
+          agua_real: ultimoTraco.agua_real,
+          eps_real: ultimoTraco.eps_real,
+          superplast_real: ultimoTraco.superplast_real,
           incorporador_real: ultimoTraco.incorporador_real,
-          tempo_batida:      ultimoTraco.tempo_batida,
-          silo:              ultimoTraco.silo,
-          expansao:          ultimoTraco.expansao,
-          densidadeEPS:      ultimoTraco.densidadeEPS,
-          obs:               ultimoTraco.obs,
+          tempo_batida: ultimoTraco.tempo_batida,
+          silo: ultimoTraco.silo,
+          expansao: ultimoTraco.expansao,
+          densidadeEPS: ultimoTraco.densidadeEPS,
+          obs: ultimoTraco.obs,
         },
         data: new Date().toISOString(),
         status: 'ativa',
@@ -609,17 +609,32 @@
     document.getElementById('btn-sobra-nao').addEventListener('click', async () => {
       modal.remove();
       // Garante que não há sobra ativa residual para o traço encerrado
-      try { await LW.desativarSobra('descartada'); } catch (_) {}
+      try { await LW.desativarSobra('descartada'); } catch (_) { }
       showSuccessModal(record);
     });
   }
 
   function removeTraco(i) {
-    state.tracos.splice(i, 1);
-    state.tracos.forEach((t, idx) => t.num = idx + 1);
-    expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
-    renderTracos();
-    persist();
+    const traco = state.tracos[i];
+
+    if (traco && traco._reaproveitado) {
+      // Se for um traço reaproveitado, exibe modal de confirmação
+      _mostrarModalConfirmacaoExclusao(i, () => {
+        // Callback de confirmação: executa a remoção real
+        state.tracos.splice(i, 1);
+        state.tracos.forEach((t, idx) => t.num = idx + 1);
+        expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
+        renderTracos();
+        persist();
+      });
+    } else {
+      // Traço normal: remove diretamente
+      state.tracos.splice(i, 1);
+      state.tracos.forEach((t, idx) => t.num = idx + 1);
+      expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
+      renderTracos();
+      persist();
+    }
   }
 
   // Formata a exibição dos ajustes: "9,5 + 0,5 + 0,3 = 10,3" ou "9,5 → 10,0 → 10,5"
@@ -660,8 +675,8 @@
   function formatDuracao(seg) {
     if (seg === '' || seg === null) return '—';
     const { h, m, s } = segParaHMS(parseInt(seg));
-    if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
-    if (m > 0) return `${m}m ${String(s).padStart(2,'0')}s`;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
     return `${s}s`;
   }
 
@@ -685,29 +700,29 @@
         <label class="form-label">⏱ Tempo de Batida</label>
         <div class="duration-picker">
           <div class="duration-col">
-            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'h',1)">▲</button>
+            <button class="dur-btn dur-up ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'h',1) ${t._reaproveitado ? 'disabled' : ''}">▲</button>
             <input class="dur-input" type="number" min="0" max="23"
               id="dur-h-${i}" value="${temValor ? h : ''}" placeholder="0"
               oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'h',-1)">▼</button>
+            <button class="dur-btn dur-dn  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'h',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
             <span class="dur-label">h</span>
           </div>
           <span class="dur-sep">:</span>
           <div class="duration-col">
-            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'m',1)">▲</button>
+            <button class="dur-btn dur-up  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'m',1)  ${t._reaproveitado ? 'disabled' : ''}">▲</button>
             <input class="dur-input" type="number" min="0" max="59"
               id="dur-m-${i}" value="${temValor ? m : ''}" placeholder="0"
               oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'m',-1)">▼</button>
+            <button class="dur-btn dur-dn  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'m',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
             <span class="dur-label">min</span>
           </div>
           <span class="dur-sep">:</span>
           <div class="duration-col">
-            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'s',1)">▲</button>
+            <button class="dur-btn dur-up ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'s',1)  ${t._reaproveitado ? 'disabled' : ''}">▲</button>
             <input class="dur-input" type="number" min="0" max="59"
               id="dur-s-${i}" value="${temValor ? s : ''}" placeholder="0"
               oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'s',-1)">▼</button>
+            <button class="dur-btn dur-dn ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'s',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
             <span class="dur-label">seg</span>
           </div>
         </div>
@@ -722,7 +737,7 @@
             <div class="ajuste-painel-titulo">Adicionar tempo extra</div>
             <div class="duration-picker duration-picker--sm">
               <div class="duration-col">
-                <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracaoAjuste(${i},'h',1)">▲</button>
+                <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracaoAjuste(${i},'h',1)" ${t.isReutilizado ? 'readonly-reaproveitado' : ''}>▲</button>
                 <input class="dur-input" type="number" min="0" max="23"
                   id="dur-aj-h-${i}" value="0" placeholder="0">
                 <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracaoAjuste(${i},'h',-1)">▼</button>
@@ -750,7 +765,7 @@
               <button class="btn btn-ghost btn-sm" onclick="LWOp.fecharAjuste(${i},'tempo_batida')">Cancelar</button>
             </div>
           </div>
-          <button class="btn-ajuste-tempo" onclick="LWOp.abrirAjuste(${i},'tempo_batida',this)">+ tempo extra</button>
+          <button class="btn-ajuste-tempo  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.abrirAjuste(${i},'tempo_batida',this) ${t._reaproveitado ? 'disabled' : ''}" title>+ tempo extra</button>
         ` : ''}
       </div>`;
   }
@@ -769,18 +784,19 @@
 
     // Painel: "Novo valor" para overwrite (resultado), "Quantidade a adicionar" para soma (insumos)
     const painelTitulo = isResultado ? 'Registrar novo valor' : 'Adicionar ajuste';
-    const painelLabel  = isResultado ? 'Novo valor:' : 'Quantidade:';
+    const painelLabel = isResultado ? 'Novo valor:' : 'Quantidade:';
     const painelPlaceholder = isResultado ? placeholder : '0';
 
     return `
       <div class="form-group insumo-group">
         <label class="form-label">${label}</label>
         <div class="insumo-input-row">
-          <input class="form-input" type="number" step="${step}"
+          <input class="form-input ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" type="number" step="${step}"
             value="${valorExibido}"
             oninput="LWOp.updateInsumoOriginal(${i},'${fieldKey}',this.value)"
+            ${t._reaproveitado ? 'readonly' : ''}
             placeholder="${placeholder}">
-          <button class="btn-ajuste" title="${painelTitulo}" onclick="LWOp.abrirAjuste(${i},'${fieldKey}',this)">+</button>
+          <button class="btn-ajuste ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" title="${painelTitulo}" onclick="LWOp.abrirAjuste(${i},'${fieldKey}',this) ${t._reaproveitado ? 'disabled' : ''}">+</button>
         </div>
         ${temAjustes ? `
           <div class="insumo-ajustes-display">
@@ -818,7 +834,7 @@
         const isExpanded = i === expandedTracoIndex;
         const isComplete = t.berco_ini && t.berco_fim && t.silo && t.expansao && t.densidadeEPS;
         const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs;
-        
+
         const statusIcon = isComplete ? '✅' : (hasData ? '⚠️' : '⚪');
         const statusClass = isComplete ? 'complete' : (hasData ? 'pending' : 'empty');
 
@@ -837,30 +853,34 @@
       // Garante migração de traços antigos
       migrarTraco(t);
       const isExpanded = i === expandedTracoIndex;
-      
+
       html += `
       <div class="traco-row ${isExpanded ? '' : ' collapsed'}">
         <!-- Cabeçalho do traço -->
         <div class="traco-card-header" onclick="LWOp.selectTraco(${i})">
           <span class="traco-num-label">Traço <strong>Nº ${t.num}</strong>
-            ${t._reaproveitado ? `<span title="Traço reaproveitado da operação ${t._sobraOrigem || ''}"
-              style="margin-left:6px;font-size:.7rem;background:var(--accent);color:#000;
-                     border-radius:4px;padding:1px 6px;font-weight:700">♻️ SOBRA</span>` : ''}
+            ${t._reaproveitado ? `<div class="traco-reaproveitado-badge" title="Traço reaproveitado da operação ${t._sobraOrigem || ''}">
+                ♻️ <span class="main-text">sobra</span>
+                <span class="sub-text"></span>
+              </div>
+            ` : ''}
           </span>
           <div class="traco-header-fields" onclick="if(${isExpanded}) event.stopPropagation()">
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Início <span class="required">*</span></label>
-              <input class="form-input" type="number" min="1" max="22" value="${t.berco_ini}"
-                oninput="LWOp.updateTraco(${i},'berco_ini',this.value)" placeholder="—">
+                <input class="form-input" type="number" min="1" max="22" value="${t.berco_ini}"
+                oninput="LWOp.updateTraco(${i},\'berco_ini\',this.value)" placeholder="—">
             </div>
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Fim <span class="required">*</span></label>
-              <input class="form-input" type="number" min="1" max="22" value="${t.berco_fim}"
-                oninput="LWOp.updateTraco(${i},'berco_fim',this.value)" placeholder="—">
+                <input class="form-input" type="number" min="1" max="22" value="${t.berco_fim}"
+                oninput="LWOp.updateTraco(${i},\'berco_fim\',this.value)" placeholder="—"}>
             </div>
             <div class="form-group traco-header-field">
               <label class="form-label">Silo do EPS <span class="required">*</span></label>
-              <select class="form-select" onchange="LWOp.updateTraco(${i}, 'silo', this.value)">
+                <select class="form-select ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" 
+                onchange="LWOp.updateTraco(${i}, 'silo', this.value)"
+                ${t._reaproveitado ? 'disabled' : ''}>
                 <option value=""></option>
                 <option value="Silo 1" ${t.silo === 'Silo 1' ? 'selected' : ''}>Silo 1</option>
                 <option value="Silo 2" ${t.silo === 'Silo 2' ? 'selected' : ''}>Silo 2</option>
@@ -870,7 +890,9 @@
             </div>
             <div class="form-group traco-header-field">
               <label class="form-label">Expansão do EPS <span class="required">*</span></label>
-              <select class="form-select" onchange="LWOp.updateTraco(${i}, 'expansao', this.value)">
+              <select class="form-select ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" 
+                onchange="LWOp.updateTraco(${i}, 'expansao', this.value)"
+                ${t._reaproveitado ? 'disabled' : ''}>
                 <option value=""></option>
                 <option value="1ª expansão" ${t.expansao === '1ª expansão' ? 'selected' : ''}>1ª expansão</option>
                 <option value="2ª expansão" ${t.expansao === '2ª expansão' ? 'selected' : ''}>2ª expansão</option>
@@ -884,12 +906,12 @@
           <!-- Seção: Receita Real Pesada -->
           <div class="traco-section-label">⚖ Receita Real Pesada</div>
           <div class="traco-fields-grid traco-fields-grid--6">
-            ${renderCampoInsumo(t, i, 'cimento_real',      'Cimento (kg)',        '0.01',  2, 'kg')}
-            ${renderCampoInsumo(t, i, 'agua_real',         'Água (kg)',           '0.01',  2, 'kg')}
-            ${renderCampoInsumo(t, i, 'eps_real',          'EPS (kg)',            '0.01',  2, 'kg')}
-            ${renderCampoInsumo(t, i, 'superplast_real',   'Superplast. (kg)',    '0.001', 3, 'kg')}
-            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)',  '0.001', 3, 'kg')}
-            ${renderCampoTempoBatida(t, i)}
+            ${renderCampoInsumo(t, i, 'cimento_real', 'Cimento (kg)', '0.01', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'agua_real', 'Água (kg)', '0.01', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'eps_real', 'EPS (kg)', '0.01', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 3, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 3, 'kg', t._reaproveitado)}
+            ${renderCampoTempoBatida(t, i, t._reaproveitado)}
           </div>
 
           <!-- Seção: Resultado -->
@@ -897,15 +919,17 @@
           <div class="traco-fields-grid traco-fields-grid--4">
             <div class="form-group">
               <label class="form-label">Densidade EPS</label>
-              <input class="form-input" type="number" step="0.01" value="${t.densidadeEPS}"
-                oninput="LWOp.updateTraco(${i},'densidadeEPS',this.value)" placeholder="kg/m³">
+                <input class="form-input" type="number" step="0.01" value="${t.densidadeEPS}"
+                oninput="LWOp.updateTraco(${i},\'densidadeEPS\',this.value)" placeholder="kg/m³"
+                ${t._reaproveitado ? 'readonly class="readonly-reaproveitado"' : ''}>
             </div>
-            ${renderCampoInsumo(t, i, 'densidade_insumo', 'Densidade do traço', '0.01', 2, 'kg/m³')}
-            ${renderCampoInsumo(t, i, 'flow_insumo',      'Flow (mm)',        '1',    0, 'mm')}
+            ${renderCampoInsumo(t, i, 'densidade_insumo', 'Densidade do traço', '0.01', 2, 'kg/m³', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'flow_insumo', 'Flow (mm)', '1', 0, 'mm', t._reaproveitado)}
             <div class="form-group traco-obs-field">
               <label class="form-label">Observações</label>
-              <input class="form-input" type="text" value="${t.obs}"
-                oninput="LWOp.updateTraco(${i},'obs',this.value)" placeholder="Ajustes, correções, falhas...">
+                <input class="form-input" type="text" value="${t.obs}"
+                oninput="LWOp.updateTraco(${i},\'obs\',this.value)" placeholder="Ajustes, correções, falhas..."
+                ${t._reaproveitado ? 'readonly class="readonly-reaproveitado"' : ''}>
             </div>
           </div>
         </div>
@@ -947,7 +971,7 @@
     const badgeCount = $('pendencia-badge-count');
     const pending = checks.filter(c => !c.ok).length;
     if (badgeCount) {
-      badgeCount.innerHTML = pending > 0 
+      badgeCount.innerHTML = pending > 0
         ? `<span style="background:var(--red); color:#fff; border-radius:10px; padding:0 6px; font-size:.65rem; margin-left:4px">${pending}</span>`
         : ` ✅`;
     }
@@ -1240,3 +1264,48 @@
   };
 
 })();
+
+/**
+ * Exibe um modal de confirmação para exclusão de traços reaproveitados.
+ * @param {number} i - Índice do traço a ser excluído.
+ * @param {function} onConfirm - Callback a ser executado se o usuário confirmar a exclusão.
+ */
+function _mostrarModalConfirmacaoExclusao(i, onConfirm) {
+  const existente = document.getElementById('modal-confirmacao-exclusao');
+  if (existente) existente.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-confirmacao-exclusao';
+  modal.className = 'modal-confirmacao-exclusao'; // Usa a classe CSS definida
+
+  modal.innerHTML = `
+      <div>
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2.2rem;margin-bottom:8px">⚠️</div>
+          <h2>Este traço é uma sobra reaproveitada.</h2>
+        </div>
+        <p>
+          Ao excluir:
+        </p>
+        <ul>
+          <li>o vínculo com o traço original será perdido;</li>
+          <li>esta utilização deixará de ser registrada nesta operação.</li>
+        </ul>
+        <p>Deseja realmente excluir?</p>
+        <div class="modal-btns">
+          <button id="btn-cancelar-exclusao" class="btn-cancelar">Cancelar</button>
+          <button id="btn-confirmar-exclusao" class="btn-excluir">Excluir</button>
+        </div>
+      </div>`;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('btn-confirmar-exclusao').addEventListener('click', () => {
+    modal.remove();
+    onConfirm();
+  });
+
+  document.getElementById('btn-cancelar-exclusao').addEventListener('click', () => {
+    modal.remove();
+  });
+}
