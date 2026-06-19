@@ -40,6 +40,161 @@
   --sidebar-w-expanded: 240px;
 }
 
+/* ============================================================
+   TEMA CLARO — Light Theme
+   Aplicado via [data-theme="light"] no <html>
+   ============================================================ */
+[data-theme="light"] {
+  --bg: #f0f2f5;
+  --bg-2: #ffffff;
+  --bg-3: #e4e7ed;
+  --bg-card: #ffffff;
+  --border: #d1d5db;
+  --border-2: #b0b7c3;
+
+  --text: #111827;
+  --text-2: #4b5563;
+  --text-3: #9ca3af;
+
+  --accent: #d97706;
+  --accent-dim: #fde68a;
+  --green: #059669;
+  --green-dim: #d1fae5;
+  --red: #dc2626;
+  --red-dim: #fee2e2;
+  --blue: #2563eb;
+  --blue-dim: #dbeafe;
+
+  --shadow: 0 4px 24px rgba(0, 0, 0, .10);
+}
+
+/* ============================================================
+   TEMA LIGHTWALL — Dark / Azul-marinho + Laranja (marca da empresa)
+   Aplicado via [data-theme="lightwall"] no <html>
+   Paleta aproximada com base no site institucional lightwallbrasil.com
+   ============================================================ */
+[data-theme="lightwall"] {
+  --bg: #0a1626;
+  --bg-2: #0f1f33;
+  --bg-3: #15293f;
+  --bg-card: #122236;
+  --border: #1f3450;
+  --border-2: #2c4a6b;
+
+  --text: #eef2f7;
+  --text-2: #9fb0c4;
+  --text-3: #62748c;
+
+  --accent: #ff8c29;
+  --accent-dim: #7a3f0f;
+  --green: #1fb88a;
+  --green-dim: #0c4636;
+  --red: #ef4444;
+  --red-dim: #7f1d1d;
+  --blue: #3b82f6;
+  --blue-dim: #16314f;
+
+  --shadow: 0 4px 24px rgba(0, 0, 0, .55);
+}
+
+/* ---- Theme picker (botão + dropdown) ---- */
+.theme-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .7rem;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color .2s, color .2s;
+  font-family: var(--font-mono);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.btn-theme:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-arrow {
+  font-size: .6rem;
+  transition: transform .2s ease;
+  line-height: 1;
+}
+
+.theme-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 6px;
+  min-width: 160px;
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-dropdown--open {
+  display: flex;
+}
+
+.theme-dropdown-title {
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text-3);
+  padding: 4px 8px 6px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: .8rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s, color .15s;
+}
+
+.theme-option:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+
+.theme-option--active {
+  color: var(--accent);
+  background: var(--bg-3);
+}
+
+.theme-option--active::after {
+  content: '✓';
+  margin-left: auto;
+  font-size: .75rem;
+}
+
 *,
 *::before,
 *::after {

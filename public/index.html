@@ -26,6 +26,15 @@
         <span class="topbar-clock" id="topbar-clock">--:--:--</span>
         <span id="topbar-role"
           style="font-size:.7rem;color:var(--text-2);letter-spacing:.08em;text-transform:uppercase"></span>
+        <div class="theme-picker" id="theme-picker">
+          <button class="btn-theme" id="btn-tema" onclick="toggleTemaDropdown()" title="Escolher tema">
+            <span id="btn-tema-label">🌙 Tema</span>
+            <span class="theme-arrow" id="theme-arrow">▾</span>
+          </button>
+          <div class="theme-dropdown" id="theme-dropdown">
+            <div class="theme-dropdown-title">Escolher tema</div>
+          </div>
+        </div>
         <button onclick="AdminAuth.logout()"
           style="font-size:.7rem;padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer">
           Sair
@@ -1301,6 +1310,102 @@
         LWDash.initRelatorio();
       }
     }
+
+    // ---- Tema ----
+    (function () {
+      const TEMA_KEY = 'lw_tema';
+
+      // ── Catálogo de temas — adicione novos aqui no futuro ──────────────────
+      const TEMAS = [
+        { id: 'dark',     label: '🌙 Escuro',    attr: null },
+        { id: 'light',    label: '☀️ Claro',     attr: 'light' },
+        { id: 'lightwall',label: '🟧 Lightwall', attr: 'lightwall' },
+      ];
+
+      let _temaAtual = 'lightwall';
+      let _dropdownAberto = false;
+
+      // ── Aplica um tema ao <html> e atualiza o botão ─────────────────────────
+      function _aplicarTema(id) {
+        const tema = TEMAS.find(t => t.id === id) || TEMAS[0];
+        _temaAtual = tema.id;
+
+        if (tema.attr) {
+          document.documentElement.setAttribute('data-theme', tema.attr);
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
+
+        const labelEl = document.getElementById('btn-tema-label');
+        if (labelEl) labelEl.textContent = tema.label;
+
+        // Marca o item ativo no dropdown
+        document.querySelectorAll('.theme-option').forEach(el => {
+          el.classList.toggle('theme-option--active', el.dataset.id === tema.id);
+        });
+
+        localStorage.setItem(TEMA_KEY, tema.id);
+      }
+
+      // ── Constrói os itens do dropdown dinamicamente ─────────────────────────
+      function _buildDropdown() {
+        const dropdown = document.getElementById('theme-dropdown');
+        if (!dropdown) return;
+
+        // Remove opções antigas (mantém o título)
+        dropdown.querySelectorAll('.theme-option').forEach(el => el.remove());
+
+        TEMAS.forEach(tema => {
+          const btn = document.createElement('button');
+          btn.className = 'theme-option';
+          btn.dataset.id = tema.id;
+          btn.textContent = tema.label;
+          if (tema.id === _temaAtual) btn.classList.add('theme-option--active');
+          btn.addEventListener('click', () => {
+            _aplicarTema(tema.id);
+            _fecharDropdown();
+          });
+          dropdown.appendChild(btn);
+        });
+      }
+
+      // ── Abre / fecha o dropdown ─────────────────────────────────────────────
+      function _abrirDropdown() {
+        _buildDropdown();
+        const dropdown = document.getElementById('theme-dropdown');
+        const arrow    = document.getElementById('theme-arrow');
+        if (dropdown) dropdown.classList.add('theme-dropdown--open');
+        if (arrow)    arrow.style.transform = 'rotate(180deg)';
+        _dropdownAberto = true;
+      }
+
+      function _fecharDropdown() {
+        const dropdown = document.getElementById('theme-dropdown');
+        const arrow    = document.getElementById('theme-arrow');
+        if (dropdown) dropdown.classList.remove('theme-dropdown--open');
+        if (arrow)    arrow.style.transform = '';
+        _dropdownAberto = false;
+      }
+
+      window.toggleTemaDropdown = function () {
+        _dropdownAberto ? _fecharDropdown() : _abrirDropdown();
+      };
+
+      // Fecha ao clicar fora
+      document.addEventListener('click', (e) => {
+        const picker = document.getElementById('theme-picker');
+        if (picker && !picker.contains(e.target)) _fecharDropdown();
+      });
+
+      // Fecha com ESC
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') _fecharDropdown();
+      });
+
+      // ── Inicializa com o tema salvo ─────────────────────────────────────────
+      const temaSalvo = localStorage.getItem(TEMA_KEY) || 'lightwall';
+      _aplicarTema(TEMAS.find(t => t.id === temaSalvo) ? temaSalvo : 'lightwall');
+    })();
 
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {

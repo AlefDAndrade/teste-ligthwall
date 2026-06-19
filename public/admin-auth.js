@@ -2,21 +2,16 @@
  * admin-auth.js — Módulo de Autenticação para Área Administrador
  * Lightwall SC · Sistema de Injeção V1.0
  *
- * Utiliza SHA-256 via Web Crypto API nativa (sem dependências externas).
- * A senha nunca é armazenada em texto puro — apenas o hash é persistido.
+ * [v2.0] Verificação de senha e arquivo de recuperação movida para o back-end.
+ *        O front-end envia a senha em texto plano via POST para /verificar-senha
+ *        e o servidor compara com o hash SHA-256 armazenado em security.json.
+ *        Isso resolve o bloqueio do crypto.subtle em contextos HTTP não seguros
+ *        (ex.: VMs Google Cloud sem HTTPS).
  *
  * Chave localStorage: "lw_admin_authenticated"
- *
- * [v1.1] Recuperação de senha via arquivo físico recovery.key adicionada.
- *        Leitura de hashes via /security.json · Atualização via POST /salvar-security.
  */
 
 const AdminAuth = (() => {
-
-  // ─── Hash SHA-256 armazenado da senha padrão "admadm" ─────────────────────
-  // Utilizado como fallback caso security.json não esteja disponível.
-  // O hash real é sempre lido de security.json em tempo de execução.
-  const STORED_HASH_FALLBACK = 'c415e920e0281339d3633ab0c19d3b11c5a70a52ad2e17e405ef66723c51294c';
 
   const LS_KEY = 'lw_admin_authenticated';
 
@@ -28,43 +23,51 @@ const AdminAuth = (() => {
     BLOQUEIO_MS: 5 * 60 * 1000, // 5 minutos
   };
 
-  // ─── Cache dos hashes lidos de security.json ───────────────────────────────
-  let _securityCache = null;
-
-  // ─── Utilitário: converter ArrayBuffer para string hexadecimal ─────────────
-  function _bufferToHex(buffer) {
-    return Array.from(new Uint8Array(buffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  // ─── Gera hash SHA-256 de uma string (assíncrono) ──────────────────────────
-  async function hashSHA256(text) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return _bufferToHex(hashBuffer);
-  }
-
-  // ─── Lê security.json do servidor ──────────────────────────────────────────
-  async function _lerSecurity() {
-    if (_securityCache) return _securityCache;
+  // ─── Verifica a senha no back-end ──────────────────────────────────────────
+  // Envia a senha em texto plano via HTTPS/HTTP para o servidor,
+  // que compara com o hash SHA-256 armazenado em security.json.
+  async function verificarSenha(senha) {
     try {
-      const res = await fetch('security.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error('security.json não encontrado');
-      _securityCache = await res.json();
-      return _securityCache;
+      const res = await fetch('/verificar-senha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senha }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return data.ok === true;
     } catch (_) {
-      // Fallback para comportamento anterior caso security.json não exista
-      return { passwordHash: STORED_HASH_FALLBACK, recoveryKeyHash: null };
+      return false;
     }
   }
 
-  // ─── Compara a senha digitada com o hash armazenado ────────────────────────
-  async function verificarSenha(senha) {
-    const hashDigitado = await hashSHA256(senha);
-    const security = await _lerSecurity();
-    return hashDigitado === (security.passwordHash || STORED_HASH_FALLBACK);
+  // ─── Verifica arquivo de recuperação no back-end ───────────────────────────
+  async function _validarArquivoRecuperacao(conteudo) {
+    try {
+      const res = await fetch('/verificar-recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: conteudo.trim() }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return data.ok === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ─── Gera hash de nova senha no back-end ───────────────────────────────────
+  // Usado ao redefinir senha via recuperação.
+  async function _gerarHashNoServidor(senha) {
+    const res = await fetch('/gerar-hash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senha }),
+    });
+    if (!res.ok) throw new Error('Falha ao gerar hash no servidor.');
+    const data = await res.json();
+    return data.hash;
   }
 
   // ─── Verifica se há sessão autenticada no localStorage ─────────────────────
@@ -84,21 +87,36 @@ const AdminAuth = (() => {
     window.location.href = 'login.html';
   }
 
+  // ─── Salva novo passwordHash no servidor via POST ──────────────────────────
+  async function _salvarNovaSenha(novoHash) {
+    // Lê recoveryKeyHash atual do servidor para não sobrescrever
+    const resSec = await fetch('security.json', { cache: 'no-store' });
+    const security = resSec.ok ? await resSec.json() : {};
+
+    const payload = {
+      passwordHash:    novoHash,
+      recoveryKeyHash: security.recoveryKeyHash || '',
+    };
+    const res = await fetch('/salvar-security', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Falha ao salvar nova senha no servidor.');
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // RECUPERAÇÃO DE SENHA — métodos privados
+  // BLOQUEIO DE RECUPERAÇÃO
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ─── Verifica se o mecanismo de bloqueio está ativo ────────────────────────
   function _estaBloqueado() {
     if (!_recuperacao.bloqueadoAte) return false;
     if (Date.now() < _recuperacao.bloqueadoAte) return true;
-    // Bloqueio expirou: resetar contadores
     _recuperacao.bloqueadoAte = null;
     _recuperacao.tentativasInvalidas = 0;
     return false;
   }
 
-  // ─── Retorna tempo restante de bloqueio em minutos:segundos ────────────────
   function _tempoRestanteBloqueio() {
     if (!_recuperacao.bloqueadoAte) return '';
     const ms = _recuperacao.bloqueadoAte - Date.now();
@@ -108,34 +126,8 @@ const AdminAuth = (() => {
     return `${min}m ${seg.toString().padStart(2, '0')}s`;
   }
 
-  // ─── Valida o arquivo .key selecionado ─────────────────────────────────────
-  async function _validarArquivoRecuperacao(conteudo) {
-    const chave = conteudo.trim();
-    const hashArquivo = await hashSHA256(chave);
-    const security = await _lerSecurity();
-    if (!security.recoveryKeyHash) return false;
-    return hashArquivo === security.recoveryKeyHash;
-  }
-
-  // ─── Salva novo passwordHash no servidor via POST ──────────────────────────
-  async function _salvarNovaSenha(novoHash) {
-    const security = await _lerSecurity();
-    const payload = {
-      passwordHash: novoHash,
-      recoveryKeyHash: security.recoveryKeyHash,
-    };
-    const res = await fetch('/salvar-security', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('Falha ao salvar nova senha no servidor.');
-    // Invalida cache para próxima leitura ser atualizada
-    _securityCache = null;
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
-  // MODAL DE LOGIN — criação e eventos (inalterado + botão Esqueci integrado)
+  // MODAL DE LOGIN — criação e eventos
   // ═══════════════════════════════════════════════════════════════════════════
 
   function _criarModal() {
@@ -281,39 +273,30 @@ const AdminAuth = (() => {
     const btnEsquec  = document.getElementById('admin-auth-btn-esqueceu');
     const erroEl     = document.getElementById('admin-auth-erro');
 
-    // Hover nos botões
     btnEntrar.addEventListener('mouseenter', () => { btnEntrar.style.background = '#d97706'; });
     btnEntrar.addEventListener('mouseleave', () => { btnEntrar.style.background = '#f59e0b'; });
     btnCancel.addEventListener('mouseenter', () => { btnCancel.style.borderColor = '#6b7280'; btnCancel.style.color = '#e5e7eb'; });
     btnCancel.addEventListener('mouseleave', () => { btnCancel.style.borderColor = '#2d2d4e'; btnCancel.style.color = '#9ca3af'; });
 
-    // Foco no input: borda colorida
     senhaInput.addEventListener('focus', () => { senhaInput.style.borderColor = '#f59e0b'; });
     senhaInput.addEventListener('blur',  () => { senhaInput.style.borderColor = '#2d2d4e'; });
 
-    // Enter no campo dispara login
     senhaInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') _tentarLogin();
     });
 
-    // Botão Entrar
     btnEntrar.addEventListener('click', _tentarLogin);
-
-    // Botão Cancelar
     btnCancel.addEventListener('click', fecharModal);
 
-    // Clicar fora do box fecha
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) fecharModal();
     });
 
-    // Esqueci minha senha → abre modal de recuperação
     btnEsquec.addEventListener('click', () => {
       fecharModal();
       abrirModalRecuperacao();
     });
 
-    // ESC fecha
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && overlay.style.display === 'flex') fecharModal();
     });
@@ -353,7 +336,6 @@ const AdminAuth = (() => {
     const erroEl  = document.getElementById('admin-auth-erro');
     const senhaEl = document.getElementById('admin-auth-senha');
 
-    // Reset estado
     erroEl.style.display = 'none';
     senhaEl.value        = '';
 
@@ -420,8 +402,6 @@ const AdminAuth = (() => {
 
         <!-- ETAPA 1: seleção do arquivo -->
         <div id="lw-recovery-etapa1">
-
-          <!-- Área de seleção de arquivo -->
           <div style="
             border: 2px dashed #2d2d4e;
             border-radius: 10px;
@@ -448,7 +428,6 @@ const AdminAuth = (() => {
             <input id="lw-recovery-input-file" type="file" accept=".key" style="display:none">
           </div>
 
-          <!-- Mensagem de erro de arquivo -->
           <div id="lw-recovery-erro-arquivo" style="
             display: none;
             background: rgba(239,68,68,.12);
@@ -460,7 +439,6 @@ const AdminAuth = (() => {
             margin-bottom: 14px;
           "></div>
 
-          <!-- Mensagem de bloqueio -->
           <div id="lw-recovery-bloqueio" style="
             display: none;
             background: rgba(239,68,68,.08);
@@ -472,13 +450,10 @@ const AdminAuth = (() => {
             margin-bottom: 14px;
             text-align: center;
           "></div>
-
         </div>
 
-        <!-- ETAPA 2: formulário de nova senha (oculto inicialmente) -->
+        <!-- ETAPA 2: formulário de nova senha -->
         <div id="lw-recovery-etapa2" style="display:none">
-
-          <!-- Nova senha -->
           <div style="margin-bottom:14px">
             <label for="lw-recovery-nova-senha" style="
               display:block;font-size:.75rem;text-transform:uppercase;
@@ -493,7 +468,6 @@ const AdminAuth = (() => {
               ">
           </div>
 
-          <!-- Confirmar senha -->
           <div style="margin-bottom:16px">
             <label for="lw-recovery-confirmar-senha" style="
               display:block;font-size:.75rem;text-transform:uppercase;
@@ -508,7 +482,6 @@ const AdminAuth = (() => {
               ">
           </div>
 
-          <!-- Erro de validação da senha -->
           <div id="lw-recovery-erro-senha" style="
             display:none;
             background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);
@@ -516,13 +489,11 @@ const AdminAuth = (() => {
             padding:9px 13px;margin-bottom:14px;
           "></div>
 
-          <!-- Botão Salvar -->
           <button id="lw-recovery-btn-salvar" style="
             width:100%;background:#f59e0b;border:none;border-radius:7px;
             color:#0f0f1a;font-size:.95rem;font-weight:700;
             padding:11px;cursor:pointer;transition:background .2s;
           ">Salvar Nova Senha</button>
-
         </div>
 
         <!-- Mensagem de sucesso -->
@@ -540,7 +511,6 @@ const AdminAuth = (() => {
             font-size:.78rem;cursor:pointer;text-decoration:underline;padding:0;
           ">← Voltar para o login</button>
         </div>
-
       </div>
     `;
 
@@ -550,80 +520,65 @@ const AdminAuth = (() => {
 
   // ─── Vincula eventos do modal de recuperação ───────────────────────────────
   function _bindEventosRecuperacao(overlay) {
-    const btnArquivo    = document.getElementById('lw-recovery-btn-arquivo');
-    const inputFile     = document.getElementById('lw-recovery-input-file');
-    const erroArquivo   = document.getElementById('lw-recovery-erro-arquivo');
-    const bloqueioEl    = document.getElementById('lw-recovery-bloqueio');
-    const etapa1        = document.getElementById('lw-recovery-etapa1');
-    const etapa2        = document.getElementById('lw-recovery-etapa2');
-    const novaSenhaEl   = document.getElementById('lw-recovery-nova-senha');
-    const confSenhaEl   = document.getElementById('lw-recovery-confirmar-senha');
-    const erroSenha     = document.getElementById('lw-recovery-erro-senha');
-    const btnSalvar     = document.getElementById('lw-recovery-btn-salvar');
-    const sucessoEl     = document.getElementById('lw-recovery-sucesso');
-    const btnVoltar     = document.getElementById('lw-recovery-btn-voltar');
-    const subtitulo     = document.getElementById('lw-recovery-subtitulo');
+    const btnArquivo  = document.getElementById('lw-recovery-btn-arquivo');
+    const inputFile   = document.getElementById('lw-recovery-input-file');
+    const erroArquivo = document.getElementById('lw-recovery-erro-arquivo');
+    const bloqueioEl  = document.getElementById('lw-recovery-bloqueio');
+    const etapa1      = document.getElementById('lw-recovery-etapa1');
+    const etapa2      = document.getElementById('lw-recovery-etapa2');
+    const novaSenhaEl = document.getElementById('lw-recovery-nova-senha');
+    const confSenhaEl = document.getElementById('lw-recovery-confirmar-senha');
+    const erroSenha   = document.getElementById('lw-recovery-erro-senha');
+    const btnSalvar   = document.getElementById('lw-recovery-btn-salvar');
+    const sucessoEl   = document.getElementById('lw-recovery-sucesso');
+    const btnVoltar   = document.getElementById('lw-recovery-btn-voltar');
+    const subtitulo   = document.getElementById('lw-recovery-subtitulo');
 
     let _timerBloqueio = null;
 
-    // Hover nos botões
     btnArquivo.addEventListener('mouseenter', () => { btnArquivo.style.background = '#d97706'; });
     btnArquivo.addEventListener('mouseleave', () => { btnArquivo.style.background = '#f59e0b'; });
     btnSalvar.addEventListener('mouseenter', () => { btnSalvar.style.background = '#d97706'; });
     btnSalvar.addEventListener('mouseleave', () => { btnSalvar.style.background = '#f59e0b'; });
 
-    // Focus nos inputs
     [novaSenhaEl, confSenhaEl].forEach(el => {
       el.addEventListener('focus', () => { el.style.borderColor = '#f59e0b'; });
       el.addEventListener('blur',  () => { el.style.borderColor = '#2d2d4e'; });
     });
 
-    // Botão selecionar arquivo
     btnArquivo.addEventListener('click', () => {
-      if (_estaBloqueado()) {
-        _mostrarBloqueio();
-        return;
-      }
+      if (_estaBloqueado()) { _mostrarBloqueio(); return; }
       inputFile.value = '';
       inputFile.click();
     });
 
-    // Arquivo selecionado via input
     inputFile.addEventListener('change', async () => {
       const arquivo = inputFile.files[0];
       if (!arquivo) return;
       await _processarArquivo(arquivo);
     });
 
-    // Clicar fora fecha
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) _fecharRecuperacao();
     });
 
-    // ESC fecha
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && overlay.style.display === 'flex') _fecharRecuperacao();
     });
 
-    // Voltar para login
     btnVoltar.addEventListener('click', () => {
       _fecharRecuperacao();
       abrirModal(AdminAuth._onSuccess);
     });
 
-    // Salvar nova senha
     btnSalvar.addEventListener('click', _salvarSenha);
     [novaSenhaEl, confSenhaEl].forEach(el => {
       el.addEventListener('keydown', (e) => { if (e.key === 'Enter') _salvarSenha(); });
     });
 
-    // ── Processa arquivo .key selecionado ─────────────────────────────────────
+    // ── Processa arquivo .key — valida no back-end ────────────────────────────
     async function _processarArquivo(arquivo) {
-      // Verifica bloqueio primeiro
-      if (_estaBloqueado()) {
-        _mostrarBloqueio();
-        return;
-      }
+      if (_estaBloqueado()) { _mostrarBloqueio(); return; }
 
       erroArquivo.style.display = 'none';
       bloqueioEl.style.display  = 'none';
@@ -635,17 +590,14 @@ const AdminAuth = (() => {
         const valido   = await _validarArquivoRecuperacao(conteudo);
 
         if (valido) {
-          // Arquivo válido: reseta contadores e avança para etapa 2
           _recuperacao.tentativasInvalidas = 0;
           _recuperacao.bloqueadoAte        = null;
 
-          etapa1.style.display    = 'none';
-          etapa2.style.display    = 'block';
-          subtitulo.textContent   = 'Defina sua nova senha de administrador.';
+          etapa1.style.display  = 'none';
+          etapa2.style.display  = 'block';
+          subtitulo.textContent = 'Defina sua nova senha de administrador.';
           setTimeout(() => novaSenhaEl.focus(), 60);
-
         } else {
-          // Arquivo inválido
           _recuperacao.tentativasInvalidas++;
 
           if (_recuperacao.tentativasInvalidas >= _recuperacao.MAX_TENTATIVAS) {
@@ -661,14 +613,12 @@ const AdminAuth = (() => {
       } catch (_) {
         _mostrarErroArquivo('Erro ao ler o arquivo. Verifique se é um arquivo .key válido.');
       } finally {
-        // Limpa dados temporários do arquivo
-        inputFile.value     = '';
+        inputFile.value        = '';
         btnArquivo.textContent = 'Selecionar Arquivo';
-        btnArquivo.disabled = false;
+        btnArquivo.disabled    = false;
       }
     }
 
-    // ── Lê o conteúdo de um arquivo via FileReader ────────────────────────────
     function _lerArquivo(arquivo) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -678,13 +628,11 @@ const AdminAuth = (() => {
       });
     }
 
-    // ── Exibe mensagem de erro de arquivo ─────────────────────────────────────
     function _mostrarErroArquivo(msg) {
-      erroArquivo.textContent  = msg;
+      erroArquivo.textContent   = msg;
       erroArquivo.style.display = 'block';
     }
 
-    // ── Exibe mensagem de bloqueio com contador regressivo ────────────────────
     function _mostrarBloqueio() {
       erroArquivo.style.display = 'none';
       btnArquivo.disabled       = true;
@@ -693,14 +641,14 @@ const AdminAuth = (() => {
 
       function _atualizar() {
         if (!_estaBloqueado()) {
-          bloqueioEl.style.display  = 'none';
-          btnArquivo.disabled       = false;
+          bloqueioEl.style.display = 'none';
+          btnArquivo.disabled      = false;
           clearInterval(_timerBloqueio);
           _recuperacao.tentativasInvalidas = 0;
           return;
         }
-        bloqueioEl.style.display  = 'block';
-        bloqueioEl.textContent    =
+        bloqueioEl.style.display = 'block';
+        bloqueioEl.textContent   =
           `🔒 Muitas tentativas inválidas. Aguarde ${_tempoRestanteBloqueio()} para tentar novamente.`;
       }
 
@@ -708,26 +656,25 @@ const AdminAuth = (() => {
       _timerBloqueio = setInterval(_atualizar, 1000);
     }
 
-    // ── Valida e salva nova senha ─────────────────────────────────────────────
+    // ── Valida e salva nova senha — hash gerado no back-end ───────────────────
     async function _salvarSenha() {
       const nova     = novaSenhaEl.value;
       const confirma = confSenhaEl.value;
 
       erroSenha.style.display = 'none';
 
-      // Validações
       if (!nova || !confirma) {
-        erroSenha.textContent  = 'Preencha todos os campos.';
+        erroSenha.textContent   = 'Preencha todos os campos.';
         erroSenha.style.display = 'block';
         return;
       }
       if (nova.length < 6) {
-        erroSenha.textContent  = 'A senha deve ter no mínimo 6 caracteres.';
+        erroSenha.textContent   = 'A senha deve ter no mínimo 6 caracteres.';
         erroSenha.style.display = 'block';
         return;
       }
       if (nova !== confirma) {
-        erroSenha.textContent  = 'As senhas não coincidem.';
+        erroSenha.textContent   = 'As senhas não coincidem.';
         erroSenha.style.display = 'block';
         confSenhaEl.value       = '';
         confSenhaEl.focus();
@@ -738,37 +685,33 @@ const AdminAuth = (() => {
       btnSalvar.disabled    = true;
 
       try {
-        const novoHash = await hashSHA256(nova);
+        // Hash gerado no servidor — sem crypto.subtle no front
+        const novoHash = await _gerarHashNoServidor(nova);
         await _salvarNovaSenha(novoHash);
 
-        // Limpa campos imediatamente após uso (segurança)
-        novaSenhaEl.value  = '';
-        confSenhaEl.value  = '';
+        novaSenhaEl.value = '';
+        confSenhaEl.value = '';
 
-        // Exibe sucesso
         etapa2.style.display    = 'none';
         sucessoEl.style.display = 'block';
         subtitulo.textContent   = 'Senha redefinida com sucesso.';
 
-        // Fecha e retorna ao login após 2 s
         setTimeout(() => {
           _fecharRecuperacao();
           abrirModal(AdminAuth._onSuccess);
         }, 2000);
 
       } catch (err) {
-        erroSenha.textContent  = 'Erro ao salvar: ' + err.message;
+        erroSenha.textContent   = 'Erro ao salvar: ' + err.message;
         erroSenha.style.display = 'block';
-        btnSalvar.textContent  = 'Salvar Nova Senha';
-        btnSalvar.disabled     = false;
+        btnSalvar.textContent   = 'Salvar Nova Senha';
+        btnSalvar.disabled      = false;
       }
     }
 
-    // ── Fecha o modal de recuperação e reseta estado visual ───────────────────
     function _fecharRecuperacao() {
       overlay.style.display = 'none';
 
-      // Reseta etapas
       etapa1.style.display    = 'block';
       etapa2.style.display    = 'none';
       sucessoEl.style.display = 'none';
@@ -777,14 +720,14 @@ const AdminAuth = (() => {
       bloqueioEl.style.display  = 'none';
       erroSenha.style.display   = 'none';
 
-      novaSenhaEl.value  = '';
-      confSenhaEl.value  = '';
+      novaSenhaEl.value = '';
+      confSenhaEl.value = '';
       subtitulo.textContent = 'Selecione seu arquivo de recuperação.';
 
-      btnSalvar.textContent = 'Salvar Nova Senha';
-      btnSalvar.disabled    = false;
+      btnSalvar.textContent  = 'Salvar Nova Senha';
+      btnSalvar.disabled     = false;
       btnArquivo.textContent = 'Selecionar Arquivo';
-      btnArquivo.disabled   = false;
+      btnArquivo.disabled    = false;
 
       if (_timerBloqueio) { clearInterval(_timerBloqueio); _timerBloqueio = null; }
     }
@@ -803,14 +746,13 @@ const AdminAuth = (() => {
     const btnArquivo  = document.getElementById('lw-recovery-btn-arquivo');
     const subtitulo   = document.getElementById('lw-recovery-subtitulo');
 
-    // Reset visual
-    etapa1.style.display    = 'block';
-    etapa2.style.display    = 'none';
-    sucessoEl.style.display = 'none';
+    etapa1.style.display      = 'block';
+    etapa2.style.display      = 'none';
+    sucessoEl.style.display   = 'none';
     erroArquivo.style.display = 'none';
     bloqueioEl.style.display  = 'none';
-    subtitulo.textContent = 'Selecione seu arquivo de recuperação.';
-    btnArquivo.disabled   = _estaBloqueado();
+    subtitulo.textContent     = 'Selecione seu arquivo de recuperação.';
+    btnArquivo.disabled       = _estaBloqueado();
 
     overlay.style.display = 'flex';
   }
@@ -821,7 +763,6 @@ const AdminAuth = (() => {
     abrirModal,
     fecharModal,
     logout,
-    hashSHA256,          // exposto para geração de novos hashes se necessário
     abrirModalRecuperacao,
     _onSuccess: null,
   };

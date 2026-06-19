@@ -1,6 +1,7 @@
-const http = require('http');
-const fs   = require('fs');
-const path = require('path');
+const http   = require('http');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
 const PORT = 3000;
 const DIR = path.join(__dirname, 'public');
@@ -44,14 +45,100 @@ function salvarContadorTracos(contador) {
   fs.writeFileSync(contadorPath, JSON.stringify(contador, null, 2), 'utf8');
 }
 
+// ─── Utilitário: hash SHA-256 no servidor (Node.js crypto nativo) ──────────
+function sha256(text) {
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+// ─── Lê security.json do disco ────────────────────────────────────────────
+const HASH_FALLBACK = 'c415e920e0281339d3633ab0c19d3b11c5a70a52ad2e17e405ef66723c51294c';
+
+function lerSecurity() {
+  const securityPath = path.join(DIR, 'security.json');
+  try {
+    return JSON.parse(fs.readFileSync(securityPath, 'utf8'));
+  } catch (_) {
+    return { passwordHash: HASH_FALLBACK, recoveryKeyHash: null };
+  }
+}
+
 http.createServer((req, res) => {
 
   // Extrai apenas o caminho (pathname) da URL, ignorando parâmetros como ?_=...
   const [urlPath] = req.url.split('?');
 
+  // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
+  // POST /verificar-senha  { senha: "texto plano" }
+  // Retorna { ok: true } se correta, { ok: false } se incorreta.
+  // A senha nunca é logada — apenas comparada com o hash em security.json.
+  if (req.method === 'POST' && urlPath === '/verificar-senha') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { senha } = JSON.parse(body);
+        if (typeof senha !== 'string') throw new Error('Payload inválido.');
+        const security = lerSecurity();
+        const hashEnviado = sha256(senha);
+        const hashEsperado = security.passwordHash || HASH_FALLBACK;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: hashEnviado === hashEsperado }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── NOVO: Verificar arquivo de recuperação no servidor ────────────────────
+  // POST /verificar-recovery  { chave: "conteudo do .key" }
+  // Retorna { ok: true } se válido.
+  if (req.method === 'POST' && urlPath === '/verificar-recovery') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { chave } = JSON.parse(body);
+        if (typeof chave !== 'string') throw new Error('Payload inválido.');
+        const security = lerSecurity();
+        if (!security.recoveryKeyHash) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false }));
+          return;
+        }
+        const hashEnviado = sha256(chave.trim());
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: hashEnviado === security.recoveryKeyHash }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── NOVO: Gerar hash de uma senha no servidor ──────────────────────────────
+  // POST /gerar-hash  { senha: "texto plano" }
+  // Retorna { hash: "hex64" } — usado ao redefinir senha via recuperação.
+  if (req.method === 'POST' && urlPath === '/gerar-hash') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { senha } = JSON.parse(body);
+        if (typeof senha !== 'string') throw new Error('Payload inválido.');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ hash: sha256(senha) }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
   // Total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura, não incrementa.
-  // Usado pelo frontend para calcular a numeração de prévia (total+1, total+2, ...)
-  // dos traços ainda em edição na operação em andamento.
   if (req.method === 'GET' && urlPath === '/total-tracos-hoje') {
     try {
       const contador = lerContadorTracosHoje();
@@ -64,9 +151,7 @@ http.createServer((req, res) => {
     return;
   }
 
-  // Confirma N traços ao finalizar uma operação — incrementa atomicamente o
-  // total do dia e retorna o novo total. Chamado uma única vez por operação
-  // finalizada, com a quantidade de traços que de fato sobraram (não excluídos).
+  // Confirma N traços ao finalizar uma operação
   if (req.method === 'POST' && urlPath === '/confirmar-tracos-hoje') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -162,57 +247,48 @@ http.createServer((req, res) => {
   }
 
   // Registrar linhas do relatório de injeção — append em relatorio_injecao.json
- if (req.method === 'POST' && urlPath === '/registrar-relatorio-injecao') {
-  let body = '';
-  req.on('data', chunk => body += chunk);
-  req.on('end', () => {
-    try {
-      const dadosRecebidos = JSON.parse(body); // Array de traços enviados pelo frontend
-      const relatorioPath = path.join(DIR, 'relatorio_injecao.json');
-      
-      let relatorio = [];
-      try { 
-        relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8')); 
-      } catch(_) {
-        relatorio = [];
-      }
+  if (req.method === 'POST' && urlPath === '/registrar-relatorio-injecao') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const dadosRecebidos = JSON.parse(body);
+        const relatorioPath = path.join(DIR, 'relatorio_injecao.json');
 
-      dadosRecebidos.forEach(novoTraco => {
-        // Tenta encontrar o traço já existente no arquivo pelo ID único
-        console.log('recebido:', novoTraco.id_traco);
-        const registroExistente = relatorio.find(r => r.id_traco === novoTraco.id_traco);
-
-        if (registroExistente) {
-          // SE JÁ EXISTE: Apenas adiciona a nova operação ao array 'operacao'
-          if (!registroExistente.ultilizado) registroExistente.ultilizado = { operacao: [] };
-          
-          // Adiciona os dados da nova utilização (id_operacao, bateria, berços)
-          registroExistente.ultilizado.operacao.push(...novoTraco.ultilizado.operacao);
-          
-          // Opcional: Atualiza a observação se o operador escreveu algo novo na segunda utilização
-          if (novoTraco.obs) {
-            registroExistente.obs = registroExistente.obs 
-              ? registroExistente.obs + " | " + novoTraco.obs 
-              : novoTraco.obs;
-          }
-        } else {
-          // SE NÃO EXISTE: É um traço novo, adiciona ele inteiro ao relatório
-          relatorio.push(novoTraco);
+        let relatorio = [];
+        try {
+          relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8'));
+        } catch(_) {
+          relatorio = [];
         }
-      });
 
-      // Salva o arquivo atualizado
-      fs.writeFileSync(relatorioPath, JSON.stringify(relatorio, null, 2), 'utf8');
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    } catch(e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-  });
-  return;
-}
+        dadosRecebidos.forEach(novoTraco => {
+          console.log('recebido:', novoTraco.id_traco);
+          const registroExistente = relatorio.find(r => r.id_traco === novoTraco.id_traco);
+
+          if (registroExistente) {
+            if (!registroExistente.ultilizado) registroExistente.ultilizado = { operacao: [] };
+            registroExistente.ultilizado.operacao.push(...novoTraco.ultilizado.operacao);
+            if (novoTraco.obs) {
+              registroExistente.obs = registroExistente.obs
+                ? registroExistente.obs + " | " + novoTraco.obs
+                : novoTraco.obs;
+            }
+          } else {
+            relatorio.push(novoTraco);
+          }
+        });
+
+        fs.writeFileSync(relatorioPath, JSON.stringify(relatorio, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
 
   // Importar lote de relatório de injeção — merge com deduplicação
   if (req.method === 'POST' && urlPath === '/importar-relatorio-injecao') {
@@ -275,7 +351,6 @@ http.createServer((req, res) => {
   }
 
   // ── SOBRA: Salvar sobra.json ──────────────────────────────────────────────
-  // POST /salvar-sobra  { ativa, tracoId, operacaoOrigem, flow, densidade, receita, data, ... }
   if (req.method === 'POST' && urlPath === '/salvar-sobra') {
     let body = '';
     req.on('data', chunk => body += chunk);

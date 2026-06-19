@@ -80,9 +80,12 @@
       const tracos = [];
       relatorio.forEach(traco => {
         const usos = traco.ultilizado?.operacao || [];
-        usos.forEach(uso => {
+        usos.forEach((uso, usoIdx) => {
           if (uso.id_operacao === bateria.id) {
-            const reaproveitado = usos.length > 1;
+            // Apenas as reutilizações (a partir da 2ª ocorrência) são
+            // "reaproveitadas". A primeira ocorrência é o traço original
+            // e deve continuar sendo contabilizada no total.
+            const reaproveitado = usoIdx > 0;
             tracos.push({
               num_traco:       traco.num_traco,
               flow:            valorFinal(traco.flow),
@@ -104,12 +107,20 @@
   }
 
   function calcularCabecalho(estrutura) {
-    let qtdTracos = 0;
+    // Conta apenas traços NOVOS (não reaproveitados), usando num_traco como
+    // chave de deduplicação. Traços reaproveitados são sobra de um traço já
+    // contabilizado em outra bateria e NÃO devem ser somados novamente.
+    const tracosUnicos = new Set();
     const densidadesEps = [];
     estrutura.forEach(({ tracos }) => {
-      qtdTracos += tracos.length;
-      tracos.forEach(t => { if (t.densidade_eps !== null) densidadesEps.push(t.densidade_eps); });
+      tracos.forEach(t => {
+        if (!t.reaproveitado) {
+          tracosUnicos.add(t.num_traco != null ? String(t.num_traco) : '_' + Math.random());
+        }
+        if (t.densidade_eps !== null) densidadesEps.push(t.densidade_eps);
+      });
     });
+    const qtdTracos = tracosUnicos.size;
     const qtdBaterias = estrutura.length;
     const mediaTracos = qtdBaterias ? qtdTracos / qtdBaterias : 0;
     let epsPredominante = null;
