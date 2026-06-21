@@ -1,0 +1,150 @@
+[
+  {
+    "id_operacao": "op_1782058439000",
+    "data_edicao": "2026-06-21T19:16:02.093Z",
+    "campos_alterados": [
+      {
+        "campo": "id_bateria",
+        "de": "B1",
+        "para": "B2"
+      },
+      {
+        "campo": "tipo_montagem",
+        "de": "S/P",
+        "para": "2/P"
+      },
+      {
+        "campo": "houve_atraso",
+        "de": "NÃO",
+        "para": "NAO"
+      },
+      {
+        "campo": "placas_cimenticia",
+        "de": 0,
+        "para": 80
+      },
+      {
+        "campo": "paineis_por_tipo",
+        "de": {
+          "sp": 40
+        },
+        "para": {
+          "2p": 40
+        }
+      },
+      {
+        "campo": "m2_por_tipo",
+        "de": {
+          "sp": 73.2
+        },
+        "para": {
+          "2p": 73.2
+        }
+      },
+      {
+        "campo": "paineis_2p",
+        "de": 0,
+        "para": 40
+      },
+      {
+        "campo": "paineis_sp",
+        "de": 40,
+        "para": 0
+      },
+      {
+        "campo": "m2_2p",
+        "de": 0,
+        "para": 73.2
+      },
+      {
+        "campo": "m2_sp",
+        "de": 73.2,
+        "para": 0
+      }
+    ]
+  },
+  {
+    "id_operacao": "op_1782058439000",
+    "data_edicao": "2026-06-21T19:24:39.592Z",
+    "campos_alterados": [
+      {
+        "campo": "id_bateria",
+        "de": "B2",
+        "para": "B6-12cm"
+      },
+      {
+        "campo": "dimensao",
+        "de": "9 cm",
+        "para": "12 cm"
+      },
+      {
+        "campo": "capacidade",
+        "de": 20,
+        "para": 18
+      },
+      {
+        "campo": "bercos_reais",
+        "de": 20,
+        "para": 18
+      },
+      {
+        "campo": "tipo_montagem",
+        "de": "2/P",
+        "para": "S/P"
+      },
+      {
+        "campo": "total_paineis",
+        "de": 40,
+        "para": 36
+      },
+      {
+        "campo": "m2_total",
+        "de": 73.2,
+        "para": 65.88
+      },
+      {
+        "campo": "placas_cimenticia",
+        "de": 80,
+        "para": 0
+      },
+      {
+        "campo": "paineis_por_tipo",
+        "de": {
+          "2p": 40
+        },
+        "para": {
+          "sp": 36
+        }
+      },
+      {
+        "campo": "m2_por_tipo",
+        "de": {
+          "2p": 73.2
+        },
+        "para": {
+          "sp": 65.88
+        }
+      },
+      {
+        "campo": "paineis_2p",
+        "de": 40,
+        "para": 0
+      },
+      {
+        "campo": "paineis_sp",
+        "de": 0,
+        "para": 36
+      },
+      {
+        "campo": "m2_2p",
+        "de": 73.2,
+        "para": 0
+      },
+      {
+        "campo": "m2_sp",
+        "de": 0,
+        "para": 65.88
+      }
+    ]
+  }
+]

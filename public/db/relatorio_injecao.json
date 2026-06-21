@@ -1,1 +1,55 @@
-[]
+[
+  {
+    "id_traco": "traco_1782058418000_0",
+    "ultilizado": {
+      "operacao": [
+        {
+          "id_operacao": "op_1782058439000",
+          "id_bateria": "B1",
+          "berco_inicio": "1",
+          "berco_finalizacao": "20",
+          "obs": "12"
+        }
+      ]
+    },
+    "data": "2026-06-21",
+    "turno": "1º TURNO",
+    "num_traco": 1,
+    "cimento_real": {
+      "original": "1",
+      "ajustes": []
+    },
+    "agua_real": {
+      "original": "1",
+      "ajustes": []
+    },
+    "eps_real": {
+      "original": "1",
+      "ajustes": []
+    },
+    "superplast_real": {
+      "original": "1",
+      "ajustes": []
+    },
+    "incorporador_real": {
+      "original": "1",
+      "ajustes": []
+    },
+    "tempo_batida": {
+      "original": "60",
+      "ajustes": []
+    },
+    "densidade": {
+      "original": "12",
+      "ajustes": []
+    },
+    "flow": {
+      "original": "12",
+      "ajustes": []
+    },
+    "obs": "12",
+    "silo": "Silo 1",
+    "expansao": "1ª expansão",
+    "densidade_eps": "12"
+  }
+]

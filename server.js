@@ -85,6 +85,7 @@ const VALIDADORES_BACKUP_DADOS = {
   'config.json':            v => v && typeof v === 'object' && !Array.isArray(v),
   'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
   'historico.json':          v => Array.isArray(v),
+  'historico_edicoes.json': v => Array.isArray(v),
   'relatorio_injecao.json': v => Array.isArray(v),
   'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
   'sobra.json':              v => v && typeof v === 'object',
@@ -99,6 +100,7 @@ const VALIDADORES_BACKUP_DADOS = {
 const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'contador_tracos.json': {},
   'historico.json': [],
+  'historico_edicoes.json': [],
   'relatorio_injecao.json': [],
   'sobra.json': {},
 };
@@ -449,6 +451,74 @@ http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── EDITAR OPERAÇÃO: corrige um registro de historico.json já existente
+  // (sobrescreve em cima dele, não cria um novo) e grava um log de
+  // auditoria em historico_edicoes.json — base pra futuro controle de
+  // eficiência de preenchimento das operações ───────────────────────────────
+  if (req.method === 'POST' && urlPath === '/editar-operacao') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { id, novosValores, diff } = payload;
+
+        if (!id || typeof id !== 'string') throw new Error('ID da operação ausente.');
+        if (!novosValores || typeof novosValores !== 'object' || Array.isArray(novosValores)) {
+          throw new Error('Payload inválido: "novosValores" ausente.');
+        }
+        if (!Array.isArray(diff) || !diff.length) {
+          throw new Error('Nenhuma alteração informada.');
+        }
+
+        // Campos que NUNCA podem ser alterados por aqui — são capturados
+        // automaticamente pelo sistema ou são a própria identidade do
+        // registro. Checagem no servidor, não só na tela — nunca confiamos
+        // só na validação do navegador.
+        // houve_atraso é calculado (tempo_min > limite de injeção), não uma
+        // escolha manual do operador — nunca editável diretamente.
+        const CAMPOS_PROTEGIDOS = new Set(['id', 'data', 'inicio', 'fim', 'tempo_min', 'qtd_tracos', 'tracos', 'houve_atraso']);
+        const tentouAlterarProtegido = Object.keys(novosValores).filter(c => CAMPOS_PROTEGIDOS.has(c));
+        if (tentouAlterarProtegido.length) {
+          throw new Error('Campo(s) não editável(eis): ' + tentouAlterarProtegido.join(', '));
+        }
+
+        const historicoPath = path.join(DB_DIR, 'historico.json');
+        const historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8') || '[]');
+        const idx = historico.findIndex(r => r.id === id);
+        if (idx === -1) throw new Error('Operação não encontrada (id: ' + id + ').');
+
+        // Atualiza EM CIMA do registro existente — não cria um novo.
+        historico[idx] = { ...historico[idx], ...novosValores };
+
+        const tmpHistorico = historicoPath + '.tmp';
+        fs.writeFileSync(tmpHistorico, JSON.stringify(historico, null, 2), 'utf8');
+        fs.renameSync(tmpHistorico, historicoPath);
+
+        // Log de auditoria — append-only, nunca apaga/sobrescreve entradas
+        // antigas. Cada edição (mesmo que no mesmo id) gera uma entrada nova.
+        const edicoesPath = path.join(DB_DIR, 'historico_edicoes.json');
+        let edicoes = [];
+        try { edicoes = JSON.parse(fs.readFileSync(edicoesPath, 'utf8') || '[]'); } catch (_) {}
+        edicoes.push({
+          id_operacao: id,
+          data_edicao: new Date().toISOString(),
+          campos_alterados: diff,
+        });
+        const tmpEdicoes = edicoesPath + '.tmp';
+        fs.writeFileSync(tmpEdicoes, JSON.stringify(edicoes, null, 2), 'utf8');
+        fs.renameSync(tmpEdicoes, edicoesPath);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }

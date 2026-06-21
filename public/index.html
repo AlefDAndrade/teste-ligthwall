@@ -175,6 +175,24 @@
             <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações.
             </div>
           </div>
+          <div class="menu-card" onclick="showPage('analise-operacional')">
+            <div class="menu-card-icon">📊</div>
+            <div class="menu-card-title">Análise Operacional</div>
+            <div class="menu-card-desc">KPIs avançados, gargalos, correlações e insights automáticos sobre a produção.
+            </div>
+          </div>
+          <div class="menu-card" onclick="showPage('qualidade-tracos')">
+            <div class="menu-card-icon">📐</div>
+            <div class="menu-card-title">Qualidade dos Traços</div>
+            <div class="menu-card-desc">Controle estatístico de processo: estabilidade de receitas, frequência de
+              ajuste por insumo e alertas de qualidade.</div>
+          </div>
+          <div class="menu-card" onclick="showPage('oee')">
+            <div class="menu-card-icon">🎯</div>
+            <div class="menu-card-title">OEE</div>
+            <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
+            </div>
+          </div>
           <div class="menu-card" data-admin-only onclick="abrirImportacao()">
             <div class="menu-card-icon">📥</div>
             <div class="menu-card-title">Importar Documento</div>
@@ -630,7 +648,14 @@
                 <div id="col-menu-list"></div>
               </div>
               <button class="btn btn-ghost btn-sm" onclick="LWDash.abrirExportModal()">⬇ Exportar Excel (.xlsx)</button>
+              <button class="btn btn-ghost btn-sm" id="btn-editar-registro" data-admin-only
+                title="Corrigir dados de uma operação já registrada" onclick="LWDash.toggleModoEdicaoRegistro()">✏️
+                Editar</button>
             </div>
+          </div>
+          <div id="registro-aviso-edicao"
+            style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(245,158,11,.1);border:1px solid var(--accent-dim);border-radius:var(--radius);color:var(--accent);font-size:.82rem">
+            ✏️ Modo de edição ativo — clique em uma linha da tabela para corrigir os dados daquela operação.
           </div>
           <!-- Filtros hierárquicos -->
           <div id="filtros-registro" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
@@ -1942,6 +1967,7 @@
       'config.json':            v => v && typeof v === 'object' && !Array.isArray(v),
       'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
       'historico.json':          v => Array.isArray(v),
+      'historico_edicoes.json': v => Array.isArray(v),
       'relatorio_injecao.json': v => Array.isArray(v),
       'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
       'sobra.json':              v => v && typeof v === 'object',
@@ -1953,6 +1979,7 @@
     const DEFAULT_SE_VAZIO_RESTAURAR = {
       'contador_tracos.json': {},
       'historico.json': [],
+      'historico_edicoes.json': [],
       'relatorio_injecao.json': [],
       'sobra.json': {},
     };
@@ -2867,7 +2894,258 @@
       alert('Configurações salvas com sucesso!');
     }
 
+    // ---- Editar Operação (admin) — Registro de Baterias ----
+    // Só os campos preenchidos manualmente podem ser corrigidos aqui (ID
+    // Bateria, Berços Reais, Tipo de Montagem, Turno, Motivo do Atraso).
+    // Data, início, fim, duração, houve_atraso (calculado a partir do tempo)
+    // e tudo que é calculado (painéis, m², cimentícia) NUNCA são editados
+    // diretamente — recalculados automaticamente quando bateria/berços/tipo
+    // de montagem mudam (ver _eoAtualizarPreview).
+    let _eoRegistroOriginal = null;
+    // true assim que o admin digitar manualmente em Berços Reais — a partir
+    // daí, trocar de bateria não sobrescreve mais o valor (ver
+    // _eoAoMudarBateria). Evita o bug de "troquei a bateria, voltei pra
+    // original, mas o berço ficou com o valor da bateria errada".
+    let _eoBercosTocadoManualmente = false;
+
+    function abrirEdicaoOperacao(bateria) {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
+      _eoBercosTocadoManualmente = false;
+
+      document.getElementById('eo-erro').style.display = 'none';
+
+      document.getElementById('eo-ro-data').textContent = bateria.data ? bateria.data.split('-').reverse().join('/') : '—';
+      document.getElementById('eo-ro-inicio').textContent = bateria.inicio ? LW.formatTime(bateria.inicio) : '—';
+      document.getElementById('eo-ro-fim').textContent = bateria.fim ? LW.formatTime(bateria.fim) : '—';
+      document.getElementById('eo-ro-duracao').textContent = LW.formatDuration(bateria.tempo_min);
+      document.getElementById('eo-ro-tracos').textContent = bateria.qtd_tracos || 0;
+      document.getElementById('eo-ro-atraso').textContent = bateria.houve_atraso === 'SIM' ? '⚠ SIM' : '✓ NÃO';
+
+      const selBateria = document.getElementById('eo-id-bateria');
+      selBateria.innerHTML = LW.BATERIA_IDS.map(b =>
+        `<option value="${b.id}">${b.id} — ${b.label || ''} (${b.bercos} berços)</option>`).join('');
+      selBateria.value = bateria.id_bateria;
+
+      const selTipo = document.getElementById('eo-tipo-montagem');
+      selTipo.innerHTML = LW.MONTAGEM_OPTS.map(t => `<option value="${t}">${t}</option>`).join('');
+      selTipo.value = bateria.tipo_montagem;
+
+      document.getElementById('eo-bercos-reais').value = bateria.bercos_reais || bateria.capacidade || '';
+      document.getElementById('eo-turno').value = bateria.turno || '1º TURNO';
+      document.getElementById('eo-motivo-atraso').value = bateria.motivo_atraso || '';
+      // Motivo do atraso só faz sentido editar se ESTA operação teve atraso
+      // (o fato em si — houve_atraso — não é editável, é calculado).
+      document.getElementById('eo-motivo-atraso-wrap').style.display = bateria.houve_atraso === 'SIM' ? 'block' : 'none';
+      _eoAtualizarPreview();
+
+      document.getElementById('editar-operacao-modal').style.display = 'flex';
+    }
+
+    function fecharEdicaoOperacao() {
+      document.getElementById('editar-operacao-modal').style.display = 'none';
+      _eoRegistroOriginal = null;
+    }
+
+    // Disparado ao DIGITAR manualmente em Berços Reais — marca que o admin
+    // assumiu o controle desse campo, então trocar de bateria depois não
+    // deve mais sobrescrever o que ele digitou.
+    function _eoAoEditarBercosManualmente() {
+      _eoBercosTocadoManualmente = true;
+      _eoAtualizarPreview();
+    }
+
+    // Ao trocar a bateria, sugere os berços da bateria nova selecionada —
+    // cobre o caso "registrei B1 mas era B6": berços e dimensão seguem a
+    // bateria certa automaticamente. Sempre que a bateria muda (inclusive
+    // voltando pra original), os berços acompanham — a não ser que o admin
+    // já tenha digitado um valor manual nessa mesma edição.
+    function _eoAoMudarBateria() {
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      if (bateriaObj && !_eoBercosTocadoManualmente) {
+        document.getElementById('eo-bercos-reais').value = bateriaObj.bercos;
+      }
+      _eoAtualizarPreview();
+    }
+
+    // Recalcula painéis/m²/cimentícia em tempo real (mesma fórmula de
+    // sempre, LW.calcPaineis) e mostra o resultado — só pra visualização,
+    // quem efetivamente grava esses valores é salvarEdicaoOperacao().
+    function _eoAtualizarPreview() {
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+
+      const calc = LW.calcPaineis(tipoMontagem, bercos);
+      document.getElementById('eo-preview').innerHTML = `
+        <div>Dimensão: <strong style="color:var(--text)">${bateriaObj?.label || '—'}</strong></div>
+        <div>Painéis Total: <strong style="color:var(--text)">${calc.total_paineis}</strong></div>
+        <div>m² Total: <strong style="color:var(--text)">${calc.m2_total.toFixed(2)}</strong></div>
+        <div>Placas Cimentícia: <strong style="color:var(--text)">${calc.placas_cimenticia}</strong></div>
+      `;
+    }
+
+    async function salvarEdicaoOperacao() {
+      if (!_eoRegistroOriginal) return;
+      document.getElementById('eo-erro').style.display = 'none';
+
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
+      const turno = document.getElementById('eo-turno').value;
+      // houve_atraso NÃO é editável (calculado a partir do tempo da
+      // operação) — o motivo só é salvo se a operação JÁ tinha atraso.
+      const motivoAtraso = _eoRegistroOriginal.houve_atraso === 'SIM'
+        ? document.getElementById('eo-motivo-atraso').value.trim()
+        : (_eoRegistroOriginal.motivo_atraso || '');
+
+      if (!idBateria) return alert('Selecione a bateria.');
+      if (!tipoMontagem) return alert('Selecione o tipo de montagem.');
+      if (!bercos || bercos < 1) return alert('Informe a quantidade de berços reais.');
+
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      const calc = LW.calcPaineis(tipoMontagem, bercos);
+
+      const novosValores = {
+        id_bateria: idBateria,
+        dimensao: bateriaObj?.label || _eoRegistroOriginal.dimensao,
+        capacidade: bateriaObj?.bercos || _eoRegistroOriginal.capacidade,
+        bercos_reais: bercos,
+        tipo_montagem: tipoMontagem,
+        turno,
+        motivo_atraso: motivoAtraso,
+        ...calc,
+      };
+
+      // Monta o diff (só os campos que de fato mudaram) — vai pro log de
+      // auditoria em historico_edicoes.json.
+      const diff = [];
+      Object.keys(novosValores).forEach(campo => {
+        const de = _eoRegistroOriginal[campo];
+        const para = novosValores[campo];
+        const mudou = (typeof de === 'object' || typeof para === 'object')
+          ? JSON.stringify(de) !== JSON.stringify(para)
+          : de !== para;
+        if (mudou) diff.push({ campo, de: de ?? null, para: para ?? null });
+      });
+
+      if (!diff.length) {
+        return alert('Nenhuma alteração foi feita.');
+      }
+      if (!confirm(`Confirma a alteração de ${diff.length} campo(s) nesta operação?`)) return;
+
+      const btn = document.getElementById('eo-btn-salvar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        const res = await fetch('/editar-operacao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: _eoRegistroOriginal.id, novosValores, diff }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao salvar edição.');
+
+        fecharEdicaoOperacao();
+        await LWDash.initRegistro();
+        alert('Operação atualizada com sucesso!');
+      } catch (e) {
+        const erroEl = document.getElementById('eo-erro');
+        erroEl.textContent = e.message;
+        erroEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
   </script>
+  <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
+  <div id="editar-operacao-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);letter-spacing:.05em">✏️
+          EDITAR OPERAÇÃO</h2>
+        <button onclick="fecharEdicaoOperacao()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="eo-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Dados capturados automaticamente / calculados — somente leitura -->
+      <div
+        style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:18px">
+        <div style="font-weight:700;color:var(--text);font-size:.8rem;margin-bottom:8px">📌 Capturados
+          automaticamente / calculados (não editáveis aqui)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;color:var(--text-2)">
+          <div>Data: <strong id="eo-ro-data" class="mono">—</strong></div>
+          <div>Traços: <strong id="eo-ro-tracos" class="mono">—</strong></div>
+          <div>Início: <strong id="eo-ro-inicio" class="mono">—</strong></div>
+          <div>Fim: <strong id="eo-ro-fim" class="mono">—</strong></div>
+          <div>Duração: <strong id="eo-ro-duracao" class="mono">—</strong></div>
+          <div>Houve atraso: <strong id="eo-ro-atraso" class="mono">—</strong></div>
+        </div>
+      </div>
+
+      <!-- Campos editáveis -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">ID Bateria</label>
+          <select class="form-select" id="eo-id-bateria" onchange="_eoAoMudarBateria()"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Berços Reais</label>
+          <input class="form-input" type="number" id="eo-bercos-reais" oninput="_eoAoEditarBercosManualmente()">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Tipo de Montagem</label>
+          <select class="form-select" id="eo-tipo-montagem" onchange="_eoAtualizarPreview()"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Turno</label>
+          <select class="form-select" id="eo-turno">
+            <option>1º TURNO</option>
+            <option>2º TURNO</option>
+            <option>3º TURNO</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="eo-motivo-atraso-wrap" style="margin-bottom:12px;display:none">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Motivo do Atraso</label>
+          <input class="form-input" id="eo-motivo-atraso">
+        </div>
+      </div>
+
+      <!-- Preview do recálculo automático -->
+      <div
+        style="background:var(--bg-2);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:14px;margin:16px 0;font-size:.82rem;color:var(--text-2)">
+        <div style="font-weight:700;color:var(--accent);font-size:.8rem;margin-bottom:8px">⚙ Recalculado
+          automaticamente, ao salvar</div>
+        <div id="eo-preview" style="display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:12px">
+        <button class="btn btn-ghost" onclick="fecharEdicaoOperacao()">Cancelar</button>
+        <button class="btn btn-danger" id="eo-btn-salvar" onclick="salvarEdicaoOperacao()">Salvar Alterações</button>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"

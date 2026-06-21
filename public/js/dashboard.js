@@ -150,6 +150,11 @@
     dimensao: new Set(), tipo_montagem: new Set(), atraso: new Set(),
   };
 
+  // Modo de edição do Registro de Baterias — enquanto ativo, clicar numa
+  // linha abre a edição da operação em vez de navegar pro Relatório de
+  // Injeção (ver onClickLinhaRegistro()).
+  let _modoEdicaoRegistro = false;
+
   const _filtrosRelatorio = {
     data_inicio: null, data_fim: null,
     id_bateria: new Set(), num_traco: new Set(),
@@ -439,9 +444,12 @@
       `).join('');
       const corMont = _corBadgeMontagem(b.tipo_montagem);
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
+      const tituloLinha = _modoEdicaoRegistro
+        ? 'Clique para editar esta operação'
+        : 'Clique para ver os traços desta bateria no Relatório de Injeção';
       return `
-      <tr style="cursor:pointer" title="Clique para ver os traços desta bateria no Relatório de Injeção"
-        onclick="LWDash.navegarParaTracosDoRegistro(window._lwRegistroMapTemp[${idx}])">
+      <tr style="cursor:pointer" title="${tituloLinha}"
+        onclick="LWDash.onClickLinhaRegistro(window._lwRegistroMapTemp[${idx}])">
         <td data-col="data" class="mono">${b.data ? b.data.split('-').reverse().join('/') : '—'}</td>
         <td data-col="turno"><span class="badge badge-gray">${b.turno || '—'}</span></td>
         <td data-col="dimensao">${b.dimensao || '—'}</td>
@@ -493,10 +501,10 @@
     { key: 'atraso', label: 'Atraso' },
     { key: 'motivo_atraso', label: 'Motivo Atraso' },
     { key: 'montagem', label: 'Montagem' },
-    { key: 'paineis_2psp', label: 'Painéis (2P/SP)', tipoPlaca: true },
+    { key: 'paineis_2psp', label: 'Painéis (Total)' },
     { key: 'paineis_2p', label: 'Painéis 2/P', tipoPlaca: true },
     { key: 'paineis_sp', label: 'Painéis S/P', tipoPlaca: true },
-    { key: 'm2_2psp', label: 'm² (2P/SP)', tipoPlaca: true },
+    { key: 'm2_2psp', label: 'm² (Total)' },
     { key: 'm2_2p', label: 'm² 2/P', tipoPlaca: true },
     { key: 'm2_sp', label: 'm² S/P', tipoPlaca: true },
     { key: 'bercos_reais', label: 'Berços Reais' },
@@ -1035,6 +1043,31 @@
   }
 
   // ================================================================
+  //  MODO DE EDIÇÃO do Registro de Baterias (admin)
+  // ================================================================
+
+  // Liga/desliga o modo de edição — enquanto ativo, clicar numa linha abre
+  // a tela de edição daquela operação em vez de navegar pro Relatório de
+  // Injeção. A função de abrir a edição (abrirEdicaoOperacao) vive no
+  // index.html, junto com o resto do modal.
+  function toggleModoEdicaoRegistro() {
+    _modoEdicaoRegistro = !_modoEdicaoRegistro;
+    const btn = document.getElementById('btn-editar-registro');
+    if (btn) btn.classList.toggle('btn-primary', _modoEdicaoRegistro);
+    const aviso = document.getElementById('registro-aviso-edicao');
+    if (aviso) aviso.style.display = _modoEdicaoRegistro ? 'flex' : 'none';
+    renderRegistro();
+  }
+
+  function onClickLinhaRegistro(bateria) {
+    if (_modoEdicaoRegistro) {
+      if (typeof window.abrirEdicaoOperacao === 'function') window.abrirEdicaoOperacao(bateria);
+      return;
+    }
+    navegarParaTracosDoRegistro(bateria);
+  }
+
+  // ================================================================
   //  NAVEGAÇÃO: Registro de Baterias → Relatório de Injeção por Traços
   // ================================================================
 
@@ -1146,6 +1179,8 @@
   window.LWDash = {
     initTurnos, initRegistro, initRelatorio, renderRelatorio,
     navegarParaTracosDoRegistro,
+    toggleModoEdicaoRegistro,
+    onClickLinhaRegistro,
     exportCSV: exportXLSX, abrirExportModal, fecharExportModal, onExportPeriodoChange,
     selecionarTodasColunas, atualizarPreviewCount, confirmarExport,
     toggleColMenu, toggleColunaRegistro, toggleGrupoTiposPlaca,

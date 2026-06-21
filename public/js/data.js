@@ -682,6 +682,7 @@ const ARQUIVOS_BACKUP_DB = [
   'config.json',
   'contador_tracos.json',
   'historico.json',
+  'historico_edicoes.json',
   'relatorio_injecao.json',
   'security.json',
   'sobra.json',
