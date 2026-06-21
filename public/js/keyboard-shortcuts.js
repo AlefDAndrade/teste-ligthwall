@@ -24,6 +24,7 @@
     { key: '5', page: 'analise-operacional', label: 'Análise Operacional', icon: '📊' },
     { key: '6', page: 'turnos', label: 'Turnos', icon: '⏳' },
     { key: '7', page: 'menu', label: 'Menu Principal', icon: '⬡' },
+    { key: '8', page: 'oee', label: 'OEE', icon: '🎯' },
   ];
 
   /**
@@ -55,6 +56,12 @@
       description: 'Adicionar novo traço',
       icon: '➕',
       handler: () => _addNewTraco(),
+    },
+    {
+      combo: 'Ctrl+Shift+D',
+      description: 'Abrir Debriefing do Dia',
+      icon: '📓',
+      handler: () => _toggleDebriefing(),
     },
     {
       combo: 'Ctrl+Space',
@@ -241,6 +248,20 @@
       _showToast('➕', 'Novo traço adicionado');
     } else {
       _showToast('➕', 'Ação não disponível no momento');
+    }
+  }
+
+  /**
+   * Abre/fecha o Debriefing do Dia. Diferente da maioria dos outros atalhos
+   * de ação, este funciona em QUALQUER página — o Debriefing vive na topbar,
+   * que é compartilhada por todas as telas.
+   */
+  function _toggleDebriefing() {
+    if (typeof LWDebriefing !== 'undefined' && typeof LWDebriefing.toggle === 'function') {
+      LWDebriefing.toggle();
+      _showToast('📓', 'Debriefing do Dia');
+    } else {
+      _showToast('📓', 'Debriefing não disponível');
     }
   }
 

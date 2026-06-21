@@ -88,20 +88,43 @@
     "opcoes": [
       {
         "label": "2/P",
-        "paineis_2p_por_berco": 2
+        "modo": "simples",
+        "tipo": "2p",
+        "paineis_2p_por_berco": 2,
+        "cimenticia": {
+          "leva": true,
+          "quantidade": 2
+        }
       },
       {
         "label": "S/P",
-        "paineis_sp_por_berco": 2
-      },
-      {
-        "label": "HÍBRIDA 2p/sp",
-        "paineis_2p_por_berco": 1,
-        "paineis_sp_por_berco": 1
+        "modo": "simples",
+        "tipo": "sp",
+        "paineis_sp_por_berco": 2,
+        "cimenticia": {
+          "leva": false,
+          "quantidade": 0
+        }
       },
       {
         "label": "3T",
-        "paineis_3t_por_berco": 2
+        "modo": "simples",
+        "tipo": "3t",
+        "paineis_3t_por_berco": 2,
+        "cimenticia": {
+          "leva": false,
+          "quantidade": 0
+        }
+      },
+      {
+        "label": "HÍBRIDA 2p/sp",
+        "modo": "hibrida",
+        "tipos": [
+          "2p",
+          "sp"
+        ],
+        "paineis_2p_por_berco": 1,
+        "paineis_sp_por_berco": 1
       }
     ]
   },

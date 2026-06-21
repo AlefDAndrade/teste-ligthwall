@@ -73,7 +73,9 @@
     if (!n) return null;
 
     const totalM2     = dados.reduce((s,r) => s + (r.m2_total||0), 0);
-    const totalPaineis= dados.reduce((s,r) => s + ((r.paineis_2p||0)+(r.paineis_sp||0)), 0);
+    // total_paineis já soma TODOS os tipos de placa (2p, sp, 3t, 4t, ...) — não
+    // usar paineis_2p+paineis_sp aqui, ou tipos novos ficam de fora da conta.
+    const totalPaineis= dados.reduce((s,r) => s + (r.total_paineis||0), 0);
     const comAtraso   = dados.filter(r => r.houve_atraso === 'SIM');
     const taxaAtraso  = (comAtraso.length / n) * 100;
 
@@ -492,7 +494,7 @@
     // Busca os dados do historico.json se ainda não estiverem carregados
     if (!LW.historico) {
       try {
-        const res = await fetch('historico.json');
+        const res = await fetch('db/historico.json');
         if (res.ok) LW.historico = await res.json();
       } catch (err) {
         console.error("Erro ao carregar historico.json:", err);
@@ -670,14 +672,18 @@
     })), maxQtd);
   }
 
+  // Paleta cíclica de cores por tipo de montagem — mesmo padrão usado em
+  // motCols (gráfico de motivos de atraso), pra cobrir qualquer quantidade
+  // de tipos sem deixar tudo que não é "2/P" caindo na mesma cor genérica.
+  const MONT_COLS = [C.blue, C.green, C.accent, C.purple, C.cyan, C.orange];
+
   // ── Correlações ───────────────────────────────────────────
   function renderCorrelacoes(kpi, dados) {
     // Montagem x Atrasos
     const mountLabels = Object.keys(kpi.corMontagem);
     const mountAtraso = mountLabels.map(m => kpi.corMontagem[m].total
       ? (kpi.corMontagem[m].atrasos/kpi.corMontagem[m].total)*100 : 0);
-    const mountCols   = mountLabels.map(m =>
-      m==='HÍBRIDA' ? C.accent : m==='2/P' ? C.blue : C.green);
+    const mountCols   = mountLabels.map((m, i) => MONT_COLS[i % MONT_COLS.length]);
     setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160), 50);
 
     // Dimensão x Tempo
@@ -742,7 +748,7 @@
     dados.forEach(r => {
       if (!porDim[r.dimensao]) porDim[r.dimensao] = {m2:0,paineis:0,ops:0};
       porDim[r.dimensao].m2      += r.m2_total||0;
-      porDim[r.dimensao].paineis += (r.paineis_2p||0)+(r.paineis_sp||0);
+      porDim[r.dimensao].paineis += r.total_paineis||0;
       porDim[r.dimensao].ops++;
     });
     const totalM2 = Object.values(porDim).reduce((s,v)=>s+v.m2,0);
@@ -774,7 +780,7 @@
     // Tenta carregar os dados iniciais para preencher os filtros de data
     if (!LW.historico) {
       try {
-        const res = await fetch('historico.json');
+        const res = await fetch('db/historico.json');
         if (res.ok) LW.historico = await res.json();
       } catch (e) {}
     }

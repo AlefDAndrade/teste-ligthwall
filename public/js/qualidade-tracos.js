@@ -79,7 +79,7 @@
   // ── BUSCA TRAÇOS COM FILTROS ─────────────────────────────
   // Usa relatorio_injecao.json como fonte primária de dados de traços
   async function getTracosComFiltros(filtros) {
-    const registros = await fetch('relatorio_injecao.json').then(r => r.json());
+    const registros = await fetch('db/relatorio_injecao.json').then(r => r.json());
 
     const dataInicio   = filtros.dataInicio   || '';
     const dataFim      = filtros.dataFim      || '';
@@ -781,7 +781,7 @@
   // ── POPULA FILTROS ────────────────────────────────────────
   async function popularFiltros() {
     try {
-      const registros = await fetch('relatorio_injecao.json').then(r => r.json());
+      const registros = await fetch('db/relatorio_injecao.json').then(r => r.json());
       const ids   = [...new Set(registros.map(r => r.id_bateria).filter(Boolean))].sort();
       const tipos = [...new Set(registros.map(r => r.tipo_montagem).filter(Boolean))].sort();
 

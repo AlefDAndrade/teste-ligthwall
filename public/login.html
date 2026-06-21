@@ -9,7 +9,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="css/login.css">
 </head>
 
 <body>
@@ -40,10 +40,17 @@
                     <span class="btn-role-icon">🏭</span>
                 </button>
 
+                <!-- ANALISTA -->
+                <button class="btn-admin" onclick="entrar('Analista')">
+                    <span class="btn-role-label">Analista</span>
+                    <span class="btn-role-sub">Dashboards · Relatórios · Análise</span>
+                    <span class="btn-role-icon">📈</span>
+                </button>
+
                 <!-- ADMINISTRADOR -->
                 <button class="btn-admin" id="btn-entrar-admin" onclick="solicitarSenhaAdmin()">
                     <span class="btn-role-label">Administrador</span>
-                    <span class="btn-role-sub">Dashboards · Relatórios · Análise</span>
+                    <span class="btn-role-sub">Configurações · Backups · Acesso total</span>
                     <span class="btn-role-icon">📊</span>
                 </button>
 
@@ -64,28 +71,38 @@
         <div class="loading-label" id="loading-label">Carregando sistema...</div>
     </div>
 
-    <script src="admin-auth.js"></script>
+    <script src="js/admin-auth.js"></script>
     <script>
-        // ─── Verifica se já está autenticado ao carregar a página ─────────────────
-        document.addEventListener('DOMContentLoaded', () => {
-            // Se já tem sessão admin válida no localStorage, mostra indicativo no botão
-            if (AdminAuth.isAutenticado()) {
-                const btn = document.getElementById('btn-entrar-admin');
-                if (btn) {
-                    const sub = btn.querySelector('.btn-role-sub');
-                    if (sub) sub.textContent = 'Acesso autorizado · Clique para entrar';
-                }
-            }
+        // ─── Restaura o estado normal da tela se a página voltar do cache do
+        // navegador (bfcache) — ex: botão "Voltar" depois de já ter entrado
+        // num perfil. Sem isso, a tela volta "congelada" no overlay de
+        // carregamento (barra em 100%, "Pronto!"), cobrindo os botões de
+        // login e dando a impressão de estar carregando pra sempre. ─────────
+        window.addEventListener('pageshow', (event) => {
+            if (!event.persisted) return; // carregamento normal, nada a fazer
+
+            const overlay = document.getElementById('loading-overlay');
+            const fill = document.getElementById('loading-fill');
+            const lbl = document.getElementById('loading-label');
+            const roleLabel = document.getElementById('loading-role-label');
+
+            if (overlay) overlay.classList.remove('active');
+            if (fill) fill.style.width = '0%';
+            if (lbl) lbl.textContent = 'Carregando sistema...';
+            if (roleLabel) roleLabel.textContent = 'Operador';
         });
+
+        // Removido: indicativo de "acesso autorizado / clique para entrar".
+        // A senha agora é pedida sempre que o Administrador é acessado a
+        // partir da tela de login, então esse aviso deixou de ser verdade.
 
         // ─── Intercepta o clique em "Administrador" ────────────────────────────────
         function solicitarSenhaAdmin() {
-            // Se já autenticado previamente (sessão localStorage válida), entra direto
-            if (AdminAuth.isAutenticado()) {
-                entrar('Administrador');
-                return;
-            }
-            // Caso contrário, exibe o modal de senha
+            // Sempre pede a senha aqui na tela de login, mesmo que já tenha
+            // autenticado como administrador antes nesta máquina/navegador.
+            // (O "ficar logado" só vale DENTRO do sistema — ex: apertar F5
+            // na área de administrador não pede senha de novo — porque ali
+            // a verificação é feita pelo index.html, não por aqui.)
             AdminAuth.abrirModal(function onSuccess() {
                 entrar('Administrador');
             });

@@ -386,6 +386,21 @@
     renderRegistro();
   }
 
+  // Cor do badge "Tipo de Montagem" — cada label novo recebe a próxima cor
+  // da paleta, na ordem em que aparece pela primeira vez. Fica em cache pra
+  // o mesmo tipo manter sempre a mesma cor entre renders/filtros, em vez de
+  // só "2/P" e "S/P" terem cor própria e todo o resto cair num "badge-amber"
+  // genérico (era assim antes, e cobria mal tipos novos como 3T/4T).
+  const PALETA_BADGE_MONTAGEM = ['badge-blue', 'badge-green', 'badge-amber', 'badge-gray'];
+  const _coresBadgeMontagem = new Map();
+  function _corBadgeMontagem(label) {
+    if (!label) return 'badge-gray';
+    if (!_coresBadgeMontagem.has(label)) {
+      _coresBadgeMontagem.set(label, PALETA_BADGE_MONTAGEM[_coresBadgeMontagem.size % PALETA_BADGE_MONTAGEM.length]);
+    }
+    return _coresBadgeMontagem.get(label);
+  }
+
   async function renderRegistro() {
     const s = await LW.getStats();
     let data = [...s.data];
@@ -445,7 +460,7 @@
           ? `<span class="badge badge-red" title="${b.motivo_atraso || ''}">⚠ SIM</span>`
           : '<span class="badge badge-green">✓ NÃO</span>'}</td>
         <td data-col="motivo_atraso">${b.motivo_atraso || '—'}</td>
-        <td data-col="montagem"><span class="badge ${b.tipo_montagem === '2/P' ? 'badge-blue' : b.tipo_montagem === 'S/P' ? 'badge-green' : 'badge-amber'}">${b.tipo_montagem || '—'}</span></td>
+        <td data-col="montagem"><span class="badge ${_corBadgeMontagem(b.tipo_montagem)}">${b.tipo_montagem || '—'}</span></td>
         <td data-col="paineis_2psp">${b.total_paineis || 0}</td>
         <td data-col="paineis_2p">${b.paineis_2p || 0}</td>
         <td data-col="paineis_sp">${b.paineis_sp || 0}</td>
@@ -877,6 +892,25 @@
   let EXPORT_COLUNAS = [...EXPORT_COLUNAS_BASE];
 
   function gerarDownloadXLSX(dados, colsSel, sufixo) {
+    // _gerarExportColunas() cria colunas dinâmicas como "paineis_3t"/"m2_3t" pra
+    // tipos não nativos, mas o registro só guarda esses valores DENTRO de
+    // paineis_por_tipo/m2_por_tipo (ex: item.paineis_por_tipo['3t']), nunca como
+    // propriedade plana item.paineis_3t. Sem isso, a coluna saía em branco pra
+    // qualquer tipo de montagem novo. Aqui "achatamos" os dois objetos em
+    // propriedades planas pra TODOS os tipos (não só 2p/sp), pra que a leitura
+    // genérica item[col.campo] mais abaixo funcione pra qualquer tipo, atual ou
+    // futuro.
+    dados = dados.map(item => {
+      const extra = {};
+      if (item.paineis_por_tipo) {
+        Object.keys(item.paineis_por_tipo).forEach(tipo => { extra['paineis_' + tipo] = item.paineis_por_tipo[tipo]; });
+      }
+      if (item.m2_por_tipo) {
+        Object.keys(item.m2_por_tipo).forEach(tipo => { extra['m2_' + tipo] = item.m2_por_tipo[tipo]; });
+      }
+      return { ...item, ...extra };
+    });
+
     // 1. Prepara os dados para o Excel
     const dadosExcel = dados.map(item => {
       const linha = {};

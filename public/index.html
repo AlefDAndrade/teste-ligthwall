@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Injeção — Lightwall SC</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body>
@@ -21,6 +21,20 @@
       </div>
       <div class="topbar-logo">⬡ Lightwall</div>
       <div class="topbar-sub">Sistema de Injeção V1.0</div>
+
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="LWDebriefing.toggle(event)">
+          📓 Debriefing do Dia
+        </button>
+        <div id="popover-debriefing" class="ao-popover debriefing-popover">
+          <div class="debriefing-header">
+            <span class="debriefing-header-label">📓 Debriefing</span>
+            <input type="date" id="debriefing-data-input" class="debriefing-date-input" oninput="LWDebriefing.mudarData(this.value)">
+          </div>
+          <div class="debriefing-paper" id="debriefing-content">Carregando...</div>
+        </div>
+      </div>
+
       <div class="topbar-right">
         <span id="topbar-date"></span>
         <span class="topbar-clock" id="topbar-clock">--:--:--</span>
@@ -60,7 +74,7 @@
       </button>
 
       <div class="sidebar-label" style="margin-top:8px">Operação</div>
-      <button class="nav-item" data-page="operacao" onclick="showPage('operacao',this)">
+      <button class="nav-item" data-page="operacao" data-hide-analista onclick="showPage('operacao',this)">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
@@ -113,6 +127,15 @@
         </svg>
         <span class="nav-text">Qualidade dos Traços</span>
       </button>
+
+      <button class="nav-item" data-page="oee" onclick="showPage('oee',this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 3" />
+          <path d="M7.5 4.2 a9 9 0 0 0-3.3 3.3" />
+        </svg>
+        <span class="nav-text">OEE</span>
+      </button>
     </nav>
 
     <!-- Backdrop para fechar ao clicar fora -->
@@ -128,7 +151,7 @@
             Controle de produção industrial</p>
         </div>
         <div class="menu-grid">
-          <div class="menu-card" onclick="showPage('operacao')">
+          <div class="menu-card" data-hide-analista onclick="showPage('operacao')">
             <div class="menu-card-icon">⏱</div>
             <div class="menu-card-title">Registrar Operação</div>
             <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e
@@ -157,6 +180,30 @@
             <div class="menu-card-title">Importar Documento</div>
             <div class="menu-card-desc">Importa dados de uma planilha Excel (.xlsx / .xls) para o histórico ou relatório
               de injeção.</div>
+          </div>
+          <div class="menu-card" data-admin-only id="btn-backup-dados" onclick="fazerBackupDados()">
+            <div class="menu-card-icon">💾</div>
+            <div class="menu-card-title">Backup de Dados</div>
+            <div class="menu-card-desc">Baixa um .zip com todos os arquivos de dados (histórico, relatório de injeção,
+              configurações etc.).</div>
+          </div>
+          <div class="menu-card" data-admin-only id="btn-backup-geral" onclick="fazerBackupGeral()">
+            <div class="menu-card-icon">🗄️</div>
+            <div class="menu-card-title">Backup Geral</div>
+            <div class="menu-card-desc">Baixa um .zip com o programa inteiro como está agora (código + dados) — útil
+              pra poder voltar a este estado exato depois.</div>
+          </div>
+          <div class="menu-card" data-admin-only onclick="abrirRestaurarBackup()">
+            <div class="menu-card-icon">♻️</div>
+            <div class="menu-card-title">Restaurar Backup de Dados</div>
+            <div class="menu-card-desc">Restaura os dados a partir de um arquivo gerado pelo "Backup de Dados". Salva
+              automaticamente uma cópia de segurança do estado atual antes de substituir.</div>
+          </div>
+          <div class="menu-card" data-admin-only onclick="abrirRestaurarGeral()">
+            <div class="menu-card-icon">⚠️</div>
+            <div class="menu-card-title">Restaurar Backup Geral</div>
+            <div class="menu-card-desc">Restaura o programa inteiro (código + dados) a partir de um "Backup Geral".
+              Requer reiniciar o servidor depois. Use com cautela.</div>
           </div>
         </div>
       </div>
@@ -199,18 +246,6 @@
                         Limite de injeção: <span style="color:var(--accent)">59 minutos</span><br>
                         m² por painel: <span style="color:var(--accent)">1,83 m²</span>
                       </div>
-                    </div>
-                  </div>
-                  <div style="position:relative">
-                    <button class="btn btn-ghost btn-sm" onclick="LWDebriefing.toggle(event)">
-                      📓 Debriefing do Dia
-                    </button>
-                    <div id="popover-debriefing" class="ao-popover debriefing-popover">
-                      <div class="debriefing-header">
-                        <span class="debriefing-header-label">📓 Debriefing</span>
-                        <input type="date" id="debriefing-data-input" class="debriefing-date-input" oninput="LWDebriefing.mudarData(this.value)">
-                      </div>
-                      <div class="debriefing-paper" id="debriefing-content">Carregando...</div>
                     </div>
                   </div>
                 </div>
@@ -541,6 +576,19 @@
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
                 onclick="limparTodosFiltros('filtros-registro')">✕ Limpar Todos</button>
+              <button type="button" id="btn-col-toggle-registro" class="btn btn-ghost btn-sm"
+                title="Exibir/ocultar colunas" aria-haspopup="true" aria-expanded="false"
+                onclick="LWDash.toggleColMenu(event)">⚙ Colunas</button>
+              <div id="col-menu-registro" class="col-menu" style="display:none">
+                <div class="col-menu-item col-menu-group-toggle">
+                  <label>
+                    <input type="checkbox" id="col-toggle-tipos-placa" onchange="LWDash.toggleGrupoTiposPlaca(this.checked)">
+                    <span>Ocultar Tipos de Placas</span>
+                  </label>
+                </div>
+                <div class="col-menu-divider"></div>
+                <div id="col-menu-list"></div>
+              </div>
               <button class="btn btn-ghost btn-sm" onclick="LWDash.abrirExportModal()">⬇ Exportar Excel (.xlsx)</button>
             </div>
           </div>
@@ -557,27 +605,7 @@
           <table id="registro-table">
             <thead>
               <tr>
-                <th data-col="data">
-                  <div style="display:flex;align-items:center;gap:8px;position:relative">
-                    <button type="button" id="btn-col-toggle-registro" class="btn-col-toggle"
-                      title="Exibir/ocultar colunas" aria-haspopup="true" aria-expanded="false"
-                      onclick="LWDash.toggleColMenu(event)"
-                      style="background:none;border:1px solid var(--border);border-radius:6px;width:24px;height:24px;line-height:1;cursor:pointer;color:var(--text-2);font-size:.8rem;flex:0 0 auto">⚙</button>
-                    <span>Data</span>
-
-                    <!-- Menu de colunas (dropdown) -->
-                    <div id="col-menu-registro" class="col-menu" style="display:none">
-                      <div class="col-menu-item col-menu-group-toggle">
-                        <label>
-                          <input type="checkbox" id="col-toggle-tipos-placa" onchange="LWDash.toggleGrupoTiposPlaca(this.checked)">
-                          <span>Ocultar Tipos de Placas</span>
-                        </label>
-                      </div>
-                      <div class="col-menu-divider"></div>
-                      <div id="col-menu-list"></div>
-                    </div>
-                  </div>
-                </th>
+                <th data-col="data">Data</th>
                 <th data-col="turno">Turno</th>
                 <th data-col="dimensao">Dimensão</th>
                 <th data-col="capacidade">Cap. Berços</th> <!-- Nova -->
@@ -912,6 +940,160 @@
     </main>
 
 
+    <!-- ============ PAGE: OEE ============ -->
+    <main class="main" id="page-oee">
+      <div class="page-header">
+        <h1 class="page-title">Análise de <span>OEE</span></h1>
+        <p class="page-desc">Disponibilidade × Performance × Qualidade</p>
+      </div>
+      <div class="page-body">
+
+        <!-- Filtros -->
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Início</label>
+              <input class="form-input" type="date" id="oee-data-inicio"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Fim</label>
+              <input class="form-input" type="date" id="oee-data-fim"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Bateria</label>
+              <select class="form-input" id="oee-bateria" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Turno</label>
+              <select class="form-input" id="oee-turno" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todos</option>
+                <option>1º TURNO</option>
+                <option>2º TURNO</option>
+                <option>3º TURNO</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-oee-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+          </div>
+        </div>
+
+        <div id="oee-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando
+          dados...</div>
+        <div id="oee-empty" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Nenhum registro no
+          período selecionado.</div>
+
+        <div id="oee-content">
+
+          <!-- KPIs principais -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
+            <div class="kpi-card">
+              <div class="kpi-label">Disponibilidade</div>
+              <div class="kpi-value" id="oee-kpi-disp" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">tempo produzindo ÷ 7h por turno</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Performance</div>
+              <div class="kpi-value" id="oee-kpi-perf" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ciclo ideal: 59 min/operação</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Qualidade</div>
+              <div class="kpi-value" id="oee-kpi-qual" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">traços sem nenhum ajuste</div>
+            </div>
+            <div class="kpi-card" style="border-color:var(--accent)">
+              <div class="kpi-label" style="color:var(--accent)">OEE Geral</div>
+              <div class="kpi-value accent" id="oee-kpi-geral" style="font-size:2rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">disp. × performance × qualidade</div>
+            </div>
+          </div>
+
+          <!-- Composição visual -->
+          <div class="card mb-4" style="padding:20px 24px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Composição do OEE</div>
+            <div id="oee-waterfall" style="display:flex;flex-direction:column;gap:14px"></div>
+          </div>
+
+          <!-- OEE por turno (tendência) -->
+          <div class="card mb-4" style="padding:20px 24px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              📈 OEE por Turno — cada barra é uma data + turno</div>
+            <canvas id="oee-chart-turnos" height="160"></canvas>
+            <div id="oee-turnos-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:20px 0">
+              Sem dados suficientes no período.</div>
+          </div>
+
+          <!-- Tabela por turno -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Detalhe por Turno</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Turno</th>
+                  <th>Operações</th>
+                  <th>Tempo Produzindo</th>
+                  <th>Disponibilidade</th>
+                  <th>Performance</th>
+                  <th>Qualidade</th>
+                  <th>OEE</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-turnos"></tbody>
+            </table>
+          </div>
+
+          <!-- Ranking por bateria -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Performance e Qualidade por Bateria</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Bateria</th>
+                  <th>Operações</th>
+                  <th>Performance</th>
+                  <th>Traços</th>
+                  <th>Qualidade</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-bateria"></tbody>
+            </table>
+          </div>
+
+          <!-- Ranking por tipo de montagem -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Performance e Qualidade por Tipo de Montagem</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo de Montagem</th>
+                  <th>Operações</th>
+                  <th>Performance</th>
+                  <th>Traços</th>
+                  <th>Qualidade</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-montagem"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+
     <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
@@ -1212,28 +1394,77 @@
           <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
             Novo Tipo de Montagem</div>
 
-          <div class="form-group" style="margin-bottom:12px">
-            <label class="form-label">Label</label>
-            <input class="form-input" id="cfg-mont-label" placeholder="Ex: HÍBRIDA 3p/2p" style="width:220px">
+          <!-- Escolha do modo -->
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button type="button" id="cfg-mont-modo-simples" class="btn btn-outline-accent btn-sm"
+              onclick="cfgEscolherModoMontagem('simples')">Simples</button>
+            <button type="button" id="cfg-mont-modo-hibrida" class="btn btn-ghost btn-sm"
+              onclick="cfgEscolherModoMontagem('hibrida')">Híbrida</button>
           </div>
 
-          <!-- Componentes (tipo + painéis/berço) adicionados antes de salvar o tipo -->
-          <div id="cfg-mont-componentes-lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
-
-          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label">Tipo de Placa</label>
-              <input class="form-input" id="cfg-mont-comp-tipo" placeholder="Ex: 2p, sp, 3p" style="width:120px">
+          <!-- ---- Formulário: SIMPLES ---- -->
+          <div id="cfg-mont-form-simples">
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:12px">
+              Um único tipo de placa por berço. Limite físico da operação: no máximo 2 painéis/berço.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Label</label>
+                <input class="form-input" id="cfg-mont-simples-label" placeholder="Ex: 3/T" style="width:160px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Tipo de Montagem</label>
+                <input class="form-input" id="cfg-mont-simples-tipo" placeholder="Ex: 3t" style="width:120px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Painéis/Berço</label>
+                <select class="form-select" id="cfg-mont-simples-paineis" style="width:110px">
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                </select>
+              </div>
             </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label">Painéis/Berço</label>
-              <input class="form-input" type="number" id="cfg-mont-comp-valor" placeholder="0" style="width:110px">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text-2);cursor:pointer">
+                <input type="checkbox" id="cfg-mont-simples-leva-cimenticia" onchange="cfgToggleCimenticiaQtd()">
+                Leva placas cimentícias
+              </label>
+              <div class="form-group" id="cfg-mont-simples-cimenticia-qtd-wrap" style="margin-bottom:0;display:none">
+                <label class="form-label">Cimentícias por painel</label>
+                <input class="form-input" type="number" id="cfg-mont-simples-cimenticia-qtd" placeholder="0"
+                  style="width:160px">
+              </div>
             </div>
-            <button class="btn btn-ghost btn-sm" onclick="cfgAdicionarComponenteMontagem()">+ Adicionar Componente</button>
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarMontagemSimples()">+ Salvar Tipo
+                Simples</button>
+            </div>
           </div>
 
-          <div style="margin-top:14px;display:flex;justify-content:flex-end">
-            <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarMontagem()">+ Salvar Tipo de Montagem</button>
+          <!-- ---- Formulário: HÍBRIDA ---- -->
+          <div id="cfg-mont-form-hibrida" style="display:none">
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:12px">
+              Combina dois tipos simples já cadastrados. O berço sempre terá 2 painéis — 1 de cada tipo escolhido.
+              A cimentícia é herdada automaticamente de cada tipo simples escolhido.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Label</label>
+                <input class="form-input" id="cfg-mont-hibrida-label" placeholder="Ex: HÍBRIDA 2P/3T" style="width:200px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">1º Tipo</label>
+                <select class="form-select" id="cfg-mont-hibrida-tipo1" style="width:170px"></select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">2º Tipo</label>
+                <select class="form-select" id="cfg-mont-hibrida-tipo2" style="width:170px"></select>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarMontagemHibrida()">+ Salvar Tipo
+                Híbrida</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1250,18 +1481,24 @@
 
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="admin-auth.js"></script>
-  <script src="data.js"></script>
-  <script src="operacao.js"></script>
-  <script src="dashboard.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="js/admin-auth.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/operacao.js"></script>
+  <script src="js/dashboard.js"></script>
   <script>
 
     // ---- Navigation ----
-    const ADMIN_ONLY_PAGES = [];
+    // Páginas bloqueadas por perfil — Analista não acessa Registrar Operação,
+    // mesmo navegando direto (atalho de teclado, URL, etc.), não só pela UI.
+    const PAGINAS_BLOQUEADAS_POR_PERFIL = {
+      'Analista': ['operacao'],
+    };
 
     function showPage(pageId, navEl) {
       const role = sessionStorage.getItem('lw_role');
-      if (role === 'Operador' && ADMIN_ONLY_PAGES.includes(pageId)) return;
+      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
+      if (bloqueadas.includes(pageId)) return;
       document.querySelectorAll('.main').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -1305,6 +1542,13 @@
       }
       if (pageId === 'qualidade-tracos') {
         LWQualidade.render();
+      }
+      if (pageId === 'oee' && !window._oeeInit) {
+        window._oeeInit = true;
+        LWOee.init();
+      }
+      if (pageId === 'oee') {
+        LWOee.render();
       }
       if (pageId === 'relatorio' && !window._relatorioInit) {
         window._relatorioInit = true;
@@ -1423,13 +1667,28 @@
       // ---- Controle de acesso por perfil ----
       const role = sessionStorage.getItem('lw_role');
 
+      // Perfil ausente ou inválido (ex: sessionStorage adulterada) — volta
+      // pro login em vez de deixar a tela sem nenhuma restrição aplicada.
+      const PERFIS_VALIDOS = ['Operador', 'Analista', 'Administrador'];
+      if (!PERFIS_VALIDOS.includes(role)) {
+        sessionStorage.clear();
+        window.location.href = 'login.html';
+        return;
+      }
+
       if (role === 'Operador') {
-        // Esconde card de Importar e botão Configurações no menu
+        // Esconde itens exclusivos do administrador (config, backup, import)
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
 
         // Bloqueia acesso direto via showPage para páginas admin
         // Vai direto para a tela de operação
         showPage('operacao');
+
+      } else if (role === 'Analista') {
+        // Mesmas restrições do Operador (sem config/backup/import), e
+        // também sem acesso à Operação — só dashboards e relatórios.
+        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
 
       } else if (role === 'Administrador') {
         // Verifica se a autenticação admin foi concluída corretamente
@@ -1441,8 +1700,9 @@
         }
         // Administrador: acesso total
         document.getElementById('btn-config').style.display = 'inline-flex';
-        // Garante que itens admin estejam visíveis
+        // Garante que itens admin e de operação estejam visíveis
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
+        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
       }
 
       const roleEl = document.getElementById('topbar-role');
@@ -1518,6 +1778,370 @@
       document.getElementById('import-modal').style.display = 'none';
     }
 
+    // ---- Backup de Dados (admin) ----
+    // A lógica de buscar os arquivos de public/db/ e montar o .zip vive em
+    // LW.gerarBackupDados() (data.js) — aqui só cuidamos do feedback na tela.
+    async function fazerBackupDados() {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+
+      const card = document.getElementById('btn-backup-dados');
+      const descEl = card?.querySelector('.menu-card-desc');
+      const descOriginal = descEl?.textContent;
+
+      try {
+        if (card) card.style.pointerEvents = 'none';
+        if (descEl) descEl.textContent = 'Gerando backup...';
+
+        await LW.gerarBackupDados();
+      } catch (e) {
+        alert('Erro ao gerar backup: ' + e.message);
+      } finally {
+        if (card) card.style.pointerEvents = '';
+        if (descEl) descEl.textContent = descOriginal;
+      }
+    }
+
+    // ---- Backup Geral (admin) ----
+    // Diferente do Backup de Dados, este .zip é montado no PRÓPRIO SERVIDOR
+    // (rota GET /backup-geral) — ele varre o projeto inteiro (código + dados),
+    // então não precisa que o front-end conheça cada arquivo de antemão.
+    async function fazerBackupGeral() {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+
+      const card = document.getElementById('btn-backup-geral');
+      const descEl = card?.querySelector('.menu-card-desc');
+      const descOriginal = descEl?.textContent;
+
+      try {
+        if (card) card.style.pointerEvents = 'none';
+        if (descEl) descEl.textContent = 'Gerando backup geral... pode levar alguns segundos.';
+
+        const res = await fetch('/backup-geral');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        // Tenta usar o nome de arquivo sugerido pelo servidor; se não vier,
+        // usa um nome padrão como fallback.
+        const cd = res.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="(.+?)"/);
+        const nomeArquivo = match ? match[1] : `lightwall_backup_geral_${todayBrasilia()}.zip`;
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nomeArquivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Erro ao gerar backup geral: ' + e.message);
+      } finally {
+        if (card) card.style.pointerEvents = '';
+        if (descEl) descEl.textContent = descOriginal;
+      }
+    }
+
+    // ---- Restaurar Backup de Dados (admin) ----
+    // Mesma lista de arquivos do "Backup de Dados", com uma checagem mínima
+    // de formato pra recusar arquivo errado/corrompido antes de mandar pro
+    // servidor (que faz a MESMA validação de novo — nunca confiamos só no
+    // que foi checado aqui no navegador).
+    const RESTAURAR_VALIDACOES = {
+      'config.json':            v => v && typeof v === 'object' && !Array.isArray(v),
+      'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
+      'historico.json':          v => Array.isArray(v),
+      'relatorio_injecao.json': v => Array.isArray(v),
+      'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
+      'sobra.json':              v => v && typeof v === 'object',
+    };
+
+    // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
+    // inicializá-los — não tratamos isso como JSON inválido. config.json e
+    // security.json ficam de fora de propósito (vazio ali é sempre um problema).
+    const DEFAULT_SE_VAZIO_RESTAURAR = {
+      'contador_tracos.json': {},
+      'historico.json': [],
+      'relatorio_injecao.json': [],
+      'sobra.json': {},
+    };
+
+    function parseArquivoRestaurar(nome, texto) {
+      if (texto.trim() === '' && DEFAULT_SE_VAZIO_RESTAURAR.hasOwnProperty(nome)) {
+        return DEFAULT_SE_VAZIO_RESTAURAR[nome];
+      }
+      return JSON.parse(texto);
+    }
+
+    let _restaurarArquivos = null; // { 'config.json': '<texto original>', ... } já validados
+
+    function abrirRestaurarBackup() {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      document.getElementById('restaurar-backup-modal').style.display = 'flex';
+      resetRestaurarBackupModal();
+    }
+
+    function fecharRestaurarBackup() {
+      document.getElementById('restaurar-backup-modal').style.display = 'none';
+    }
+
+    function resetRestaurarBackupModal() {
+      _restaurarArquivos = null;
+      document.getElementById('restaurar-step-0').style.display = 'block';
+      document.getElementById('restaurar-step-1').style.display = 'none';
+      document.getElementById('restaurar-erro').style.display = 'none';
+      document.getElementById('restaurar-file-input').value = '';
+      document.getElementById('restaurar-senha').value = '';
+    }
+
+    function voltarRestaurarStep0() {
+      document.getElementById('restaurar-step-0').style.display = 'block';
+      document.getElementById('restaurar-step-1').style.display = 'none';
+    }
+
+    function mostrarErroRestaurar(msg) {
+      const el = document.getElementById('restaurar-erro');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function handleRestaurarDrop(e) {
+      e.preventDefault();
+      e.currentTarget.style.borderColor = 'var(--border)';
+      e.currentTarget.style.background = 'var(--bg-2)';
+      const file = e.dataTransfer.files[0];
+      if (file) handleRestaurarArquivo(file);
+    }
+
+    async function handleRestaurarArquivo(file) {
+      document.getElementById('restaurar-erro').style.display = 'none';
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        mostrarErroRestaurar('Selecione um arquivo .zip — o gerado pelo botão "Backup de Dados".');
+        return;
+      }
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const esperados = Object.keys(RESTAURAR_VALIDACOES);
+        const faltando = esperados.filter(nome => !zip.file(nome));
+        if (faltando.length) {
+          mostrarErroRestaurar('Arquivo de backup incompleto — faltam: ' + faltando.join(', '));
+          return;
+        }
+
+        const conteudos = {};
+        const resumo = [];
+        for (const nome of esperados) {
+          const texto = await zip.file(nome).async('string');
+          let valor;
+          try {
+            valor = parseArquivoRestaurar(nome, texto);
+          } catch (e) {
+            mostrarErroRestaurar(`"${nome}" não é um JSON válido.`);
+            return;
+          }
+          if (!RESTAURAR_VALIDACOES[nome](valor)) {
+            mostrarErroRestaurar(`"${nome}" não tem o formato esperado.`);
+            return;
+          }
+          conteudos[nome] = texto;
+          resumo.push(`• ${nome}: ${Array.isArray(valor) ? valor.length + ' registro(s)' : 'ok'}`);
+        }
+
+        _restaurarArquivos = conteudos;
+        document.getElementById('restaurar-preview').innerHTML = resumo.map(l => `<div>${l}</div>`).join('');
+        document.getElementById('restaurar-step-0').style.display = 'none';
+        document.getElementById('restaurar-step-1').style.display = 'block';
+      } catch (e) {
+        mostrarErroRestaurar('Não foi possível ler o .zip: ' + e.message);
+      }
+    }
+
+    async function confirmarRestaurarBackup() {
+      if (!_restaurarArquivos) return;
+      document.getElementById('restaurar-erro').style.display = 'none';
+
+      const senha = document.getElementById('restaurar-senha').value;
+      if (!senha) { mostrarErroRestaurar('Digite sua senha de administrador.'); return; }
+
+      if (!confirm('Tem certeza? Isso vai substituir os dados atuais pelos deste backup. Uma cópia de segurança do estado atual será salva automaticamente antes.')) {
+        return;
+      }
+
+      const btn = document.getElementById('restaurar-btn-confirmar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Restaurando...';
+
+        const res = await fetch('/restaurar-backup-dados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senha, arquivos: _restaurarArquivos }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar backup.');
+
+        alert('Backup restaurado com sucesso! A página será recarregada.');
+        window.location.reload();
+      } catch (e) {
+        mostrarErroRestaurar(e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
+    // ---- Restaurar Backup Geral (admin) ----
+    // Mesmas ideias do Restaurar Backup de Dados, com camadas extras dado o
+    // risco maior: frase de confirmação explícita, e o backup pode conter
+    // QUALQUER arquivo do projeto (não uma lista fixa como o de dados).
+    const ESSENCIAIS_BACKUP_GERAL = ['server.js', 'package.json', 'public/index.html'];
+
+    let _restaurarGeralArquivos = null; // { 'server.js': '<conteúdo>', ... } já lidos do .zip
+
+    function abrirRestaurarGeral() {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      document.getElementById('restaurar-geral-modal').style.display = 'flex';
+      resetRestaurarGeralModal();
+    }
+
+    function fecharRestaurarGeral() {
+      document.getElementById('restaurar-geral-modal').style.display = 'none';
+    }
+
+    function resetRestaurarGeralModal() {
+      _restaurarGeralArquivos = null;
+      document.getElementById('restaurar-geral-step-0').style.display = 'block';
+      document.getElementById('restaurar-geral-step-1').style.display = 'none';
+      document.getElementById('restaurar-geral-erro').style.display = 'none';
+      document.getElementById('restaurar-geral-file-input').value = '';
+      document.getElementById('restaurar-geral-frase').value = '';
+      document.getElementById('restaurar-geral-senha').value = '';
+      document.getElementById('restaurar-geral-btn-confirmar').disabled = true;
+    }
+
+    function voltarRestaurarGeralStep0() {
+      document.getElementById('restaurar-geral-step-0').style.display = 'block';
+      document.getElementById('restaurar-geral-step-1').style.display = 'none';
+    }
+
+    function mostrarErroRestaurarGeral(msg) {
+      const el = document.getElementById('restaurar-geral-erro');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function handleRestaurarGeralDrop(e) {
+      e.preventDefault();
+      e.currentTarget.style.borderColor = 'var(--border)';
+      e.currentTarget.style.background = 'var(--bg-2)';
+      const file = e.dataTransfer.files[0];
+      if (file) handleRestaurarGeralArquivo(file);
+    }
+
+    // O botão só fica liberado quando a frase E a senha estão preenchidas —
+    // mais um obstáculo deliberado antes de uma ação tão destrutiva.
+    function validarBotaoRestaurarGeral() {
+      const frase = document.getElementById('restaurar-geral-frase').value;
+      const senha = document.getElementById('restaurar-geral-senha').value;
+      document.getElementById('restaurar-geral-btn-confirmar').disabled = !(frase === 'RESTAURAR TUDO' && senha);
+    }
+
+    async function handleRestaurarGeralArquivo(file) {
+      document.getElementById('restaurar-geral-erro').style.display = 'none';
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        mostrarErroRestaurarGeral('Selecione um arquivo .zip — o gerado pelo botão "Backup Geral".');
+        return;
+      }
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+
+        const faltando = ESSENCIAIS_BACKUP_GERAL.filter(nome => !zip.file(nome));
+        if (faltando.length) {
+          mostrarErroRestaurarGeral('Isso não parece ser um Backup Geral — faltam: ' + faltando.join(', ') +
+            '. Você selecionou um Backup de Dados por engano?');
+          return;
+        }
+
+        const conteudos = {};
+        let tamanhoTotal = 0;
+        const caminhos = [];
+        for (const [nome, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          const texto = await entry.async('string');
+          conteudos[nome] = texto;
+          tamanhoTotal += texto.length;
+          caminhos.push(nome);
+        }
+        caminhos.sort();
+
+        if (caminhos.length > 500) {
+          mostrarErroRestaurarGeral('Backup com número de arquivos suspeito (>500) — recusado por segurança.');
+          return;
+        }
+
+        _restaurarGeralArquivos = conteudos;
+        document.getElementById('restaurar-geral-resumo').textContent =
+          `${caminhos.length} arquivo(s) — ${(tamanhoTotal / 1024).toFixed(0)} KB`;
+        document.getElementById('restaurar-geral-preview').innerHTML =
+          caminhos.map(c => `<div>${c}</div>`).join('');
+
+        document.getElementById('restaurar-geral-step-0').style.display = 'none';
+        document.getElementById('restaurar-geral-step-1').style.display = 'block';
+        validarBotaoRestaurarGeral();
+      } catch (e) {
+        mostrarErroRestaurarGeral('Não foi possível ler o .zip: ' + e.message);
+      }
+    }
+
+    async function confirmarRestaurarGeral() {
+      if (!_restaurarGeralArquivos) return;
+      document.getElementById('restaurar-geral-erro').style.display = 'none';
+
+      const frase = document.getElementById('restaurar-geral-frase').value;
+      const senha = document.getElementById('restaurar-geral-senha').value;
+      if (frase !== 'RESTAURAR TUDO' || !senha) return;
+
+      if (!confirm(
+        'ÚLTIMA CONFIRMAÇÃO: isso vai substituir TODO o código e os dados do sistema pelos deste backup, e vai ' +
+        'exigir reiniciar o servidor manualmente depois. Uma cópia de segurança completa do estado atual será ' +
+        'salva automaticamente antes. Continuar?'
+      )) {
+        return;
+      }
+
+      const btn = document.getElementById('restaurar-geral-btn-confirmar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Restaurando...';
+
+        const res = await fetch('/restaurar-backup-geral', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senha, confirmacao: frase, arquivos: _restaurarGeralArquivos }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar backup geral.');
+
+        alert(
+          `Backup geral restaurado com sucesso (${json.arquivosRestaurados} arquivos)!\n\n` +
+          `IMPORTANTE: reinicie o servidor agora manualmente (Ctrl+C e "npm start", ou "pm2 restart") para que ` +
+          `mudanças no código do servidor tenham efeito.\n\n` +
+          `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}`
+        );
+        window.location.reload();
+      } catch (e) {
+        mostrarErroRestaurarGeral(e.message);
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
     function escolherDestino(destino) {
       _importDestino = destino;
       // Ajusta o título e os campos de mapeamento conforme o destino
@@ -1542,15 +2166,30 @@
           { key: 'expansao', label: 'Expansão', required: false },
         ];
       } else {
-        _activeImportFields = IMPORT_FIELDS; // campos originais do historico
+        // Campos fixos + campos dinâmicos para qualquer tipo de montagem que
+        // não seja 2p/sp (ex: 3t, 4t) — assim, se a planilha tiver colunas
+        // específicas pra esses tipos, dá pra mapeá-las; senão, ficam apenas
+        // como campos opcionais não preenchidos.
+        const NATIVOS_IMPORT = new Set(['2p', 'sp']);
+        const tiposExtrasImport = new Set();
+        Object.values(LW.MONTAGEM_MAP || {}).forEach(m => {
+          Object.keys(m.porBerco || {}).forEach(t => { if (!NATIVOS_IMPORT.has(t)) tiposExtrasImport.add(t); });
+        });
+        const camposExtrasImport = [];
+        tiposExtrasImport.forEach(tipo => {
+          const label = tipo.toUpperCase();
+          camposExtrasImport.push({ key: `paineis_${tipo}`, label: `Painéis ${label}`, required: false });
+          camposExtrasImport.push({ key: `m2_${tipo}`, label: `m² ${label}`, required: false });
+        });
+        _activeImportFields = [...IMPORT_FIELDS, ...camposExtrasImport]; // campos originais do historico + dinâmicos
       }
 
       // Atualiza label de destino visível no step-1
       const labelEl = document.getElementById('import-destino-label');
       if (labelEl) {
         labelEl.textContent = destino === 'historico'
-          ? 'Destino: Relatorio de Baterias (historico.json)'
-          : 'Destino: Relatório de Injeção (relatorio_injecao.json)';
+          ? 'Destino: Relatorio de Baterias (db/historico.json)'
+          : 'Destino: Relatório de Injeção (db/relatorio_injecao.json)';
         labelEl.style.color = destino === 'historico' ? 'var(--accent)' : 'var(--blue)';
       }
       document.getElementById('import-step-0').style.display = 'none';
@@ -1704,28 +2343,64 @@
           const capacidade = (bateriaObj?.bercos) || (dimObj?.bercos) || 0;
           const houve = mapa['houve_atraso'] ? String(row[mapa['houve_atraso']]).trim().toUpperCase() : 'NAO';
 
+          // Monta paineis_por_tipo/m2_por_tipo genericamente a partir de QUALQUER
+          // campo mapeado no formato paineis_<tipo> / m2_<tipo> — cobre 2p/sp
+          // nativos e qualquer tipo extra (3t, 4t, ...) que tenha sido mapeado,
+          // em vez de só olhar pra paineis_2p/paineis_sp.
+          const paineis_por_tipo = {};
+          const m2_por_tipo = {};
+          Object.keys(mapa).forEach(campo => {
+            if (campo === 'total_paineis' || campo === 'm2_total') return; // são o total geral, não por tipo
+            let m = campo.match(/^paineis_(.+)$/);
+            if (m) { paineis_por_tipo[m[1]] = parseInt(row[mapa[campo]]) || 0; return; }
+            m = campo.match(/^m2_(.+)$/);
+            if (m) { m2_por_tipo[m[1]] = parseFloat(row[mapa[campo]]) || 0; }
+          });
+
+          // Total: usa a coluna explícita de total se ela foi mapeada; senão,
+          // deriva somando os tipos que FORAM mapeados — assim uma planilha só
+          // com colunas por tipo (sem uma coluna de "Total") não fica com o
+          // total zerado.
+          const somaPaineisTipos = Object.values(paineis_por_tipo).reduce((s, v) => s + v, 0);
+          const somaM2Tipos = Object.values(m2_por_tipo).reduce((s, v) => s + v, 0);
+          const total_paineis = mapa['total_paineis'] ? (parseInt(row[mapa['total_paineis']]) || 0) : somaPaineisTipos;
+          const m2_total = mapa['m2_total'] ? (parseFloat(row[mapa['m2_total']]) || 0) : somaM2Tipos;
+
           return {
             id: 'imp_' + nowBrasilia().getTime() + '_' + i,
             data: dataISO ? dataISO.split('T')[0] : '',
             turno: mapa['turno'] ? String(row[mapa['turno']]).trim() : '',
             dimensao: dimensao.trim(),
             capacidade,
-            id_bateria: mapa['id_bateria'] ? String(row[mapa['id_bateria']]).trim() : '',
+            id_bateria: idBateria,
             inicio: inicioISO || '',
             fim: fimISO || '',
             qtd_tracos: mapa['qtd_tracos'] ? parseInt(row[mapa['qtd_tracos']]) || 0 : 0,
             houve_atraso: houve === 'SIM' ? 'SIM' : 'NÃO',
             motivo_atraso: mapa['motivo_atraso'] ? String(row[mapa['motivo_atraso']]).trim() : '',
             tipo_montagem: mapa['tipo_montagem'] ? String(row[mapa['tipo_montagem']]).trim() : '',
-            total_paineis: mapa['total_paineis'] ? parseInt(row[mapa['total_paineis']]) || 0 : 0,
-            paineis_2p: mapa['paineis_2p'] ? parseInt(row[mapa['paineis_2p']]) || 0 : 0,
-            paineis_sp: mapa['paineis_sp'] ? parseInt(row[mapa['paineis_sp']]) || 0 : 0,
-            m2_total: mapa['m2_total'] ? parseFloat(row[mapa['m2_total']]) || 0 : 0,
-            m2_2p: mapa['m2_2p'] ? parseFloat(row[mapa['m2_2p']]) || 0 : 0,
-            m2_sp: mapa['m2_sp'] ? parseFloat(row[mapa['m2_sp']]) || 0 : 0,
+            total_paineis,
+            paineis_por_tipo,
+            m2_total,
+            m2_por_tipo,
+            // Aliases de compatibilidade (sempre presentes, mesmo que 0):
+            paineis_2p: paineis_por_tipo['2p'] || 0,
+            paineis_sp: paineis_por_tipo['sp'] || 0,
+            m2_2p: m2_por_tipo['2p'] || 0,
+            m2_sp: m2_por_tipo['sp'] || 0,
             bercos_reais: mapa['bercos_reais'] ? parseInt(row[mapa['bercos_reais']]) || capacidade : capacidade,
             tempo_min: tempoMin,
-            placas_cimenticia: mapa['placas_cimenticia'] ? (parseInt(row[mapa['placas_cimenticia']]) || 0) : (mapa['paineis_2p'] ? (parseInt(row[mapa['paineis_2p']]) || 0) * 2 : 0),
+            // Cimentícia: usa a coluna explícita se mapeada; senão, deriva
+            // pela MESMA regra configurável usada em calcPaineis() (data.js) —
+            // soma, por tipo, painéis × cimentícia configurada pra aquele tipo.
+            // Antes era fixo em paineis_2p*2; agora respeita o que foi
+            // cadastrado na tela de admin pra cada tipo (2p, sp, 3t, 4t, ...).
+            placas_cimenticia: mapa['placas_cimenticia']
+              ? (parseInt(row[mapa['placas_cimenticia']]) || 0)
+              : Object.keys(paineis_por_tipo).reduce((soma, tipo) => {
+                  const c = (LW.CIMENTICIA_POR_TIPO || {})[tipo];
+                  return soma + (c && c.leva ? paineis_por_tipo[tipo] * (c.quantidade || 0) : 0);
+                }, 0),
           };
         });
       }
@@ -1806,7 +2481,55 @@
     // ---- Config Modal ----
 
     let _cfgDados = null; // cópia local enquanto edita
-    let _cfgMontComponentesTemp = []; // componentes (tipo+valor) do novo tipo de montagem em edição
+
+    // Converte uma opção bruta de tipos_montagem.opcoes (do config.json) pra
+    // a forma usada na tela de admin.
+    function _montagemDoConfigParaUI(opcao) {
+      if (opcao.modo === 'hibrida') {
+        const tipos = Array.isArray(opcao.tipos) ? [...opcao.tipos] : Object.keys(opcao)
+          .map(k => k.match(/^paineis_(.+)_por_berco$/))
+          .filter(Boolean).map(m => m[1]);
+        return { label: opcao.label, modo: 'hibrida', tipos };
+      }
+      // Simples (ou registro legado sem "modo" definido, com 1 único componente)
+      let tipo = opcao.tipo;
+      if (!tipo) {
+        const chave = Object.keys(opcao).find(k => /^paineis_(.+)_por_berco$/.test(k));
+        tipo = chave ? chave.match(/^paineis_(.+)_por_berco$/)[1] : '';
+      }
+      const paineisPorBerco = tipo ? (opcao[`paineis_${tipo}_por_berco`] ?? 2) : 2;
+      return {
+        label: opcao.label,
+        modo: 'simples',
+        tipo,
+        paineisPorBerco,
+        cimenticia: (opcao.cimenticia && typeof opcao.cimenticia === 'object')
+          ? { leva: !!opcao.cimenticia.leva, quantidade: Number(opcao.cimenticia.quantidade) || 0 }
+          : { leva: false, quantidade: 0 },
+      };
+    }
+
+    // Converte de volta a forma da tela de admin pro formato salvo no
+    // config.json (mantém as chaves paineis_<tipo>_por_berco, lidas
+    // dinamicamente por extrairComponentesMontagem() em data.js).
+    function _montagemDaUIParaConfig(m) {
+      if (m.modo === 'hibrida') {
+        const opcao = { label: m.label, modo: 'hibrida', tipos: [...m.tipos] };
+        m.tipos.forEach(t => { opcao[`paineis_${t}_por_berco`] = 1; });
+        return opcao;
+      }
+      const opcao = {
+        label: m.label,
+        modo: 'simples',
+        tipo: m.tipo,
+        cimenticia: {
+          leva: !!m.cimenticia?.leva,
+          quantidade: m.cimenticia?.leva ? (m.cimenticia.quantidade || 0) : 0,
+        },
+      };
+      opcao[`paineis_${m.tipo}_por_berco`] = m.paineisPorBerco;
+      return opcao;
+    }
 
     function abrirConfig() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
@@ -1814,14 +2537,9 @@
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
       _cfgDados = {
         baterias: LW.BATERIA_IDS.map(b => ({ id: b.id, label: b.label || '', bercos: b.bercos || 20 })),
-        // Cada montagem agora guarda 'componentes': [{ tipo: '2p', valor: 2 }, ...],
-        // espelhando a estrutura genérica porBerco usada internamente em data.js.
-        montagens: Object.entries(LW.MONTAGEM_MAP).map(([label, v]) => ({
-          label,
-          componentes: Object.entries(v.porBerco || {}).map(([tipo, valor]) => ({ tipo, valor }))
-        }))
+        montagens: LW.MONTAGEM_OPCOES.map(_montagemDoConfigParaUI),
       };
-      _cfgMontComponentesTemp = [];
+      cfgEscolherModoMontagem('simples');
       cfgRenderTudo();
       document.getElementById('config-modal').style.display = 'flex';
     }
@@ -1829,7 +2547,6 @@
     function fecharConfig() {
       document.getElementById('config-modal').style.display = 'none';
       _cfgDados = null;
-      _cfgMontComponentesTemp = [];
     }
 
     function cfgRenderTudo() {
@@ -1845,31 +2562,28 @@
     </div>
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhuma bateria cadastrada.</span>';
 
-      // Montagens — cada uma exibe seus componentes (tipo: valor/berço) dinamicamente
+      // Montagens — mostra modo (Simples/Híbrida), composição e cimentícia
       const lm = document.getElementById('cfg-montagem-lista');
-      lm.innerHTML = _cfgDados.montagens.map((m, i) => `
+      lm.innerHTML = _cfgDados.montagens.map((m, i) => {
+        const corBadge = m.modo === 'hibrida' ? 'var(--accent)' : 'var(--blue)';
+        const detalhe = m.modo === 'hibrida'
+          ? `${m.tipos.map(t => t.toUpperCase()).join(' + ')} — 1 painel de cada (2/berço)`
+          : `${(m.tipo || '—').toUpperCase()} — ${m.paineisPorBerco}/berço`;
+        const cimenticiaTxt = m.modo === 'hibrida'
+          ? 'cimentícia herdada dos tipos simples'
+          : (m.cimenticia?.leva ? `${m.cimenticia.quantidade} ciment./painel` : 'sem cimentícia');
+        return `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
       <span style="font-family:var(--font-display);font-size:.9rem;font-weight:700;color:var(--text);min-width:90px">${m.label}</span>
-      ${m.componentes.map(c =>
-        `<span style="font-size:.78rem;color:var(--text-3)">${c.tipo.toUpperCase()}/berço: <strong style="color:var(--blue)">${c.valor}</strong></span>`
-      ).join('')}
+      <span style="font-size:.66rem;font-weight:700;color:${corBadge};text-transform:uppercase;letter-spacing:.06em;border:1px solid ${corBadge};border-radius:4px;padding:2px 6px">${m.modo === 'hibrida' ? 'Híbrida' : 'Simples'}</span>
+      <span style="font-size:.78rem;color:var(--text-3)">${detalhe}</span>
+      <span style="font-size:.78rem;color:var(--text-3)">${cimenticiaTxt}</span>
       <button onclick="cfgRemoverMontagem(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
     </div>
-  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum tipo cadastrado.</span>';
+  `;
+      }).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum tipo cadastrado.</span>';
 
-      cfgRenderComponentesTemp();
-    }
-
-    // Renderiza a lista temporária de componentes (tipo+valor) do tipo de montagem em edição
-    function cfgRenderComponentesTemp() {
-      const el = document.getElementById('cfg-mont-componentes-lista');
-      if (!el) return;
-      el.innerHTML = _cfgMontComponentesTemp.map((c, i) => `
-    <div style="display:flex;align-items:center;gap:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px">
-      <span style="font-size:.8rem;color:var(--text-2)">${c.tipo.toUpperCase()} — <strong style="color:var(--blue)">${c.valor}</strong> painéis/berço</span>
-      <button onclick="cfgRemoverComponenteMontagem(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;margin-left:auto">✕</button>
-    </div>
-  `).join('') || '<span style="color:var(--text-3);font-size:.78rem">Nenhum componente adicionado ainda.</span>';
+      cfgPopularSelectsHibrida();
     }
 
     function cfgAdicionarBateria() {
@@ -1901,47 +2615,105 @@
 
     // cfgAdicionarDimensao e cfgRemoverDimensao removidos — dimensão agora pertence à bateria
 
-    // Adiciona um componente (tipo de placa + painéis/berço) à lista temporária,
-    // antes de salvar o tipo de montagem como um todo.
-    function cfgAdicionarComponenteMontagem() {
-      const inputTipo = document.getElementById('cfg-mont-comp-tipo');
-      const inputValor = document.getElementById('cfg-mont-comp-valor');
+    // ---- Tipos de Montagem: escolha de modo (Simples / Híbrida) ----
 
-      const tipo = inputTipo.value.trim().toLowerCase().replace(/\s+/g, '');
-      const valor = parseInt(inputValor.value);
-
-      if (!tipo) return alert('Digite o tipo de placa (ex: 2p, sp, 3p).');
-      if (!/^[a-z0-9]+$/.test(tipo)) return alert('Use apenas letras e números no tipo (ex: 2p, sp, 3p).');
-      if (!Number.isFinite(valor) || valor < 0) return alert('Digite a quantidade de painéis/berço (0 ou mais).');
-      if (_cfgMontComponentesTemp.find(c => c.tipo === tipo)) return alert('Este tipo de placa já foi adicionado a este tipo de montagem.');
-
-      _cfgMontComponentesTemp.push({ tipo, valor });
-      inputTipo.value = '';
-      inputValor.value = '';
-      cfgRenderComponentesTemp();
+    function cfgEscolherModoMontagem(modo) {
+      const elSimples = document.getElementById('cfg-mont-form-simples');
+      const elHibrida = document.getElementById('cfg-mont-form-hibrida');
+      if (elSimples) elSimples.style.display = modo === 'simples' ? 'block' : 'none';
+      if (elHibrida) elHibrida.style.display = modo === 'hibrida' ? 'block' : 'none';
+      const btnSimples = document.getElementById('cfg-mont-modo-simples');
+      const btnHibrida = document.getElementById('cfg-mont-modo-hibrida');
+      if (btnSimples) btnSimples.className = modo === 'simples' ? 'btn btn-outline-accent btn-sm' : 'btn btn-ghost btn-sm';
+      if (btnHibrida) btnHibrida.className = modo === 'hibrida' ? 'btn btn-outline-accent btn-sm' : 'btn btn-ghost btn-sm';
+      if (modo === 'hibrida') cfgPopularSelectsHibrida();
     }
 
-    function cfgRemoverComponenteMontagem(i) {
-      _cfgMontComponentesTemp.splice(i, 1);
-      cfgRenderComponentesTemp();
+    function cfgToggleCimenticiaQtd() {
+      const checked = document.getElementById('cfg-mont-simples-leva-cimenticia').checked;
+      document.getElementById('cfg-mont-simples-cimenticia-qtd-wrap').style.display = checked ? 'flex' : 'none';
     }
 
-    // Consolida os componentes empilhados em um novo tipo de montagem e o salva na lista.
-    function cfgAdicionarMontagem() {
-      const label = document.getElementById('cfg-mont-label').value.trim().toUpperCase();
+    // Popula os dois <select> do formulário Híbrida com os tipos SIMPLES já
+    // cadastrados — só dá pra combinar tipos que já existem como simples.
+    function cfgPopularSelectsHibrida() {
+      if (!_cfgDados) return;
+      const sel1 = document.getElementById('cfg-mont-hibrida-tipo1');
+      const sel2 = document.getElementById('cfg-mont-hibrida-tipo2');
+      if (!sel1 || !sel2) return;
+      const simples = _cfgDados.montagens.filter(m => m.modo === 'simples');
+      const opts = simples.map(m => `<option value="${m.tipo}">${m.label} (${m.tipo.toUpperCase()})</option>`).join('');
+      const valor1 = sel1.value, valor2 = sel2.value;
+      sel1.innerHTML = '<option value="">— selecione —</option>' + opts;
+      sel2.innerHTML = '<option value="">— selecione —</option>' + opts;
+      sel1.value = valor1; sel2.value = valor2;
+    }
+
+    // Cria um novo tipo de montagem SIMPLES: 1 tipo de placa, painéis/berço
+    // (máx. 2, limitação física da operação) e se leva placas cimentícias.
+    function cfgAdicionarMontagemSimples() {
+      const label = document.getElementById('cfg-mont-simples-label').value.trim().toUpperCase();
+      const tipo = document.getElementById('cfg-mont-simples-tipo').value.trim().toLowerCase().replace(/\s+/g, '');
+      const paineisPorBerco = parseInt(document.getElementById('cfg-mont-simples-paineis').value);
+      const levaCimenticia = document.getElementById('cfg-mont-simples-leva-cimenticia').checked;
+      const qtdCimenticia = parseInt(document.getElementById('cfg-mont-simples-cimenticia-qtd').value);
+
       if (!label) return alert('Digite um label para o tipo de montagem.');
-      if (!_cfgMontComponentesTemp.length) return alert('Adicione ao menos um componente (tipo de placa + painéis/berço).');
-      if (_cfgDados.montagens.find(m => m.label === label)) return alert('Este tipo já existe.');
+      if (!tipo) return alert('Digite o tipo de montagem (ex: 2p, sp, 3t).');
+      if (!/^[a-z0-9]+$/.test(tipo)) return alert('Use apenas letras e números no tipo (ex: 2p, sp, 3t).');
+      if (![1, 2].includes(paineisPorBerco)) return alert('Painéis/berço deve ser 1 ou 2 — limitação física da operação.');
+      if (levaCimenticia && (!Number.isFinite(qtdCimenticia) || qtdCimenticia < 1)) {
+        return alert('Digite a quantidade de cimentícias por painel.');
+      }
+      if (_cfgDados.montagens.find(m => m.label === label)) return alert('Este label já existe.');
+      if (_cfgDados.montagens.find(m => m.modo === 'simples' && m.tipo === tipo)) {
+        return alert('Já existe um tipo simples com esse código de tipo.');
+      }
 
-      _cfgDados.montagens.push({ label, componentes: [..._cfgMontComponentesTemp] });
+      _cfgDados.montagens.push({
+        label, modo: 'simples', tipo, paineisPorBerco,
+        cimenticia: { leva: levaCimenticia, quantidade: levaCimenticia ? qtdCimenticia : 0 },
+      });
 
-      document.getElementById('cfg-mont-label').value = '';
-      _cfgMontComponentesTemp = [];
+      document.getElementById('cfg-mont-simples-label').value = '';
+      document.getElementById('cfg-mont-simples-tipo').value = '';
+      document.getElementById('cfg-mont-simples-leva-cimenticia').checked = false;
+      document.getElementById('cfg-mont-simples-cimenticia-qtd').value = '';
+      cfgToggleCimenticiaQtd();
+      cfgRenderTudo();
+    }
+
+    // Cria um novo tipo de montagem HÍBRIDA: combina dois tipos simples já
+    // cadastrados, sempre 1 painel de cada (2 painéis/berço no total). A
+    // cimentícia não é perguntada aqui — é herdada de cada tipo simples na
+    // hora do cálculo (calcPaineis(), em data.js).
+    function cfgAdicionarMontagemHibrida() {
+      const label = document.getElementById('cfg-mont-hibrida-label').value.trim().toUpperCase();
+      const tipo1 = document.getElementById('cfg-mont-hibrida-tipo1').value;
+      const tipo2 = document.getElementById('cfg-mont-hibrida-tipo2').value;
+
+      if (!label) return alert('Digite um label para o tipo híbrido.');
+      if (!tipo1 || !tipo2) return alert('Escolha os dois tipos que compõem a montagem híbrida.');
+      if (tipo1 === tipo2) return alert('Escolha dois tipos diferentes.');
+      if (_cfgDados.montagens.find(m => m.label === label)) return alert('Este label já existe.');
+
+      _cfgDados.montagens.push({ label, modo: 'hibrida', tipos: [tipo1, tipo2] });
+
+      document.getElementById('cfg-mont-hibrida-label').value = '';
       cfgRenderTudo();
     }
 
     function cfgRemoverMontagem(i) {
-      if (!confirm(`Remover o tipo "${_cfgDados.montagens[i].label}"?`)) return;
+      const m = _cfgDados.montagens[i];
+      // Impede remover um tipo simples que está em uso por uma híbrida — ela
+      // ficaria referenciando um tipo que não existe mais.
+      if (m.modo === 'simples') {
+        const usadoEm = _cfgDados.montagens.filter(o => o.modo === 'hibrida' && o.tipos.includes(m.tipo));
+        if (usadoEm.length) {
+          return alert(`Não é possível remover "${m.label}" — está em uso pela(s) montagem(ns) híbrida(s): ${usadoEm.map(o => o.label).join(', ')}.`);
+        }
+      }
+      if (!confirm(`Remover o tipo "${m.label}"?`)) return;
       _cfgDados.montagens.splice(i, 1);
       cfgRenderTudo();
     }
@@ -1958,18 +2730,12 @@
       });
       const dimensoesOpcoes = Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
 
+      const novasOpcoesMontagem = _cfgDados.montagens.map(_montagemDaUIParaConfig);
+
       const cfg = {
         baterias: { ids: _cfgDados.baterias },
         dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
-        tipos_montagem: {
-          // Cada componente {tipo, valor} é convertido para a chave genérica
-          // "paineis_<tipo>_por_berco", lida dinamicamente por extrairComponentesMontagem() em data.js.
-          opcoes: _cfgDados.montagens.map(m => {
-            const opcao = { label: m.label };
-            m.componentes.forEach(c => { opcao[`paineis_${c.tipo}_por_berco`] = c.valor; });
-            return opcao;
-          })
-        },
+        tipos_montagem: { opcoes: novasOpcoesMontagem },
         // Preserva volume_por_placa tal como está atualmente em memória — este modal
         // não edita essa lista, então nunca deve sobrescrevê-la com algo vazio/ausente.
         volume_por_placa: LW.VOLUME_POR_PLACA,
@@ -1990,6 +2756,7 @@
       // Atualiza variáveis em memória imediatamente (sem reload)
       LW.BATERIA_IDS.length = 0;
       _cfgDados.baterias.forEach(b => LW.BATERIA_IDS.push(b));
+      LW.aplicarTiposMontagemEmMemoria(novasOpcoesMontagem);
 
       fecharConfig();
       alert('Configurações salvas com sucesso!');
@@ -2066,6 +2833,162 @@
     </div>
   </div>
 
+  <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
+  <div id="restaurar-backup-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2
+          style="font-family:var(--font-display);font-size:1.3rem;color:var(--red);letter-spacing:.06em">♻️ RESTAURAR
+          BACKUP DE DADOS</h2>
+        <button onclick="fecharRestaurarBackup()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="restaurar-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Passo 0: escolher o arquivo -->
+      <div id="restaurar-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
+          Restaura <strong>config, histórico, relatório de injeção, segurança, sobra e contador de traços</strong> a
+          partir de um arquivo gerado pelo botão "Backup de Dados" (.zip). Uma cópia de segurança do estado atual é
+          salva automaticamente no servidor antes de qualquer substituição.
+        </p>
+
+        <div id="restaurar-dropzone" style="
+            border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+            text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+            background:var(--bg-2)
+          " onclick="document.getElementById('restaurar-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--red)';this.style.background='rgba(239,68,68,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleRestaurarDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o backup aqui</div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .zip</div>
+        </div>
+        <input type="file" id="restaurar-file-input" accept=".zip" style="display:none"
+          onchange="handleRestaurarArquivo(this.files[0])">
+      </div>
+
+      <!-- Passo 1: preview do conteúdo + senha + confirmação -->
+      <div id="restaurar-step-1" style="display:none">
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="voltarRestaurarStep0()">←
+          Voltar</button>
+
+        <div
+          style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;font-size:.85rem;color:var(--text-2)">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px">Conteúdo do backup:</div>
+          <div id="restaurar-preview"></div>
+        </div>
+
+        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:16px">
+          ⚠ Isso vai substituir TODOS os dados atuais pelos deste backup.
+        </p>
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
+          administrador para continuar:</label>
+        <input type="password" id="restaurar-senha" class="form-input" style="margin-bottom:20px;width:100%"
+          placeholder="Senha de administrador" autocomplete="current-password">
+
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharRestaurarBackup()">Cancelar</button>
+          <button class="btn btn-danger" id="restaurar-btn-confirmar" onclick="confirmarRestaurarBackup()">Restaurar
+            agora</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
+  <div id="restaurar-geral-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:2px solid var(--red);border-radius:var(--radius-lg);padding:32px;width:600px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--red);letter-spacing:.06em">⚠️
+          RESTAURAR BACKUP GERAL</h2>
+        <button onclick="fecharRestaurarGeral()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="restaurar-geral-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Passo 0: escolher o arquivo -->
+      <div id="restaurar-geral-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:12px">
+          Restaura <strong>o programa inteiro</strong> (servidor, páginas, código e dados) a partir de um arquivo
+          gerado pelo botão "Backup Geral" (.zip).
+        </p>
+        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:20px">
+          ⚠ Depois de restaurar, é preciso <u>reiniciar o servidor manualmente</u> (ex: Ctrl+C e "npm start", ou
+          "pm2 restart") para que mudanças no código do servidor tenham efeito. As páginas (HTML/CSS/JS) já aparecem
+          atualizadas no próximo carregamento, mas o processo do servidor continua rodando o código antigo até
+          reiniciar.
+        </p>
+
+        <div id="restaurar-geral-dropzone" style="
+            border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+            text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+            background:var(--bg-2)
+          " onclick="document.getElementById('restaurar-geral-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--red)';this.style.background='rgba(239,68,68,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleRestaurarGeralDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o backup geral aqui</div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .zip</div>
+        </div>
+        <input type="file" id="restaurar-geral-file-input" accept=".zip" style="display:none"
+          onchange="handleRestaurarGeralArquivo(this.files[0])">
+      </div>
+
+      <!-- Passo 1: preview + frase de confirmação + senha -->
+      <div id="restaurar-geral-step-1" style="display:none">
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="voltarRestaurarGeralStep0()">←
+          Voltar</button>
+
+        <div
+          style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;font-size:.85rem;color:var(--text-2);max-height:160px;overflow-y:auto">
+          <div style="font-weight:700;color:var(--text);margin-bottom:8px" id="restaurar-geral-resumo"></div>
+          <div id="restaurar-geral-preview" style="font-family:var(--font-mono);font-size:.78rem;line-height:1.6">
+          </div>
+        </div>
+
+        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:16px">
+          ⚠ Isso vai substituir TODO o código e os dados atuais pelos deste backup. Uma cópia de segurança completa
+          do estado atual será salva automaticamente no servidor antes da substituição.
+        </p>
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">
+          Para confirmar, digite <code style="color:var(--red)">RESTAURAR TUDO</code>:
+        </label>
+        <input type="text" id="restaurar-geral-frase" class="form-input" style="margin-bottom:16px;width:100%"
+          placeholder="RESTAURAR TUDO" oninput="validarBotaoRestaurarGeral()" autocomplete="off">
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
+          administrador:</label>
+        <input type="password" id="restaurar-geral-senha" class="form-input" style="margin-bottom:20px;width:100%"
+          placeholder="Senha de administrador" autocomplete="current-password" oninput="validarBotaoRestaurarGeral()">
+
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharRestaurarGeral()">Cancelar</button>
+          <button class="btn btn-danger" id="restaurar-geral-btn-confirmar" disabled
+            onclick="confirmarRestaurarGeral()">Restaurar agora</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <div id="import-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2098,7 +3021,7 @@
             </div>
             <div style="font-size:.8rem;color:var(--text-3);line-height:1.5">
               Importa dados de produção: baterias, painéis, m², tempo e atrasos.<br>
-              Destino: <code style="color:var(--accent);font-family:var(--font-mono)">historico.json</code>
+              Destino: <code style="color:var(--accent);font-family:var(--font-mono)">db/historico.json</code>
             </div>
           </button>
 
@@ -2114,7 +3037,7 @@
             </div>
             <div style="font-size:.8rem;color:var(--text-3);line-height:1.5">
               Importa dados de traços: berços, densidade, flow e observações.<br>
-              Destino: <code style="color:var(--blue);font-family:var(--font-mono)">relatorio_injecao.json</code>
+              Destino: <code style="color:var(--blue);font-family:var(--font-mono)">db/relatorio_injecao.json</code>
             </div>
           </button>
 
@@ -2196,10 +3119,11 @@
 
     </div>
   </div>
-  <script src="analise-operacional.js"></script>
-  <script src="qualidade-tracos.js"></script>
-  <script src="debriefing.js"></script>
-  <script src="keyboard-shortcuts.js"></script>
+  <script src="js/analise-operacional.js"></script>
+  <script src="js/qualidade-tracos.js"></script>
+  <script src="js/oee.js"></script>
+  <script src="js/debriefing.js"></script>
+  <script src="js/keyboard-shortcuts.js"></script>
 </body>
 
 </html>

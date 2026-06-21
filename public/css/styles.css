@@ -1963,11 +1963,6 @@ td.mono {
   margin: 6px 4px;
 }
 
-.btn-col-toggle:hover {
-  background: var(--bg-2) !important;
-  color: var(--accent) !important;
-}
-
 /* ============================================================
    DEBRIEFING DO DIA — relatório operacional somente leitura
    ============================================================ */

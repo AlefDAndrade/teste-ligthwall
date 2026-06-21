@@ -62,8 +62,8 @@
 
   async function carregarDados() {
     const [historico, relatorio] = await Promise.all([
-      fetch('historico.json').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('relatorio_injecao.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('db/historico.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('db/relatorio_injecao.json').then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
     return {
       historico: Array.isArray(historico) ? historico : [],

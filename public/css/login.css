@@ -27,24 +27,31 @@ body {
     overflow: hidden;
 }
 
-/* ---- Animated concrete grid background ---- */
+/* ---- Animated concrete grid background ----
+   Anima via transform (GPU) em vez de background-position (que força o
+   navegador a redesenhar a tela inteira em cada quadro, pra sempre, enquanto
+   a página estiver aberta — era isso que deixava o computador "ventilando"). */
 .bg-grid {
     position: fixed;
-    inset: 0;
+    top: -48px;
+    left: -48px;
+    right: -48px;
+    bottom: -48px;
     background-image:
         linear-gradient(rgba(255, 140, 41, .04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 140, 41, .04) 1px, transparent 1px);
     background-size: 48px 48px;
     animation: grid-drift 30s linear infinite;
+    will-change: transform;
 }
 
 @keyframes grid-drift {
     from {
-        background-position: 0 0;
+        transform: translate3d(0, 0, 0);
     }
 
     to {
-        background-position: 48px 48px;
+        transform: translate3d(48px, 48px, 0);
     }
 }
 
@@ -233,18 +240,24 @@ body {
     width: 60%;
     height: 220%;
     background: rgba(255, 255, 255, .22);
-    transform: skewX(-20deg);
+    transform: skewX(-20deg) translateX(0%);
     animation: shimmer 3s 1.2s ease-in-out infinite;
+    will-change: transform;
 }
 
+/* Anima via transform (GPU) em vez de 'left' (que força reflow+repaint a
+   cada quadro, pra sempre, enquanto a página estiver aberta). A posição
+   inicial (-80% a 140% do botão) é a mesma de antes — só a forma de animar
+   mudou. Como translateX() é relativo à LARGURA DO PRÓPRIO ELEMENTO (60% do
+   botão), 220% do botão equivale a 220/60 ≈ 366.67% do elemento. */
 @keyframes shimmer {
     0% {
-        left: -80%;
+        transform: skewX(-20deg) translateX(0%);
     }
 
     60%,
     100% {
-        left: 140%;
+        transform: skewX(-20deg) translateX(366.67%);
     }
 }
 

@@ -90,7 +90,7 @@ const AdminAuth = (() => {
   // ─── Salva novo passwordHash no servidor via POST ──────────────────────────
   async function _salvarNovaSenha(novoHash) {
     // Lê recoveryKeyHash atual do servidor para não sobrescrever
-    const resSec = await fetch('security.json', { cache: 'no-store' });
+    const resSec = await fetch('db/security.json', { cache: 'no-store' });
     const security = resSec.ok ? await resSec.json() : {};
 
     const payload = {

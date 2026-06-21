@@ -16,6 +16,15 @@ const LIMITE_INJECAO_MIN = 59;    // minutos limite antes de registrar atraso
 let DIMENSAO_OPTS = [];
 let MONTAGEM_OPTS = [];   // ['2/P', 'S/P', 'HÍBRIDA', ...]
 let MONTAGEM_MAP = {};   // { label: { paineis_2p_por_berco, paineis_sp_por_berco } }
+// Lista bruta de tipos_montagem.opcoes, tal como vem do config.json — cada
+// item guarda { label, modo: 'simples'|'hibrida', tipo|tipos, paineis_*_por_berco,
+// cimenticia? }. Usada pela tela de admin (cfgRenderTudo) pra editar com
+// fidelidade total, e por CIMENTICIA_POR_TIPO abaixo.
+let MONTAGEM_OPCOES = [];
+// Cimentícia por tipo de placa simples — { '2p': { leva: true, quantidade: 2 }, ... }.
+// Um tipo híbrido NÃO tem entrada própria aqui: ele herda automaticamente a
+// cimentícia de cada tipo simples que o compõe (ver calcPaineis()).
+let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
 
@@ -41,10 +50,42 @@ function extrairComponentesMontagem(opcao) {
   return { porBerco };
 }
 
+/**
+ * Constrói o mapa de cimentícia por tipo de placa SIMPLES, a partir da lista
+ * bruta de tipos_montagem.opcoes. Tipos híbridos não entram aqui — eles
+ * herdam automaticamente a cimentícia de cada tipo simples que os compõe,
+ * na hora do cálculo (ver calcPaineis()).
+ */
+function _montarCimenticiaPorTipo(opcoes) {
+  const mapa = {};
+  (opcoes || []).forEach(o => {
+    if (o.modo === 'simples' && o.tipo) {
+      mapa[o.tipo] = (o.cimenticia && typeof o.cimenticia === 'object')
+        ? { leva: !!o.cimenticia.leva, quantidade: Number(o.cimenticia.quantidade) || 0 }
+        : { leva: false, quantidade: 0 };
+    }
+  });
+  return mapa;
+}
+
+/**
+ * Aplica uma lista de tipos_montagem.opcoes às variáveis em memória
+ * (MONTAGEM_OPTS, MONTAGEM_MAP, MONTAGEM_OPCOES, CIMENTICIA_POR_TIPO).
+ * Reaproveitada por loadConfig() e exposta como LW.aplicarTiposMontagemEmMemoria()
+ * pra a tela de admin atualizar tudo na hora, sem precisar recarregar a página.
+ */
+function _aplicarTiposMontagem(opcoes) {
+  MONTAGEM_OPCOES = opcoes;
+  MONTAGEM_OPTS = opcoes.map(t => t.label);
+  MONTAGEM_MAP = {};
+  opcoes.forEach(t => { MONTAGEM_MAP[t.label] = extrairComponentesMontagem(t); });
+  CIMENTICIA_POR_TIPO = _montarCimenticiaPorTipo(opcoes);
+}
+
 async function loadConfig() {
   if (_configReady) return;
   try {
-    const res = await fetch('config.json');
+    const res = await fetch('db/config.json');
     if (!res.ok) throw new Error('config.json não encontrado');
     const cfg = await res.json();
 
@@ -73,19 +114,14 @@ async function loadConfig() {
     // isso não deve impedir a leitura dos demais blocos válidos. Cada bloco que
     // falhar mantém o valor já carregado (ou o default, na primeira carga).
     if (Array.isArray(cfg.tipos_montagem?.opcoes)) {
-      MONTAGEM_OPTS = cfg.tipos_montagem.opcoes.map(t => t.label);
-      MONTAGEM_MAP = {};
-      cfg.tipos_montagem.opcoes.forEach(t => {
-        MONTAGEM_MAP[t.label] = extrairComponentesMontagem(t);
-      });
+      _aplicarTiposMontagem(cfg.tipos_montagem.opcoes);
     } else if (!MONTAGEM_OPTS.length) {
       console.warn('[LW] config.json sem "tipos_montagem.opcoes" válido — usando fallback de tipos de montagem.');
-      MONTAGEM_OPTS = ['2/P', 'S/P', 'HÍBRIDA'];
-      MONTAGEM_MAP = {
-        '2/P': { porBerco: { '2p': 2 } },
-        'S/P': { porBerco: { 'sp': 2 } },
-        'HÍBRIDA': { porBerco: { '2p': 1, 'sp': 1 } },
-      };
+      _aplicarTiposMontagem([
+        { label: '2/P', modo: 'simples', tipo: '2p', paineis_2p_por_berco: 2, cimenticia: { leva: true, quantidade: 2 } },
+        { label: 'S/P', modo: 'simples', tipo: 'sp', paineis_sp_por_berco: 2, cimenticia: { leva: false, quantidade: 0 } },
+        { label: 'HÍBRIDA 2p/sp', modo: 'hibrida', tipos: ['2p', 'sp'], paineis_2p_por_berco: 1, paineis_sp_por_berco: 1 },
+      ]);
     } else {
       console.warn('[LW] config.json sem "tipos_montagem.opcoes" válido — mantendo tipos de montagem já carregados.');
     }
@@ -122,12 +158,11 @@ async function loadConfig() {
       { label: '9 cm', bercos: 20 },
       { label: '12 cm', bercos: 18 },
     ];
-    MONTAGEM_OPTS = ['2/P', 'S/P', 'HÍBRIDA'];
-    MONTAGEM_MAP = {
-      '2/P': { porBerco: { '2p': 2 } },
-      'S/P': { porBerco: { 'sp': 2 } },
-      'HÍBRIDA': { porBerco: { '2p': 1, 'sp': 1 } },
-    };
+    _aplicarTiposMontagem([
+      { label: '2/P', modo: 'simples', tipo: '2p', paineis_2p_por_berco: 2, cimenticia: { leva: true, quantidade: 2 } },
+      { label: 'S/P', modo: 'simples', tipo: 'sp', paineis_sp_por_berco: 2, cimenticia: { leva: false, quantidade: 0 } },
+      { label: 'HÍBRIDA 2p/sp', modo: 'hibrida', tipos: ['2p', 'sp'], paineis_2p_por_berco: 1, paineis_sp_por_berco: 1 },
+    ]);
     BATERIA_IDS = ['B1', 'B2', 'B3', 'B4', 'B5-7,5cm', 'B6-12cm', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12'];
     VOLUME_POR_PLACA = [
       { label: 'S/P - 7,5 cm', volume: 0.1373 },
@@ -146,11 +181,7 @@ async function loadConfig() {
       const cfg = JSON.parse(override);
       BATERIA_IDS = cfg.baterias.ids;
       DIMENSAO_OPTS = cfg.dimensoes.opcoes;
-      MONTAGEM_OPTS = cfg.tipos_montagem.opcoes.map(t => t.label);
-      MONTAGEM_MAP = {};
-      cfg.tipos_montagem.opcoes.forEach(t => {
-        MONTAGEM_MAP[t.label] = extrairComponentesMontagem(t);
-      });
+      _aplicarTiposMontagem(cfg.tipos_montagem.opcoes);
     } catch (e) { console.warn('Config override inválida', e); }
   }
 
@@ -218,8 +249,17 @@ function calcPaineis(tipoMontagem, bercos) {
   });
   const m2_total = paineis_total * M2_POR_PAINEL;
 
-  // Placas cimenticia: regra de negócio específica do tipo '2p' (mantida).
-  const placas_cimenticia = (paineis_por_tipo['2p'] || 0) * 2;
+  // Placas cimentícia: agora é uma propriedade de CADA TIPO DE PLACA SIMPLES
+  // (configurável na tela de admin), não mais fixa no tipo '2p'. Um tipo
+  // híbrido herda automaticamente — aqui somamos a contribuição de cada tipo
+  // presente nesta montagem, simples ou híbrida.
+  let placas_cimenticia = 0;
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    const c = CIMENTICIA_POR_TIPO[tipo];
+    if (c && c.leva) {
+      placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
+    }
+  });
 
   return {
     total_paineis: paineis_total,
@@ -373,7 +413,7 @@ async function registrarRelatorioInjecao(record) {
 
 async function getRelatorioInjecao() {
   try {
-    const res = await fetch('relatorio_injecao.json');
+    const res = await fetch('db/relatorio_injecao.json');
     if (!res.ok) return [];
     return await res.json();
   } catch (_) { return []; }
@@ -427,7 +467,7 @@ async function registrarOperacao(record) {
 }
 
 async function getStats(filtros = {}) {
-  const baterias = await fetch('historico.json').then(r => r.json());
+  const baterias = await fetch('db/historico.json').then(r => r.json());
   // Garante paineis_por_tipo/m2_por_tipo em todos os registros (antigos e novos)
   baterias.forEach(normalizarPaineisRegistro);
   let data = baterias;
@@ -520,7 +560,7 @@ async function getStats(filtros = {}) {
  */
 async function getSobra() {
   try {
-    const res = await fetch('sobra.json?_=' + Date.now()); // evita cache
+    const res = await fetch('db/sobra.json?_=' + Date.now()); // evita cache
     if (!res.ok) return null;
     const sobra = await res.json();
     // Só retorna se estiver realmente ativa
@@ -552,6 +592,67 @@ async function desativarSobra(motivo) {
   await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() });
 }
 
+// ---- Backup de Dados ----
+
+// Todos os arquivos que vivem em public/db/ — se um novo arquivo de dados
+// for adicionado lá no futuro, basta incluir o nome aqui também.
+const ARQUIVOS_BACKUP_DB = [
+  'config.json',
+  'contador_tracos.json',
+  'historico.json',
+  'relatorio_injecao.json',
+  'security.json',
+  'sobra.json',
+];
+
+/**
+ * Busca todos os arquivos de public/db/ (via fetch, igual ao resto do app) e
+ * monta um .zip com eles no próprio navegador (usando JSZip, carregado via
+ * CDN no index.html), disparando o download. Não depende de nenhuma rota
+ * nova no servidor.
+ */
+async function gerarBackupDados() {
+  if (typeof JSZip === 'undefined') {
+    throw new Error('Biblioteca JSZip não carregada.');
+  }
+
+  const zip = new JSZip();
+  let algumArquivoIncluido = false;
+
+  for (const nome of ARQUIVOS_BACKUP_DB) {
+    try {
+      const res = await fetch('db/' + nome, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const texto = await res.text();
+      zip.file(nome, texto);
+      algumArquivoIncluido = true;
+    } catch (err) {
+      console.error(`[Backup] Falha ao incluir "${nome}" no backup:`, err);
+    }
+  }
+
+  if (!algumArquivoIncluido) {
+    throw new Error('Não foi possível ler nenhum arquivo de public/db/ — backup cancelado.');
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+
+  // Nome do arquivo final, ex: lightwall_backup_dados_2026-06-19_14h32.zip
+  const agora = nowBrasilia();
+  const hh = String(agora.getUTCHours()).padStart(2, '0');
+  const mm = String(agora.getUTCMinutes()).padStart(2, '0');
+  const nomeArquivo = `lightwall_backup_dados_${todayBrasilia()}_${hh}h${mm}.zip`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---- Export ----
 
 window.LW = {
@@ -564,6 +665,8 @@ window.LW = {
   get DIMENSAO_OPTS() { return DIMENSAO_OPTS; },
   get MONTAGEM_OPTS() { return MONTAGEM_OPTS; },
   get MONTAGEM_MAP() { return MONTAGEM_MAP; },
+  get MONTAGEM_OPCOES() { return MONTAGEM_OPCOES; },
+  get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
 
@@ -571,6 +674,7 @@ window.LW = {
   // Config loader
   loadConfig,
   waitConfig,
+  aplicarTiposMontagemEmMemoria: _aplicarTiposMontagem,
 
   // Storage
   getOperacaoAtual, saveOperacaoAtual, clearOperacaoAtual,
@@ -595,4 +699,7 @@ window.LW = {
 
   // Sobra de traço
   getSobra, salvarSobra, desativarSobra,
+
+  // Backup de dados
+  gerarBackupDados,
 };
