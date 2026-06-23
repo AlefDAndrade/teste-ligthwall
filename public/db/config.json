@@ -95,7 +95,7 @@
           "leva": true,
           "quantidade": 2
         },
-        "cor": "#3b85ce"
+        "corHue": 210
       },
       {
         "label": "S/P",
@@ -106,7 +106,7 @@
           "leva": false,
           "quantidade": 0
         },
-        "cor": "#60ce3b"
+        "corHue": 105
       },
       {
         "label": "3T",
@@ -117,7 +117,7 @@
           "leva": false,
           "quantidade": 0
         },
-        "cor": "#cebd3b"
+        "corHue": 53
       },
       {
         "label": "HÍBRIDA 2p/sp",
