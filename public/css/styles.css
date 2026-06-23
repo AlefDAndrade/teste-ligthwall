@@ -1218,6 +1218,44 @@ td.mono {
 }
 
 /* Separador de seção interna */
+.traco-section-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px 0;
+}
+
+.btn-ajustar-receita {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent, #3b82f6);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+
+.btn-ajustar-receita:hover {
+  background: var(--accent-dark, #2563eb);
+  transform: scale(1.03);
+}
+
+.btn-ajustar-receita:active {
+  transform: scale(.97);
+}
+
+.btn-ajustar-receita.readonly-reaproveitado {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
 .traco-section-label {
   font-size: 0.68rem;
   font-weight: 700;

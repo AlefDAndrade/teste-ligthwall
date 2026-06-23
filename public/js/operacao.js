@@ -305,13 +305,15 @@
     };
   }
 
-  // Retorna o total de um insumo (serializado, sem getter)
+  // Retorna o total/atual de um insumo (serializado, sem getter).
+  // Insumos reais (cimento, água, EPS, superplast., incorporador) somam
+  // original + todos os ajustes. Densidade e Flow são remedição: cada
+  // ajuste SOBRESCREVE o valor anterior — vale o último valor registrado.
   function totalInsumo(insumo, fieldKey) {
     const temOriginal = insumo.original !== '' && insumo.original !== null;
     const temAjustes = insumo.ajustes && insumo.ajustes.length > 0;
     if (!temOriginal && !temAjustes) return '';
 
-    // Para Densidade e Flow, o ajuste sobrescreve o valor anterior (não soma)
     const isResultado = fieldKey && (fieldKey.includes('densidade') || fieldKey.includes('flow'));
     if (isResultado) {
       if (temAjustes) return insumo.ajustes[insumo.ajustes.length - 1];
@@ -363,6 +365,20 @@
       && insumoPreenchido('tempo_batida')
       && insumoPreenchido('densidade_insumo')
       && insumoPreenchido('flow_insumo');
+  }
+
+  /**
+   * Verifica se algum ajuste de insumo do traço ficou sem o tempo de batida
+   * correspondente. Rede de segurança — o fluxo normal (modal "Ajuste de
+   * Receita") sempre grava os dois juntos, mas isso cobre traços antigos
+   * (de antes dessa regra existir) ou reaproveitados de uma sobra que já
+   * estava nesse estado.
+   */
+  function tracoTemAjusteSemTempoBatida(t) {
+    const camposInsumo = ['cimento_real', 'agua_real', 'eps_real', 'superplast_real', 'incorporador_real'];
+    const maxAjustesInsumo = Math.max(0, ...camposInsumo.map(c => (t[c]?.ajustes?.length) || 0));
+    const ajustesTempo = t.tempo_batida?.ajustes?.length || 0;
+    return maxAjustesInsumo > ajustesTempo;
   }
 
   /**
@@ -645,6 +661,197 @@
     });
   }
 
+  // ── Ajuste de Receita (insumo + tempo de batida, juntos) ──────────────────
+  // Substitui os antigos botões/painéis separados de cada campo. Regra:
+  // toda vez que um insumo é adicionado, o tempo de batida extra necessário
+  // pra misturar esse adicional tem que ser informado junto — então tudo
+  // entra pela mesma tela: insumos (somam ao total), tempo de batida
+  // (sempre obrigatório) e, opcionalmente, a remedição de Densidade/Flow
+  // (essas duas sobrescrevem o valor anterior, não somam).
+  const CAMPOS_INSUMO_AJUSTE = [
+    { campo: 'cimento_real', nome: 'cimento', label: 'Cimento (kg)', step: '0.01' },
+    { campo: 'eps_real', nome: 'eps', label: 'EPS (kg)', step: '0.01' },
+    { campo: 'agua_real', nome: 'agua', label: 'Água (kg)', step: '0.01' },
+    { campo: 'superplast_real', nome: 'superplast', label: 'Superplast. (kg)', step: '0.001' },
+    { campo: 'incorporador_real', nome: 'incorporador', label: 'Incorp. de Ar (kg)', step: '0.001' },
+  ];
+
+  const CAMPOS_RESULTADO_AJUSTE = [
+    { campo: 'densidade_insumo', nome: 'densidade', label: 'Densidade do traço (kg/m³)', step: '0.01' },
+    { campo: 'flow_insumo', nome: 'flow', label: 'Flow (mm)', step: '1' },
+  ];
+
+  function _mostrarModalAjusteReceita(i) {
+    const t = state.tracos[i];
+    if (!t || t._reaproveitado) return;
+
+    const existente = document.getElementById('modal-ajuste-receita');
+    if (existente) existente.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-ajuste-receita';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:32px;width:480px;max-width:92vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:2.2rem;margin-bottom:8px">⚖️</div>
+          <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--accent);margin:0">
+            Ajuste de Receita — Traço Nº ${t.num}
+          </h2>
+          <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
+            Toda vez que um insumo é adicionado, é preciso informar quanto tempo extra de batida foi necessário.
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-bottom:18px">
+          <label class="form-label">⏱ Tempo de Batida Adicionado <span class="required">*</span></label>
+          <div class="duration-picker">
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" id="ar-h-up">▲</button>
+              <input class="dur-input" type="number" min="0" max="23" id="ar-dur-h" value="0" readonly>
+              <button type="button" class="dur-btn dur-dn" id="ar-h-dn">▼</button>
+              <span class="dur-label">h</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" id="ar-m-up">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="ar-dur-m" value="0" readonly>
+              <button type="button" class="dur-btn dur-dn" id="ar-m-dn">▼</button>
+              <span class="dur-label">min</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" id="ar-s-up">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="ar-dur-s" value="0" readonly>
+              <button type="button" class="dur-btn dur-dn" id="ar-s-dn">▼</button>
+              <span class="dur-label">seg</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:10px">Insumo Adicionado <span style="color:var(--text-3);font-weight:400;text-transform:none">(opcional — preencha só o que foi adicionado)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            ${CAMPOS_INSUMO_AJUSTE.map(c => `
+              <div class="form-group">
+                <label class="form-label">${c.label}</label>
+                <input class="form-input" type="number" step="${c.step}" id="ar-insumo-${c.campo}" placeholder="0">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:6px;margin-top:14px">
+          <label class="form-label" style="margin-bottom:10px">Remedição <span style="color:var(--text-3);font-weight:400;text-transform:none">(opcional — sobrescreve o valor anterior)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            ${CAMPOS_RESULTADO_AJUSTE.map(c => `
+              <div class="form-group">
+                <label class="form-label">${c.label}</label>
+                <input class="form-input" type="number" step="${c.step}" id="ar-insumo-${c.campo}" placeholder="novo valor">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div id="ar-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:8px;margin-top:8px"></div>
+
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <button id="ar-btn-salvar" class="btn btn-primary" style="flex:1">Salvar Ajuste</button>
+          <button id="ar-btn-cancelar" class="btn btn-ghost" style="flex:1">Cancelar</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    // Relógio h:m:s só muda pelas setas — sem digitação livre (readonly nos
+    // inputs), pra manter o valor sempre dentro do range válido.
+    const incDecAr = (id, max, delta) => {
+      const el = document.getElementById(id);
+      let val = (parseInt(el.value) || 0) + delta;
+      if (val < 0) val = max;
+      if (val > max) val = 0;
+      el.value = val;
+    };
+    document.getElementById('ar-h-up').addEventListener('click', () => incDecAr('ar-dur-h', 23, 1));
+    document.getElementById('ar-h-dn').addEventListener('click', () => incDecAr('ar-dur-h', 23, -1));
+    document.getElementById('ar-m-up').addEventListener('click', () => incDecAr('ar-dur-m', 59, 1));
+    document.getElementById('ar-m-dn').addEventListener('click', () => incDecAr('ar-dur-m', 59, -1));
+    document.getElementById('ar-s-up').addEventListener('click', () => incDecAr('ar-dur-s', 59, 1));
+    document.getElementById('ar-s-dn').addEventListener('click', () => incDecAr('ar-dur-s', 59, -1));
+
+    document.getElementById('ar-btn-cancelar').addEventListener('click', () => modal.remove());
+    document.getElementById('ar-btn-salvar').addEventListener('click', () => _salvarAjusteReceita(i, modal));
+  }
+
+  async function _salvarAjusteReceita(i, modal) {
+    const t = state.tracos[i];
+    if (!t) { modal.remove(); return; }
+
+    const erroEl = document.getElementById('ar-erro');
+    const mostrarErroModal = msg => { erroEl.textContent = msg; erroEl.style.display = 'block'; };
+    erroEl.style.display = 'none';
+
+    const h = parseInt(document.getElementById('ar-dur-h').value) || 0;
+    const m = parseInt(document.getElementById('ar-dur-m').value) || 0;
+    const s = parseInt(document.getElementById('ar-dur-s').value) || 0;
+    const segundos = h * 3600 + m * 60 + s;
+    if (segundos <= 0) {
+      mostrarErroModal('Informe o tempo de batida adicionado, usando as setas do relógio.');
+      return;
+    }
+    const minutos = Math.round((segundos / 60) * 100) / 100; // pro arquivo de auditoria (em minutos)
+
+    const camposPreenchidos = {}; // { cimento_real: valor, ... } — pro state do traço
+    const ajusteAudit = { tempo_batida: minutos }; // { tempo_batida, cimento, agua, densidade, flow, ... } — pro arquivo de auditoria
+
+    // Insumos (somam ao total) — todos opcionais, preenche só o que entrou.
+    CAMPOS_INSUMO_AJUSTE.forEach(c => {
+      const input = document.getElementById(`ar-insumo-${c.campo}`);
+      const val = parseFloat(input?.value);
+      if (!isNaN(val) && val > 0) {
+        camposPreenchidos[c.campo] = val;
+        ajusteAudit[c.nome] = val;
+      }
+    });
+
+    // Remedição (Densidade/Flow) — também opcional, mas sobrescreve em vez
+    // de somar (ver totalInsumo: para esses dois campos vale só o último
+    // valor da lista de ajustes, não a soma).
+    CAMPOS_RESULTADO_AJUSTE.forEach(c => {
+      const input = document.getElementById(`ar-insumo-${c.campo}`);
+      const val = parseFloat(input?.value);
+      if (!isNaN(val) && val > 0) {
+        camposPreenchidos[c.campo] = val;
+        ajusteAudit[c.nome] = val;
+      }
+    });
+
+    // Aplica no state: tempo de batida (já em segundos, mesma unidade usada
+    // internamente) + cada campo preenchido (insumo ou remedição).
+    if (!t.tempo_batida || typeof t.tempo_batida !== 'object') t.tempo_batida = { original: '', ajustes: [] };
+    t.tempo_batida.ajustes.push(segundos);
+
+    Object.entries(camposPreenchidos).forEach(([campo, valor]) => {
+      if (!t[campo] || typeof t[campo] !== 'object') t[campo] = { original: '', ajustes: [] };
+      t[campo].ajustes.push(valor);
+    });
+
+    persist();
+    renderTracos();
+    modal.remove();
+
+    // Registra no arquivo de auditoria de ajustes — não bloqueia o fluxo se
+    // falhar (o dado principal já está salvo no traço; isso é só o
+    // histórico de qual ajuste veio com qual tempo de batida).
+    try {
+      await LW.registrarAjusteTraco(t.id, ajusteAudit);
+    } catch (err) {
+      console.warn('[LW] Falha ao registrar auditoria do ajuste de receita:', err.message);
+    }
+  }
+
   /**
    * Exibe o modal de sobra ao finalizar uma operação.
    * Pergunta se houve sobra no ÚLTIMO traço e persiste sobra.json se sim.
@@ -859,45 +1066,10 @@
             <span class="ajustes-formula">${formula}</span>
             <span class="ajustes-total-badge">Total: ${formatDuracao(parseInt(total))}</span>
           </div>` : ''}
-        ${temValor ? `
-          <div class="ajuste-painel dur-ajuste-painel" id="ajuste-painel-${i}-tempo_batida" style="display:none">
-            <div class="ajuste-painel-titulo">Adicionar tempo extra</div>
-            <div class="duration-picker duration-picker--sm">
-              <div class="duration-col">
-                <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracaoAjuste(${i},'h',1)" ${t.isReutilizado ? 'readonly-reaproveitado' : ''}>▲</button>
-                <input class="dur-input" type="number" min="0" max="23"
-                  id="dur-aj-h-${i}" value="0" placeholder="0">
-                <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracaoAjuste(${i},'h',-1)">▼</button>
-                <span class="dur-label">h</span>
-              </div>
-              <span class="dur-sep">:</span>
-              <div class="duration-col">
-                <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracaoAjuste(${i},'m',1)">▲</button>
-                <input class="dur-input" type="number" min="0" max="59"
-                  id="dur-aj-m-${i}" value="0" placeholder="0">
-                <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracaoAjuste(${i},'m',-1)">▼</button>
-                <span class="dur-label">min</span>
-              </div>
-              <span class="dur-sep">:</span>
-              <div class="duration-col">
-                <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracaoAjuste(${i},'s',1)">▲</button>
-                <input class="dur-input" type="number" min="0" max="59"
-                  id="dur-aj-s-${i}" value="0" placeholder="0">
-                <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracaoAjuste(${i},'s',-1)">▼</button>
-                <span class="dur-label">seg</span>
-              </div>
-            </div>
-            <div class="ajuste-painel-btns" style="margin-top:10px">
-              <button class="btn btn-primary btn-sm" onclick="LWOp.salvarAjusteDuracao(${i})">Salvar</button>
-              <button class="btn btn-ghost btn-sm" onclick="LWOp.fecharAjuste(${i},'tempo_batida')">Cancelar</button>
-            </div>
-          </div>
-          <button class="btn-ajuste-tempo  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.abrirAjuste(${i},'tempo_batida',this) ${t._reaproveitado ? 'disabled' : ''}" title>+ tempo extra</button>
-        ` : ''}
       </div>`;
   }
 
-  // Renderiza campo de insumo com botão de ajuste
+  // Renderiza campo de insumo (entrada do valor original + badge de ajustes)
   function renderCampoInsumo(t, i, fieldKey, label, step, decimais, placeholder) {
     const insumo = t[fieldKey] || { original: '', ajustes: [] };
     const isResultado = fieldKey && (fieldKey.includes('densidade') || fieldKey.includes('flow'));
@@ -905,41 +1077,30 @@
     const displayAjustes = temAjustes ? formatAjustesDisplay(insumo, decimais, fieldKey) : '';
     const total = totalInsumo(insumo, fieldKey);
 
-    // Para resultado (densidade/flow): input mostra original (valor medido), badge mostra atual
-    // Para insumos: input mostra original, badge mostra total somado
-    const valorExibido = insumo.original;
-
-    // Painel: "Novo valor" para overwrite (resultado), "Quantidade a adicionar" para soma (insumos)
-    const painelTitulo = isResultado ? 'Registrar novo valor' : 'Adicionar ajuste';
-    const painelLabel = isResultado ? 'Novo valor:' : 'Quantidade:';
-    const painelPlaceholder = isResultado ? placeholder : '0';
+    // Todo campo mostra o valor ATUAL no próprio campo, já considerando os
+    // ajustes — soma pros insumos reais (cimento, água, EPS, superplast.,
+    // incorporador), último valor registrado pra Densidade/Flow (que
+    // sobrescrevem em vez de somar). Antes do primeiro ajuste, total ===
+    // original, então o campo continua editável normalmente; depois do
+    // primeiro ajuste, trava (readonly) — daí em diante, qualquer mudança
+    // passa pelo botão único "⚖️ Ajustar Receita" do card do traço.
+    const valorExibido = total !== '' ? parseFloat(total).toFixed(decimais) : '';
 
     return `
       <div class="form-group insumo-group">
         <label class="form-label">${label} <span class="required">*</span></label>
         <div class="insumo-input-row">
-          <input class="form-input ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" type="number" step="${step}"
+          <input class="form-input ${(t._reaproveitado || temAjustes) ? 'readonly-reaproveitado' : ''}" type="number" step="${step}"
             value="${valorExibido}"
             oninput="LWOp.updateInsumoOriginal(${i},'${fieldKey}',this.value)"
-            ${t._reaproveitado ? 'readonly' : ''}
+            ${t._reaproveitado || temAjustes ? 'readonly' : ''}
             placeholder="${placeholder}">
-          <button class="btn-ajuste ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" title="${painelTitulo}" onclick="LWOp.abrirAjuste(${i},'${fieldKey}',this) ${t._reaproveitado ? 'disabled' : ''}">+</button>
         </div>
         ${temAjustes ? `
           <div class="insumo-ajustes-display">
             <span class="ajustes-formula">${displayAjustes}</span>
             <span class="ajustes-total-badge">${isResultado ? 'Atual' : 'Total'}: ${total !== '' ? parseFloat(total).toFixed(decimais) : '—'}</span>
           </div>` : ''}
-        <div class="ajuste-painel" id="ajuste-painel-${i}-${fieldKey}" style="display:none">
-          <div class="ajuste-painel-titulo">${painelTitulo}</div>
-          <label class="form-label">${painelLabel}</label>
-          <input class="form-input ajuste-qty-input" type="number" step="${step}"
-            id="ajuste-input-${i}-${fieldKey}" placeholder="${painelPlaceholder}" value="">
-          <div class="ajuste-painel-btns">
-            <button class="btn btn-primary btn-sm" onclick="LWOp.salvarAjuste(${i},'${fieldKey}')">Salvar</button>
-            <button class="btn btn-ghost btn-sm" onclick="LWOp.fecharAjuste(${i},'${fieldKey}')">Cancelar</button>
-          </div>
-        </div>
       </div>`;
   }
 
@@ -1034,11 +1195,16 @@
 
         <div class="traco-card-body">
           <!-- Seção: Receita Real Pesada -->
-          <div class="traco-section-label">⚖ Receita Real Pesada</div>
+          <div class="traco-section-label-row">
+            <div class="traco-section-label" style="padding:0">⚖ Receita Real Pesada</div>
+            <button type="button" class="btn-ajustar-receita ${t._reaproveitado ? 'readonly-reaproveitado' : ''}"
+              onclick="LWOp.abrirAjusteReceita(${i}) ${t._reaproveitado ? 'disabled' : ''}"
+              title="Adicionar insumo e/ou tempo de batida">⚖️ Ajustar Receita</button>
+          </div>
           <div class="traco-fields-grid traco-fields-grid--6">
             ${renderCampoInsumo(t, i, 'cimento_real', 'Cimento (kg)', '0.01', 2, 'kg', t._reaproveitado)}
-            ${renderCampoInsumo(t, i, 'agua_real', 'Água (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'eps_real', 'EPS (kg)', '0.01', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'agua_real', 'Água (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 3, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 3, 'kg', t._reaproveitado)}
             ${renderCampoTempoBatida(t, i, t._reaproveitado)}
@@ -1070,6 +1236,7 @@
 
   function updatePendencias() {
     const tracosCompletos = state.tracos.length > 0 && state.tracos.every(tracoCompleto);
+    const tracosComAjusteSemTempo = state.tracos.filter(tracoTemAjusteSemTempoBatida);
     const checks = [
       { label: 'Turno definido', ok: !!state.turno },
       { label: 'Dimensão da bateria', ok: !!state.dimensao },
@@ -1079,7 +1246,8 @@
       { label: 'Injeção finalizada', ok: !!state.fim },
       { label: 'Motivo do atraso', ok: state.houve_atraso === 'NÃO' || !!state.motivo_atraso },
       { label: 'Ao menos 1 traço', ok: state.tracos.length > 0 },
-      { label: 'Informações do traço (todos os campos obrigatórios)', ok: tracosCompletos }
+      { label: 'Informações do traço (todos os campos obrigatórios)', ok: tracosCompletos },
+      { label: 'Tempo de batida para todos os ajustes de insumo', ok: tracosComAjusteSemTempo.length === 0 }
     ];
 
     const allOk = checks.every(c => c.ok);
@@ -1377,42 +1545,6 @@
       }
       persist();
     },
-    // Abre o painel de ajuste para um insumo específico
-    abrirAjuste(i, field, btn) {
-      // Fecha qualquer painel aberto
-      document.querySelectorAll('.ajuste-painel').forEach(p => {
-        if (p.id !== `ajuste-painel-${i}-${field}`) p.style.display = 'none';
-      });
-      const painel = document.getElementById(`ajuste-painel-${i}-${field}`);
-      if (!painel) return;
-      const isOpen = painel.style.display !== 'none';
-      painel.style.display = isOpen ? 'none' : 'block';
-      if (!isOpen) {
-        const input = document.getElementById(`ajuste-input-${i}-${field}`);
-        if (input) { input.value = ''; setTimeout(() => input.focus(), 50); }
-      }
-    },
-    // Salva o ajuste e recalcula o total
-    salvarAjuste(i, field) {
-      const input = document.getElementById(`ajuste-input-${i}-${field}`);
-      if (!input) return;
-      const qty = parseFloat(input.value);
-      if (isNaN(qty)) { input.focus(); return; }
-
-      let insumo = state.tracos[i][field];
-      if (!insumo || typeof insumo !== 'object' || !('ajustes' in insumo)) {
-        insumo = { original: '', ajustes: [] };
-        state.tracos[i][field] = insumo;
-      }
-      insumo.ajustes.push(qty);
-      persist();
-      renderTracos();
-    },
-    // Fecha o painel sem salvar
-    fecharAjuste(i, field) {
-      const painel = document.getElementById(`ajuste-painel-${i}-${field}`);
-      if (painel) painel.style.display = 'none';
-    },
     removeTraco,
     addTraco,
 
@@ -1451,33 +1583,15 @@
       const dispEl = document.querySelector(`#tempo-batida-group-${i} .dur-total-display`);
       if (dispEl) dispEl.innerHTML = `${formatDuracao(seg)} <span class="dur-seg-raw">(${seg}s)</span>`;
       persist();
-      renderTracos(); // Re-renderiza para atualizar a visibilidade do botão "+ tempo extra"
+      renderTracos(); // Re-renderiza para atualizar a visibilidade do botão "+ Ajuste de Receita"
     },
 
-    // Ajusta um campo do picker de ajuste (painel +tempo extra)
-    ajustarDuracaoAjuste(i, campo, delta) {
-      const id = `dur-aj-${campo}-${i}`;
-      const el = document.getElementById(id);
-      if (!el) return;
-      const max = campo === 'h' ? 23 : 59;
-      let val = (parseInt(el.value) || 0) + delta;
-      if (val < 0) val = max;
-      if (val > max) val = 0;
-      el.value = val;
-    },
-
-    // Salva ajuste de duração (picker do painel +tempo extra)
-    salvarAjusteDuracao(i) {
-      const seg = this._lerDuracaoPicker('dur-aj', i);
-      if (seg === 0) { document.getElementById(`dur-aj-s-${i}`)?.focus(); return; }
-      let insumo = state.tracos[i].tempo_batida;
-      if (!insumo || typeof insumo !== 'object' || !('ajustes' in insumo)) {
-        insumo = { original: '', ajustes: [] };
-        state.tracos[i].tempo_batida = insumo;
-      }
-      insumo.ajustes.push(seg);
-      persist();
-      renderTracos();
+    // Abre o modal unificado de Ajuste de Receita (insumo + tempo de
+    // batida juntos) — ver _mostrarModalAjusteReceita.
+    abrirAjusteReceita(i) {
+      const t = state.tracos[i];
+      if (!t || t._reaproveitado) return;
+      _mostrarModalAjusteReceita(i);
     },
     toggleCard(id) {
       const el = document.getElementById(id);
@@ -1540,4 +1654,4 @@ function _mostrarModalConfirmacaoExclusao(i, onConfirm) {
   document.getElementById('btn-cancelar-exclusao').addEventListener('click', () => {
     modal.remove();
   });
-} 
+}

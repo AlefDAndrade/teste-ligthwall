@@ -90,6 +90,7 @@ const VALIDADORES_BACKUP_DADOS = {
   'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
+  'ajustes_tracos.json':    v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -105,6 +106,7 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'relatorio_injecao.json': [],
   'sobra.json': {},
   'paradas.json': [],
+  'ajustes_tracos.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -644,6 +646,64 @@ http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── AJUSTES DE TRAÇO: registra um ajuste (insumo + tempo de batida juntos)
+  // no histórico de auditoria — não interfere no traço em si (que já foi
+  // salvo no historico.json/relatorio_injecao.json); isso é só o "log" de
+  // qual ajuste veio com qual tempo de batida, organizado por traço.
+  // Numeração de "ajuste_N" é decidida AQUI no servidor (não no navegador)
+  // pra evitar duas abas/operações gerando o mesmo número pro mesmo traço.
+  if (req.method === 'POST' && urlPath === '/registrar-ajuste-traco') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { id_traco, ajuste } = JSON.parse(body);
+        if (!id_traco || typeof id_traco !== 'string') {
+          throw new Error('Payload inválido: "id_traco" obrigatório.');
+        }
+        if (!ajuste || typeof ajuste !== 'object' || Array.isArray(ajuste)) {
+          throw new Error('Payload inválido: "ajuste" obrigatório.');
+        }
+        if (typeof ajuste.tempo_batida !== 'number' || ajuste.tempo_batida <= 0) {
+          throw new Error('"ajuste.tempo_batida" obrigatório (minutos, > 0).');
+        }
+
+        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
+        let ajustesTracos = [];
+        try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
+
+        let entrada = ajustesTracos.find(e => e.id_traco === id_traco);
+        if (!entrada) {
+          entrada = { id_traco };
+          ajustesTracos.push(entrada);
+        }
+
+        // Próximo número de ajuste — conta quantas chaves "ajuste_N" essa
+        // entrada já tem (persiste através de reaproveitamentos do mesmo
+        // traço em operações diferentes, já que o id do traço não muda).
+        const numerosExistentes = Object.keys(entrada)
+          .map(k => /^ajuste_(\d+)$/.exec(k))
+          .filter(Boolean)
+          .map(m => parseInt(m[1], 10));
+        const proximoNumero = (numerosExistentes.length ? Math.max(...numerosExistentes) : 0) + 1;
+
+        entrada['ajuste_' + proximoNumero] = { ...ajuste, registrado_em: new Date().toISOString() };
+
+        const tmp = ajustesPath + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(ajustesTracos, null, 2), 'utf8');
+        fs.renameSync(tmp, ajustesPath);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ajusteNumero: proximoNumero }));
+      } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }

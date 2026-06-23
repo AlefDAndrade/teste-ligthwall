@@ -613,6 +613,31 @@ async function getRelatorioInjecao() {
   } catch (_) { return []; }
 }
 
+// ---- Ajustes de Traço (auditoria) ----
+// Histórico de cada ajuste de receita (insumo + tempo de batida juntos)
+// feito num traço, guardado por id_traco em ajustes_tracos.json. A
+// numeração de "ajuste_N" é decidida no servidor (ver /registrar-ajuste-traco
+// em server.js) — não interfere no traço em si, é só o log de auditoria.
+async function registrarAjusteTraco(idTraco, ajuste) {
+  const res = await fetch('/registrar-ajuste-traco', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id_traco: idTraco, ajuste }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro ao registrar ajuste do traço');
+  return json;
+}
+
+async function getAjustesTracos() {
+  try {
+    const res = await fetch('db/ajustes_tracos.json');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (_) { return []; }
+}
+
 /**
  * Obtém o total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura,
  * não consome/incrementa nada. Usado para calcular a numeração de PRÉVIA
@@ -908,6 +933,7 @@ const ARQUIVOS_BACKUP_DB = [
   'historico.json',
   'historico_edicoes.json',
   'paradas.json',
+  'ajustes_tracos.json',
   'relatorio_injecao.json',
   'security.json',
   'sobra.json',
@@ -1161,6 +1187,10 @@ window.LW = {
   getRelatorioInjecao,
   getTotalTracosHoje,
   confirmarTracosHoje,
+
+  // Ajustes de Traço (auditoria de insumo + tempo de batida)
+  registrarAjusteTraco,
+  getAjustesTracos,
 
   // Dados e analytics
   registrarOperacao, getStats,

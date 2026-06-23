@@ -34,15 +34,19 @@ public/
 │   ├── analise-operacional.js   # dashboard "Análise Operacional"
 │   ├── qualidade-tracos.js      # dashboard "Qualidade dos Traços" (CEP)
 │   ├── oee.js                  # dashboard "OEE"
+│   ├── paradas.js               # tela "Registro de Paradas"
 │   ├── debriefing.js            # popover "Debriefing do Dia" (global, na topbar)
 │   ├── admin-auth.js            # autenticação do perfil Administrador
 │   └── keyboard-shortcuts.js    # atalhos de teclado e modal de ajuda (F1)
 └── db/
     ├── config.json             # baterias, tipos de montagem, volume por placa
     ├── historico.json           # histórico de operações (Registro de Baterias)
+    ├── historico_edicoes.json   # log de auditoria de edições em historico.json
     ├── relatorio_injecao.json   # traços injetados (Relatório de Injeção)
+    ├── ajustes_tracos.json      # auditoria de ajustes de receita por traço (insumo + tempo de batida)
     ├── security.json            # hash da senha do admin + hash da chave de recuperação
     ├── sobra.json                # traço com sobra ativa entre operações
+    ├── paradas.json              # paradas registradas (planejadas/não planejadas)
     └── contador_tracos.json      # contador diário de traços (reset automático)
 server.js               # servidor HTTP + rotas da API
 package.json
@@ -74,6 +78,31 @@ A sessão (`sessionStorage`) dura enquanto a aba estiver aberta. Um F5 dentro do
 - **Menu Principal** — atalhos rápidos + (admin) Backup, Restauração e Importação.
 
 Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
+
+## Ajuste de Receita (Registrar Operação)
+
+Sempre que um insumo (cimento, água, EPS, superplastificante ou incorporador de ar) precisa ser **adicionado** a um traço já em andamento, o tempo de batida extra necessário pra misturar esse adicional tem que ser informado **junto**, na mesma ação — caso contrário a tela de Registrar Operação acusa pendência e bloqueia o registro da operação.
+
+Por isso, insumo e tempo de batida não têm mais painéis de ajuste separados: o botão "+" de qualquer um dos 5 insumos, e o botão "+ Ajuste de Receita" do tempo de batida, abrem a mesma tela:
+
+- **Tempo de Batida Adicionado (minutos)** — sempre obrigatório.
+- **Foi adicionado algum insumo neste ajuste?** — se marcado, abre os campos dos 5 insumos (preenche-se só os que de fato foram adicionados); se desmarcado, é um ajuste só de tempo de batida (ex: "só precisa bater mais um pouco", sem ter colocado nada a mais).
+
+Campos de **resultado medido** (Densidade do traço, Flow) continuam com o painel simples de sempre — ali é uma remedição, não uma adição, então não exige tempo de batida.
+
+Cada ajuste salvo também é registrado em `ajustes_tracos.json`, indexado pelo `id_traco`, com uma chave `ajuste_N` por ajuste (numeração sequencial e contínua por traço, decidida pelo servidor — inclusive entre reaproveitamentos do mesmo traço em operações diferentes):
+
+```json
+[
+  {
+    "id_traco": "traco_1781888111000_0",
+    "ajuste_1": { "tempo_batida": 2, "cimento": 50, "registrado_em": "2026-06-23T18:34:08.445Z" },
+    "ajuste_2": { "tempo_batida": 1.5, "registrado_em": "2026-06-23T18:34:08.457Z" }
+  }
+]
+```
+
+Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes.
 
 ## Configuração (Administrador)
 
@@ -152,6 +181,7 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) |
 | `/registrar-operacao` | POST | Grava um registro em `historico.json` |
 | `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` |
+| `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` |
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
