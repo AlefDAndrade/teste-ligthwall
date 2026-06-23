@@ -7,6 +7,12 @@
 //    lavagem programada (2x 30min) → restam 7h (420 min) de produção
 //    planejada por turno. Disponibilidade = tempo real produzindo (soma de
 //    tempo_min das operações daquele turno) ÷ 420 min.
+//    Tempo real produzindo desconta a parte de cada parada NÃO PLANEJADA
+//    (registrada em "Paradas") que cair dentro da janela [início,fim] da
+//    operação — o cronômetro continua contando durante uma parada não
+//    planejada, mas esse tempo não é produção de fato. Atraso (tempo_min,
+//    houve_atraso) continua intocado por esse desconto — são coisas
+//    independentes, pode ter atraso sem ter tido parada.
 //  - Performance: ciclo ideal de 59 min por operação/bateria. Performance =
 //    (59 × nº de operações) ÷ tempo real produzindo, limitado a 100%.
 //  - Qualidade: % de traços que NÃO precisaram de nenhum ajuste de insumo
@@ -58,6 +64,47 @@
     return 0;
   }
 
+  // ── Desconto de parada NÃO PLANEJADA no tempo produzindo ──────────────────
+  // O cronômetro da operação continua contando mesmo durante uma parada não
+  // planejada (ex: bico de injeção entupiu) — o operador não pausa a tela,
+  // só registra a parada separadamente. Esse tempo NÃO é produção de fato,
+  // então a parcela da parada que cair dentro da janela [início, fim] da
+  // operação é descontada do tempo produzindo usado na Disponibilidade.
+  // Importante: isso NÃO altera tempo_min, houve_atraso ou motivo_atraso —
+  // o atraso continua sendo calculado do jeito que já era (pode ter
+  // atrasado sem ter tido parada nenhuma, são coisas independentes). Só a
+  // conta interna de Disponibilidade do OEE usa esse desconto.
+  function _minutosParadaNaoPlanejadaNaJanela(inicioISO, fimISO, paradas) {
+    if (!inicioISO || !fimISO || !paradas || !paradas.length) return 0;
+    const ini = new Date(inicioISO).getTime();
+    const fim = new Date(fimISO).getTime();
+    if (isNaN(ini) || isNaN(fim) || fim <= ini) return 0;
+
+    let totalMs = 0;
+    paradas.forEach(p => {
+      if (p.classificacao !== 'Não Planejada') return;
+      if (!p.inicio || !p.fim) return;
+      const pIni = new Date(p.inicio).getTime();
+      const pFim = new Date(p.fim).getTime();
+      if (isNaN(pIni) || isNaN(pFim)) return;
+      // Sobreposição clipada à janela da operação — se a parada for maior
+      // ou cair parcialmente fora da janela, só a parte que coincide com
+      // esta operação entra na conta dela.
+      const overlapIni = Math.max(ini, pIni);
+      const overlapFim = Math.min(fim, pFim);
+      if (overlapFim > overlapIni) totalMs += (overlapFim - overlapIni);
+    });
+    return totalMs / 60000;
+  }
+
+  // Tempo produzindo "real" de uma operação: tempo_min menos a parte de
+  // paradas não planejadas que caiu dentro da janela dela. Nunca negativo.
+  function _tempoProduzindoReal(rec, paradas) {
+    const bruto = _tempoMin(rec);
+    const descontar = _minutosParadaNaoPlanejadaNaJanela(rec.inicio, rec.fim, paradas);
+    return Math.max(0, bruto - descontar);
+  }
+
   // ── Agrupamento por turno-instância (data + turno) ───────────────────────
   // Cada combinação de data+turno tem seu próprio orçamento de 420 min,
   // independente de quantas baterias rodaram nela.
@@ -73,13 +120,16 @@
 
   // ── Cálculo dos 3 componentes ─────────────────────────────────────────────
 
-  function calcularDisponibilidade(historico) {
+  // `paradas` é opcional — quando informado, paradas classificadas como
+  // "Não Planejada" que coincidirem com a janela [início,fim] de uma
+  // operação descontam do tempo produzindo dela (ver _tempoProduzindoReal).
+  function calcularDisponibilidade(historico, paradas = []) {
     const turnos = _agruparPorTurnoInstancia(historico);
     if (!turnos.length) return { pct: 0, turnos: [], tempoTotalProduzindo: 0, tempoPlanejadoTotal: 0, nTurnos: 0 };
 
     let tempoTotalProduzindo = 0;
     const detalhe = turnos.map(g => {
-      const tempoProduzindo = g.ops.reduce((s, r) => s + _tempoMin(r), 0);
+      const tempoProduzindo = g.ops.reduce((s, r) => s + _tempoProduzindoReal(r, paradas), 0);
       tempoTotalProduzindo += tempoProduzindo;
       return {
         data: g.data,
@@ -115,13 +165,13 @@
 
   // ── Quebra por turno-instância (Disponibilidade + Performance + Qualidade
   // + OEE de cada uma) ───────────────────────────────────────────────────────
-  function calcularPorTurnoInstancia(historico, tracos) {
+  function calcularPorTurnoInstancia(historico, tracos, paradas = []) {
     const turnos = _agruparPorTurnoInstancia(historico);
     return turnos.map(g => {
       const perf = calcularPerformance(g.ops);
       const tracosDoTurno = tracos.filter(t => t.data === g.data && t.turno === g.turno);
       const qual = calcularQualidade(tracosDoTurno);
-      const tempoProduzindo = g.ops.reduce((s, r) => s + _tempoMin(r), 0);
+      const tempoProduzindo = g.ops.reduce((s, r) => s + _tempoProduzindoReal(r, paradas), 0);
       const dispPct = (tempoProduzindo / MINUTOS_TURNO_PLANEJADO) * 100;
       // Sem traço registrado nesse turno = qualidade indeterminada (null), não
       // "0% de qualidade" — são coisas diferentes (falta de dado x falha real).
@@ -179,9 +229,11 @@
       return true;
     });
 
-    // Paradas não têm turno/bateria associados (só início/fim) — filtramos
-    // só por data. Usadas apenas pra DETALHAR de onde vem o tempo perdido;
-    // não entram na conta de Disponibilidade (ver _resumoParadas).
+    // Paradas não têm turno/bateria associados diretamente (só início/fim)
+    // — filtramos só por data. A sobreposição entre uma parada NÃO
+    // PLANEJADA e a janela [início,fim] de cada operação É usada para
+    // descontar do tempo produzindo da Disponibilidade (ver
+    // _tempoProduzindoReal) — paradas planejadas não afetam esse cálculo.
     let paradas = await fetch('db/paradas.json').then(r => r.ok ? r.json() : []).catch(() => []);
     if (!Array.isArray(paradas)) paradas = [];
     paradas = paradas.filter(p => {
@@ -195,9 +247,12 @@
   }
 
   // Soma o tempo de paradas registradas no período, separado por
-  // classificação — usado só pra EXIBIR de onde vem o tempo sem produção,
-  // sem alterar o cálculo de Disponibilidade (que continua sendo só tempo
-  // produzindo ÷ tempo planejado, igual sempre foi).
+  // classificação — usado pra EXIBIR de onde vem o tempo sem produção na
+  // barra de composição (_renderParadasBreakdown). É um total simples por
+  // data, sem checar sobreposição com operação nenhuma — diferente do
+  // desconto de Disponibilidade (_tempoProduzindoReal), que só conta a
+  // parte de cada parada não planejada que de fato caiu dentro da janela
+  // de uma operação.
   function _resumoParadas(paradas) {
     let planejada = 0, naoPlanejada = 0;
     paradas.forEach(p => {
@@ -454,7 +509,7 @@
     }
     if (content) content.style.display = 'block';
 
-    const disp = calcularDisponibilidade(historico);
+    const disp = calcularDisponibilidade(historico, paradas);
     const perf = calcularPerformance(historico);
     const qual = calcularQualidade(tracos);
 
@@ -462,7 +517,7 @@
     _renderWaterfall(disp, perf, qual);
     _renderParadasBreakdown(disp, _resumoParadas(paradas));
 
-    const porTurno = calcularPorTurnoInstancia(historico, tracos);
+    const porTurno = calcularPorTurnoInstancia(historico, tracos, paradas);
     const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'ºT').replace('º TURNO', 'ºT')}`);
     requestAnimationFrame(() => _drawBarChart('oee-chart-turnos', labels, porTurno.map(t => t.oeePct), C.accent));
     _renderTabelaTurnos(porTurno);
@@ -493,6 +548,8 @@
     _calcularPorTurnoInstancia: calcularPorTurnoInstancia,
     _calcularPorGrupo: calcularPorGrupo,
     _resumoParadas,
+    _tempoProduzindoReal,
+    _minutosParadaNaoPlanejadaNaJanela,
   };
 
 })();
