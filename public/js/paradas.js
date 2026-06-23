@@ -455,8 +455,12 @@
 
   // ── Exclusão ──────────────────────────────────────────────────────────────
 
-  function confirmarExclusao(id) {
-    if (!confirm('Confirmar exclusão desta parada? A ação não pode ser desfeita.')) return;
+  async function confirmarExclusao(id) {
+    const confirmou = await LW.mostrarConfirmacao(
+      'A ação não pode ser desfeita.',
+      { titulo: 'Excluir esta parada?', textoConfirmar: 'Excluir', tipo: 'perigo', icon: '🗑️' }
+    );
+    if (!confirmou) return;
     excluirParadaServidor(id).then(() => {
       mostrarToast('Parada excluída.', 'ok');
       _paradas = _paradas.filter(p => p.id !== id);

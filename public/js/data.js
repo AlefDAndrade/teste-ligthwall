@@ -924,6 +924,155 @@ async function gerarBackupDados() {
   URL.revokeObjectURL(url);
 }
 
+// ---- Alerta customizado (substitui o alert() nativo do navegador) ----
+// Mesmo padrão visual usado nos modais de Sobra de Traço (operacao.js):
+// overlay + card central, com ícone/título de acordo com o tipo. Diferente
+// do alert() nativo, não bloqueia a thread (é baseado em Promise) — quem
+// precisar esperar o usuário fechar antes de continuar (ex: antes de um
+// reload) deve usar `await`.
+
+const _ALERTA_ESTILOS = {
+  sucesso: { icon: '✅', cor: 'var(--green)', titulo: 'Sucesso' },
+  erro: { icon: '❌', cor: 'var(--red)', titulo: 'Erro' },
+  aviso: { icon: '⚠️', cor: 'var(--red)', titulo: 'Atenção' },
+  info: { icon: 'ℹ️', cor: 'var(--accent)', titulo: 'Aviso' },
+};
+
+function _escaparHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Exibe um modal de alerta customizado (substitui o alert() nativo).
+ * @param {string} mensagem - Texto a exibir (quebras de linha \n são respeitadas).
+ * @param {object} [opcoes]
+ * @param {'sucesso'|'erro'|'aviso'|'info'} [opcoes.tipo='info']
+ * @param {string} [opcoes.titulo] - Sobrescreve o título padrão do tipo.
+ * @returns {Promise<void>} resolve quando o usuário fecha o modal (clique no OK, Enter ou Esc).
+ */
+function mostrarAlerta(mensagem, opcoes = {}) {
+  const estilo = _ALERTA_ESTILOS[opcoes.tipo] || _ALERTA_ESTILOS.info;
+  const titulo = opcoes.titulo || estilo.titulo;
+
+  return new Promise(resolve => {
+    const anterior = document.getElementById('modal-alerta-global');
+    if (anterior) anterior.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-alerta-global';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:32px;width:440px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2.2rem;margin-bottom:8px">${estilo.icon}</div>
+          <h2 style="font-family:var(--font-display);font-size:1.3rem;color:${estilo.cor};margin:0">
+            ${_escaparHtml(titulo)}
+          </h2>
+        </div>
+        <p style="color:var(--text-2);text-align:center;margin-bottom:24px;line-height:1.5;white-space:pre-line">${_escaparHtml(mensagem)}</p>
+        <button id="btn-alerta-ok"
+          style="width:100%;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
+                 font-weight:700;font-size:.9rem;cursor:pointer">
+          OK
+        </button>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const fechar = () => {
+      modal.remove();
+      document.removeEventListener('keydown', onKeydown);
+      resolve();
+    };
+    const onKeydown = (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') fechar();
+    };
+
+    document.getElementById('btn-alerta-ok').addEventListener('click', fechar);
+    document.addEventListener('keydown', onKeydown);
+    document.getElementById('btn-alerta-ok').focus();
+  });
+}
+
+/**
+ * Exibe um modal de confirmação customizado (substitui o confirm() nativo
+ * do navegador) — mesmo padrão visual usado nos modais de Sobra de Traço.
+ * @param {string} mensagem
+ * @param {object} [opcoes]
+ * @param {string} [opcoes.titulo='Confirmar ação']
+ * @param {string} [opcoes.textoConfirmar='Confirmar']
+ * @param {string} [opcoes.textoCancelar='Cancelar']
+ * @param {'padrao'|'perigo'} [opcoes.tipo='padrao'] - 'perigo' deixa o botão de confirmar vermelho.
+ * @param {string} [opcoes.icon='❓']
+ * @returns {Promise<boolean>} true se confirmado, false se cancelado (botão, Esc ou clique fora).
+ */
+function mostrarConfirmacao(mensagem, opcoes = {}) {
+  const titulo = opcoes.titulo || 'Confirmar ação';
+  const textoConfirmar = opcoes.textoConfirmar || 'Confirmar';
+  const textoCancelar = opcoes.textoCancelar || 'Cancelar';
+  const perigo = opcoes.tipo === 'perigo';
+  const corConfirmar = perigo ? 'var(--red)' : 'var(--accent)';
+  const corTextoConfirmar = perigo ? '#fff' : '#000';
+  const icon = opcoes.icon || '❓';
+
+  return new Promise(resolve => {
+    const anterior = document.getElementById('modal-confirmacao-global');
+    if (anterior) anterior.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-confirmacao-global';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:32px;width:440px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2.2rem;margin-bottom:8px">${icon}</div>
+          <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--text);margin:0">
+            ${_escaparHtml(titulo)}
+          </h2>
+        </div>
+        <p style="color:var(--text-2);text-align:center;margin-bottom:24px;line-height:1.5;white-space:pre-line">${_escaparHtml(mensagem)}</p>
+        <div style="display:flex;gap:12px">
+          <button id="btn-confirmacao-confirmar"
+            style="flex:1;padding:12px;background:${corConfirmar};color:${corTextoConfirmar};border:none;border-radius:var(--radius);
+                   font-weight:700;font-size:.9rem;cursor:pointer">
+            ${_escaparHtml(textoConfirmar)}
+          </button>
+          <button id="btn-confirmacao-cancelar"
+            style="flex:1;padding:12px;background:var(--bg-2);color:var(--text);border:1px solid var(--border);
+                   border-radius:var(--radius);font-size:.9rem;cursor:pointer">
+            ${_escaparHtml(textoCancelar)}
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const fechar = (resultado) => {
+      modal.remove();
+      document.removeEventListener('keydown', onKeydown);
+      resolve(resultado);
+    };
+    const onKeydown = (e) => {
+      if (e.key === 'Enter') fechar(true);
+      if (e.key === 'Escape') fechar(false);
+    };
+
+    document.getElementById('btn-confirmacao-confirmar').addEventListener('click', () => fechar(true));
+    document.getElementById('btn-confirmacao-cancelar').addEventListener('click', () => fechar(false));
+    document.addEventListener('keydown', onKeydown);
+    document.getElementById('btn-confirmacao-confirmar').focus();
+  });
+}
+
 // ---- Export ----
 
 window.LW = {
@@ -981,4 +1130,10 @@ window.LW = {
 
   // Backup de dados
   gerarBackupDados,
+
+  // Alerta customizado (substitui alert() nativo)
+  mostrarAlerta,
+
+  // Confirmação customizada (substitui confirm() nativo)
+  mostrarConfirmacao,
 };

@@ -2205,7 +2205,7 @@
         await LW.gerarBackupDados();
         fecharBackupHub();
       } catch (e) {
-        alert('Erro ao gerar backup: ' + e.message);
+        LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
       } finally {
         if (card) card.style.pointerEvents = '';
         _statusBackupHub(null);
@@ -2246,7 +2246,7 @@
 
         fecharBackupHub();
       } catch (e) {
-        alert('Erro ao gerar backup geral: ' + e.message);
+        LW.mostrarAlerta('Erro ao gerar backup geral: ' + e.message, { tipo: 'erro' });
       } finally {
         if (card) card.style.pointerEvents = '';
         _statusBackupHub(null);
@@ -2380,9 +2380,11 @@
       const senha = document.getElementById('restaurar-senha').value;
       if (!senha) { mostrarErroRestaurar('Digite sua senha de administrador.'); return; }
 
-      if (!confirm('Tem certeza? Isso vai substituir os dados atuais pelos deste backup. Uma cópia de segurança do estado atual será salva automaticamente antes.')) {
-        return;
-      }
+      const confirmou = await LW.mostrarConfirmacao(
+        'Isso vai substituir os dados atuais pelos deste backup. Uma cópia de segurança do estado atual será salva automaticamente antes.',
+        { titulo: 'Restaurar backup de dados?', textoConfirmar: 'Restaurar', tipo: 'perigo', icon: '♻️' }
+      );
+      if (!confirmou) return;
 
       const btn = document.getElementById('restaurar-btn-confirmar');
       const textoOriginal = btn.textContent;
@@ -2398,7 +2400,7 @@
         const json = await res.json();
         if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar backup.');
 
-        alert('Backup restaurado com sucesso! A página será recarregada.');
+        await LW.mostrarAlerta('Backup restaurado com sucesso! A página será recarregada.', { tipo: 'sucesso' });
         window.location.reload();
       } catch (e) {
         mostrarErroRestaurar(e.message);
@@ -2521,13 +2523,12 @@
       const senha = document.getElementById('restaurar-geral-senha').value;
       if (frase !== 'RESTAURAR TUDO' || !senha) return;
 
-      if (!confirm(
-        'ÚLTIMA CONFIRMAÇÃO: isso vai substituir TODO o código e os dados do sistema pelos deste backup, e vai ' +
-        'exigir reiniciar o servidor manualmente depois. Uma cópia de segurança completa do estado atual será ' +
-        'salva automaticamente antes. Continuar?'
-      )) {
-        return;
-      }
+      const confirmouGeral = await LW.mostrarConfirmacao(
+        'Isso vai substituir TODO o código e os dados do sistema pelos deste backup, e vai exigir reiniciar o ' +
+        'servidor manualmente depois. Uma cópia de segurança completa do estado atual será salva automaticamente antes.',
+        { titulo: 'ÚLTIMA CONFIRMAÇÃO', textoConfirmar: 'Restaurar Tudo', tipo: 'perigo', icon: '⚠️' }
+      );
+      if (!confirmouGeral) return;
 
       const btn = document.getElementById('restaurar-geral-btn-confirmar');
       const textoOriginal = btn.textContent;
@@ -2543,11 +2544,12 @@
         const json = await res.json();
         if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar backup geral.');
 
-        alert(
+        await LW.mostrarAlerta(
           `Backup geral restaurado com sucesso (${json.arquivosRestaurados} arquivos)!\n\n` +
           `IMPORTANTE: reinicie o servidor agora manualmente (Ctrl+C e "npm start", ou "pm2 restart") para que ` +
           `mudanças no código do servidor tenham efeito.\n\n` +
-          `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}`
+          `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}`,
+          { tipo: 'sucesso' }
         );
         window.location.reload();
       } catch (e) {
@@ -2649,7 +2651,7 @@
           const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
           const ws = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-          if (!rows.length) { alert('Planilha vazia ou sem dados reconhecíveis.'); return; }
+          if (!rows.length) { LW.mostrarAlerta('Planilha vazia ou sem dados reconhecíveis.', { tipo: 'aviso' }); return; }
 
           _importSheetHeaders = Object.keys(rows[0]);
           _importSheetRows = rows;
@@ -2662,7 +2664,7 @@
           renderMappingGrid();
           document.getElementById('import-mapping-area').style.display = 'block';
         } catch (err) {
-          alert('Erro ao ler o arquivo: ' + err.message);
+          LW.mostrarAlerta('Erro ao ler o arquivo: ' + err.message, { tipo: 'erro' });
         }
       };
       reader.readAsArrayBuffer(file);
@@ -2709,7 +2711,7 @@
       });
 
       const faltando = _activeImportFields.filter(f => f.required && !mapa[f.key]).map(f => f.label);
-      if (faltando.length) { alert('Mapeie os campos obrigatórios: ' + faltando.join(', ')); return; }
+      if (faltando.length) { LW.mostrarAlerta('Mapeie os campos obrigatórios: ' + faltando.join(', '), { tipo: 'aviso' }); return; }
 
       const erros = [];
       if (_importDestino === 'relatorio_injecao') {
@@ -3045,19 +3047,23 @@
         _cfgAtalhoCapturando = null;
         if (!resultado) { cfgRenderAtalhos(); return; } // cancelado com Esc
         if (resultado.erro) {
-          alert(resultado.erro);
+          LW.mostrarAlerta(resultado.erro, { tipo: 'erro' });
           cfgRenderAtalhos();
           return;
         }
         const r = LWKeyboard.definirAtalho(id, resultado.combo);
-        if (!r.ok) alert(r.erro);
+        if (!r.ok) LW.mostrarAlerta(r.erro, { tipo: 'erro' });
         cfgRenderAtalhos();
       });
     }
 
-    function cfgResetarAtalhos() {
+    async function cfgResetarAtalhos() {
       if (typeof LWKeyboard === 'undefined') return;
-      if (!confirm('Restaurar todos os atalhos de teclado pro padrão de fábrica? Isso desfaz qualquer personalização feita neste navegador.')) return;
+      const confirmou = await LW.mostrarConfirmacao(
+        'Isso desfaz qualquer personalização feita neste navegador.',
+        { titulo: 'Restaurar atalhos para o padrão de fábrica?', textoConfirmar: 'Restaurar Padrões', icon: '↺' }
+      );
+      if (!confirmou) return;
       LWKeyboard.resetarAtalhos();
       cfgRenderAtalhos();
     }
@@ -3112,10 +3118,10 @@
       const label = inputLabel.value.trim();
       const bercos = parseInt(inputBercos.value);
 
-      if (!id) return alert('Digite o ID da bateria (ex: B14).');
-      if (!label) return alert('Digite a dimensão da bateria (ex: 15 cm).');
-      if (!bercos || bercos < 1) return alert('Digite a quantidade de berços válida.');
-      if (_cfgDados.baterias.find(b => b.id === id)) return alert('Este ID de bateria já existe.');
+      if (!id) { LW.mostrarAlerta('Digite o ID da bateria (ex: B14).', { tipo: 'aviso' }); return; }
+      if (!label) { LW.mostrarAlerta('Digite a dimensão da bateria (ex: 15 cm).', { tipo: 'aviso' }); return; }
+      if (!bercos || bercos < 1) { LW.mostrarAlerta('Digite a quantidade de berços válida.', { tipo: 'aviso' }); return; }
+      if (_cfgDados.baterias.find(b => b.id === id)) { LW.mostrarAlerta('Este ID de bateria já existe.', { tipo: 'aviso' }); return; }
 
       _cfgDados.baterias.push({ id, label, bercos });
       inputId.value = '';
@@ -3124,8 +3130,12 @@
       cfgRenderTudo();
     }
 
-    function cfgRemoverBateria(i) {
-      if (!confirm(`Remover a bateria "${_cfgDados.baterias[i].id}"?`)) return;
+    async function cfgRemoverBateria(i) {
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover a bateria "${_cfgDados.baterias[i].id}"?`,
+        { titulo: 'Remover bateria', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
       _cfgDados.baterias.splice(i, 1);
       cfgRenderTudo();
     }
@@ -3195,16 +3205,18 @@
       const qtdCimenticia = parseInt(document.getElementById('cfg-mont-simples-cimenticia-qtd').value);
       const cor = document.getElementById('cfg-mont-simples-cor').value || LW.gerarProximaCorDisponivel([]);
 
-      if (!label) return alert('Digite um label para o tipo de montagem.');
-      if (!tipo) return alert('Digite o tipo de montagem (ex: 2p, sp, 3t).');
-      if (!/^[a-z0-9]+$/.test(tipo)) return alert('Use apenas letras e números no tipo (ex: 2p, sp, 3t).');
-      if (![1, 2].includes(paineisPorBerco)) return alert('Painéis/berço deve ser 1 ou 2 — limitação física da operação.');
+      if (!label) { LW.mostrarAlerta('Digite um label para o tipo de montagem.', { tipo: 'aviso' }); return; }
+      if (!tipo) { LW.mostrarAlerta('Digite o tipo de montagem (ex: 2p, sp, 3t).', { tipo: 'aviso' }); return; }
+      if (!/^[a-z0-9]+$/.test(tipo)) { LW.mostrarAlerta('Use apenas letras e números no tipo (ex: 2p, sp, 3t).', { tipo: 'aviso' }); return; }
+      if (![1, 2].includes(paineisPorBerco)) { LW.mostrarAlerta('Painéis/berço deve ser 1 ou 2 — limitação física da operação.', { tipo: 'aviso' }); return; }
       if (levaCimenticia && (!Number.isFinite(qtdCimenticia) || qtdCimenticia < 1)) {
-        return alert('Digite a quantidade de cimentícias por painel.');
+        LW.mostrarAlerta('Digite a quantidade de cimentícias por painel.', { tipo: 'aviso' });
+        return;
       }
-      if (_cfgDados.montagens.find(m => m.label === label)) return alert('Este label já existe.');
+      if (_cfgDados.montagens.find(m => m.label === label)) { LW.mostrarAlerta('Este label já existe.', { tipo: 'aviso' }); return; }
       if (_cfgDados.montagens.find(m => m.modo === 'simples' && m.tipo === tipo)) {
-        return alert('Já existe um tipo simples com esse código de tipo.');
+        LW.mostrarAlerta('Já existe um tipo simples com esse código de tipo.', { tipo: 'aviso' });
+        return;
       }
 
       _cfgDados.montagens.push({
@@ -3230,10 +3242,10 @@
       const tipo1 = document.getElementById('cfg-mont-hibrida-tipo1').value;
       const tipo2 = document.getElementById('cfg-mont-hibrida-tipo2').value;
 
-      if (!label) return alert('Digite um label para o tipo híbrido.');
-      if (!tipo1 || !tipo2) return alert('Escolha os dois tipos que compõem a montagem híbrida.');
-      if (tipo1 === tipo2) return alert('Escolha dois tipos diferentes.');
-      if (_cfgDados.montagens.find(m => m.label === label)) return alert('Este label já existe.');
+      if (!label) { LW.mostrarAlerta('Digite um label para o tipo híbrido.', { tipo: 'aviso' }); return; }
+      if (!tipo1 || !tipo2) { LW.mostrarAlerta('Escolha os dois tipos que compõem a montagem híbrida.', { tipo: 'aviso' }); return; }
+      if (tipo1 === tipo2) { LW.mostrarAlerta('Escolha dois tipos diferentes.', { tipo: 'aviso' }); return; }
+      if (_cfgDados.montagens.find(m => m.label === label)) { LW.mostrarAlerta('Este label já existe.', { tipo: 'aviso' }); return; }
 
       _cfgDados.montagens.push({ label, modo: 'hibrida', tipos: [tipo1, tipo2] });
 
@@ -3241,24 +3253,29 @@
       cfgRenderTudo();
     }
 
-    function cfgRemoverMontagem(i) {
+    async function cfgRemoverMontagem(i) {
       const m = _cfgDados.montagens[i];
       // Impede remover um tipo simples que está em uso por uma híbrida — ela
       // ficaria referenciando um tipo que não existe mais.
       if (m.modo === 'simples') {
         const usadoEm = _cfgDados.montagens.filter(o => o.modo === 'hibrida' && o.tipos.includes(m.tipo));
         if (usadoEm.length) {
-          return alert(`Não é possível remover "${m.label}" — está em uso pela(s) montagem(ns) híbrida(s): ${usadoEm.map(o => o.label).join(', ')}.`);
+          LW.mostrarAlerta(`Não é possível remover "${m.label}" — está em uso pela(s) montagem(ns) híbrida(s): ${usadoEm.map(o => o.label).join(', ')}.`, { tipo: 'aviso' });
+          return;
         }
       }
-      if (!confirm(`Remover o tipo "${m.label}"?`)) return;
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover o tipo "${m.label}"?`,
+        { titulo: 'Remover tipo de montagem', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
       _cfgDados.montagens.splice(i, 1);
       cfgRenderTudo();
     }
 
     async function cfgSalvar() {
-      if (!_cfgDados.baterias.length) return alert('Adicione ao menos uma bateria.');
-      if (!_cfgDados.montagens.length) return alert('Adicione ao menos um tipo de montagem.');
+      if (!_cfgDados.baterias.length) { LW.mostrarAlerta('Adicione ao menos uma bateria.', { tipo: 'aviso' }); return; }
+      if (!_cfgDados.montagens.length) { LW.mostrarAlerta('Adicione ao menos um tipo de montagem.', { tipo: 'aviso' }); return; }
 
       // Nova estrutura: dimensão e berços ficam dentro de cada bateria
       // Reconstruímos DIMENSAO_OPTS a partir das baterias (para retrocompatibilidade)
@@ -3288,7 +3305,8 @@
         const result = await res.json();
         if (!result.ok) throw new Error(result.erro);
       } catch (e) {
-        return alert('Erro ao salvar: ' + e.message);
+        LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
+        return;
       }
 
       // Atualiza variáveis em memória imediatamente (sem reload)
@@ -3297,7 +3315,7 @@
       LW.aplicarTiposMontagemEmMemoria(novasOpcoesMontagem);
 
       fecharConfig();
-      alert('Configurações salvas com sucesso!');
+      LW.mostrarAlerta('Configurações salvas com sucesso!', { tipo: 'sucesso' });
     }
 
     // ---- Editar Operação (admin) — Registro de Baterias ----
@@ -3407,9 +3425,9 @@
         ? document.getElementById('eo-motivo-atraso').value.trim()
         : (_eoRegistroOriginal.motivo_atraso || '');
 
-      if (!idBateria) return alert('Selecione a bateria.');
-      if (!tipoMontagem) return alert('Selecione o tipo de montagem.');
-      if (!bercos || bercos < 1) return alert('Informe a quantidade de berços reais.');
+      if (!idBateria) { LW.mostrarAlerta('Selecione a bateria.', { tipo: 'aviso' }); return; }
+      if (!tipoMontagem) { LW.mostrarAlerta('Selecione o tipo de montagem.', { tipo: 'aviso' }); return; }
+      if (!bercos || bercos < 1) { LW.mostrarAlerta('Informe a quantidade de berços reais.', { tipo: 'aviso' }); return; }
 
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
       const calc = LW.calcPaineis(tipoMontagem, bercos);
@@ -3438,9 +3456,14 @@
       });
 
       if (!diff.length) {
-        return alert('Nenhuma alteração foi feita.');
+        LW.mostrarAlerta('Nenhuma alteração foi feita.', { tipo: 'aviso' });
+        return;
       }
-      if (!confirm(`Confirma a alteração de ${diff.length} campo(s) nesta operação?`)) return;
+      const confirmouEdicao = await LW.mostrarConfirmacao(
+        `Confirma a alteração de ${diff.length} campo(s) nesta operação?`,
+        { titulo: 'Confirmar edição', textoConfirmar: 'Salvar Alteração', icon: '✏️' }
+      );
+      if (!confirmouEdicao) return;
 
       const btn = document.getElementById('eo-btn-salvar');
       const textoOriginal = btn.textContent;
@@ -3458,7 +3481,7 @@
 
         fecharEdicaoOperacao();
         await LWDash.initRegistro();
-        alert('Operação atualizada com sucesso!');
+        LW.mostrarAlerta('Operação atualizada com sucesso!', { tipo: 'sucesso' });
       } catch (e) {
         const erroEl = document.getElementById('eo-erro');
         erroEl.textContent = e.message;

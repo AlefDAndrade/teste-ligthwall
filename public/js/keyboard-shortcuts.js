@@ -364,7 +364,7 @@
     }
   }
 
-  function _startInjectionTimer() {
+  async function _startInjectionTimer() {
     const active = document.querySelector('.main.active');
     const pageId = active?.id?.replace('page-', '');
 
@@ -381,12 +381,13 @@
       return;
     }
 
-    // Se o botão de finalizar estiver habilitado (injeção em curso), finaliza
-    // — finalizarInjecao() pede confirmação antes de agir; só mostra o toast
-    // de sucesso se o usuário realmente confirmou (botão fica desabilitado).
-    if (btnFinalizar && !btnFinalizar.disabled) {
-      btnFinalizar.click();
-      if (btnFinalizar.disabled) {
+    // Se o botão de finalizar estiver habilitado (injeção em curso), finaliza.
+    // finalizarInjecao() pede confirmação num modal (assíncrono) — por isso
+    // chamamos a função direto via LWOp (em vez de simular clique no botão)
+    // e aguardamos o resultado, só mostrando o toast se foi mesmo confirmado.
+    if (btnFinalizar && !btnFinalizar.disabled && typeof LWOp !== 'undefined' && LWOp.finalizarInjecao) {
+      const finalizou = await LWOp.finalizarInjecao();
+      if (finalizou) {
         _showToast('⏹', 'Injeção finalizada');
       }
       return;
@@ -399,7 +400,7 @@
    * Reseta a operação atual na página de operação.
    * Funciona apenas se o usuário estiver na página 'operacao'.
    */
-  function _resetOperation() {
+  async function _resetOperation() {
     const active = document.querySelector('.main.active');
     const pageId = active?.id?.replace('page-', '');
 
@@ -410,9 +411,11 @@
     }
 
     const btnResetar = document.getElementById('btn-resetar');
-    if (btnResetar && !btnResetar.disabled) {
-      btnResetar.click();
-      _showToast('↺', 'Operação resetada');
+    if (btnResetar && !btnResetar.disabled && typeof LWOp !== 'undefined' && LWOp.resetarOperacao) {
+      const resetou = await LWOp.resetarOperacao();
+      if (resetou) {
+        _showToast('↺', 'Operação resetada');
+      }
     } else {
       _showToast('↺', 'Resetar não disponível');
     }

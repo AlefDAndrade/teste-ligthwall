@@ -222,12 +222,14 @@
     updatePendencias();
   }
 
-  function finalizarInjecao() {
-    if (state.status !== 'running') return;
+  async function finalizarInjecao() {
+    if (state.status !== 'running') return false;
 
-    if (!confirm('Encerrar a injeção agora?\n\nIsso vai parar o cronômetro e travar os campos de tempo desta operação.')) {
-      return;
-    }
+    const confirmou = await LW.mostrarConfirmacao(
+      'Isso vai parar o cronômetro e travar os campos de tempo desta operação.',
+      { titulo: 'Encerrar a injeção agora?', textoConfirmar: 'Encerrar Injeção', icon: '⏹' }
+    );
+    if (!confirmou) return false;
 
     state.fim = nowBrasilia().toISOString();
     state.status = 'finished';
@@ -250,6 +252,7 @@
     persist();
     updateStatusBanner();
     updatePendencias();
+    return true;
   }
 
   function startTimerUI() {
@@ -1179,7 +1182,7 @@
           _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos, fullRecord);
           return;
         }
-        alert('Erro ao salvar operação: ' + err.message);
+        LW.mostrarAlerta('Erro ao salvar operação: ' + err.message, { tipo: 'erro' });
       });
   }
 
@@ -1245,12 +1248,17 @@
     modal.style.display = 'flex';
   }
 
-  function resetarOperacao() {
-    if (!confirm('Limpar todos os dados da operação atual?')) return;
+  async function resetarOperacao() {
+    const confirmou = await LW.mostrarConfirmacao(
+      'Isso apaga turno, traços, horários e tudo mais preenchido nesta tela.',
+      { titulo: 'Limpar todos os dados da operação atual?', textoConfirmar: 'Limpar Tudo', tipo: 'perigo', icon: '🗑️' }
+    );
+    if (!confirmou) return false;
     clearInterval(timerInterval);
     LW.clearOperacaoAtual();
     resetState();
     renderAll();
+    return true;
   }
 
   function resetState() {
@@ -1331,6 +1339,9 @@
   // ---- Public API ----
   window.LWOp = {
     init,
+    iniciarInjecao,
+    finalizarInjecao,
+    resetarOperacao,
     selectTraco(i) {
       expandedTracoIndex = i; // Define o traço ativo e foca na visualização exclusiva
       renderTracos();

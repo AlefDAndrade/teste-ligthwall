@@ -1179,7 +1179,7 @@
       const el = document.getElementById('exp-col-' + i);
       return el && el.checked;
     });
-    if (!colsSel.length) { alert('Selecione ao menos uma coluna.'); return; }
+    if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
     gerarDownloadXLSX(dados, colsSel, sufixo);
     fecharExportModal();
   }
