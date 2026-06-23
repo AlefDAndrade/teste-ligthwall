@@ -224,6 +224,11 @@
 
   function finalizarInjecao() {
     if (state.status !== 'running') return;
+
+    if (!confirm('Encerrar a injeção agora?\n\nIsso vai parar o cronômetro e travar os campos de tempo desta operação.')) {
+      return;
+    }
+
     state.fim = nowBrasilia().toISOString();
     state.status = 'finished';
     clearInterval(timerInterval);
@@ -449,7 +454,9 @@
         : { original: '', ajustes: [] },
       densidade: (sobra.densidade !== undefined && sobra.densidade !== null) ? sobra.densidade : '',
       flow: (sobra.flow !== undefined && sobra.flow !== null) ? sobra.flow : '',
-      obs: receita.obs || '',
+      // Observações são específicas de cada bateria/operação — não devem
+      // ser herdadas da operação de origem da sobra; começa sempre vazia.
+      obs: '',
       silo: receita.silo || '',
       expansao: receita.expansao || '',
       densidadeEPS: receita.densidadeEPS || '',

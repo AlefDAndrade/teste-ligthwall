@@ -382,9 +382,13 @@
     }
 
     // Se o botão de finalizar estiver habilitado (injeção em curso), finaliza
+    // — finalizarInjecao() pede confirmação antes de agir; só mostra o toast
+    // de sucesso se o usuário realmente confirmou (botão fica desabilitado).
     if (btnFinalizar && !btnFinalizar.disabled) {
       btnFinalizar.click();
-      _showToast('⏹', 'Injeção finalizada');
+      if (btnFinalizar.disabled) {
+        _showToast('⏹', 'Injeção finalizada');
+      }
       return;
     }
 
