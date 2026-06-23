@@ -179,7 +179,33 @@
       return true;
     });
 
-    return { historico, tracos };
+    // Paradas não têm turno/bateria associados (só início/fim) — filtramos
+    // só por data. Usadas apenas pra DETALHAR de onde vem o tempo perdido;
+    // não entram na conta de Disponibilidade (ver _resumoParadas).
+    let paradas = await fetch('db/paradas.json').then(r => r.ok ? r.json() : []).catch(() => []);
+    if (!Array.isArray(paradas)) paradas = [];
+    paradas = paradas.filter(p => {
+      const data = (p.inicio || '').slice(0, 10);
+      if (filtros.dataInicio && data < filtros.dataInicio) return false;
+      if (filtros.dataFim && data > filtros.dataFim) return false;
+      return true;
+    });
+
+    return { historico, tracos, paradas };
+  }
+
+  // Soma o tempo de paradas registradas no período, separado por
+  // classificação — usado só pra EXIBIR de onde vem o tempo sem produção,
+  // sem alterar o cálculo de Disponibilidade (que continua sendo só tempo
+  // produzindo ÷ tempo planejado, igual sempre foi).
+  function _resumoParadas(paradas) {
+    let planejada = 0, naoPlanejada = 0;
+    paradas.forEach(p => {
+      const min = parseFloat(p.duracao_min) || 0;
+      if (p.classificacao === 'Planejada') planejada += min;
+      else naoPlanejada += min;
+    });
+    return { planejada, naoPlanejada, n: paradas.length };
   }
 
   function _lerFiltros() {
@@ -354,6 +380,60 @@
     `).join('');
   }
 
+  // ── Render: barra de composição do tempo planejado (Produzindo / Parada
+  // Planejada / Parada Não Planejada / Sem registro) — só ilustrativo, não
+  // realimenta a fórmula de Disponibilidade. ─────────────────────────────────
+  function _renderParadasBreakdown(disp, resumo) {
+    const elBar = document.getElementById('oee-paradas-bar');
+    const elLegenda = document.getElementById('oee-paradas-legenda');
+    const elVazio = document.getElementById('oee-paradas-vazio');
+    if (!elBar || !elLegenda) return;
+
+    const planejadoTotal = disp.tempoPlanejadoTotal;
+    if (!planejadoTotal) {
+      elBar.innerHTML = '';
+      elLegenda.innerHTML = '';
+      if (elVazio) elVazio.style.display = 'block';
+      return;
+    }
+    if (elVazio) elVazio.style.display = 'none';
+
+    const produzindo = disp.tempoTotalProduzindo;
+    const { planejada, naoPlanejada, n } = resumo;
+    // "Sem registro": o que resta do orçamento do turno que não foi produção
+    // nem parada lançada (pode ser atraso não registrado, etc.). Nunca
+    // negativo — se as paradas registradas somarem mais que o próprio
+    // orçamento (ex: parada lançada fora da janela das operações), zeramos
+    // em vez de mostrar um número sem sentido.
+    const semRegistro = Math.max(0, planejadoTotal - produzindo - planejada - naoPlanejada);
+
+    const segs = [
+      { label: 'Produzindo', min: produzindo, cor: C.green },
+      { label: 'Parada Planejada', min: planejada, cor: C.blue },
+      { label: 'Parada Não Planejada', min: naoPlanejada, cor: C.red },
+      { label: 'Sem registro', min: semRegistro, cor: C.border },
+    ];
+
+    elBar.innerHTML = segs.map(s => {
+      const pct = (s.min / planejadoTotal) * 100;
+      if (pct <= 0) return '';
+      return `<div style="height:100%;width:${pct}%;background:${s.cor}" title="${s.label}: ${_fmtMin(s.min)} (${_fmtPct(pct)})"></div>`;
+    }).join('');
+
+    elLegenda.innerHTML = segs.map(s => {
+      const pct = (s.min / planejadoTotal) * 100;
+      return `
+      <div style="display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--text-2)">
+        <span style="width:10px;height:10px;border-radius:3px;background:${s.cor};display:inline-block;flex-shrink:0"></span>
+        ${s.label}: <strong style="color:var(--text)">${_fmtMin(s.min)}</strong>
+        <span style="color:var(--text-3)">(${_fmtPct(pct)})</span>
+      </div>`;
+    }).join('') + `
+      <div style="font-size:.74rem;color:var(--text-3);width:100%;margin-top:2px">
+        ${n} parada${n !== 1 ? 's' : ''} registrada${n !== 1 ? 's' : ''} no período.
+      </div>`;
+  }
+
   // ── Orquestração ─────────────────────────────────────────────────────────
   async function render() {
     const loading = document.getElementById('oee-loading');
@@ -364,7 +444,7 @@
     if (content) content.style.display = 'none';
 
     const filtros = _lerFiltros();
-    const { historico, tracos } = await _buscarDados(filtros);
+    const { historico, tracos, paradas } = await _buscarDados(filtros);
 
     if (loading) loading.style.display = 'none';
 
@@ -380,6 +460,7 @@
 
     _renderKPIs(disp, perf, qual);
     _renderWaterfall(disp, perf, qual);
+    _renderParadasBreakdown(disp, _resumoParadas(paradas));
 
     const porTurno = calcularPorTurnoInstancia(historico, tracos);
     const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'ºT').replace('º TURNO', 'ºT')}`);
@@ -411,6 +492,7 @@
     _calcularQualidade: calcularQualidade,
     _calcularPorTurnoInstancia: calcularPorTurnoInstancia,
     _calcularPorGrupo: calcularPorGrupo,
+    _resumoParadas,
   };
 
 })();

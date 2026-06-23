@@ -282,7 +282,9 @@
       const badge = p.classificacao === 'Planejada'
         ? `<span class="badge badge-blue">Planejada</span>`
         : `<span class="badge badge-red">Não Planejada</span>`;
-      const canEdit = AdminAuth.isAdmin();
+      // Registro de Paradas não é uma feature exclusiva de administrador —
+      // qualquer perfil que acesse esta página pode editar/excluir registros.
+      const canEdit = true;
       const btns = canEdit
         ? `<button class="btn btn-ghost btn-sm" onclick="LWParadas.editarParada('${p.id}')">✏</button>
            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="LWParadas.confirmarExclusao('${p.id}')">✕</button>`
