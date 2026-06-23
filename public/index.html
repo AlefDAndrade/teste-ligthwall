@@ -3309,13 +3309,15 @@
         return;
       }
 
-      // Atualiza variáveis em memória imediatamente (sem reload)
-      LW.BATERIA_IDS.length = 0;
-      _cfgDados.baterias.forEach(b => LW.BATERIA_IDS.push(b));
-      LW.aplicarTiposMontagemEmMemoria(novasOpcoesMontagem);
-
+      // Recarrega a página depois de salvar — assim os selects de bateria e
+      // tipo de montagem na tela de Registrar Operação (preenchidos só na
+      // inicialização) já aparecem atualizados, sem precisar de F5 manual.
       fecharConfig();
-      LW.mostrarAlerta('Configurações salvas com sucesso!', { tipo: 'sucesso' });
+      await LW.mostrarAlerta(
+        'Configurações salvas com sucesso!',
+        { tipo: 'sucesso' }
+      );
+      window.location.reload();
     }
 
     // ---- Editar Operação (admin) — Registro de Baterias ----
