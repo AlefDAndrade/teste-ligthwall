@@ -48,13 +48,12 @@ public/
     ├── sobra.json                # traço com sobra ativa entre operações
     ├── paradas.json              # paradas registradas (planejadas/não planejadas)
     ├── operacao_andamento.json    # snapshot da operação em andamento agora (live), ou null
-    ├── acessos.json               # log de acesso (ip, deviceId, rota, user-agent) — ver seção dedicada
     └── contador_tracos.json      # contador diário de traços (reset automático)
 server.js               # servidor HTTP + rotas da API
 package.json
 ```
 
-`backups-seguranca/` e `backups-automaticos/` são criadas automaticamente pelo servidor (ver seção *Backup e Restauração*) e nunca devem ser versionadas — já estão no `.gitignore`.
+`backups-seguranca/`, `backups-automaticos/` e `logs/` são criadas automaticamente pelo servidor (ver seções *Backup e Restauração* e *Log de Acesso*, abaixo) e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta (diferente dos arquivos de `public/db/` — ver "Limitações conhecidas").
 
 ## Perfis de usuário
 
@@ -164,7 +163,7 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 
 ## Log de Acesso
 
-Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `public/db/acessos.json`:
+Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `logs/acessos.json`:
 
 ```json
 {
@@ -178,8 +177,11 @@ Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', 
 
 - `ip` e `userAgent` vêm do próprio request, capturados no servidor (fontes confiáveis).
 - `deviceId` é gerado uma única vez por navegador/computador e persistido em `localStorage` (`lw_device_id`) — não é um login de verdade, mas é o que dá pra usar como identidade estável de "qual aparelho é qual" sem exigir cadastro.
+- Fica em `logs/`, **fora** de `public/` — de propósito: arquivos em `public/db/` são servidos como arquivo estático comum (ver "Limitações conhecidas"), e isso exporia o IP de quem acessa pra qualquer um que soubesse a URL. Em `logs/`, não existe rota nenhuma que sirva esse arquivo — só o próprio servidor lê/escreve nele direto no disco.
+- O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
 - Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
 - Pensado como base pra, no futuro, restringir o registro de operação a um único computador (consultando o `deviceId` mais recente antes de liberar a tela) — o que, nesse cenário, também simplificaria a Operação em Andamento (sem mais de um cliente "gravando" ao mesmo tempo, o eco entre abas deixa de ser uma preocupação).
+- Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
 
 **Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
 
@@ -220,7 +222,7 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
 | `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
-| `/registrar-acesso` | POST | Grava uma entrada em `acessos.json` (log de acesso) |
+| `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |

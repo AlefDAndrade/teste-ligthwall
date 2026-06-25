@@ -92,7 +92,6 @@ const VALIDADORES_BACKUP_DADOS = {
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
   'ajustes_tracos.json':    v => Array.isArray(v),
-  'acessos.json':            v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -109,7 +108,6 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'sobra.json': {},
   'paradas.json': [],
   'ajustes_tracos.json': [],
-  'acessos.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -314,7 +312,14 @@ function salvarOperacaoAndamentoNoDisco(dados) {
 // Base pra, no futuro, restringir quem pode registrar operação a um único
 // computador. Cresce sem limite por enquanto — sem rotina de limpeza
 // automática (mesma ressalva já documentada pra backups-seguranca/).
-const ACESSOS_PATH = path.join(DB_DIR, 'acessos.json');
+//
+// Fica em logs/, FORA de public/ — diferente dos arquivos de public/db/
+// (que são servidos como arquivo estático comum, ex: /db/security.json
+// funciona por URL direta — ver "Limitações conhecidas" no README), aqui
+// o IP de quem acessa não pode ficar visível pra qualquer um que souber a
+// URL. Pasta criada na hora (mkdirSync) se ainda não existir.
+const DIR_LOGS = path.join(ROOT_DIR, 'logs');
+const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 
 const server = http.createServer((req, res) => {
 
@@ -763,6 +768,7 @@ const server = http.createServer((req, res) => {
         if (!Array.isArray(acessos)) acessos = [];
         acessos.push(entrada);
 
+        fs.mkdirSync(DIR_LOGS, { recursive: true });
         const tmp = ACESSOS_PATH + '.tmp';
         fs.writeFileSync(tmp, JSON.stringify(acessos, null, 2), 'utf8');
         fs.renameSync(tmp, ACESSOS_PATH);

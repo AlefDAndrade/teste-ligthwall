@@ -1095,7 +1095,6 @@ const ARQUIVOS_BACKUP_DB = [
   'relatorio_injecao.json',
   'security.json',
   'sobra.json',
-  'acessos.json',
 ];
 
 /**
