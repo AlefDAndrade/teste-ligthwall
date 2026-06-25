@@ -6,7 +6,7 @@ const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
-const PORT = 5000;
+const PORT = 3000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -92,6 +92,7 @@ const VALIDADORES_BACKUP_DADOS = {
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
   'ajustes_tracos.json':    v => Array.isArray(v),
+  'acessos.json':            v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -108,6 +109,7 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'sobra.json': {},
   'paradas.json': [],
   'ajustes_tracos.json': [],
+  'acessos.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -303,6 +305,16 @@ function salvarOperacaoAndamentoNoDisco(dados) {
   fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), 'utf8');
   fs.renameSync(tmp, OPERACAO_ANDAMENTO_PATH);
 }
+
+// ─── LOG DE ACESSO ──────────────────────────────────────────────────────────
+// Registra cada acesso a rotas "sensíveis" do app (por enquanto, só
+// "Registrar Operação" — ver POST /registrar-acesso, mais abaixo) com
+// ip + user-agent (capturados aqui, de fontes confiáveis do próprio
+// request) e deviceId (gerado e persistido no navegador de quem acessou).
+// Base pra, no futuro, restringir quem pode registrar operação a um único
+// computador. Cresce sem limite por enquanto — sem rotina de limpeza
+// automática (mesma ressalva já documentada pra backups-seguranca/).
+const ACESSOS_PATH = path.join(DB_DIR, 'acessos.json');
 
 const server = http.createServer((req, res) => {
 
@@ -703,6 +715,57 @@ const server = http.createServer((req, res) => {
 
         salvarOperacaoAndamentoNoDisco(dadosFinal);
         broadcastOperacaoAndamento(dadosFinal, clientId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── LOG DE ACESSO: registra ip + user-agent (do próprio request,
+  // confiáveis) + deviceId (mandado pelo navegador) toda vez que a rota
+  // informada é acessada. "rota" é livre (ex: '/operacao'), mas por
+  // enquanto só a tela "Registrar Operação" chama isso (ver showPage() em
+  // index.html) — é o primeiro passo pra, no futuro, restringir essa tela
+  // a um único computador.
+  if (req.method === 'POST' && urlPath === '/registrar-acesso') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('Payload inválido.');
+        }
+        const rota = typeof payload.rota === 'string' ? payload.rota : '';
+        if (!rota) throw new Error('Payload inválido: "rota" obrigatória.');
+        const deviceId = typeof payload.deviceId === 'string' ? payload.deviceId : '';
+
+        // IPv4 mapeado em IPv6 (ex: "::ffff:192.168.1.10") vem assim por
+        // padrão do Node — remove o prefixo pra guardar só o IP "puro".
+        const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+        const userAgent = req.headers['user-agent'] || '';
+
+        const entrada = {
+          ip,
+          deviceId,
+          data: new Date().toISOString(),
+          rota,
+          userAgent,
+        };
+
+        let acessos = [];
+        try { acessos = JSON.parse(fs.readFileSync(ACESSOS_PATH, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(acessos)) acessos = [];
+        acessos.push(entrada);
+
+        const tmp = ACESSOS_PATH + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(acessos, null, 2), 'utf8');
+        fs.renameSync(tmp, ACESSOS_PATH);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1149,4 +1212,4 @@ server.listen(PORT, () => {
   // servidor subir depois das 23:50 de algum dia.
   setInterval(executarBackupAutomaticoSeNecessario, 60 * 1000);
   executarBackupAutomaticoSeNecessario();
-});""
+});

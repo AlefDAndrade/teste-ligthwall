@@ -371,6 +371,53 @@ function clearOperacaoAtual() {
 }
 
 // ============================================================
+//  LOG DE ACESSO
+//
+//  Registra no servidor cada acesso a rotas "sensíveis" do app — por
+//  enquanto, só "Registrar Operação" (ver showPage() em index.html). Base
+//  pra, no futuro, restringir quem pode registrar operação a um único
+//  computador. ip + user-agent são capturados pelo SERVIDOR (fontes
+//  confiáveis); deviceId é gerado aqui e persistido neste navegador — os
+//  dois juntos identificam "qual computador é qual" sem exigir login real.
+// ============================================================
+
+const DB_KEY_DEVICE_ID = 'lw_device_id';
+
+/**
+ * ID estável deste navegador/computador — gerado uma única vez e
+ * persistido em localStorage (sobrevive a reabrir o navegador; some se os
+ * dados do navegador forem limpos).
+ */
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DB_KEY_DEVICE_ID);
+    if (!id) {
+      id = 'dev_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      localStorage.setItem(DB_KEY_DEVICE_ID, id);
+    }
+    return id;
+  } catch (_) {
+    return 'dev_sem_localstorage'; // navegador sem localStorage disponível
+  }
+}
+
+/**
+ * Registra um acesso à rota informada — melhor esforço: nunca lança erro
+ * pra quem chamou (sem conexão, simplesmente não loga; não é crítico a
+ * ponto de travar a navegação por isso).
+ * @param {string} rota - ex: '/operacao'
+ */
+async function registrarAcesso(rota) {
+  try {
+    await fetch('/registrar-acesso', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: getDeviceId(), rota }),
+    });
+  } catch (_) { /* sem conexão — ok, não é crítico */ }
+}
+
+// ============================================================
 //  OPERAÇÃO EM ANDAMENTO — sincronização ao vivo (WebSocket)
 //
 //  Só existe UMA operação em andamento por vez, pra fábrica inteira. Toda
@@ -1048,6 +1095,7 @@ const ARQUIVOS_BACKUP_DB = [
   'relatorio_injecao.json',
   'security.json',
   'sobra.json',
+  'acessos.json',
 ];
 
 /**
@@ -1283,6 +1331,9 @@ window.LW = {
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+
+  // Log de Acesso
+  getDeviceId, registrarAcesso,
 
   // Cálculos
   calcPaineis,

@@ -48,6 +48,7 @@ public/
     ├── sobra.json                # traço com sobra ativa entre operações
     ├── paradas.json              # paradas registradas (planejadas/não planejadas)
     ├── operacao_andamento.json    # snapshot da operação em andamento agora (live), ou null
+    ├── acessos.json               # log de acesso (ip, deviceId, rota, user-agent) — ver seção dedicada
     └── contador_tracos.json      # contador diário de traços (reset automático)
 server.js               # servidor HTTP + rotas da API
 package.json
@@ -161,6 +162,27 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 
 **Limitação conhecida**: não há "trava" de quem pode editar — se duas pessoas interagirem com a tela ao mesmo tempo em computadores diferentes, a última mudança enviada sobrescreve a anterior (mesmo modelo de confiança usado em outras telas administrativas do sistema, sem token de sessão).
 
+## Log de Acesso
+
+Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `public/db/acessos.json`:
+
+```json
+{
+  "ip": "177.x.x.x",
+  "deviceId": "dev_1782345678901_ab12cd",
+  "data": "2026-06-24T09:15:20.123Z",
+  "rota": "/operacao",
+  "userAgent": "Mozilla/5.0 (Linux; Android 13) ... Chrome/120 Mobile"
+}
+```
+
+- `ip` e `userAgent` vêm do próprio request, capturados no servidor (fontes confiáveis).
+- `deviceId` é gerado uma única vez por navegador/computador e persistido em `localStorage` (`lw_device_id`) — não é um login de verdade, mas é o que dá pra usar como identidade estável de "qual aparelho é qual" sem exigir cadastro.
+- Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
+- Pensado como base pra, no futuro, restringir o registro de operação a um único computador (consultando o `deviceId` mais recente antes de liberar a tela) — o que, nesse cenário, também simplificaria a Operação em Andamento (sem mais de um cliente "gravando" ao mesmo tempo, o eco entre abas deixa de ser uma preocupação).
+
+**Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
+
 ## OEE
 
 Definições usadas, combinadas com o time de operação:
@@ -198,6 +220,7 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
 | `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
+| `/registrar-acesso` | POST | Grava uma entrada em `acessos.json` (log de acesso) |
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |

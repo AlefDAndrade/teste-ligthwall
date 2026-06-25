@@ -1852,6 +1852,11 @@
       const role = sessionStorage.getItem('lw_role');
       const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
       if (bloqueadas.includes(pageId)) return;
+
+      // Log de acesso: registra só "Registrar Operação" por enquanto — é a
+      // base pra, no futuro, restringir essa tela a um único computador.
+      if (pageId === 'operacao') LW.registrarAcesso('/operacao');
+
       document.querySelectorAll('.main').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
