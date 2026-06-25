@@ -28,21 +28,31 @@
 
   function init() {
     // Carrega config.json e só depois inicializa a tela
-    LW.loadConfig().then(() => {
+    LW.loadConfig().then(async () => {
       populateSelects();
 
-      const saved = LW.getOperacaoAtual();
-      if (saved) {
-        state = saved;
-        expandedTracoIndex = state.tracos.length - 1; // Expande o último ao retomar
-        renderAll();
-        if (state.status === 'running') startTimerUI();
+      // Só existe UMA operação em andamento por vez, na fábrica inteira —
+      // a fonte de verdade passa a ser o servidor, não mais só o
+      // localStorage deste navegador. Sem conexão, cai pro rascunho local
+      // salvo aqui (mesmo comportamento de antes desta sincronização
+      // existir).
+      let estadoInicial;
+      try {
+        estadoInicial = await LW.getOperacaoAndamento();
+      } catch (_) {
+        estadoInicial = LW.getOperacaoAtual();
       }
+      _aplicarEstadoExterno(estadoInicial);
 
       wireEvents();
       setInterval(updateClock, 1000);
       updateClock();
       renderAll();
+      _aplicarTravaDeAutorizacao();
+
+      // A partir daqui, qualquer mudança feita em OUTRA aba/computador
+      // nesta mesma operação chega aqui ao vivo (cronômetro incluso).
+      LW.conectarOperacaoAndamento(_aplicarEstadoExterno);
 
       // Fecha popovers ao clicar fora
       document.addEventListener('click', (e) => {
@@ -51,6 +61,26 @@
         }
       });
     });
+  }
+
+  /**
+   * Aplica um estado vindo de FORA desta aba — snapshot inicial do servidor
+   * ao carregar a tela, ou atualização ao vivo via WebSocket (mudança feita
+   * por outra aba/computador). Nunca reenvia pro servidor (usa
+   * LW.saveOperacaoAtual, não persist()), senão criaria um eco infinito
+   * entre as abas.
+   */
+  function _aplicarEstadoExterno(dados) {
+    clearInterval(timerInterval);
+    if (dados) {
+      state = dados;
+    } else {
+      resetState();
+    }
+    LW.saveOperacaoAtual(state); // mantém o cache local desta aba em dia
+    expandedTracoIndex = state.tracos.length - 1;
+    renderAll();
+    if (state.status === 'running') startTimerUI();
   }
 
   // Preenche os <select> com dados do config.json
@@ -209,8 +239,42 @@
     }
   }
 
+  /**
+   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
+   * registrar, resetar) — mostra um aviso e retorna true se este
+   * dispositivo NÃO está autorizado (Configurações → Autorizados). A
+   * trava de verdade é sempre no servidor; isto aqui só dá feedback
+   * imediato (sem esperar a rede) e cobre atalhos de teclado, que não
+   * passam pelos campos/botões desabilitados na tela.
+   */
+  function _bloqueadoPorAutorizacao() {
+    if (LW.dispositivoEstaAutorizado()) return false;
+    LW.mostrarAlerta(
+      'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+      { tipo: 'erro' }
+    );
+    return true;
+  }
+
+  /**
+   * Desabilita todos os campos/botões da tela (via <fieldset disabled> —
+   * cobre até os elementos de traço, renderizados dinamicamente) e mostra
+   * o banner "só acompanhando" quando este dispositivo não está
+   * autorizado. Chamada uma vez no boot e de novo sempre que a aba
+   * Operação é aberta (a lista de autorizados pode ter mudado desde o
+   * boot — ver showPage() em index.html).
+   */
+  function _aplicarTravaDeAutorizacao() {
+    const autorizado = LW.dispositivoEstaAutorizado();
+    const fieldset = $('op-fieldset-trava');
+    if (fieldset) fieldset.disabled = !autorizado;
+    const aviso = $('op-aviso-nao-autorizado');
+    if (aviso) aviso.style.display = autorizado ? 'none' : 'flex';
+  }
+
   function iniciarInjecao() {
     if (state.status !== 'idle') return;
+    if (_bloqueadoPorAutorizacao()) return;
     state.inicio = nowBrasilia().toISOString();
     state.status = 'running';
     $('op-inicio').value = LW.formatTime(state.inicio);
@@ -224,6 +288,7 @@
 
   async function finalizarInjecao() {
     if (state.status !== 'running') return false;
+    if (_bloqueadoPorAutorizacao()) return false;
 
     const confirmou = await LW.mostrarConfirmacao(
       'Isso vai parar o cronômetro e travar os campos de tempo desta operação.',
@@ -1271,6 +1336,7 @@
   }
 
   function registrarOperacao() {
+    if (_bloqueadoPorAutorizacao()) return;
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
 
@@ -1339,6 +1405,7 @@
     ])
       .then(() => {
         LW.clearOperacaoAtual();
+        LW.enviarOperacaoAndamento(null, { imediato: true });
         clearInterval(timerInterval);
         resetState();
         renderAll();
@@ -1372,6 +1439,7 @@
     LW.enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos);
 
     LW.clearOperacaoAtual();
+    LW.enviarOperacaoAndamento(null, { imediato: true }); // melhor esforço — sem conexão, só não vai mesmo
     clearInterval(timerInterval);
     resetState();
     renderAll();
@@ -1425,6 +1493,7 @@
   }
 
   async function resetarOperacao() {
+    if (_bloqueadoPorAutorizacao()) return false;
     const confirmou = await LW.mostrarConfirmacao(
       'Isso apaga turno, traços, horários e tudo mais preenchido nesta tela.',
       { titulo: 'Limpar todos os dados da operação atual?', textoConfirmar: 'Limpar Tudo', tipo: 'perigo', icon: '🗑️' }
@@ -1432,6 +1501,7 @@
     if (!confirmou) return false;
     clearInterval(timerInterval);
     LW.clearOperacaoAtual();
+    LW.enviarOperacaoAndamento(null, { imediato: true });
     resetState();
     renderAll();
     return true;
@@ -1517,6 +1587,11 @@
 
   function persist() {
     LW.saveOperacaoAtual(state);
+    // Só transmite a partir do momento em que a operação É iniciada (status
+    // deixa de ser 'idle') — campos preenchidos ANTES de "Iniciar Injeção"
+    // continuam sendo só um rascunho local, sem aparecer pra quem mais
+    // estiver com a tela aberta.
+    LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
     updatePendencias();
   }
 
@@ -1526,6 +1601,7 @@
     iniciarInjecao,
     finalizarInjecao,
     resetarOperacao,
+    atualizarTravaAutorizacao: _aplicarTravaDeAutorizacao,
     selectTraco(i) {
       expandedTracoIndex = i; // Define o traço ativo e foca na visualização exclusiva
       renderTracos();

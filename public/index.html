@@ -296,6 +296,10 @@
       </div>
 
       <div class="page-body">
+        <div id="op-aviso-nao-autorizado" style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--accent);font-size:.85rem;align-items:center;gap:10px">
+          🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>
+        </div>
+        <fieldset id="op-fieldset-trava" style="border:none;margin:0;padding:0">
         <div class="op-layout-grid">
           <!-- Coluna Esquerda: Informações Operacionais (~60%) -->
           <div class="op-info-column">
@@ -487,6 +491,7 @@
             </button>
           </div>
         </div>
+        </fieldset>
       </div>
     </main>
 
@@ -1895,7 +1900,13 @@
 
       // Log de acesso: registra só "Registrar Operação" por enquanto — é a
       // base pra, no futuro, restringir essa tela a um único computador.
-      if (pageId === 'operacao') LW.registrarAcesso('/operacao');
+      if (pageId === 'operacao') {
+        LW.registrarAcesso('/operacao');
+        // A lista de Configurações → Autorizados pode ter mudado desde o
+        // boot da página (ex: admin acabou de autorizar este computador)
+        // — reaplica a trava na hora de abrir a aba, sem precisar de F5.
+        if (typeof LWOp !== 'undefined' && LWOp.atualizarTravaAutorizacao) LWOp.atualizarTravaAutorizacao();
+      }
 
       document.querySelectorAll('.main').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));

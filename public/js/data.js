@@ -456,6 +456,19 @@ async function registrarAcesso(rota) {
   } catch (_) { /* sem conexão — ok, não é crítico */ }
 }
 
+/**
+ * Indica se ESTE dispositivo pode controlar a operação em andamento — true
+ * se a lista de Configurações → Autorizados estiver vazia (sem restrição)
+ * ou se o deviceId deste navegador estiver nela. Usado pela tela de
+ * Registrar Operação pra desabilitar campos/botões com feedback claro —
+ * a trava de verdade é sempre no servidor (ver dispositivoAutorizado() em
+ * server.js), isto aqui é só pra UI/UX.
+ */
+function dispositivoEstaAutorizado() {
+  if (!DISPOSITIVOS_AUTORIZADOS.length) return true;
+  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
+}
+
 // ============================================================
 //  OPERAÇÃO EM ANDAMENTO — sincronização ao vivo (WebSocket)
 //
@@ -1384,6 +1397,7 @@ window.LW = {
   // Log de Acesso
   getDeviceId, registrarAcesso,
   atualizarDispositivosAutorizados,
+  dispositivoEstaAutorizado,
 
   // Cálculos
   calcPaineis,
