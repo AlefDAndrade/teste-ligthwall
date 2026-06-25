@@ -11,6 +11,13 @@ const TURNO_OPTS = ['1º TURNO', '2º TURNO', '3º TURNO'];
 const M2_POR_PAINEL = 1.83;  // m² por painel (calculado da planilha original)
 const LIMITE_INJECAO_MIN = 59;    // minutos limite antes de registrar atraso
 
+// Sentinela do tipo de montagem "Personalizado" — diferente dos outros
+// (simples/híbrida), não é um item de tipos_montagem.opcoes em config.json;
+// é uma opção fixa, sempre disponível, na tela de Registrar Operação. Ver
+// abrirGradeMontagemPersonalizada() em operacao.js e calcPaineisPersonalizado()
+// abaixo.
+const TIPO_MONTAGEM_PERSONALIZADA = 'PERSONALIZADA';
+
 // ---- Config dinâmica — carregada de config.json ----
 // Defaults vazios; preenchidos por loadConfig()
 let DIMENSAO_OPTS = [];
@@ -141,33 +148,34 @@ function corCssDoHex(hex) {
 //   gradiente (canvas não entende a string CSS linear-gradient()).
 // - Sem cor disponível (tipo desconhecido, ou híbrido cujos componentes
 //   ainda não têm cor): cinza neutro.
+// Extrai a cor (hex) de uma opção de tipos_montagem.opcoes simples — aceita
+// tanto o objeto da opção quanto o código do tipo (ex: 'sp'), nesse caso
+// procurando em MONTAGEM_OPCOES. Reaproveitado por corMontagemPorLabel()
+// (caso híbrido) e por corPorTipoSimples() (grade de Montagem Personalizada).
+function _hexDoTipoSimples(tipoOuOpcao) {
+  const op = typeof tipoOuOpcao === 'string'
+    ? (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipoOuOpcao)
+    : tipoOuOpcao;
+  if (!op) return null;
+  if (typeof op.cor === 'string' && op.cor) return op.cor;
+  if (typeof op.corHue === 'number') return hslParaHex(op.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO);
+  return null;
+}
+
 function corMontagemPorLabel(label) {
   const opcao = (MONTAGEM_OPCOES || []).find(o => o.label === label);
   if (!opcao) return _corMontagemNeutra();
 
   if (opcao.modo === 'simples') {
-    // cor (hex) é o formato atual; corHue (número) é o formato antigo,
-    // mantido só pra não perder a cor de registros salvos antes desta
-    // mudança — convertido na hora, nunca migrado silenciosamente no disco.
-    if (typeof opcao.cor === 'string' && opcao.cor) {
-      return { ...corCssDoHex(opcao.cor), hibrida: false };
-    }
-    if (typeof opcao.corHue === 'number') {
-      return { ...corCssDoHex(hslParaHex(opcao.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO)), hibrida: false };
-    }
+    const hex = _hexDoTipoSimples(opcao);
+    if (hex) return { ...corCssDoHex(hex), hibrida: false };
   }
 
   if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos) && opcao.tipos.length === 2) {
     const [op1, op2] = opcao.tipos.map(t =>
       (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === t));
-    const corDoTipo = op => {
-      if (!op) return null;
-      if (typeof op.cor === 'string' && op.cor) return op.cor;
-      if (typeof op.corHue === 'number') return hslParaHex(op.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO);
-      return null;
-    };
-    const hex1 = corDoTipo(op1);
-    const hex2 = corDoTipo(op2);
+    const hex1 = _hexDoTipoSimples(op1);
+    const hex2 = _hexDoTipoSimples(op2);
     if (hex1 && hex2) {
       const c1 = corCssDoHex(hex1);
       const c2 = corCssDoHex(hex2);
@@ -182,6 +190,17 @@ function corMontagemPorLabel(label) {
   }
 
   return _corMontagemNeutra();
+}
+
+/**
+ * Cor (mesmo formato de corMontagemPorLabel) de um tipo SIMPLES, dado o
+ * código do tipo (ex: 'sp', '2p', '3t') em vez do label — usado pela grade
+ * de Montagem Personalizada, onde cada berço guarda o tipo, não o label.
+ */
+function corPorTipoSimples(tipo) {
+  const hex = _hexDoTipoSimples(tipo);
+  if (!hex) return _corMontagemNeutra();
+  return { ...corCssDoHex(hex), hibrida: false };
 }
 
 function _corMontagemNeutra() {
@@ -664,6 +683,53 @@ function calcPaineis(tipoMontagem, bercos) {
     paineis_por_tipo,
     m2_por_tipo,
     // Aliases de compatibilidade (sempre presentes):
+    paineis_2p: paineis_por_tipo['2p'] || 0,
+    paineis_sp: paineis_por_tipo['sp'] || 0,
+    m2_2p: m2_por_tipo['2p'] || 0,
+    m2_sp: m2_por_tipo['sp'] || 0,
+  };
+}
+
+/**
+ * Equivalente a calcPaineis(), mas pra Montagem Personalizada — em vez de
+ * uma proporção fixa por berço (igual em todos os berços), cada berço tem
+ * seu próprio tipo (ou null = vazio/não usado), vindo da grade montada em
+ * Registrar Operação. Soma berço a berço e devolve EXATAMENTE o mesmo
+ * formato de calcPaineis(), pra tudo que já consome paineis_por_tipo/
+ * m2_por_tipo (OEE, Análise Operacional, exportações, Registro de
+ * Baterias) funcionar sem nenhuma mudança.
+ * @param {Array<string|null>} bercosPersonalizados - um item por berço, ex: ['sp','sp','3t',null,...]
+ */
+function calcPaineisPersonalizado(bercosPersonalizados) {
+  const paineis_por_tipo = {};
+  let paineis_total = 0;
+
+  (bercosPersonalizados || []).forEach(tipo => {
+    if (!tipo) return; // berço vazio/não usado — não soma em nenhum tipo
+    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo);
+    const porBerco = opcao ? (Number(opcao['paineis_' + tipo + '_por_berco']) || 0) : 0;
+    paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + porBerco;
+    paineis_total += porBerco;
+  });
+
+  const m2_por_tipo = {};
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    m2_por_tipo[tipo] = paineis_por_tipo[tipo] * M2_POR_PAINEL;
+  });
+  const m2_total = paineis_total * M2_POR_PAINEL;
+
+  let placas_cimenticia = 0;
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    const c = CIMENTICIA_POR_TIPO[tipo];
+    if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
+  });
+
+  return {
+    total_paineis: paineis_total,
+    m2_total,
+    placas_cimenticia,
+    paineis_por_tipo,
+    m2_por_tipo,
     paineis_2p: paineis_por_tipo['2p'] || 0,
     paineis_sp: paineis_por_tipo['sp'] || 0,
     m2_2p: m2_por_tipo['2p'] || 0,
@@ -1430,6 +1496,7 @@ window.LW = {
   hslParaHex,
   hexParaHue,
   corMontagemPorLabel,
+  corPorTipoSimples,
 
   // Storage
   getOperacaoAtual, saveOperacaoAtual, clearOperacaoAtual,
@@ -1446,6 +1513,8 @@ window.LW = {
 
   // Cálculos
   calcPaineis,
+  calcPaineisPersonalizado,
+  TIPO_MONTAGEM_PERSONALIZADA,
   normalizarPaineisRegistro,
   somarPorTipo,
   extrairComponentesMontagem,

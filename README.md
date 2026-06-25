@@ -43,7 +43,8 @@ public/
     ├── historico.json           # histórico de operações (Registro de Baterias)
     ├── historico_edicoes.json   # log de auditoria de edições em historico.json
     ├── relatorio_injecao.json   # traços injetados (Relatório de Injeção)
-    ├── ajustes_tracos.json      # auditoria de ajustes de receita por traço (insumo + tempo de batida)
+    ├── relatorio_edicoes.json   # log de auditoria de edições em relatorio_injecao.json
+    ├── ajustes_tracos.json      # ajustes de receita por traço (insumo + tempo de batida) — fonte de verdade após uma edição (ver "Editar Traço")
     ├── security.json            # hash da senha do admin + hash da chave de recuperação
     ├── sobra.json                # traço com sobra ativa entre operações
     ├── paradas.json              # paradas registradas (planejadas/não planejadas)
@@ -105,7 +106,47 @@ Cada ajuste salvo também é registrado em `ajustes_tracos.json`, indexado pelo 
 ]
 ```
 
-Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes.
+Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — **durante a operação em si**, não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes. Isso muda ao **editar** um traço já registrado — ver seção dedicada, abaixo.
+
+## Montagem Personalizada (Registrar Operação)
+
+Além de **Simples** (todos os berços do mesmo tipo) e **Híbrida** (cada berço produz painéis de 2 tipos ao mesmo tempo, numa proporção fixa), existe **🔧 Personalizado**: cada berço da bateria tem seu próprio tipo, escolhido individualmente — pra baterias que misturam tipos em quantidades quaisquer (ex: 4 berços de 3T, 5 de S/P, 7 de 2/P e o resto de 1T).
+
+Ao escolher "Personalizado" em Tipo de Montagem, abre a grade de berços:
+
+- Abas no topo com cada tipo **simples** já cadastrado em Configurações → Baterias e Montagem (cores reaproveitadas das que cada tipo já tem).
+- Selecione um tipo, depois clique nos berços (pinta na hora) ou use **"De [ ] até [ ] — Aplicar"** pra um intervalo inteiro de uma vez.
+- Berço sem tipo definido = vazio/não usado — não entra em nenhum cálculo.
+- O botão **"🔧 Configurar Berços"** (abaixo do select) reabre a grade a qualquer momento, preservando o que já foi preenchido.
+
+**Reconciliação ao Registrar**: o número de berços com tipo definido na grade precisa bater com "Berços Reais". Se não bater:
+- **Mais berços com tipo do que "Berços Reais"** diz → pergunta se houve berço não usado nesta operação. Se sim, reabre a grade só pra marcar quais (sem abas — qualquer clique ali só limpa o berço). Se não, "Berços Reais" sobe pra bater com o que está preenchido.
+- **Menos berços com tipo do que "Berços Reais"** diz → faltam berços sem tipo — reabre a grade completa (com abas) pra terminar de preencher; não dá pra registrar até completar.
+
+**Compatibilidade**: `tipo_montagem` é gravado como `"PERSONALIZADA"` (um valor fixo, pra continuar agrupando junto nos filtros/gráficos que já existem — OEE, Análise Operacional, Registro de Baterias), com o detalhe berço a berço guardado à parte em `bercos_personalizados` (um array, um item por berço, ex: `["3t","3t","sp",null,...]`). Os totais (`paineis_por_tipo`, `m2_por_tipo`, `placas_cimenticia`) são somados a partir dessa grade e ficam no mesmo formato que Simples/Híbrida já produzem — então nada no resto do sistema precisou de nenhuma mudança pra exibir/somar baterias Personalizadas corretamente (inclusive tipos novos tipo "1T", "3T": as colunas da tabela de Registro de Baterias e os gráficos por tipo já são dinâmicos).
+
+**Limitação conhecida**: o badge de "Tipo de Montagem" pra uma bateria Personalizada usa a mesma cor neutra (cinza) de um tipo desconhecido — diferente de Simples/Híbrida, que têm cor própria. O detalhe da composição (quais berços, quais tipos) só fica visível olhando o registro completo (`bercos_personalizados`), sem uma visualização dedicada ainda.
+
+## Editar Traço (Relatório de Injeção)
+
+Em **Menu → Relatório de Injeção → ✏️ Editar** (Administrador): liga um modo de edição — clicar numa linha abre a edição completa daquele traço, em vez do painel de detalhe de ajustes. Mesmo padrão visual do "✏️ Editar" do Registro de Baterias.
+
+Dá pra editar **tudo**:
+- Identificação do traço (Nº, Densidade EPS, Silo, Expansão).
+- Dados **deste uso específico** (qual bateria, berço início/fim, observações) — só a entrada clicada dentro de `ultilizado.operacao[]`; outros usos/reaproveitamentos do mesmo traço não são afetados.
+- O valor **original** (planejado) de cada um dos 5 insumos e do tempo de batida.
+- Cada **ajuste individual** já aplicado — pode editar, remover ou adicionar, exatamente como a tela de detalhe (▾) já mostra.
+- Densidade e Flow — valor original + cada leitura/remedição.
+
+**A virada importante**: a partir de uma edição por aqui, `ajustes_tracos.json` passa a ser a **fonte de verdade** dos ajustes daquele traço — os campos `*_real`/`tempo_batida` de `relatorio_injecao.json` (a parte `.ajustes[]` de cada um) são **sempre recalculados no servidor** a partir da lista de ajustes editada, nunca aceitos prontos do navegador. Isso resolve o problema de hoje (os arrays de cada campo crescem cada um por conta própria, sem nenhuma correlação entre eles, então não dá pra saber com certeza "qual ajuste de cimento aconteceu junto com qual ajuste de tempo de batida") — a partir da primeira edição de um traço, os dois arquivos passam a ficar garantidamente consistentes entre si. Densidade e Flow não entram nessa derivação (não fazem parte de `ajustes_tracos.json` — são remedições simples, com sua própria lista de leituras).
+
+Unidade: o formulário sempre usa **minutos** pro tempo de batida (igual a `ajustes_tracos.json`); o servidor converte pra **segundos** ao gravar em `relatorio_injecao.json` (igual ao fluxo ao vivo do Ajuste de Receita).
+
+Se a lista de ajustes de um campo ficar vazia depois da edição, ele volta a ser um número simples em vez de `{original, ajustes}` — mesmo formato que um traço nunca ajustado.
+
+Auditoria em `relatorio_edicoes.json` (mesmo padrão de `historico_edicoes.json`, indexado por `id_traco` + `id_operacao`) — por bloco de dados alterado (identificação, uso, originais, ajustes, densidade, flow), não campo a campo.
+
+**Limitação conhecida**: igual à Edição de Operação, não há checagem de senha no servidor pra essa rota — a trava de "só Administrador" é só na tela (mesmo modelo de confiança já usado ali).
 
 ## Configuração (Administrador)
 
@@ -251,7 +292,9 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/salvar-config` | POST | Salva `config.json` |
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) |
 | `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒🧪 |
+| `/editar-operacao` | POST | Corrige um registro existente em `historico.json` + audita em `historico_edicoes.json` |
 | `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒🧪 |
+| `/editar-traco-relatorio` | POST | Corrige um traço em `relatorio_injecao.json` + regrava `ajustes_tracos.json` pra ele + audita em `relatorio_edicoes.json` (ver *Editar Traço*) |
 | `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` 🧪 |
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
