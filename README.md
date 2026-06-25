@@ -55,6 +55,8 @@ package.json
 
 `backups-seguranca/`, `backups-automaticos/` e `logs/` são criadas automaticamente pelo servidor (ver seções *Backup e Restauração* e *Log de Acesso*, abaixo) e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta (diferente dos arquivos de `public/db/` — ver "Limitações conhecidas").
 
+`public/db/teste/` é criada automaticamente na primeira vez que o **Modo de Teste** é usado (ver seção dedicada, abaixo) — mesmos arquivos de uma operação normal (`historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json`, `sobra.json`), só que isolados, pra nunca misturar com dados reais. Também não é versionada.
+
 ## Perfis de usuário
 
 Escolhidos na tela de login (`login.html`), sem necessidade de cadastro prévio:
@@ -180,6 +182,21 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 
 **Limitação conhecida**: a trava de quem pode editar é por **dispositivo** (ver *Configurações → Autorizados*, abaixo), não por sessão — se a lista de autorizados estiver vazia (padrão), continua valendo "última mudança enviada sobrescreve a anterior", sem nenhuma trava.
 
+## Modo de Teste (Registrar Operação)
+
+Toggle **🧪 Modo de Teste**, no topo da tela (só pode trocar com a operação parada — `status: 'idle'`). Existe pra treinar/testar o fluxo inteiro de uma operação sem misturar nada com dados reais de produção.
+
+Com o toggle ativo, a operação funciona normalmente (turno, traços, Iniciar/Finalizar/Registrar, ajustes, sobra), mas:
+
+- **Tudo é salvo em `public/db/teste/`** em vez de `public/db/` — `historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json` e `sobra.json` têm uma cópia isolada lá, criada na hora que o modo de teste é usado por aquela rota pela primeira vez. **Nunca** escreve nos arquivos reais.
+- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de Autorizados/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
+- **Qualquer computador pode usar**, mesmo um que não esteja autorizado a controlar operações reais — a trava de Autorizados é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
+- **Nunca cai na fila de sincronização offline** — se a conexão cair no meio de um teste, ele simplesmente não salva (com aviso de erro), em vez de ficar pendente pra "sincronizar de verdade" depois (essa fila é só pra operações reais).
+- **Sempre desliga ao limpar/zerar a tela** — de propósito, pra nunca ficar "esquecido" ligado numa operação real futura. Pra outro teste, é só ativar de novo.
+- Visualmente reforçado em 3 lugares: o toggle fica roxo/aceso, um banner roxo no topo diz "MODO DE TESTE ATIVO", e o badge de status ao lado do cronômetro ganha um selo "🧪 TESTE".
+
+O que fazer com os dados gerados em `public/db/teste/` (limpar, conferir, descartar) é decisão de uso — o sistema só garante que eles nunca se misturam com os reais.
+
 ## Log de Acesso
 
 Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `logs/acessos.json`:
@@ -229,27 +246,28 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/verificar-senha` | POST | Confirma senha do administrador |
 | `/verificar-recovery` | POST | Confirma chave de recuperação de senha |
 | `/gerar-hash` | POST | Gera hash SHA-256 de uma senha (uso interno/setup) |
-| `/total-tracos-hoje` | GET | Contador diário de traços |
-| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒 |
+| `/total-tracos-hoje` | GET | Contador diário de traços 🧪 |
+| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒🧪 |
 | `/salvar-config` | POST | Salva `config.json` |
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) |
-| `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒 |
-| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒 |
-| `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` |
+| `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒🧪 |
+| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒🧪 |
+| `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` 🧪 |
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
-| `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
+| `/salvar-sobra` | POST | Salva/atualiza `sobra.json` 🧪 |
 | `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outro dispositivo autorizado já é o dono — ver *Autorizados*) |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
 | `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
-
-🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada).
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |
 | `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup |
 | `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
+
+- 🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada). Ignorado quando `?modoTeste=true`.
+- 🧪 = aceita `?modoTeste=true` — desvia a leitura/escrita pra `public/db/teste/` em vez de `public/db/` (ver *Modo de Teste*, acima).
 
 ## Limitações conhecidas
 

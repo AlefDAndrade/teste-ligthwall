@@ -6,7 +6,7 @@ const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
-const PORT = 5000;
+const PORT = 3000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -42,12 +42,26 @@ function horaMinutoBrasiliaServer() {
   return { hora, minuto };
 }
 
+// ─── MODO DE TESTE (Registrar Operação) ────────────────────────────────────
+// Toggle na tela "Registrar Operação" — quando ativo, a operação inteira
+// (historico, relatório de injeção, contador de traços, ajustes, sobra) é
+// salva em public/db/teste/ em vez de public/db/, pra treinar/testar o
+// fluxo sem misturar com dados reais de produção. Nunca toca nos arquivos
+// normais. Pasta criada na hora (mkdirSync) na primeira escrita.
+const DB_TESTE_DIR = path.join(DB_DIR, 'teste');
+
+function dirParaModoTeste(modoTesteFlag) {
+  if (!modoTesteFlag) return DB_DIR;
+  fs.mkdirSync(DB_TESTE_DIR, { recursive: true });
+  return DB_TESTE_DIR;
+}
+
 // Lê o contador de traços do dia, resetando automaticamente se a data mudou
 // (Brasília). NÃO incrementa — apenas garante que o objeto retornado é válido
 // para o dia de hoje. Quem chama decide se quer ler ou incrementar.
-function lerContadorTracosHoje() {
+function lerContadorTracosHoje(modoTesteFlag = false) {
   const hoje = todayBrasiliaServer();
-  const contadorPath = path.join(DB_DIR, 'contador_tracos.json');
+  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
   let contador = { data: hoje, total: 0 };
   try {
     contador = JSON.parse(fs.readFileSync(contadorPath, 'utf8'));
@@ -58,8 +72,8 @@ function lerContadorTracosHoje() {
   return contador;
 }
 
-function salvarContadorTracos(contador) {
-  const contadorPath = path.join(DB_DIR, 'contador_tracos.json');
+function salvarContadorTracos(contador, modoTesteFlag = false) {
+  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
   fs.writeFileSync(contadorPath, JSON.stringify(contador, null, 2), 'utf8');
 }
 
@@ -355,9 +369,13 @@ const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
   // ?deviceId=... — usado pra checar autorização de dispositivo em rotas
-  // que controlam a operação em andamento, ver dispositivoAutorizado()).
+  // que controlam a operação em andamento, ver dispositivoAutorizado();
+  // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
+  // ver dirParaModoTeste(), mais abaixo).
   const [urlPath, queryString] = req.url.split('?');
-  const deviceId = new URLSearchParams(queryString || '').get('deviceId') || '';
+  const queryParams = new URLSearchParams(queryString || '');
+  const deviceId = queryParams.get('deviceId') || '';
+  const modoTeste = queryParams.get('modoTeste') === 'true';
 
   // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
   // POST /verificar-senha  { senha: "texto plano" }
@@ -433,7 +451,7 @@ const server = http.createServer((req, res) => {
   // Total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura, não incrementa.
   if (req.method === 'GET' && urlPath === '/total-tracos-hoje') {
     try {
-      const contador = lerContadorTracosHoje();
+      const contador = lerContadorTracosHoje(modoTeste);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
     } catch (e) {
@@ -448,16 +466,16 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const payload = JSON.parse(body);
         const quantidade = Number(payload.quantidade);
         if (!Number.isInteger(quantidade) || quantidade < 0) {
           throw new Error('Quantidade inválida.');
         }
-        const contador = lerContadorTracosHoje();
+        const contador = lerContadorTracosHoje(modoTeste);
         contador.total += quantidade;
-        salvarContadorTracos(contador);
+        salvarContadorTracos(contador, modoTeste);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
       } catch (e) {
@@ -520,10 +538,10 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
-        const historicoPath = path.join(DB_DIR, 'historico.json');
+        const historicoPath = path.join(dirParaModoTeste(modoTeste), 'historico.json');
         let historico = [];
         try {
           historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8'));
@@ -613,10 +631,10 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const dadosRecebidos = JSON.parse(body);
-        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
+        const relatorioPath = path.join(dirParaModoTeste(modoTeste), 'relatorio_injecao.json');
 
         let relatorio = [];
         try {
@@ -720,7 +738,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const sobra = JSON.parse(body);
-        const sobraPath = path.join(DB_DIR, 'sobra.json');
+        const sobraPath = path.join(dirParaModoTeste(modoTeste), 'sobra.json');
         fs.writeFileSync(sobraPath, JSON.stringify(sobra, null, 2), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -879,7 +897,7 @@ const server = http.createServer((req, res) => {
           throw new Error('"ajuste.tempo_batida" obrigatório (minutos, > 0).');
         }
 
-        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
+        const ajustesPath = path.join(dirParaModoTeste(modoTeste), 'ajustes_tracos.json');
         let ajustesTracos = [];
         try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
         if (!Array.isArray(ajustesTracos)) ajustesTracos = [];

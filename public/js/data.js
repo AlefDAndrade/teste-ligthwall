@@ -431,6 +431,19 @@ function _comDeviceId(url) {
 }
 
 /**
+ * Anexa "&modoTeste=true" (ou "?modoTeste=true") na URL quando `modoTeste`
+ * é truthy — usado pelo Toggle de Teste em Registrar Operação pra desviar
+ * a gravação pra public/db/teste/ em vez dos arquivos reais (ver
+ * dirParaModoTeste() em server.js). Sem efeito (URL inalterada) quando
+ * `modoTeste` é falso — combina com _comDeviceId(), em qualquer ordem.
+ */
+function _comModoTeste(url, modoTeste) {
+  if (!modoTeste) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'modoTeste=true';
+}
+
+/**
  * Atualiza a cópia em memória de DISPOSITIVOS_AUTORIZADOS depois de salvar
  * com sucesso em config.json (Configurações → Autorizados) — loadConfig()
  * só roda uma vez por página (guarda em _configReady), então isto é o jeito
@@ -793,7 +806,7 @@ function formatDateTime(isoString) {
 
 // ---- Relatório de Injeção ----
 
-async function registrarRelatorioInjecao(record) {
+async function registrarRelatorioInjecao(record, modoTeste = false) {
   const linhas = (record.tracos || []).map(t => ({
     id_traco: t.id || (record.id + '_t' + t.num),
     // Estrutura exata solicitada
@@ -827,7 +840,7 @@ async function registrarRelatorioInjecao(record) {
 
   if (!linhas.length) return;
 
-  const res = await fetch(_comDeviceId('/registrar-relatorio-injecao'), {
+  const res = await fetch(_comModoTeste(_comDeviceId('/registrar-relatorio-injecao'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(linhas),
@@ -849,8 +862,8 @@ async function getRelatorioInjecao() {
 // feito num traço, guardado por id_traco em ajustes_tracos.json. A
 // numeração de "ajuste_N" é decidida no servidor (ver /registrar-ajuste-traco
 // em server.js) — não interfere no traço em si, é só o log de auditoria.
-async function registrarAjusteTraco(idTraco, ajuste) {
-  const res = await fetch('/registrar-ajuste-traco', {
+async function registrarAjusteTraco(idTraco, ajuste, modoTeste = false) {
+  const res = await fetch(_comModoTeste('/registrar-ajuste-traco', modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id_traco: idTraco, ajuste }),
@@ -877,8 +890,9 @@ async function getAjustesTracos() {
  * confirmarTracosHoje().
  * @returns {Promise<number>} total de traços confirmados hoje
  */
-async function getTotalTracosHoje() {
-  const res = await fetch('/total-tracos-hoje?_=' + Date.now()); // evita cache
+async function getTotalTracosHoje(modoTeste = false) {
+  const url = _comModoTeste('/total-tracos-hoje?_=' + Date.now(), modoTeste); // evita cache
+  const res = await fetch(url);
   const json = await res.json();
   if (!json.ok) throw new Error(json.erro || 'Erro ao obter total de traços do dia');
   return json.total;
@@ -893,8 +907,8 @@ async function getTotalTracosHoje() {
  * @param {number} quantidade - quantos traços novos foram confirmados
  * @returns {Promise<number>} novo total acumulado do dia
  */
-async function confirmarTracosHoje(quantidade) {
-  const res = await fetch(_comDeviceId('/confirmar-tracos-hoje'), {
+async function confirmarTracosHoje(quantidade, modoTeste = false) {
+  const res = await fetch(_comModoTeste(_comDeviceId('/confirmar-tracos-hoje'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quantidade }),
@@ -906,8 +920,8 @@ async function confirmarTracosHoje(quantidade) {
 
 // ---- Analytics ----
 
-async function registrarOperacao(record) {
-  const res = await fetch(_comDeviceId('/registrar-operacao'), {
+async function registrarOperacao(record, modoTeste = false) {
+  const res = await fetch(_comModoTeste(_comDeviceId('/registrar-operacao'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(record),
@@ -1120,9 +1134,10 @@ async function getStats(filtros = {}) {
  * Carrega sobra.json do servidor.
  * Retorna o objeto de sobra, ou null se não existir / não estiver ativa.
  */
-async function getSobra() {
+async function getSobra(modoTeste = false) {
   try {
-    const res = await fetch('db/sobra.json?_=' + Date.now()); // evita cache
+    const caminho = modoTeste ? 'db/teste/sobra.json' : 'db/sobra.json';
+    const res = await fetch(caminho + '?_=' + Date.now()); // evita cache
     if (!res.ok) return null;
     const sobra = await res.json();
     // Só retorna se estiver realmente ativa
@@ -1134,8 +1149,8 @@ async function getSobra() {
  * Persiste o objeto de sobra no servidor (sobra.json).
  * @param {object} sobra – objeto conforme estrutura definida
  */
-async function salvarSobra(sobra) {
-  const res = await fetch('/salvar-sobra', {
+async function salvarSobra(sobra, modoTeste = false) {
+  const res = await fetch(_comModoTeste('/salvar-sobra', modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sobra),
@@ -1148,10 +1163,10 @@ async function salvarSobra(sobra) {
  * Desativa a sobra atual, marcando-a como inativa e registrando motivo.
  * @param {'utilizada'|'descartada'} motivo
  */
-async function desativarSobra(motivo) {
-  const atual = await getSobra();
+async function desativarSobra(motivo, modoTeste = false) {
+  const atual = await getSobra(modoTeste);
   if (!atual) return; // já não existe sobra ativa
-  await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() });
+  await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() }, modoTeste);
 }
 
 // ---- Backup de Dados ----

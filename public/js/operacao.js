@@ -18,6 +18,7 @@
     fim: null,
     status: 'idle',      // idle | running | finished
     tracos: [],
+    modo_teste: false,
   };
 
   let timerInterval = null;
@@ -70,6 +71,12 @@
    * entre as abas.
    */
   function _aplicarEstadoExterno(dados) {
+    // Não deixa uma atualização de operação REAL sobrescrever um teste
+    // local em andamento — só se sai do modo de teste de propósito
+    // (toggle OFF com a operação parada, ou "🗑️ Limpar Tudo"). Sem isso,
+    // alguém começando uma operação real em outro computador apagaria
+    // sem aviso o teste em andamento aqui.
+    if (state.modo_teste) return;
     clearInterval(timerInterval);
     if (dados) {
       state = dados;
@@ -127,6 +134,18 @@
   }
 
   function wireEvents() {
+    $('op-toggle-teste').addEventListener('change', e => {
+      // Só pode trocar de modo com a operação parada — evita misturar
+      // dados reais e de teste numa mesma operação em andamento.
+      if (state.status !== 'idle') {
+        e.target.checked = state.modo_teste; // desfaz visualmente
+        LW.mostrarAlerta('Encerre ou limpe a operação atual antes de trocar de modo.', { tipo: 'aviso' });
+        return;
+      }
+      state.modo_teste = e.target.checked;
+      persist();
+      _aplicarTravaDeAutorizacao();
+    });
     $('op-turno').addEventListener('change', e => {
       state.turno = e.target.value; persist();
     });
@@ -260,6 +279,10 @@
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
    */
   function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
+    // Modo de teste é um sandbox local — nunca toca o servidor (ver
+    // persist()), então a trava de Autorizados/dono não faz sentido aqui:
+    // qualquer computador pode testar, autorizado ou não pra operações reais.
+    if (state.modo_teste) return false;
     if (!LW.dispositivoEstaAutorizado()) {
       LW.mostrarAlerta(
         'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
@@ -287,15 +310,27 @@
    * dinamicamente, diferente da lista de Autorizados.
    */
   function _aplicarTravaDeAutorizacao() {
+    const fieldset = $('op-fieldset-trava');
+    const aviso = $('op-aviso-nao-autorizado');
+    const avisoTeste = $('op-aviso-modo-teste');
+
+    // Modo de teste é um sandbox local — nunca trava a tela (ver
+    // _bloqueadoPorAutorizacao) — só troca o banner padrão pelo de teste.
+    if (state.modo_teste) {
+      if (fieldset) fieldset.disabled = false;
+      if (aviso) aviso.style.display = 'none';
+      if (avisoTeste) avisoTeste.style.display = 'flex';
+      return;
+    }
+    if (avisoTeste) avisoTeste.style.display = 'none';
+
     const autorizado = LW.dispositivoEstaAutorizado();
     const dono = state?.donoDeviceId || null;
     const ehODono = !dono || dono === LW.getDeviceId();
     const podeControlar = autorizado && ehODono;
 
-    const fieldset = $('op-fieldset-trava');
     if (fieldset) fieldset.disabled = !podeControlar;
 
-    const aviso = $('op-aviso-nao-autorizado');
     if (!aviso) return;
     if (podeControlar) {
       aviso.style.display = 'none';
@@ -390,6 +425,12 @@
       banner.innerHTML = '<span class="badge badge-amber">◉ Injeção em andamento</span>';
     } else {
       banner.innerHTML = '<span class="badge badge-green">✓ Finalizado</span>';
+    }
+    // Reforça a visibilidade do modo de teste bem ao lado do status — o
+    // banner grande no topo da página pode passar despercebido se a
+    // pessoa já tiver rolado a tela.
+    if (state.modo_teste) {
+      banner.innerHTML += ' <span class="badge" style="background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.5)">🧪 TESTE</span>';
     }
   }
 
@@ -510,7 +551,7 @@
   async function _garantirBaseNumTraco() {
     if (typeof state.baseNumTraco === 'number') return;
     try {
-      state.baseNumTraco = await LW.getTotalTracosHoje();
+      state.baseNumTraco = await LW.getTotalTracosHoje(state.modo_teste);
     } catch (err) {
       console.warn('[LW] Falha ao obter total de traços do dia, usando 0 como base:', err.message);
       state.baseNumTraco = 0;
@@ -627,7 +668,7 @@
    */
   async function addTraco() {
     let sobra = null;
-    try { sobra = await LW.getSobra(); } catch (_) { sobra = null; }
+    try { sobra = await LW.getSobra(state.modo_teste); } catch (_) { sobra = null; }
 
     if (!sobra) {
       // Fluxo normal — sem sobra ativa
@@ -698,7 +739,7 @@
       // Adiciona o traço reaproveitado ao state
       _adicionarTracoDeSobra(sobra);
       // Marca sobra como utilizada (em segundo plano para não travar a UI)
-      try { await LW.desativarSobra('utilizada'); } catch (_) { }
+      try { await LW.desativarSobra('utilizada', state.modo_teste); } catch (_) { }
     });
 
     document.getElementById('btn-criar-novo-traco').addEventListener('click', () => {
@@ -752,7 +793,7 @@
 
     document.getElementById('btn-descartar-sobra').addEventListener('click', async () => {
       modal.remove();
-      try { await LW.desativarSobra('descartada'); } catch (_) { }
+      try { await LW.desativarSobra('descartada', state.modo_teste); } catch (_) { }
       await callbackProsseguir();
     });
 
@@ -947,7 +988,7 @@
     // falhar (o dado principal já está salvo no traço; isso é só o
     // histórico de qual ajuste veio com qual tempo de batida).
     try {
-      await LW.registrarAjusteTraco(t.id, ajusteAudit);
+      await LW.registrarAjusteTraco(t.id, ajusteAudit, state.modo_teste);
     } catch (err) {
       console.warn('[LW] Falha ao registrar auditoria do ajuste de receita:', err.message);
     }
@@ -1030,7 +1071,7 @@
         status: 'ativa',
       };
       try {
-        await LW.salvarSobra(sobra);
+        await LW.salvarSobra(sobra, state.modo_teste);
       } catch (err) {
         console.warn('[LW] Falha ao salvar sobra:', err.message);
       }
@@ -1040,7 +1081,7 @@
     document.getElementById('btn-sobra-nao').addEventListener('click', async () => {
       modal.remove();
       // Garante que não há sobra ativa residual para o traço encerrado
-      try { await LW.desativarSobra('descartada'); } catch (_) { }
+      try { await LW.desativarSobra('descartada', state.modo_teste); } catch (_) { }
       showSuccessModal(record);
     });
   }
@@ -1429,15 +1470,18 @@
     // navigator.onLine é só um indício (pode estar errado em alguns casos),
     // então mesmo quando ele diz "online" ainda tentamos enviar de verdade;
     // é só uma forma de pular a tentativa quando já se sabe que vai falhar.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    // Em modo de teste, NUNCA enfileira — essa fila é só pra operações
+    // reais ("será registrada de verdade quando a conexão voltar"); um
+    // teste teria a mesma chance de ser sincronizado como dado real depois.
+    if (!state.modo_teste && typeof navigator !== 'undefined' && navigator.onLine === false) {
       _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos, fullRecord);
       return;
     }
 
     Promise.all([
-      LW.registrarOperacao(historyRecord),
-      LW.registrarRelatorioInjecao(fullRecord),
-      qtdTracosNovos > 0 ? LW.confirmarTracosHoje(qtdTracosNovos) : Promise.resolve(),
+      LW.registrarOperacao(historyRecord, state.modo_teste),
+      LW.registrarRelatorioInjecao(fullRecord, state.modo_teste),
+      qtdTracosNovos > 0 ? LW.confirmarTracosHoje(qtdTracosNovos, state.modo_teste) : Promise.resolve(),
     ])
       .then(() => {
         LW.clearOperacaoAtual();
@@ -1456,11 +1500,11 @@
         // por algum motivo de verdade (esse caso continua mostrando o erro
         // pra a pessoa corrigir, não faz sentido enfileirar algo que o
         // servidor já disse que não aceita).
-        if (err instanceof TypeError) {
+        if (!state.modo_teste && err instanceof TypeError) {
           _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos, fullRecord);
           return;
         }
-        LW.mostrarAlerta('Erro ao salvar operação: ' + err.message, { tipo: 'erro' });
+        LW.mostrarAlerta('Erro ao salvar operação' + (state.modo_teste ? ' de TESTE' : '') + ': ' + err.message, { tipo: 'erro' });
       });
   }
 
@@ -1555,11 +1599,17 @@
       desemplaque: null,
       status: 'idle',
       tracos: [],
+      // Sempre volta pra false — exige reativar o toggle a cada operação
+      // nova, de propósito: evita o risco de "esquecer ligado" e uma
+      // operação REAL acabar indo pros arquivos de teste sem querer.
+      modo_teste: false,
     };
   }
 
   function renderAll() {
     // Set form values
+    $('op-toggle-teste').checked = !!state.modo_teste;
+    $('op-toggle-teste').disabled = state.status !== 'idle';
     $('op-turno').value = state.turno || '1º TURNO';
     $('op-dimensao').value = state.dimensao || '';
 
@@ -1624,11 +1674,17 @@
 
   function persist() {
     LW.saveOperacaoAtual(state);
-    // Só transmite a partir do momento em que a operação É iniciada (status
-    // deixa de ser 'idle') — campos preenchidos ANTES de "Iniciar Injeção"
-    // continuam sendo só um rascunho local, sem aparecer pra quem mais
-    // estiver com a tela aberta.
-    LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
+    // Operação de TESTE nunca é transmitida — fica só neste navegador, do
+    // início ao fim. É assim que ela nunca aparece pra quem mais estiver
+    // acompanhando a tela (que só vê operações reais) e nunca passa pela
+    // trava de Autorizados/dono (que só faz sentido pra operações reais).
+    if (!state.modo_teste) {
+      // Só transmite a partir do momento em que a operação É iniciada
+      // (status deixa de ser 'idle') — campos preenchidos ANTES de
+      // "Iniciar Injeção" continuam sendo só um rascunho local, sem
+      // aparecer pra quem mais estiver com a tela aberta.
+      LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
+    }
     updatePendencias();
   }
 

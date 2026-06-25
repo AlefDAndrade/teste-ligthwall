@@ -296,6 +296,18 @@
       </div>
 
       <div class="page-body">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:12px">
+          <label for="op-toggle-teste" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.82rem;color:var(--text-2);user-select:none">
+            🧪 Modo de Teste
+            <span class="switch">
+              <input type="checkbox" id="op-toggle-teste">
+              <span class="switch-slider"></span>
+            </span>
+          </label>
+        </div>
+        <div id="op-aviso-modo-teste" style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.5);color:#c4b5fd;font-size:.85rem;align-items:center;gap:10px;font-weight:600">
+          🧪 <span>MODO DE TESTE ATIVO — nada nesta operação afeta os dados reais. Tudo é salvo separado, em arquivos de teste, pra você descartar ou conferir depois.</span>
+        </div>
         <div id="op-aviso-nao-autorizado" style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--accent);font-size:.85rem;align-items:center;gap:10px">
           🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>
         </div>
