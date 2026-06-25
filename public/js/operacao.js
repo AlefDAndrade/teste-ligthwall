@@ -1082,7 +1082,7 @@
             <button id="grade-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
           </div>
 
-          <div id="grade-bercos" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px"></div>
+          <div id="grade-bercos" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
 
           <div style="display:flex;justify-content:flex-end;gap:12px">
             <button id="grade-btn-cancelar" class="btn btn-ghost">Cancelar</button>

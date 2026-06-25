@@ -6,8 +6,8 @@ Sistema interno de controle de operações de injeção de baterias (placas cime
 
 - **Backend**: Node.js puro (módulo `http`, sem framework), servindo arquivos estáticos e uma API simples em JSON.
 - **Frontend**: HTML/CSS/JS sem framework nem build step — tudo é `<script>` global.
-- **"Banco de dados"**: arquivos JSON em `public/db/` (sem banco de dados real).
-- **Dependências**: `xlsx` (exportação/importação de Excel) e `jszip` (geração e leitura de backups `.zip`).
+- **"Banco de dados"**: em migração, por fases, de arquivos JSON (`public/db/`) pra **SQLite** (`better-sqlite3`) — ver seção dedicada, abaixo. Os arquivos JSON que ainda não foram migrados continuam exatamente como sempre.
+- **Dependências**: `xlsx` (exportação/importação de Excel), `jszip` (geração e leitura de backups `.zip`), `ws` (WebSocket da Operação em Andamento), `better-sqlite3` (banco de dados).
 
 ## Como rodar
 
@@ -57,6 +57,72 @@ package.json
 `backups-seguranca/`, `backups-automaticos/` e `logs/` são criadas automaticamente pelo servidor (ver seções *Backup e Restauração* e *Log de Acesso*, abaixo) e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta (diferente dos arquivos de `public/db/` — ver "Limitações conhecidas").
 
 `public/db/teste/` é criada automaticamente na primeira vez que o **Modo de Teste** é usado (ver seção dedicada, abaixo) — mesmos arquivos de uma operação normal (`historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json`, `sobra.json`), só que isolados, pra nunca misturar com dados reais. Também não é versionada.
+
+## Banco de Dados (SQLite)
+
+Os arquivos JSON de `public/db/` crescem sem limite e são lidos/escritos **por inteiro** a cada operação (lê tudo, mexe em memória, escreve tudo de volta) — funciona bem em baixo volume, mas não tem transação de verdade (dois `POST` quase simultâneos podem se sobrescrever) nem índice (toda busca percorre o arquivo inteiro). Por isso, está em andamento uma migração **por fases** pra SQLite (`better-sqlite3`) — cada fase migra um grupo de arquivos por vez, totalmente testada antes da próxima.
+
+**Por que SQLite e não Postgres/MySQL**: continua sendo um arquivo só (`data/lightwall.sqlite`), sem processo de banco separado pra administrar — mesma simplicidade de operação que o projeto sempre teve (`node server.js`, sem Docker, sem serviço externo). Só valeria a pena trocar por um banco "de servidor" se um dia isso precisasse rodar em mais de uma máquina escrevendo no mesmo banco ao mesmo tempo.
+
+**Status da migração:**
+
+| Fase | Arquivo(s) JSON | Tabela(s) SQL | Status |
+|---|---|---|---|
+| 1 | — (infraestrutura) | — | ✅ Feita — `db.js` cria o banco/schema completo no boot; nenhuma rota usa ainda |
+| 2 | `historico.json`, `historico_edicoes.json` | `operacoes`, `edicoes_operacao` | ✅ Feita |
+| 3 | `paradas.json` | `paradas` | ✅ Feita |
+| 4 | `sobra.json`, `contador_tracos.json` | `sobra`, `contador_tracos` | ✅ Feita |
+| 5 | `relatorio_injecao.json`, `ajustes_tracos.json` | `tracos`, `traco_usos`, `ajustes`, `leituras_resultado`, `edicoes_traco` | ✅ Feita |
+
+`config.json`, `security.json`, `operacao_andamento.json` e `logs/acessos.json` **não entram** nessa migração — são configuração, estado efêmero ou log de baixo volume, sem o mesmo problema de concorrência/crescimento. Continuam como JSON.
+
+### Fase 2 — como funciona na prática
+
+- **Migração automática, sem passo manual**: no boot, `db.migrarHistoricoSeNecessario()` confere se a tabela `operacoes` está vazia E `historico.json` ainda existe com esse nome — se sim, importa tudo (numa transação) e **renomeia** o arquivo pra `historico.json.migrado-<timestamp>` (nunca apaga). Isso também acontece com `historico_edicoes.json`. Reinicia o servidor sem ter migrado nada ainda? Roda sozinho, sem precisar lembrar de nenhum comando.
+- **Zero mudança no navegador**: `historico.json` não existe mais como arquivo, mas o servidor intercepta `GET /db/historico.json` (e `historico_edicoes.json`) e devolve o mesmo formato de sempre, reconstruído a partir do SQL — toda tela que já fazia `fetch('db/historico.json')` direto (Registro de Baterias, OEE, Análise Operacional, Debriefing, a tela de Backup de Dados) continua funcionando **sem nenhuma alteração**.
+- **Backup e Restauração também não mudam de comportamento**: "Backup de Dados" e o backup automático diário exportam o conteúdo atual da tabela como JSON (mesmo formato); "Restaurar Backup de Dados" substitui o conteúdo da tabela inteira (dentro de uma transação) em vez de escrever um arquivo. "Backup Geral" inclui `data/lightwall.sqlite` automaticamente (já varre o projeto inteiro) — com um detalhe importante: roda um `PRAGMA wal_checkpoint(TRUNCATE)` antes de zipar, senão escritas recentes podem estar só no arquivo `-wal` e não no `.sqlite` principal.
+- **Modo de Teste não foi tocado**: continua escrevendo em `public/db/teste/historico.json`, exatamente como antes — só o caminho **real** (sem `?modoTeste=true`) passa a usar SQL.
+- **Testado**: migração automática (comparando campo a campo com o arquivo original — reconstrução idêntica), `/registrar-operacao`, `/editar-operacao` (inclusive a checagem de campos protegidos), `/importar-historico` com deduplicação, 5 registros concorrentes via `Promise.all` (o problema original que motivou a migração), Modo de Teste continuando isolado, e a restauração completa de um Backup de Dados (com o backup de segurança pré-restauração capturando o estado anterior corretamente).
+- **Achado de implementação**: tanto o `better-sqlite3` quanto o `node:sqlite` recusam um objeto de parâmetros nomeados com chaves que não aparecem na query (`UPDATE ... SET x = @x` não aceita um objeto que também tenha `@y` sem uso) — o `UPDATE` de `/editar-operacao` precisa receber só as colunas que de fato atualiza, não o objeto inteiro do registro.
+
+### Fase 3 — como funciona na prática
+
+Bem mais simples que a Fase 2: `paradas.json` é uma lista plana (`{id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em}`), sem nenhum campo calculado/serializado — então não precisou de tabela de auditoria nem de cuidado especial nenhum.
+
+- Mesmo padrão de tudo: migração automática no boot (renomeia `paradas.json` pra `.migrado-<timestamp>` depois de importar), `GET /db/paradas.json` interceptado pra devolver o mesmo formato de sempre (cobre `paradas.js` e `oee.js`, que já faziam `fetch('db/paradas.json')` direto — zero mudança no navegador), e Backup de Dados/Restauração/Backup Geral tratando `paradas.json` como tabela, igual a `historico.json`.
+- `/salvar-parada` (que fazia inserir-ou-atualizar por `id`) virou um `INSERT ... ON CONFLICT(id) DO UPDATE` — upsert de verdade, em 1 query, em vez de ler tudo, achar o índice, e escrever tudo de volta.
+- **Testado**: migração automática (reconstrução idêntica), inserir, atualizar (upsert no mesmo id, sem duplicar), excluir, excluir inexistente (erro), 5 paradas concorrentes via `Promise.all`, e a restauração completa de um backup (com o backup de segurança capturando as paradas anteriores corretamente).
+
+### Fase 4 — como funciona na prática
+
+`sobra.json` é um objeto único (não lista) em **camelCase** (`tracoId`, `numTraco`, `operacaoOrigem`, `dataEncerramento`) — diferente da convenção `snake_case` do resto do projeto, preservada de propósito na reconstrução pra não quebrar nada no navegador. Continua sendo "1 registro só, sempre o mais recente" — a tabela usa `id = 1` fixo, com `INSERT ... ON CONFLICT(id) DO UPDATE` em todo salvamento (nunca um 2º registro).
+
+`contador_tracos.json` já tinha tabela desde a Fase 1 (`data` como chave — 1 linha por dia). Aqui veio a melhoria mais concreta da migração até agora:
+
+- **Incremento atômico de verdade**: antes, "confirmar N traços" era ler o total, somar em JS, escrever de volta — dois pedidos quase simultâneos podiam ler o mesmo valor e um incremento se perder. Agora é uma única query (`INSERT ... ON CONFLICT(data) DO UPDATE SET total = total + ?`), que soma **dentro do banco**. Testado com 10 confirmações de "+1" disparadas ao mesmo tempo via `Promise.all` — as 10 contaram, nenhuma se perdeu.
+- **Bônus**: como a tabela aceita 1 linha por dia (e não só "o dia atual", como o arquivo fazia), o histórico de dias anteriores fica preservado — o arquivo antigo sobrescrevia o total assim que o dia virava; agora cada dia continua consultável depois. O formato **externo** (`GET /db/contador_tracos.json`, Backup de Dados) continua devolvendo só o dia de hoje, pra não mudar o contrato existente.
+- A restauração de `contador_tracos.json` faz upsert só da linha mencionada no backup (geralmente "hoje" no momento em que o backup foi feito) — não apaga os outros dias que o banco tenha acumulado desde então; `sobra.json`/`historico.json`/`paradas.json` continuam substituindo a tabela inteira (são histórico completo, sempre estiveram assim).
+- **Testado**: as duas migrações automáticas (reconstrução idêntica de `sobra.json`; `contador_tracos.json` corretamente "zerando" para o dia atual sem perder o dia antigo, que fica preservado como uma linha separada — mesmo comportamento que o arquivo já tinha, de resetar a cada novo dia), salvar/atualizar sobra sem duplicar linha, e a restauração de backup pros dois.
+
+### Fase 5 — como funciona na prática
+
+A mais complexa, e a única que muda a FORMA dos dados, não só o lugar onde moram. `ajustes` agora é uma tabela de verdade (1 linha por ajuste) — o total de cada insumo é `original + SUM(ajustes.<campo>)`, somado pelo banco, nunca mais montado à mão em JS. Isso elimina estruturalmente o problema de sincronia entre `relatorio_injecao.json` e `ajustes_tracos.json` que resolvíamos manualmente, caso a caso, na tela de Editar Traço.
+
+- **Dois FKs de propósito ficaram de fora** (ver comentário no schema, em `db.js`): `ajustes.id_traco` e `traco_usos.id_operacao`. O "+ Ajuste de Receita" ao vivo grava um ajuste **antes** do traço existir na tabela `tracos` (só é criado ao finalizar/registrar a operação) — exigir o FK quebraria esse fluxo. E a importação de planilha gera um `id_operacao` sintético que nunca existe em `operacoes` — não há uma operação real por trás de uma linha de Excel.
+- **Dados legados sem correlação confiável**: nos 6 traços reais que existiam antes desta migração, 3 tinham ajuste registrado em `relatorio_injecao.json` mas **nenhuma** entrada correspondente em `ajustes_tracos.json` (nunca foi usado de verdade até agora). Pra esses, a migração colapsa original+ajustes num único total — o **total fica correto**, mas o histórico de "qual ajuste foi cada um" não é reconstruível com confiança (é a mesma ambiguidade que já discutimos: não dá pra saber se um ajuste de cimento e um de tempo de batida aconteceram juntos ou em momentos diferentes). Isso é uma limitação dos dados de origem, não algo que esta migração piora.
+- **Reconstrução (`GET /db/relatorio_injecao.json`, `GET /db/ajustes_tracos.json`)**: cobre `dashboard.js` (Relatório de Injeção), o modal de Editar Traço, `LW.getAjustesTracos()`, e a tela de Backup de Dados — todos já faziam `fetch` direto, zero mudança no navegador.
+- **`/registrar-relatorio-injecao`**: pra um traço novo, confia no `.original` que o navegador manda SE a tabela `ajustes` já tiver linha(s) pra esse `id_traco` (population ao vivo, via `/registrar-ajuste-traco`, durante a própria operação); só colapsa se não tiver — mesma regra da migração. Pra um traço reaproveitado (já existe), só adiciona o novo uso — réplica fiel do comportamento de sempre, mesma limitação preexistente inclusive (densidade/flow remedidos numa reutilização não são persistidos; já era assim antes, não é uma regressão).
+- **`/importar-relatorio-injecao`**: a planilha não tem `id_traco` nem `id_operacao` reais — gera um `id_traco` sintético por linha. A planilha também nunca teve coluna de EPS mapeada (lacuna pré-existente, preservada).
+- **Achado do teste de concorrência**: a numeração sequencial de `ajustes.ordem` usa `SELECT MAX(ordem)` seguido de `INSERT` — não é uma única operação atômica como o incremento do contador (Fase 4). Testado com 10 ajustes simultâneos no mesmo traço e nenhum colidiu, porque o Node é single-threaded e o driver do SQLite é síncrono — não existe uma forma de duas requisições entrelaçarem o SELECT de uma com o INSERT de outra dentro do mesmo processo. Isso deixaria de ser verdade se este servidor um dia rodasse em modo cluster (múltiplos processos Node) — não é o caso hoje, mas vale lembrar se isso mudar.
+- **Testado**: migração com dados reais (incluindo a checagem de colapso acima, comparando TOTAIS — não só estrutura — entre o arquivo original e o reconstruído), o fluxo completo ao vivo (ajuste antes do traço existir → registrar → confiar nos ajustes já gravados), reaproveitamento (só adiciona uso, não toca no resto), edição completa de traço (identificação, uso específico, ajustes substituídos por inteiro, densidade/flow), importação de planilha, restauração de backup substituindo as 4 tabelas de uma vez, e os dois cenários de concorrência acima.
+
+### Migração concluída
+
+As 5 fases estão feitas — `public/db/` só guarda mais `config.json`, `security.json` e `operacao_andamento.json` (configuração/estado efêmero, nunca migrados de propósito). Tudo que crescia sem limite e tinha risco real de concorrência agora é SQLite. Ainda falta rodar isso de verdade no servidor de produção (`npm install` lá, já que o `better-sqlite3` não instala neste ambiente de desenvolvimento — ver "Limitação conhecida da instalação", acima) e confirmar a migração automática com os dados reais de produção.
+
+**Atenção pra quem escrever as queries de total, na Fase 5**: `original + SUM(ajustes.campo)` só dá o valor certo com `COALESCE` dos **dois** lados — `COALESCE(original, 0) + COALESCE(SUM(ajustes.campo), 0)`. Sem o primeiro `COALESCE`, um traço cujo insumo nunca foi preenchido (`original` NULL) faz a soma inteira virar `NULL` (regra do SQL: `NULL + qualquer coisa = NULL`), mesmo tendo ajustes reais somados. Validado durante o desenvolvimento, com teste isolado, antes de chegar a valer pra alguma rota de verdade.
+
+**Limitação conhecida da instalação**: `better-sqlite3` compila um módulo nativo na instalação (`npm install`) — normalmente automático, mas se o `npm install` falhar por falta de binário pré-compilado pra sua versão exata do Node, o fallback é compilar do código-fonte, o que exige ferramentas de build (`build-essential`/`python3` no Linux) e acesso de rede pra baixar os headers do Node. Em ambientes com rede restrita, isso pode falhar — use `npm install` (nunca `npm ci`) na primeira vez depois de puxar essa mudança, já que o `package-lock.json` ainda não tem a entrada de `better-sqlite3` resolvida de verdade.
 
 ## Perfis de usuário
 

@@ -6,10 +6,38 @@ const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
-const PORT = 5000;
+// SQLite (better-sqlite3) — Fase 1 da migração JSON → SQL (ver README,
+// seção "Banco de Dados (SQLite)"). Por enquanto só cria o banco/schema;
+// nenhuma rota usa isto ainda — segue tudo lendo/escrevendo os JSONs de
+// public/db/ exatamente como antes, até cada fase ser migrada de verdade.
+const db = require('./db.js');
+
+// Converte pra número, ou null se vazio/nulo/indefinido — usado ao montar
+// parâmetros de colunas SQL a partir de valores de formulário (que chegam
+// como string vazia '' quando o campo não foi preenchido).
+function numOuNulo(v) {
+  return (v === '' || v === null || v === undefined) ? null : Number(v);
+}
+
+const PORT = 3000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
+
+// Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
+// que sobe com a tabela "operacoes" vazia E historico.json ainda existir
+// com esse nome exato; depois disso é sempre um no-op rápido (1 SELECT
+// COUNT(*) + 1 fs.existsSync).
+db.migrarHistoricoSeNecessario(DB_DIR);
+// Fase 3 — mesmo critério, pra paradas.json.
+db.migrarParadasSeNecessario(DB_DIR);
+// Fase 4 — mesmo critério, pra sobra.json e contador_tracos.json.
+db.migrarSobraSeNecessario(DB_DIR);
+db.migrarContadorTracosSeNecessario(DB_DIR);
+// Fase 5 — mesmo critério, pra relatorio_injecao.json + ajustes_tracos.json
+// (a mais complexa; depende da Fase 2 já ter rodado, pra "operacoes" já
+// existir quando os usos forem conferidos — por isso vem por último).
+db.migrarRelatorioInjecaoSeNecessario(DB_DIR);
 
 const MIME = {
   '.html': 'text/html',
@@ -59,22 +87,47 @@ function dirParaModoTeste(modoTesteFlag) {
 // Lê o contador de traços do dia, resetando automaticamente se a data mudou
 // (Brasília). NÃO incrementa — apenas garante que o objeto retornado é válido
 // para o dia de hoje. Quem chama decide se quer ler ou incrementar.
+// Lê o contador de traços do dia — Modo de Teste continua em JSON
+// (arquivo isolado de sempre); o caminho real lê da tabela contador_tracos
+// (uma query simples, sem o reset manual de "novo dia" — cada dia já é
+// uma linha própria, então um dia novo simplesmente ainda não tem linha).
 function lerContadorTracosHoje(modoTesteFlag = false) {
   const hoje = todayBrasiliaServer();
-  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
-  let contador = { data: hoje, total: 0 };
-  try {
-    contador = JSON.parse(fs.readFileSync(contadorPath, 'utf8'));
-  } catch (_) { /* arquivo ainda não existe — usa o default acima */ }
-  if (contador.data !== hoje) {
-    contador = { data: hoje, total: 0 }; // novo dia: reinicia a contagem
+  if (modoTesteFlag) {
+    const contadorPath = path.join(dirParaModoTeste(true), 'contador_tracos.json');
+    let contador = { data: hoje, total: 0 };
+    try {
+      contador = JSON.parse(fs.readFileSync(contadorPath, 'utf8'));
+    } catch (_) { /* arquivo ainda não existe — usa o default acima */ }
+    if (contador.data !== hoje) {
+      contador = { data: hoje, total: 0 }; // novo dia: reinicia a contagem
+    }
+    return contador;
   }
-  return contador;
+  const row = db.prepare('SELECT total FROM contador_tracos WHERE data = ?').get(hoje);
+  return { data: hoje, total: row ? row.total : 0 };
 }
 
-function salvarContadorTracos(contador, modoTesteFlag = false) {
-  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
-  fs.writeFileSync(contadorPath, JSON.stringify(contador, null, 2), 'utf8');
+// Incrementa o contador de traços do dia em "quantidade" — Modo de Teste
+// continua fazendo ler-tudo-somar-escrever-tudo (arquivo isolado, sem
+// concorrência real pra se preocupar); o caminho real faz a soma DENTRO
+// do banco, numa query só — sem isso, dois "/confirmar-tracos-hoje" quase
+// simultâneos podiam ler o mesmo total, somar separado, e um incremento
+// se perder (o último a escrever "ganha", sem nunca somar os dois juntos).
+function incrementarContadorTracosHoje(quantidade, modoTesteFlag = false) {
+  const hoje = todayBrasiliaServer();
+  if (modoTesteFlag) {
+    const contador = lerContadorTracosHoje(true);
+    contador.total += quantidade;
+    const contadorPath = path.join(dirParaModoTeste(true), 'contador_tracos.json');
+    fs.writeFileSync(contadorPath, JSON.stringify(contador, null, 2), 'utf8');
+    return contador;
+  }
+  db.prepare(`
+    INSERT INTO contador_tracos (data, total) VALUES (?, ?)
+    ON CONFLICT(data) DO UPDATE SET total = total + ?
+  `).run(hoje, quantidade, quantidade);
+  return lerContadorTracosHoje(false);
 }
 
 // ─── Utilitário: hash SHA-256 no servidor (Node.js crypto nativo) ──────────
@@ -156,9 +209,32 @@ async function gerarZipDadosServidor() {
   const zip = new JSZip();
   Object.keys(VALIDADORES_BACKUP_DADOS).forEach(nome => {
     try {
-      zip.file(nome, fs.readFileSync(path.join(DB_DIR, nome)));
+      if (nome === 'historico.json') {
+        // Não existe mais como arquivo (Fase 2 — ver "Banco de Dados
+        // (SQLite)" no README) — exporta o conteúdo atual da tabela, no
+        // mesmo formato de sempre, pra continuar saindo no backup.
+        const rows = db.prepare('SELECT * FROM operacoes ORDER BY data ASC, criado_em ASC').all();
+        zip.file(nome, JSON.stringify(rows.map(db.rowParaOperacao), null, 2));
+      } else if (nome === 'historico_edicoes.json') {
+        const rows = db.prepare('SELECT id_operacao, data_edicao, campos_alterados FROM edicoes_operacao ORDER BY id ASC').all();
+        zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
+      } else if (nome === 'paradas.json') {
+        const rows = db.prepare('SELECT * FROM paradas ORDER BY inicio ASC').all();
+        zip.file(nome, JSON.stringify(rows.map(db.rowParaParada), null, 2));
+      } else if (nome === 'sobra.json') {
+        const row = db.prepare('SELECT * FROM sobra WHERE id = 1').get();
+        zip.file(nome, JSON.stringify(db.rowParaSobra(row), null, 2));
+      } else if (nome === 'contador_tracos.json') {
+        zip.file(nome, JSON.stringify(lerContadorTracosHoje(false), null, 2));
+      } else if (nome === 'relatorio_injecao.json') {
+        zip.file(nome, JSON.stringify(db.todosOsTracos(), null, 2));
+      } else if (nome === 'ajustes_tracos.json') {
+        zip.file(nome, JSON.stringify(db.todosOsAjustesTracosJSON(), null, 2));
+      } else {
+        zip.file(nome, fs.readFileSync(path.join(DB_DIR, nome)));
+      }
     } catch (_) {
-      // Arquivo pode não existir ainda — ok, só não entra no zip.
+      // Arquivo/tabela pode não existir/estar vazia ainda — ok, só não entra no zip.
     }
   });
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
@@ -196,10 +272,8 @@ function _rotacionarBackupsAutomaticos() {
 // do que arriscar não ter um backup justamente quando algo está estranho).
 function _houveOperacaoHoje(hoje) {
   try {
-    const texto = fs.readFileSync(path.join(DB_DIR, 'historico.json'), 'utf8').trim();
-    if (!texto) return false; // arquivo vazio = nenhuma operação registrada nunca
-    const historico = JSON.parse(texto);
-    return Array.isArray(historico) && historico.some(r => r.data === hoje);
+    const row = db.prepare('SELECT 1 FROM operacoes WHERE data = ? LIMIT 1').get(hoje);
+    return !!row;
   } catch (_) {
     return true;
   }
@@ -254,6 +328,14 @@ function adicionarPastaAoZip(zip, dirAbsoluto, prefixoZip) {
 }
 
 async function gerarBackupGeral() {
+  // Checkpoint do WAL ANTES de zipar — sem isso, escritas recentes podem
+  // estar só em data/lightwall.sqlite-wal (ainda não "promovidas" pro
+  // arquivo principal), e o backup ficaria incompleto/inconsistente se
+  // alguém restaurar só o .sqlite sem os arquivos -wal/-shm junto.
+  // TRUNCATE = escreve tudo no arquivo principal E encolhe o -wal de volta
+  // (o oposto de deixá-lo crescer pra sempre).
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { console.error('[backup] Falha no checkpoint do WAL:', e.message); }
+
   const zip = new JSZip();
   adicionarPastaAoZip(zip, ROOT_DIR, '');
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
@@ -475,9 +557,7 @@ const server = http.createServer((req, res) => {
         if (!Number.isInteger(quantidade) || quantidade < 0) {
           throw new Error('Quantidade inválida.');
         }
-        const contador = lerContadorTracosHoje(modoTeste);
-        contador.total += quantidade;
-        salvarContadorTracos(contador, modoTeste);
+        const contador = incrementarContadorTracosHoje(quantidade, modoTeste);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
       } catch (e) {
@@ -535,7 +615,76 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Registrar operação — faz append no historico.json
+  // ── GET /db/historico_edicoes.json: mesma ideia da rota de historico.json
+  // acima — usado pelo "Backup de Dados" gerado no navegador
+  // (gerarBackupDados(), em data.js), que ainda faz fetch('db/' + nome)
+  // genérico pra cada arquivo da lista.
+  if (req.method === 'GET' && urlPath === '/db/historico_edicoes.json') {
+    try {
+      const rows = db.prepare('SELECT id_operacao, data_edicao, campos_alterados FROM edicoes_operacao ORDER BY id ASC').all();
+      const edicoes = rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(edicoes));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/relatorio_injecao.json: mesma estratégia das outras — desde
+  // a Fase 5, não existe mais como arquivo (caminho real); reconstrói o
+  // mesmo formato de sempre a partir de tracos+traco_usos+ajustes+
+  // leituras_resultado. Cobre LW.getRelatorioInjecao (dashboard.js), o
+  // modal de Editar Traço, e a tela de Backup de Dados — todos já fazem
+  // fetch direto, sem mudança nenhuma necessária.
+  if (req.method === 'GET' && urlPath === '/db/relatorio_injecao.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsTracos()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/ajustes_tracos.json: idem — usado por LW.getAjustesTracos()
+  // (o modal de Editar Traço carrega a lista de ajustes editável a partir
+  // daqui) e pela tela de Backup de Dados.
+  if (req.method === 'GET' && urlPath === '/db/ajustes_tracos.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsAjustesTracosJSON()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/historico.json: intercepta ANTES do fallback de arquivo
+  // estático (mais abaixo) — desde a Fase 2, historico.json não existe
+  // mais como arquivo de verdade; isso reconstrói o mesmo formato/conteúdo
+  // a partir da tabela "operacoes", pra ZERO mudança no navegador (toda
+  // tela que já fazia fetch('db/historico.json') continua funcionando
+  // sem nenhuma alteração — LW.getStats, Análise Operacional, Debriefing,
+  // a tela de Backup de Dados).
+  if (req.method === 'GET' && urlPath === '/db/historico.json') {
+    try {
+      const rows = db.prepare('SELECT * FROM operacoes ORDER BY data ASC, criado_em ASC').all();
+      const historico = rows.map(db.rowParaOperacao);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(historico));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // Registrar operação — grava na tabela operacoes (SQL); em Modo de
+  // Teste, continua indo pro JSON isolado de sempre (ver dirParaModoTeste).
   if (req.method === 'POST' && urlPath === '/registrar-operacao') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -543,13 +692,21 @@ const server = http.createServer((req, res) => {
       if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
-        const historicoPath = path.join(dirParaModoTeste(modoTeste), 'historico.json');
-        let historico = [];
-        try {
-          historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8'));
-        } catch (_) {}
-        historico.push(record);
-        fs.writeFileSync(historicoPath, JSON.stringify(historico, null, 2), 'utf8');
+
+        if (modoTeste) {
+          const historicoPath = path.join(dirParaModoTeste(modoTeste), 'historico.json');
+          let historico = [];
+          try { historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8')); } catch (_) {}
+          historico.push(record);
+          fs.writeFileSync(historicoPath, JSON.stringify(historico, null, 2), 'utf8');
+        } else {
+          db.prepare(db.SQL_INSERIR_OPERACAO).run({
+            ...db.operacaoParaRow(record),
+            modo_teste: 0,
+            criado_em: new Date().toISOString(),
+          });
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
@@ -560,10 +717,10 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── EDITAR OPERAÇÃO: corrige um registro de historico.json já existente
-  // (sobrescreve em cima dele, não cria um novo) e grava um log de
-  // auditoria em historico_edicoes.json — base pra futuro controle de
-  // eficiência de preenchimento das operações ───────────────────────────────
+  // ── EDITAR OPERAÇÃO: corrige um registro da tabela operacoes já existente
+  // (UPDATE em cima dele, não cria um novo) e grava um log de auditoria em
+  // edicoes_operacao — base pra futuro controle de eficiência de
+  // preenchimento das operações ───────────────────────────────────────────
   if (req.method === 'POST' && urlPath === '/editar-operacao') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -592,31 +749,33 @@ const server = http.createServer((req, res) => {
           throw new Error('Campo(s) não editável(eis): ' + tentouAlterarProtegido.join(', '));
         }
 
-        const historicoPath = path.join(DB_DIR, 'historico.json');
-        const historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8') || '[]');
-        const idx = historico.findIndex(r => r.id === id);
-        if (idx === -1) throw new Error('Operação não encontrada (id: ' + id + ').');
+        const atual = db.prepare('SELECT * FROM operacoes WHERE id = ?').get(id);
+        if (!atual) throw new Error('Operação não encontrada (id: ' + id + ').');
 
-        // Atualiza EM CIMA do registro existente — não cria um novo.
-        historico[idx] = { ...historico[idx], ...novosValores };
+        // Mescla em cima do que já está no banco — igual ao spread
+        // {...historico[idx], ...novosValores} de antes, só que primeiro
+        // convertendo a linha SQL pro formato historico.json (onde
+        // novosValores já está, vindo do navegador), e na volta convertendo
+        // o resultado mesclado de volta pra parâmetros de coluna.
+        const mesclado = { ...db.rowParaOperacao(atual), ...novosValores };
 
-        const tmpHistorico = historicoPath + '.tmp';
-        fs.writeFileSync(tmpHistorico, JSON.stringify(historico, null, 2), 'utf8');
-        fs.renameSync(tmpHistorico, historicoPath);
+        db.prepare(`
+          UPDATE operacoes SET
+            dimensao = @dimensao, capacidade = @capacidade, id_bateria = @id_bateria,
+            bercos_reais = @bercos_reais, tipo_montagem = @tipo_montagem, turno = @turno,
+            motivo_atraso = @motivo_atraso, bercos_personalizados = @bercos_personalizados,
+            total_paineis = @total_paineis, m2_total = @m2_total, placas_cimenticia = @placas_cimenticia,
+            paineis_por_tipo = @paineis_por_tipo, m2_por_tipo = @m2_por_tipo,
+            paineis_2p = @paineis_2p, paineis_sp = @paineis_sp, m2_2p = @m2_2p, m2_sp = @m2_sp
+          WHERE id = @id
+        `).run(db.operacaoParaRow(mesclado));
 
         // Log de auditoria — append-only, nunca apaga/sobrescreve entradas
         // antigas. Cada edição (mesmo que no mesmo id) gera uma entrada nova.
-        const edicoesPath = path.join(DB_DIR, 'historico_edicoes.json');
-        let edicoes = [];
-        try { edicoes = JSON.parse(fs.readFileSync(edicoesPath, 'utf8') || '[]'); } catch (_) {}
-        edicoes.push({
-          id_operacao: id,
-          data_edicao: new Date().toISOString(),
-          campos_alterados: diff,
-        });
-        const tmpEdicoes = edicoesPath + '.tmp';
-        fs.writeFileSync(tmpEdicoes, JSON.stringify(edicoes, null, 2), 'utf8');
-        fs.renameSync(tmpEdicoes, edicoesPath);
+        db.prepare(`
+          INSERT INTO edicoes_operacao (id_operacao, data_edicao, campos_alterados)
+          VALUES (?, ?, ?)
+        `).run(id, new Date().toISOString(), JSON.stringify(diff));
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -665,116 +824,92 @@ const server = http.createServer((req, res) => {
           }
         });
 
-        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
-        const relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8') || '[]');
-        const traco = relatorio.find(r => r.id_traco === id_traco);
+        const traco = db.prepare('SELECT * FROM tracos WHERE id_traco = ?').get(id_traco);
         if (!traco) throw new Error('Traço não encontrado (id_traco: ' + id_traco + ').');
 
-        const uso = (traco.ultilizado?.operacao || []).find(o => o.id_operacao === id_operacao);
+        const uso = db.prepare('SELECT * FROM traco_usos WHERE id_traco = ? AND id_operacao = ?').get(id_traco, id_operacao);
         if (!uso) throw new Error('Uso/operação não encontrado pra esse traço (id_operacao: ' + id_operacao + ').');
 
-        // Dados do USO específico clicado (id_bateria/berços/obs) — só essa
-        // entrada dentro de ultilizado.operacao[], nunca as outras (mesmo
-        // traço pode ter sido reaproveitado em mais de uma bateria).
-        if (novosValores.uso) {
-          Object.assign(uso, novosValores.uso);
-        }
-
-        // Identificação do traço (compartilhada entre todos os usos)
-        ['num_traco', 'densidade_eps', 'silo', 'expansao'].forEach(campo => {
-          if (campo in novosValores) traco[campo] = novosValores[campo];
-        });
-
-        // Insumos + tempo de batida: o "original" vem direto do formulário,
-        // os ".ajustes[]" são SEMPRE recalculados a partir da lista de
-        // ajustes (nunca aceita um array vindo do cliente pra esses 6
-        // campos — evita o cliente mandar algo dessincronizado).
-        const MAPA_CAMPO_AJUSTE = {
-          cimento_real: 'cimento', agua_real: 'agua', eps_real: 'eps',
-          superplast_real: 'superplast', incorporador_real: 'incorporador',
-        };
-        const originais = novosValores.originais || {};
-
-        function colapsa(original, listaAjustes) {
-          const temOriginal = original !== '' && original !== null && original !== undefined;
-          if (!listaAjustes.length) return temOriginal ? Number(original) : '';
-          return { original: temOriginal ? Number(original) : '', ajustes: listaAjustes };
-        }
-
-        Object.entries(MAPA_CAMPO_AJUSTE).forEach(([campoReal, nomeAjuste]) => {
-          const lista = ajustes
-            .filter(a => a[nomeAjuste] !== undefined && a[nomeAjuste] !== null && a[nomeAjuste] !== '')
-            .map(a => Number(a[nomeAjuste]));
-          traco[campoReal] = colapsa(originais[campoReal], lista);
-        });
-        // tempo_batida: ajustes_tracos.json guarda em MINUTOS; relatorio_injecao.json
-        // (original e ajustes) guarda em SEGUNDOS — mesma unidade que o
-        // fluxo ao vivo do Ajuste de Receita já usa (ver operacao.js).
-        const listaTempoSegundos = ajustes.map(a => Number(a.tempo_batida) * 60);
-        const originalTempoSegundos = (originais.tempo_batida_min !== '' && originais.tempo_batida_min !== null && originais.tempo_batida_min !== undefined)
-          ? Number(originais.tempo_batida_min) * 60
-          : '';
-        traco.tempo_batida = colapsa(originalTempoSegundos, listaTempoSegundos);
-
-        // Densidade/Flow: remedições simples, sem relação com ajustes_tracos.json
-        // — cada "leitura" SUBSTITUI a anterior (não soma), igual ao vivo.
-        ['densidade', 'flow'].forEach(campo => {
-          if (novosValores[campo]) {
-            const { original, leituras } = novosValores[campo];
-            traco[campo] = colapsa(original, Array.isArray(leituras) ? leituras.map(Number) : []);
-          }
-        });
-
-        const tmpRelatorio = relatorioPath + '.tmp';
-        fs.writeFileSync(tmpRelatorio, JSON.stringify(relatorio, null, 2), 'utf8');
-        fs.renameSync(tmpRelatorio, relatorioPath);
-
-        // Regrava ajustes_tracos.json pra esse id_traco — substitui a
-        // entrada inteira (renumerando ajuste_1, ajuste_2, ... na ordem
-        // enviada), preservando o "registrado_em" de quem já existia
-        // (mandado de volta pelo cliente) e estampando agora só os novos.
-        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
-        let ajustesTracos = [];
-        try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
-        if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
-
-        const idxEntrada = ajustesTracos.findIndex(e => e.id_traco === id_traco);
-        if (!ajustes.length) {
-          // Lista ficou vazia — remove a entrada inteira, não deixa um
-          // {id_traco} solto sem nenhum ajuste_N.
-          if (idxEntrada !== -1) ajustesTracos.splice(idxEntrada, 1);
-        } else {
-          const novaEntrada = { id_traco };
-          ajustes.forEach((a, i) => {
-            const entrada = { tempo_batida: a.tempo_batida };
-            ['cimento', 'agua', 'eps', 'superplast', 'incorporador'].forEach(nome => {
-              if (a[nome] !== undefined && a[nome] !== null && a[nome] !== '') entrada[nome] = Number(a[nome]);
+        db.transaction(() => {
+          // Dados do USO específico clicado (id_bateria/berços/obs) — só
+          // essa linha de traco_usos, nunca as outras (mesmo traço pode
+          // ter sido reaproveitado em mais de uma bateria).
+          if (novosValores.uso) {
+            db.prepare(`
+              UPDATE traco_usos SET id_bateria = @id_bateria, berco_inicio = @berco_inicio,
+                berco_finalizacao = @berco_finalizacao, obs = @obs
+              WHERE id_traco = @id_traco AND id_operacao = @id_operacao
+            `).run({
+              id_traco, id_operacao,
+              id_bateria: novosValores.uso.id_bateria ?? uso.id_bateria,
+              berco_inicio: novosValores.uso.berco_inicio ?? uso.berco_inicio,
+              berco_finalizacao: novosValores.uso.berco_finalizacao ?? uso.berco_finalizacao,
+              obs: novosValores.uso.obs ?? uso.obs,
             });
-            entrada.registrado_em = a.registrado_em || new Date().toISOString();
-            novaEntrada['ajuste_' + (i + 1)] = entrada;
+          }
+
+          // Identificação do traço (compartilhada entre todos os usos) +
+          // os "originais" dos insumos/tempo de batida, que vêm prontos do
+          // formulário (sem colapso — diferente da migração/registro ao
+          // vivo, aqui o original já é exatamente o que a pessoa digitou).
+          const originais = novosValores.originais || {};
+          db.prepare(`
+            UPDATE tracos SET
+              num_traco = @num_traco, densidade_eps = @densidade_eps, silo = @silo, expansao = @expansao,
+              cimento_original = @cimento_original, agua_original = @agua_original, eps_original = @eps_original,
+              superplast_original = @superplast_original, incorporador_original = @incorporador_original,
+              tempo_batida_original = @tempo_batida_original,
+              densidade_original = @densidade_original, flow_original = @flow_original
+            WHERE id_traco = @id_traco
+          `).run({
+            id_traco,
+            num_traco: ('num_traco' in novosValores) ? novosValores.num_traco : traco.num_traco,
+            densidade_eps: ('densidade_eps' in novosValores) ? novosValores.densidade_eps : traco.densidade_eps,
+            silo: ('silo' in novosValores) ? novosValores.silo : traco.silo,
+            expansao: ('expansao' in novosValores) ? novosValores.expansao : traco.expansao,
+            cimento_original: numOuNulo(originais.cimento_real),
+            agua_original: numOuNulo(originais.agua_real),
+            eps_original: numOuNulo(originais.eps_real),
+            superplast_original: numOuNulo(originais.superplast_real),
+            incorporador_original: numOuNulo(originais.incorporador_real),
+            // tempo_batida_min (formulário, minutos) -> segundos (mesma unidade de sempre em "tracos")
+            tempo_batida_original: (originais.tempo_batida_min !== '' && originais.tempo_batida_min != null)
+              ? Number(originais.tempo_batida_min) * 60 : null,
+            densidade_original: novosValores.densidade ? numOuNulo(novosValores.densidade.original) : traco.densidade_original,
+            flow_original: novosValores.flow ? numOuNulo(novosValores.flow.original) : traco.flow_original,
           });
-          if (idxEntrada !== -1) ajustesTracos[idxEntrada] = novaEntrada;
-          else ajustesTracos.push(novaEntrada);
-        }
 
-        const tmpAjustes = ajustesPath + '.tmp';
-        fs.writeFileSync(tmpAjustes, JSON.stringify(ajustesTracos, null, 2), 'utf8');
-        fs.renameSync(tmpAjustes, ajustesPath);
+          // Ajustes: substitui TODOS de uma vez (apaga + reinsere
+          // renumerado 1..N) — mais simples e seguro que tentar calcular um
+          // diff linha a linha, e o volume por traço é sempre pequeno.
+          db.prepare('DELETE FROM ajustes WHERE id_traco = ?').run(id_traco);
+          const inserirAjuste = db.prepare(db.SQL_INSERIR_AJUSTE);
+          ajustes.forEach((a, i) => {
+            inserirAjuste.run({
+              id_traco, ordem: i + 1, tempo_batida: a.tempo_batida,
+              cimento: numOuNulo(a.cimento), agua: numOuNulo(a.agua), eps: numOuNulo(a.eps),
+              superplast: numOuNulo(a.superplast), incorporador: numOuNulo(a.incorporador),
+              registrado_em: a.registrado_em || new Date().toISOString(),
+            });
+          });
 
-        // Log de auditoria — append-only, mesmo padrão de historico_edicoes.json.
-        const edicoesPath = path.join(DB_DIR, 'relatorio_edicoes.json');
-        let edicoes = [];
-        try { edicoes = JSON.parse(fs.readFileSync(edicoesPath, 'utf8') || '[]'); } catch (_) {}
-        if (!Array.isArray(edicoes)) edicoes = [];
-        edicoes.push({
-          id_traco,
-          id_operacao,
-          data_edicao: new Date().toISOString(),
-          campos_alterados: diff,
-        });
-        const tmpEdicoesRel = edicoesPath + '.tmp';
-        fs.writeFileSync(tmpEdicoesRel, JSON.stringify(edicoes, null, 2), 'utf8');
-        fs.renameSync(tmpEdicoesRel, edicoesPath);
+          // Densidade/Flow: mesma ideia — substitui as leituras inteiras.
+          const inserirLeitura = db.prepare(db.SQL_INSERIR_LEITURA);
+          ['densidade', 'flow'].forEach(campo => {
+            if (!novosValores[campo]) return;
+            db.prepare('DELETE FROM leituras_resultado WHERE id_traco = ? AND campo = ?').run(id_traco, campo);
+            const leituras = Array.isArray(novosValores[campo].leituras) ? novosValores[campo].leituras : [];
+            leituras.forEach((valor, i) => {
+              inserirLeitura.run({ id_traco, campo, valor: Number(valor), ordem: i + 1 });
+            });
+          });
+
+          // Log de auditoria — append-only, mesmo padrão de edicoes_operacao.
+          db.prepare(`
+            INSERT INTO edicoes_traco (id_traco, id_operacao, data_edicao, campos_alterados)
+            VALUES (?, ?, ?, ?)
+          `).run(id_traco, id_operacao, new Date().toISOString(), JSON.stringify(diff));
+        })();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -786,7 +921,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Registrar linhas do relatório de injeção — append em relatorio_injecao.json
+  // Registrar linhas do relatório de injeção — grava nas tabelas tracos/
+  // traco_usos/leituras_resultado (SQL); em Modo de Teste, continua indo
+  // pro JSON isolado de sempre.
   if (req.method === 'POST' && urlPath === '/registrar-relatorio-injecao') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -794,33 +931,102 @@ const server = http.createServer((req, res) => {
       if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const dadosRecebidos = JSON.parse(body);
-        const relatorioPath = path.join(dirParaModoTeste(modoTeste), 'relatorio_injecao.json');
 
-        let relatorio = [];
-        try {
-          relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8'));
-        } catch(_) {
-          relatorio = [];
+        if (modoTeste) {
+          const relatorioPath = path.join(dirParaModoTeste(true), 'relatorio_injecao.json');
+          let relatorio = [];
+          try { relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8')); } catch (_) { relatorio = []; }
+          dadosRecebidos.forEach(novoTraco => {
+            const registroExistente = relatorio.find(r => r.id_traco === novoTraco.id_traco);
+            if (registroExistente) {
+              if (!registroExistente.ultilizado) registroExistente.ultilizado = { operacao: [] };
+              registroExistente.ultilizado.operacao.push(...novoTraco.ultilizado.operacao);
+            } else {
+              relatorio.push(novoTraco);
+            }
+          });
+          fs.writeFileSync(relatorioPath, JSON.stringify(relatorio, null, 2), 'utf8');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+          return;
         }
 
-        dadosRecebidos.forEach(novoTraco => {
-          console.log('recebido:', novoTraco.id_traco);
-          const registroExistente = relatorio.find(r => r.id_traco === novoTraco.id_traco);
+        // Caminho real (SQL):
+        const inserirTraco = db.prepare(db.SQL_INSERIR_TRACO);
+        const inserirUso = db.prepare(db.SQL_INSERIR_USO);
+        const inserirLeitura = db.prepare(db.SQL_INSERIR_LEITURA);
 
-          if (registroExistente) {
-            if (!registroExistente.ultilizado) registroExistente.ultilizado = { operacao: [] };
-            // Cada uso/reaproveitamento já carrega sua própria obs dentro do
-            // próprio item de operação (novoTraco.ultilizado.operacao[].obs),
-            // então não há mais necessidade de concatenar obs no nível do
-            // traço — isso evitava perder a observação de reaproveitamentos,
-            // mas misturava observações de baterias diferentes num só texto.
-            registroExistente.ultilizado.operacao.push(...novoTraco.ultilizado.operacao);
-          } else {
-            relatorio.push(novoTraco);
-          }
-        });
+        db.transaction(() => {
+          dadosRecebidos.forEach(novoTraco => {
+            const tracoExiste = db.prepare('SELECT 1 FROM tracos WHERE id_traco = ?').get(novoTraco.id_traco);
 
-        fs.writeFileSync(relatorioPath, JSON.stringify(relatorio, null, 2), 'utf8');
+            if (!tracoExiste) {
+              // Traço novo: os 5 insumos + tempo de batida confiam no
+              // .original do payload SE já existir ajuste pra esse traço
+              // na tabela "ajustes" (gravado ao vivo, durante a operação,
+              // via /registrar-ajuste-traco) — senão colapsa original+
+              // ajustes num único total (mesma regra da migração; ver
+              // README, "Banco de Dados (SQLite)" -> Fase 5).
+              const jaTemAjustes = !!db.prepare('SELECT 1 FROM ajustes WHERE id_traco = ? LIMIT 1').get(novoTraco.id_traco);
+
+              const paramsTraco = {
+                id_traco: novoTraco.id_traco, data: novoTraco.data, turno: novoTraco.turno ?? null,
+                num_traco: novoTraco.num_traco ?? null,
+              };
+              const CAMPOS_SOMA_LOCAIS = [
+                ['cimento_real', 'cimento_original'], ['agua_real', 'agua_original'], ['eps_real', 'eps_original'],
+                ['superplast_real', 'superplast_original'], ['incorporador_real', 'incorporador_original'],
+              ];
+              CAMPOS_SOMA_LOCAIS.forEach(([campoJson, coluna]) => {
+                const original = db.extrairOriginal(novoTraco[campoJson]);
+                const ajustesDoCampo = db.extrairAjustesNumericos(novoTraco[campoJson]);
+                paramsTraco[coluna] = (jaTemAjustes || !ajustesDoCampo.length)
+                  ? original
+                  : (original || 0) + ajustesDoCampo.reduce((s, v) => s + v, 0);
+              });
+              {
+                const original = db.extrairOriginal(novoTraco.tempo_batida);
+                const ajustesDoCampo = db.extrairAjustesNumericos(novoTraco.tempo_batida);
+                paramsTraco.tempo_batida_original = (jaTemAjustes || !ajustesDoCampo.length)
+                  ? original
+                  : (original || 0) + ajustesDoCampo.reduce((s, v) => s + v, 0);
+              }
+              paramsTraco.densidade_original = db.extrairOriginal(novoTraco.densidade);
+              paramsTraco.flow_original = db.extrairOriginal(novoTraco.flow);
+              paramsTraco.obs = novoTraco.obs ?? null;
+              paramsTraco.silo = novoTraco.silo ?? null;
+              paramsTraco.expansao = novoTraco.expansao ?? null;
+              paramsTraco.densidade_eps = novoTraco.densidade_eps ?? null;
+
+              inserirTraco.run(paramsTraco);
+
+              // Leituras de densidade/flow — traço é novo, nunca teve
+              // nenhuma leitura registrada ainda.
+              ['densidade', 'flow'].forEach(campo => {
+                db.extrairAjustesNumericos(novoTraco[campo]).forEach((valor, i) => {
+                  inserirLeitura.run({ id_traco: novoTraco.id_traco, campo, valor, ordem: i + 1 });
+                });
+              });
+            }
+
+            // Em qualquer caso (novo ou reaproveitado): adiciona o(s) uso(s)
+            // — mesmo comportamento de sempre, nunca toca em outro campo do
+            // traço quando ele já existe (nem densidade/flow, se mudou
+            // nesse reaproveitamento — limitação que já existia antes
+            // desta migração, replicada de propósito, não introduzida agora).
+            (novoTraco.ultilizado?.operacao || []).forEach(uso => {
+              inserirUso.run({
+                id_traco: novoTraco.id_traco,
+                id_operacao: uso.id_operacao ?? '',
+                id_bateria: uso.id_bateria ?? null,
+                berco_inicio: uso.berco_inicio ?? null,
+                berco_finalizacao: uso.berco_finalizacao ?? null,
+                obs: uso.obs ?? null,
+              });
+            });
+          });
+        })();
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
@@ -831,7 +1037,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Importar lote de relatório de injeção — merge com deduplicação
+  // Importar lote de relatório de injeção — cada linha da planilha não tem
+  // id_traco nem id_operacao reais (não vem de uma operação de verdade),
+  // então gera um id_traco sintético por linha e cria um traco_usos com o
+  // id_operacao sintético que o navegador já mandou (sem FK pra
+  // "operacoes" de propósito — ver schema em db.js).
   if (req.method === 'POST' && urlPath === '/importar-relatorio-injecao') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -839,18 +1049,48 @@ const server = http.createServer((req, res) => {
       try {
         const novos = JSON.parse(body);
         if (!Array.isArray(novos)) throw new Error('Payload deve ser um array');
-        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
-        let relatorio = [];
-        try { relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8')); } catch(_) {}
-        const existentes = new Set(relatorio.map(r => r.id_operacao + '|' + r.num_traco));
+
+        // Mesma checagem de duplicata de sempre (id_operacao+num_traco) —
+        // na prática quase nunca encontra nada, já que id_operacao é
+        // gerado novo a cada importação (era assim também antes desta
+        // migração; não é uma regressão introduzida agora).
+        const existentes = new Set(
+          db.prepare(`
+            SELECT tu.id_operacao || '|' || t.num_traco AS chave
+            FROM traco_usos tu JOIN tracos t ON t.id_traco = tu.id_traco
+          `).all().map(r => r.chave)
+        );
+
+        const inserirTraco = db.prepare(db.SQL_INSERIR_TRACO);
+        const inserirUso = db.prepare(db.SQL_INSERIR_USO);
         let inseridos = 0, duplicatas = 0;
-        novos.forEach(r => {
-          const chave = r.id_operacao + '|' + r.num_traco;
-          if (existentes.has(chave)) { duplicatas++; }
-          else { relatorio.push(r); existentes.add(chave); inseridos++; }
+
+        const importarTudo = db.transaction((lista) => {
+          lista.forEach((r, i) => {
+            const chave = r.id_operacao + '|' + r.num_traco;
+            if (existentes.has(chave)) { duplicatas++; return; }
+
+            const idTraco = 'imp_traco_' + Date.now() + '_' + i;
+            inserirTraco.run({
+              id_traco: idTraco, data: r.data, turno: r.turno ?? null, num_traco: r.num_traco ?? null,
+              cimento_original: numOuNulo(r.cimento), agua_original: numOuNulo(r.agua),
+              eps_original: null, // planilha de importação nunca teve coluna de EPS — lacuna pré-existente
+              superplast_original: numOuNulo(r.superplast), incorporador_original: numOuNulo(r.incorporador),
+              tempo_batida_original: numOuNulo(r.tempo_batida), // já em segundos, igual ao registro ao vivo
+              densidade_original: numOuNulo(r.densidade), flow_original: numOuNulo(r.flow),
+              obs: r.obs ?? null, silo: r.silo ?? null, expansao: r.expansao ?? null,
+              densidade_eps: r.densidade_eps ?? null,
+            });
+            inserirUso.run({
+              id_traco: idTraco, id_operacao: r.id_operacao ?? '', id_bateria: r.id_bateria ?? null,
+              berco_inicio: r.berco_ini ?? null, berco_finalizacao: r.berco_fim ?? null, obs: r.obs ?? null,
+            });
+            existentes.add(chave);
+            inseridos++;
+          });
         });
-        relatorio.sort((a, b) => (a.data > b.data ? 1 : -1));
-        fs.writeFileSync(relatorioPath, JSON.stringify(relatorio, null, 2), 'utf8');
+        importarTudo(novos);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, inseridos, duplicatas }));
       } catch(e) {
@@ -861,7 +1101,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Importar lote de registros — merge no historico.json com deduplicação
+  // Importar lote de registros — insere na tabela operacoes, com a mesma
+  // deduplicação de sempre (por id, ou por data+bateria+turno pra
+  // registros antigos sem id).
   if (req.method === 'POST' && urlPath === '/importar-historico') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -869,18 +1111,28 @@ const server = http.createServer((req, res) => {
       try {
         const novos = JSON.parse(body);
         if (!Array.isArray(novos)) throw new Error('Payload deve ser um array');
-        const historicoPath = path.join(DB_DIR, 'historico.json');
-        let historico = [];
-        try { historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8')); } catch(_) {}
-        const existentes = new Set(historico.map(r => r.id || (r.data + '|' + r.id_bateria + '|' + r.turno)));
+
+        const existentesRows = db.prepare('SELECT id, data, id_bateria, turno FROM operacoes').all();
+        const existentes = new Set(existentesRows.map(r => r.id || (r.data + '|' + r.id_bateria + '|' + r.turno)));
+
+        const inserirOperacao = db.prepare(db.SQL_INSERIR_OPERACAO);
         let inseridos = 0, duplicatas = 0;
-        novos.forEach(r => {
-          const chave = r.id || (r.data + '|' + r.id_bateria + '|' + r.turno);
-          if (existentes.has(chave)) { duplicatas++; }
-          else { historico.push(r); existentes.add(chave); inseridos++; }
+
+        const importarTudo = db.transaction((lista) => {
+          for (const r of lista) {
+            const chave = r.id || (r.data + '|' + r.id_bateria + '|' + r.turno);
+            if (existentes.has(chave)) { duplicatas++; continue; }
+            inserirOperacao.run({
+              ...db.operacaoParaRow(r),
+              modo_teste: 0,
+              criado_em: new Date().toISOString(),
+            });
+            existentes.add(chave);
+            inseridos++;
+          }
         });
-        historico.sort((a, b) => (a.data > b.data ? 1 : -1));
-        fs.writeFileSync(historicoPath, JSON.stringify(historico, null, 2), 'utf8');
+        importarTudo(novos);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, inseridos, duplicatas }));
       } catch(e) {
@@ -891,15 +1143,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── SOBRA: Salvar sobra.json ──────────────────────────────────────────────
+  // ── SOBRA: salvar sobra (real -> tabela sobra; Modo de Teste -> JSON isolado) ──
   if (req.method === 'POST' && urlPath === '/salvar-sobra') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const sobra = JSON.parse(body);
-        const sobraPath = path.join(dirParaModoTeste(modoTeste), 'sobra.json');
-        fs.writeFileSync(sobraPath, JSON.stringify(sobra, null, 2), 'utf8');
+        if (modoTeste) {
+          const sobraPath = path.join(dirParaModoTeste(true), 'sobra.json');
+          fs.writeFileSync(sobraPath, JSON.stringify(sobra, null, 2), 'utf8');
+        } else {
+          db.prepare(db.SQL_UPSERT_SOBRA).run(db.sobraParaRow(sobra));
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
@@ -1057,39 +1313,104 @@ const server = http.createServer((req, res) => {
           throw new Error('"ajuste.tempo_batida" obrigatório (minutos, > 0).');
         }
 
-        const ajustesPath = path.join(dirParaModoTeste(modoTeste), 'ajustes_tracos.json');
-        let ajustesTracos = [];
-        try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
-        if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
+        if (modoTeste) {
+          const ajustesPath = path.join(dirParaModoTeste(true), 'ajustes_tracos.json');
+          let ajustesTracos = [];
+          try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
+          if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
 
-        let entrada = ajustesTracos.find(e => e.id_traco === id_traco);
-        if (!entrada) {
-          entrada = { id_traco };
-          ajustesTracos.push(entrada);
+          let entrada = ajustesTracos.find(e => e.id_traco === id_traco);
+          if (!entrada) { entrada = { id_traco }; ajustesTracos.push(entrada); }
+
+          const numerosExistentes = Object.keys(entrada)
+            .map(k => /^ajuste_(\d+)$/.exec(k)).filter(Boolean).map(m => parseInt(m[1], 10));
+          const proximoNumero = (numerosExistentes.length ? Math.max(...numerosExistentes) : 0) + 1;
+          entrada['ajuste_' + proximoNumero] = { ...ajuste, registrado_em: new Date().toISOString() };
+
+          const tmp = ajustesPath + '.tmp';
+          fs.writeFileSync(tmp, JSON.stringify(ajustesTracos, null, 2), 'utf8');
+          fs.renameSync(tmp, ajustesPath);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, ajusteNumero: proximoNumero }));
+          return;
         }
 
-        // Próximo número de ajuste — conta quantas chaves "ajuste_N" essa
-        // entrada já tem (persiste através de reaproveitamentos do mesmo
-        // traço em operações diferentes, já que o id do traço não muda).
-        const numerosExistentes = Object.keys(entrada)
-          .map(k => /^ajuste_(\d+)$/.exec(k))
-          .filter(Boolean)
-          .map(m => parseInt(m[1], 10));
-        const proximoNumero = (numerosExistentes.length ? Math.max(...numerosExistentes) : 0) + 1;
+        // Caminho real (SQL): "ordem" = próximo número sequencial pra esse
+        // id_traco — não tem FK pra "tracos" de propósito (ver schema em
+        // db.js): este ajuste ao vivo acontece ANTES do traço existir lá,
+        // já que só é registrado de verdade ao finalizar a operação.
+        const ultimaOrdem = db.prepare('SELECT MAX(ordem) AS m FROM ajustes WHERE id_traco = ?').get(id_traco).m || 0;
+        const proximaOrdem = ultimaOrdem + 1;
 
-        entrada['ajuste_' + proximoNumero] = { ...ajuste, registrado_em: new Date().toISOString() };
-
-        const tmp = ajustesPath + '.tmp';
-        fs.writeFileSync(tmp, JSON.stringify(ajustesTracos, null, 2), 'utf8');
-        fs.renameSync(tmp, ajustesPath);
+        db.prepare(db.SQL_INSERIR_AJUSTE).run({
+          id_traco,
+          ordem: proximaOrdem,
+          tempo_batida: ajuste.tempo_batida,
+          cimento: ajuste.cimento ?? null,
+          agua: ajuste.agua ?? null,
+          eps: ajuste.eps ?? null,
+          superplast: ajuste.superplast ?? null,
+          incorporador: ajuste.incorporador ?? null,
+          registrado_em: new Date().toISOString(),
+        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, ajusteNumero: proximoNumero }));
+        res.end(JSON.stringify({ ok: true, ajusteNumero: proximaOrdem }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
     });
+    return;
+  }
+
+  // ── GET /db/paradas.json: mesma estratégia de historico.json — desde a
+  // Fase 3, paradas.json não existe mais como arquivo; reconstrói o
+  // mesmo formato a partir da tabela "paradas", pra paradas.js e oee.js
+  // (que já fazem fetch('db/paradas.json') direto) continuarem sem
+  // nenhuma mudança.
+  if (req.method === 'GET' && urlPath === '/db/paradas.json') {
+    try {
+      const rows = db.prepare('SELECT * FROM paradas ORDER BY inicio ASC').all();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(rows.map(db.rowParaParada)));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/sobra.json: mesma estratégia das outras — desde a Fase 4,
+  // sobra.json não existe mais como arquivo (caminho real); reconstrói o
+  // mesmo objeto de sempre (camelCase) a partir da tabela "sobra". Modo de
+  // Teste continua sendo arquivo estático de verdade (não intercepta aqui).
+  if (req.method === 'GET' && urlPath === '/db/sobra.json') {
+    try {
+      const row = db.prepare('SELECT * FROM sobra WHERE id = 1').get();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.rowParaSobra(row)));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/contador_tracos.json: idem — usado só pelo Backup de Dados
+  // gerado no navegador (não tem leitura direta em nenhuma tela; a tela
+  // usa /total-tracos-hoje). Devolve só o dia de HOJE, igual ao arquivo de
+  // sempre (a tabela pode ter mais dias guardados, mas o formato externo
+  // nunca mudou — sempre foi "o contador do dia atual", nunca histórico).
+  if (req.method === 'GET' && urlPath === '/db/contador_tracos.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(lerContadorTracosHoje(false)));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
     return;
   }
 
@@ -1103,18 +1424,18 @@ const server = http.createServer((req, res) => {
         if (!parada || typeof parada !== 'object' || !parada.id) {
           throw new Error('Payload inválido: "id" obrigatório.');
         }
-        const paradasPath = path.join(DB_DIR, 'paradas.json');
-        let paradas = [];
-        try { paradas = JSON.parse(fs.readFileSync(paradasPath, 'utf8') || '[]'); } catch (_) {}
-        const idx = paradas.findIndex(p => p.id === parada.id);
-        if (idx !== -1) {
-          paradas[idx] = { ...paradas[idx], ...parada };
-        } else {
-          paradas.push(parada);
-        }
-        const tmp = paradasPath + '.tmp';
-        fs.writeFileSync(tmp, JSON.stringify(paradas, null, 2), 'utf8');
-        fs.renameSync(tmp, paradasPath);
+        const atual = db.prepare('SELECT * FROM paradas WHERE id = ?').get(parada.id);
+        const mesclado = atual ? { ...db.rowParaParada(atual), ...parada } : parada;
+
+        db.prepare(`
+          INSERT INTO paradas (id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em)
+          VALUES (@id, @inicio, @fim, @duracao_min, @motivo, @equipamento, @classificacao, @obs, @registrado_em)
+          ON CONFLICT(id) DO UPDATE SET
+            inicio = @inicio, fim = @fim, duracao_min = @duracao_min, motivo = @motivo,
+            equipamento = @equipamento, classificacao = @classificacao, obs = @obs,
+            registrado_em = @registrado_em
+        `).run(db.paradaParaRow(mesclado));
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -1133,15 +1454,8 @@ const server = http.createServer((req, res) => {
       try {
         const { id } = JSON.parse(body);
         if (!id || typeof id !== 'string') throw new Error('ID inválido.');
-        const paradasPath = path.join(DB_DIR, 'paradas.json');
-        let paradas = [];
-        try { paradas = JSON.parse(fs.readFileSync(paradasPath, 'utf8') || '[]'); } catch (_) {}
-        const antes = paradas.length;
-        paradas = paradas.filter(p => p.id !== id);
-        if (paradas.length === antes) throw new Error('Parada não encontrada (id: ' + id + ').');
-        const tmp = paradasPath + '.tmp';
-        fs.writeFileSync(tmp, JSON.stringify(paradas, null, 2), 'utf8');
-        fs.renameSync(tmp, paradasPath);
+        const resultado = db.prepare('DELETE FROM paradas WHERE id = ?').run(id);
+        if (resultado.changes === 0) throw new Error('Parada não encontrada (id: ' + id + ').');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -1259,27 +1573,119 @@ const server = http.createServer((req, res) => {
 
         // 3) Backup de segurança do estado ATUAL antes de sobrescrever
         // qualquer coisa. Fica fora de public/ — nunca é servido pela web.
+        // historico.json/historico_edicoes.json não existem mais como
+        // arquivo (Fase 2 — ver "Banco de Dados (SQLite)" no README):
+        // o backup de segurança deles é um DUMP do conteúdo atual da
+        // tabela, no mesmo formato de sempre.
         const carimbo = todayBrasiliaServer() + '_' + Date.now();
         const dirSeguranca = path.join(ROOT_DIR, 'backups-seguranca', 'pre-restore_' + carimbo);
         fs.mkdirSync(dirSeguranca, { recursive: true });
         for (const nome of esperados) {
           try {
-            fs.copyFileSync(path.join(DB_DIR, nome), path.join(dirSeguranca, nome));
+            if (nome === 'historico.json') {
+              const rows = db.prepare('SELECT * FROM operacoes ORDER BY data ASC, criado_em ASC').all();
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(db.rowParaOperacao), null, 2), 'utf8');
+            } else if (nome === 'historico_edicoes.json') {
+              const rows = db.prepare('SELECT id_operacao, data_edicao, campos_alterados FROM edicoes_operacao ORDER BY id ASC').all();
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
+            } else if (nome === 'paradas.json') {
+              const rows = db.prepare('SELECT * FROM paradas ORDER BY inicio ASC').all();
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(db.rowParaParada), null, 2), 'utf8');
+            } else if (nome === 'sobra.json') {
+              const row = db.prepare('SELECT * FROM sobra WHERE id = 1').get();
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.rowParaSobra(row), null, 2), 'utf8');
+            } else if (nome === 'contador_tracos.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(lerContadorTracosHoje(false), null, 2), 'utf8');
+            } else if (nome === 'relatorio_injecao.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsTracos(), null, 2), 'utf8');
+            } else if (nome === 'ajustes_tracos.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsAjustesTracosJSON(), null, 2), 'utf8');
+            } else {
+              fs.copyFileSync(path.join(DB_DIR, nome), path.join(dirSeguranca, nome));
+            }
           } catch (_) {
-            // Arquivo pode não existir ainda (ex.: primeira execução) — ok.
+            // Arquivo/tabela pode estar vazio ainda (ex.: primeira execução) — ok.
           }
         }
 
         // 4) Escreve tudo em arquivos .tmp primeiro; só promove (rename) pro
         // nome final depois que TODOS os .tmp foram gravados com sucesso —
         // minimiza o risco de deixar a pasta db/ num estado inconsistente.
-        const pendentes = esperados.map(nome => ({
+        // historico.json/historico_edicoes.json/paradas.json/sobra.json/
+        // contador_tracos.json/relatorio_injecao.json/ajustes_tracos.json
+        // não entram nessa escrita em arquivo — substituem o conteúdo das
+        // tabelas SQL direto (também só depois que TODOS os outros
+        // arquivos .tmp já foram validados e gravados, pra manter a mesma
+        // garantia de "tudo ou nada").
+        const nomesArquivo = esperados.filter(n =>
+          !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
+            'relatorio_injecao.json', 'ajustes_tracos.json'].includes(n));
+        const pendentes = nomesArquivo.map(nome => ({
           tmp: path.join(DB_DIR, nome + '.tmp'),
           destino: path.join(DB_DIR, nome),
           texto: textosValidados[nome],
         }));
         pendentes.forEach(p => fs.writeFileSync(p.tmp, p.texto, 'utf8'));
         pendentes.forEach(p => fs.renameSync(p.tmp, p.destino));
+
+        if (esperados.includes('historico.json')) {
+          const novoHistorico = JSON.parse(textosValidados['historico.json']);
+          const inserirOperacao = db.prepare(db.SQL_INSERIR_OPERACAO);
+          db.transaction(() => {
+            db.prepare('DELETE FROM operacoes').run();
+            for (const r of novoHistorico) {
+              inserirOperacao.run({ ...db.operacaoParaRow(r), modo_teste: 0, criado_em: r.fim || r.inicio || new Date().toISOString() });
+            }
+          })();
+        }
+        if (esperados.includes('historico_edicoes.json')) {
+          const novasEdicoes = JSON.parse(textosValidados['historico_edicoes.json']);
+          const inserirEdicao = db.prepare('INSERT INTO edicoes_operacao (id_operacao, data_edicao, campos_alterados) VALUES (?, ?, ?)');
+          db.transaction(() => {
+            db.prepare('DELETE FROM edicoes_operacao').run();
+            for (const e of novasEdicoes) {
+              inserirEdicao.run(e.id_operacao, e.data_edicao, JSON.stringify(e.campos_alterados || []));
+            }
+          })();
+        }
+        if (esperados.includes('paradas.json')) {
+          const novasParadas = JSON.parse(textosValidados['paradas.json']);
+          const inserirParada = db.prepare(db.SQL_INSERIR_PARADA);
+          db.transaction(() => {
+            db.prepare('DELETE FROM paradas').run();
+            for (const p of novasParadas) inserirParada.run(db.paradaParaRow(p));
+          })();
+        }
+        if (esperados.includes('sobra.json')) {
+          const novaSobra = JSON.parse(textosValidados['sobra.json']);
+          if (novaSobra && Object.keys(novaSobra).length) {
+            db.prepare(db.SQL_UPSERT_SOBRA).run(db.sobraParaRow(novaSobra));
+          } else {
+            db.prepare('DELETE FROM sobra').run();
+          }
+        }
+        if (esperados.includes('contador_tracos.json')) {
+          const novoContador = JSON.parse(textosValidados['contador_tracos.json']);
+          if (novoContador && novoContador.data) {
+            db.prepare(`
+              INSERT INTO contador_tracos (data, total) VALUES (?, ?)
+              ON CONFLICT(data) DO UPDATE SET total = ?
+            `).run(novoContador.data, novoContador.total || 0, novoContador.total || 0);
+          }
+        }
+        if (esperados.includes('relatorio_injecao.json')) {
+          const novoRelatorio = JSON.parse(textosValidados['relatorio_injecao.json']);
+          const novosAjustes = esperados.includes('ajustes_tracos.json')
+            ? JSON.parse(textosValidados['ajustes_tracos.json'])
+            : db.todosOsAjustesTracosJSON(); // não fazia parte deste backup — preserva os ajustes atuais
+          db.transaction(() => db.substituirTracosEAjustes(novoRelatorio, novosAjustes))();
+        } else if (esperados.includes('ajustes_tracos.json')) {
+          // Raro (backup só com ajustes, sem o relatório) — ainda assim
+          // substitui só os ajustes, preservando os traços como estão.
+          const novoRelatorioAtual = db.todosOsTracos();
+          const novosAjustes = JSON.parse(textosValidados['ajustes_tracos.json']);
+          db.transaction(() => db.substituirTracosEAjustes(novoRelatorioAtual, novosAjustes))();
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
