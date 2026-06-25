@@ -321,10 +321,43 @@ function salvarOperacaoAndamentoNoDisco(dados) {
 const DIR_LOGS = path.join(ROOT_DIR, 'logs');
 const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 
+// ─── DISPOSITIVOS AUTORIZADOS A CONTROLAR A OPERAÇÃO ───────────────────────
+// Lista opcional em config.json (dispositivosAutorizados: [{ deviceId, nome,
+// autorizadoEm }]), editável em Configurações → Autorizados. Regra: lista
+// VAZIA = sem restrição (qualquer computador pode iniciar/encerrar/registrar
+// — comportamento padrão, igual a antes desta funcionalidade existir).
+// Lista com pelo menos 1 item = só os deviceIds dela podem controlar; os
+// demais continuam podendo ACOMPANHAR ao vivo (WebSocket), só não interagir.
+function lerConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
+
+function dispositivoAutorizado(deviceId) {
+  const cfg = lerConfig();
+  const lista = Array.isArray(cfg.dispositivosAutorizados) ? cfg.dispositivosAutorizados : [];
+  if (!lista.length) return true; // sem restrição configurada ainda
+  return lista.some(d => d && d.deviceId === deviceId);
+}
+
+function negarDispositivoNaoAutorizado(res) {
+  res.writeHead(403, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    ok: false,
+    erro: 'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+  }));
+}
+
 const server = http.createServer((req, res) => {
 
-  // Extrai apenas o caminho (pathname) da URL, ignorando parâmetros como ?_=...
-  const [urlPath] = req.url.split('?');
+  // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
+  // ?deviceId=... — usado pra checar autorização de dispositivo em rotas
+  // que controlam a operação em andamento, ver dispositivoAutorizado()).
+  const [urlPath, queryString] = req.url.split('?');
+  const deviceId = new URLSearchParams(queryString || '').get('deviceId') || '';
 
   // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
   // POST /verificar-senha  { senha: "texto plano" }
@@ -415,6 +448,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const payload = JSON.parse(body);
         const quantidade = Number(payload.quantidade);
@@ -486,6 +520,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
         const historicoPath = path.join(DB_DIR, 'historico.json');
@@ -578,6 +613,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const dadosRecebidos = JSON.parse(body);
         const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
@@ -706,6 +742,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const payload = JSON.parse(body);
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {

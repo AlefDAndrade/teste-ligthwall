@@ -125,6 +125,18 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 - Tipos **híbridos** não geram cor própria: aparecem sempre com a tela dividida 50/50 entre a cor de cada um dos 2 tipos simples que os compõem (gradiente CSS no HTML; gradiente real desenhado no `<canvas>`, que não entende a sintaxe `linear-gradient()` do CSS).
 - Aparece em: badge de "Tipo de Montagem" no Registro de Baterias, gráfico "Montagem × Atrasos" da Análise Operacional, e uma bolinha de pré-visualização na própria tela de admin.
 
+### Autorizados
+
+Em **Menu → Configurações → Autorizados**: controla quais computadores podem iniciar, encerrar e registrar operações em **Registrar Operação** (ver *Operação em Andamento*, abaixo). Cada item é `{ deviceId, nome, autorizadoEm }`, guardado em `config.json` (`dispositivosAutorizados`).
+
+- **Lista vazia (padrão)**: sem restrição — qualquer computador pode controlar, igual ao comportamento antes desta funcionalidade existir.
+- **Lista com 1+ item**: só os `deviceId`s dela podem controlar. Os demais continuam podendo **acompanhar a operação ao vivo** (WebSocket), só não conseguem interagir.
+- A própria tela mostra o `deviceId` do computador que está olhando (gerado e persistido em `localStorage`, `lw_device_id` — ver *Log de Acesso*), já pré-preenchido no campo de autorizar — é assim que se autoriza "este computador aqui".
+- Cada autorizar/remover salva na hora (sem precisar do botão "✓ Salvar Configurações", que é só da aba Baterias e Montagem).
+- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao` e `/confirmar-tracos-hoje` recusam (HTTP 403) qualquer `deviceId` fora da lista, quando ela não está vazia.
+
+**Limitação conhecida**: `deviceId` não é uma credencial de segurança de verdade (ver *Log de Acesso*) — é só uma identidade de conveniência. Quem tiver acesso físico ao computador autorizado controla a operação; isso restringe *qual máquina*, não *quem* a está usando.
+
 ## Backup e Restauração (Administrador)
 
 Um único card no menu ("💾 Backup e Restauração") abre um painel com todas as opções:
@@ -159,7 +171,7 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 - Campos preenchidos **antes** de clicar em "Iniciar Injeção" não são transmitidos (ainda é só um rascunho local) — a transmissão começa no clique de "Iniciar" e termina quando a operação é registrada, resetada (🗑️ Limpar Tudo) ou enfileirada por falta de conexão.
 - Sem necessidade de framework: o servidor (`server.js`) anexa um `WebSocket.Server` (lib `ws`) ao mesmo `http.Server` já existente.
 
-**Limitação conhecida**: não há "trava" de quem pode editar — se duas pessoas interagirem com a tela ao mesmo tempo em computadores diferentes, a última mudança enviada sobrescreve a anterior (mesmo modelo de confiança usado em outras telas administrativas do sistema, sem token de sessão).
+**Limitação conhecida**: a trava de quem pode editar é por **dispositivo** (ver *Configurações → Autorizados*, abaixo), não por sessão — se a lista de autorizados estiver vazia (padrão), continua valendo "última mudança enviada sobrescreve a anterior", sem nenhuma trava.
 
 ## Log de Acesso
 
@@ -180,7 +192,7 @@ Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', 
 - Fica em `logs/`, **fora** de `public/` — de propósito: arquivos em `public/db/` são servidos como arquivo estático comum (ver "Limitações conhecidas"), e isso exporia o IP de quem acessa pra qualquer um que soubesse a URL. Em `logs/`, não existe rota nenhuma que sirva esse arquivo — só o próprio servidor lê/escreve nele direto no disco.
 - O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
 - Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
-- Pensado como base pra, no futuro, restringir o registro de operação a um único computador (consultando o `deviceId` mais recente antes de liberar a tela) — o que, nesse cenário, também simplificaria a Operação em Andamento (sem mais de um cliente "gravando" ao mesmo tempo, o eco entre abas deixa de ser uma preocupação).
+- Pensado como base pra restringir o registro de operação a um único computador — já implementado em **Configurações → Autorizados** (ver seção dedicada), usando esse mesmo `deviceId`.
 - Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
 
 **Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
@@ -211,18 +223,20 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/verificar-recovery` | POST | Confirma chave de recuperação de senha |
 | `/gerar-hash` | POST | Gera hash SHA-256 de uma senha (uso interno/setup) |
 | `/total-tracos-hoje` | GET | Contador diário de traços |
-| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário |
+| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒 |
 | `/salvar-config` | POST | Salva `config.json` |
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) |
-| `/registrar-operacao` | POST | Grava um registro em `historico.json` |
-| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` |
+| `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒 |
+| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒 |
 | `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` |
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
-| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket |
+| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
 | `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
+
+🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada).
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |

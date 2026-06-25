@@ -1642,6 +1642,9 @@
           <button type="button" id="cfg-nav-atalhos" onclick="cfgMostrarSecao('atalhos')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             ⌨️ Atalhos de Teclado</button>
+          <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔒 Autorizados</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -1802,6 +1805,43 @@
             <div id="cfg-atalhos-acoes" style="display:flex;flex-direction:column;gap:6px"></div>
           </div>
           <!-- ========== /SEÇÃO: Atalhos de Teclado ========== -->
+
+          <!-- ========== SEÇÃO: Dispositivos Autorizados ========== -->
+          <div id="cfg-secao-autorizados" style="display:none">
+            <div class="card-title">Dispositivos Autorizados</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Controla quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong>.
+              Enquanto a lista estiver <strong>vazia</strong>, qualquer computador pode controlar (comportamento
+              atual). Ao autorizar pelo menos um dispositivo aqui, só os da lista podem controlar — os demais
+              continuam podendo acompanhar a operação ao vivo, só não interagir.
+            </p>
+
+            <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
+
+            <div id="cfg-autorizados-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Autorizar Novo Dispositivo</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
+                  <label class="form-label">Nome (opcional)</label>
+                  <input class="form-input" id="cfg-autorizado-nome" placeholder="Ex: Sala de Controle">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:2;min-width:240px">
+                  <label class="form-label">Device ID</label>
+                  <input class="form-input" id="cfg-autorizado-deviceid"
+                    style="font-family:var(--font-mono);font-size:.78rem">
+                </div>
+                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarAutorizado()">+ Autorizar</button>
+              </div>
+              <p style="font-size:.74rem;color:var(--text-3);margin-top:10px;margin-bottom:0">
+                💡 Pra autorizar <strong>este</strong> computador, o Device ID dele já vem preenchido acima.
+              </p>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
         </div>
       </div>
@@ -3003,17 +3043,22 @@
     function cfgMostrarSecao(secao) {
       const elDados = document.getElementById('cfg-secao-dados');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
+      const elAutorizados = document.getElementById('cfg-secao-autorizados');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
+      if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
       const navDados = document.getElementById('cfg-nav-dados');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
+      const navAutorizados = document.getElementById('cfg-nav-autorizados');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
+      if (secao === 'autorizados') cfgRenderAutorizados();
     }
 
     // ---- Atalhos de Teclado (Configurações → Atalhos) ----
@@ -3298,11 +3343,7 @@
 
       // Nova estrutura: dimensão e berços ficam dentro de cada bateria
       // Reconstruímos DIMENSAO_OPTS a partir das baterias (para retrocompatibilidade)
-      const uniqueDims = new Map();
-      _cfgDados.baterias.forEach(b => {
-        if (b.label && b.bercos) uniqueDims.set(b.label, b.bercos);
-      });
-      const dimensoesOpcoes = Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
+      const dimensoesOpcoes = _derivarDimensoesDeBaterias(_cfgDados.baterias);
 
       const novasOpcoesMontagem = _cfgDados.montagens.map(_montagemDaUIParaConfig);
 
@@ -3310,9 +3351,11 @@
         baterias: { ids: _cfgDados.baterias },
         dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
         tipos_montagem: { opcoes: novasOpcoesMontagem },
-        // Preserva volume_por_placa tal como está atualmente em memória — este modal
-        // não edita essa lista, então nunca deve sobrescrevê-la com algo vazio/ausente.
+        // Preserva volume_por_placa e dispositivosAutorizados tal como estão
+        // atualmente em memória — este modal não edita essas listas, então
+        // nunca deve sobrescrevê-las com algo vazio/ausente.
         volume_por_placa: LW.VOLUME_POR_PLACA,
+        dispositivosAutorizados: LW.DISPOSITIVOS_AUTORIZADOS,
       };
 
       try {
@@ -3338,6 +3381,144 @@
       );
       window.location.reload();
     }
+
+    // Deriva dimensoes.opcoes a partir de uma lista de baterias — usado por
+    // cfgSalvar() (com o rascunho em edição) e _configAtualBaseParaSalvar()
+    // (com o que já está carregado), pra manter o campo de compatibilidade
+    // "dimensoes" sempre em sincronia com as baterias, sem duplicar lógica.
+    function _derivarDimensoesDeBaterias(baterias) {
+      const uniqueDims = new Map();
+      baterias.forEach(b => {
+        if (b.label && b.bercos) uniqueDims.set(b.label, b.bercos);
+      });
+      return Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
+    }
+
+    // ---- Dispositivos Autorizados (Configurações → Autorizados) ----
+    // Diferente da seção "Baterias e Montagem" (que só salva tudo de uma vez
+    // no botão "✓ Salvar Configurações"), aqui cada autorizar/remover salva
+    // na hora — não tem o que "cancelar" depois de uma ação tão simples.
+    // Por isso monta o config.json inteiro a partir do que já está
+    // carregado em memória (igual cfgSalvar() faz com volume_por_placa),
+    // só trocando a lista de autorizados.
+    function _configAtualBaseParaSalvar() {
+      return {
+        baterias: { ids: LW.BATERIA_IDS },
+        dimensoes: { opcoes: _derivarDimensoesDeBaterias(LW.BATERIA_IDS) },
+        tipos_montagem: { opcoes: LW.MONTAGEM_OPCOES },
+        volume_por_placa: LW.VOLUME_POR_PLACA,
+        dispositivosAutorizados: LW.DISPOSITIVOS_AUTORIZADOS,
+      };
+    }
+
+    async function _cfgSalvarAutorizados(novaLista) {
+      const cfg = _configAtualBaseParaSalvar();
+      cfg.dispositivosAutorizados = novaLista;
+      const res = await fetch('/salvar-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
+      LW.atualizarDispositivosAutorizados(novaLista);
+    }
+
+    function cfgRenderAutorizados() {
+      const meuId = LW.getDeviceId();
+      const lista = LW.DISPOSITIVOS_AUTORIZADOS;
+
+      // Status de "este computador" — feedback imediato de se quem está
+      // olhando essa tela agora consegue (ou não) controlar a operação.
+      const elStatus = document.getElementById('cfg-autorizados-status');
+      let statusHtml;
+      if (!lista.length) {
+        statusHtml = `<span class="badge badge-gray">⬤ Sem restrição — qualquer computador pode controlar</span>`;
+      } else if (lista.some(d => d.deviceId === meuId)) {
+        statusHtml = `<span class="badge badge-green">✓ Este computador ESTÁ autorizado</span>`;
+      } else {
+        statusHtml = `<span class="badge badge-red">⚠ Este computador NÃO está autorizado</span>`;
+      }
+      elStatus.innerHTML = statusHtml +
+        `<div style="font-size:.74rem;color:var(--text-3);margin-top:8px">Device ID deste computador: <span style="font-family:var(--font-mono)">${meuId}</span></div>`;
+
+      // Lista de autorizados
+      const elLista = document.getElementById('cfg-autorizados-lista');
+      elLista.innerHTML = lista.map(d => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
+      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${d.nome ? _escaparHtmlLocal(d.nome) : '(sem nome)'}</span>
+      <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-2)">${_escaparHtmlLocal(d.deviceId)}</span>
+      ${d.deviceId === meuId ? '<span style="font-size:.7rem;color:var(--green)">← este computador</span>' : ''}
+      <button onclick="cfgRemoverAutorizado('${_escaparHtmlLocal(d.deviceId)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum dispositivo autorizado ainda.</span>';
+
+      // Convenience: pré-preenche o campo de Device ID com o deste
+      // computador — é o caso mais comum (autorizar a própria máquina).
+      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
+      if (inputDeviceId && !inputDeviceId.value) inputDeviceId.value = meuId;
+    }
+
+    // Escape simples — esta tela não tem acesso a uma função de escape já
+    // existente no escopo global, então replica a mesma lógica usada em
+    // data.js (_escaparHtml) só pra estes dois campos de texto livre.
+    function _escaparHtmlLocal(texto) {
+      const div = document.createElement('div');
+      div.textContent = String(texto ?? '');
+      return div.innerHTML;
+    }
+
+    async function cfgAdicionarAutorizado() {
+      const inputNome = document.getElementById('cfg-autorizado-nome');
+      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
+
+      const nome = inputNome.value.trim();
+      const deviceId = inputDeviceId.value.trim();
+
+      if (!deviceId) { LW.mostrarAlerta('Cole o Device ID do computador a autorizar.', { tipo: 'aviso' }); return; }
+      if (LW.DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === deviceId)) {
+        LW.mostrarAlerta('Este Device ID já está autorizado.', { tipo: 'aviso' });
+        return;
+      }
+
+      const novaLista = [
+        ...LW.DISPOSITIVOS_AUTORIZADOS,
+        { deviceId, nome, autorizadoEm: new Date().toISOString() },
+      ];
+
+      try {
+        await _cfgSalvarAutorizados(novaLista);
+      } catch (e) {
+        LW.mostrarAlerta('Erro ao autorizar: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      inputNome.value = '';
+      inputDeviceId.value = '';
+      cfgRenderAutorizados();
+    }
+
+    async function cfgRemoverAutorizado(deviceId) {
+      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover a autorização de "${dispositivo?.nome || deviceId}"? Se a lista ficar vazia, qualquer computador volta a poder controlar operações.`,
+        { titulo: 'Remover dispositivo autorizado', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+
+      const novaLista = LW.DISPOSITIVOS_AUTORIZADOS.filter(d => d.deviceId !== deviceId);
+
+      try {
+        await _cfgSalvarAutorizados(novaLista);
+      } catch (e) {
+        LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      cfgRenderAutorizados();
+    }
+
+
 
     // ---- Editar Operação (admin) — Registro de Baterias ----
     // Só os campos preenchidos manualmente podem ser corrigidos aqui (ID

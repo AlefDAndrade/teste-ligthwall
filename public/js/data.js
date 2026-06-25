@@ -27,6 +27,11 @@ let MONTAGEM_OPCOES = [];
 let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
+// Dispositivos autorizados a controlar a operação em andamento (iniciar,
+// encerrar, registrar) — [{ deviceId, nome, autorizadoEm }]. Lista vazia =
+// sem restrição (qualquer computador pode controlar). Editável em
+// Configurações → Autorizados. Ver dispositivoAutorizado() em server.js.
+let DISPOSITIVOS_AUTORIZADOS = [];
 
 let _configReady = false;
 const _configCallbacks = [];
@@ -303,6 +308,14 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "volume_por_placa" válido — mantendo lista já carregada.');
     }
 
+    // Lista vazia/ausente é o padrão (sem restrição) — não é um erro nem
+    // precisa de warning, diferente dos outros blocos acima.
+    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
+      ? cfg.dispositivosAutorizados.map(d => ({
+          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
+        }))
+      : [];
+
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
     DIMENSAO_OPTS = [
@@ -324,6 +337,10 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
+    // Falha pra ler config.json não deve travar quem já estava autorizado
+    // (nem ninguém, na falta de configuração) — fica vazio (sem
+    // restrição), nunca bloqueado por padrão.
+    if (!DISPOSITIVOS_AUTORIZADOS.length) DISPOSITIVOS_AUTORIZADOS = [];
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -399,6 +416,28 @@ function getDeviceId() {
   } catch (_) {
     return 'dev_sem_localstorage'; // navegador sem localStorage disponível
   }
+}
+
+/**
+ * Anexa "?deviceId=..." (ou "&deviceId=..." se já houver query string) na
+ * URL — usado pelas rotas que controlam a operação em andamento (iniciar,
+ * encerrar, registrar), pra o servidor checar se este dispositivo está
+ * autorizado (ver dispositivoAutorizado() em server.js e a seção
+ * "Configurações → Autorizados").
+ */
+function _comDeviceId(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'deviceId=' + encodeURIComponent(getDeviceId());
+}
+
+/**
+ * Atualiza a cópia em memória de DISPOSITIVOS_AUTORIZADOS depois de salvar
+ * com sucesso em config.json (Configurações → Autorizados) — loadConfig()
+ * só roda uma vez por página (guarda em _configReady), então isto é o jeito
+ * de refletir a mudança sem precisar recarregar a página inteira.
+ */
+function atualizarDispositivosAutorizados(lista) {
+  DISPOSITIVOS_AUTORIZADOS = Array.isArray(lista) ? lista : [];
 }
 
 /**
@@ -502,12 +541,22 @@ async function _postOperacaoAndamento(dados) {
   if (corpo === _opAndamentoUltimoEnviado) return; // nada mudou de verdade — evita tráfego à toa
   _opAndamentoUltimoEnviado = corpo;
   try {
-    await fetch('/salvar-operacao-andamento', {
+    const res = await fetch(_comDeviceId('/salvar-operacao-andamento'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dados, clientId: OP_ANDAMENTO_CLIENT_ID }),
     });
+    if (!res.ok) {
+      // Diferente de falha de rede (catch abaixo): o servidor respondeu e
+      // recusou — hoje, o único motivo é "dispositivo não autorizado" (ver
+      // Configurações → Autorizados). Mostra na hora, senão a pessoa fica
+      // digitando sem nenhum feedback de que nada está sendo transmitido.
+      _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
+      const json = await res.json().catch(() => null);
+      mostrarAlerta(json?.erro || 'Este computador não está autorizado a controlar a operação.', { tipo: 'erro' });
+    }
   } catch (_) {
+    _opAndamentoUltimoEnviado = undefined;
     // Sem conexão — a tela segue funcionando normalmente em modo local
     // (mesmo comportamento de antes desta sincronização existir); a
     // próxima mudança tenta de novo.
@@ -754,7 +803,7 @@ async function registrarRelatorioInjecao(record) {
 
   if (!linhas.length) return;
 
-  const res = await fetch('/registrar-relatorio-injecao', {
+  const res = await fetch(_comDeviceId('/registrar-relatorio-injecao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(linhas),
@@ -821,7 +870,7 @@ async function getTotalTracosHoje() {
  * @returns {Promise<number>} novo total acumulado do dia
  */
 async function confirmarTracosHoje(quantidade) {
-  const res = await fetch('/confirmar-tracos-hoje', {
+  const res = await fetch(_comDeviceId('/confirmar-tracos-hoje'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quantidade }),
@@ -834,7 +883,7 @@ async function confirmarTracosHoje(quantidade) {
 // ---- Analytics ----
 
 async function registrarOperacao(record) {
-  const res = await fetch('/registrar-operacao', {
+  const res = await fetch(_comDeviceId('/registrar-operacao'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(record),
@@ -1310,6 +1359,7 @@ window.LW = {
   get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
+  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
 
   // Config loader
@@ -1333,6 +1383,7 @@ window.LW = {
 
   // Log de Acesso
   getDeviceId, registrarAcesso,
+  atualizarDispositivosAutorizados,
 
   // Cálculos
   calcPaineis,
