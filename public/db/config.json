@@ -1,0 +1,160 @@
+{
+  "baterias": {
+    "ids": [
+      {
+        "id": "B1",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B2",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B3",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B4",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B5-7,5cm",
+        "label": "7,5 cm",
+        "bercos": 22
+      },
+      {
+        "id": "B6-12cm",
+        "label": "12 cm",
+        "bercos": 18
+      },
+      {
+        "id": "B7",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B8",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B9",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B10",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B11",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B12",
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "id": "B13",
+        "label": "9 cm",
+        "bercos": 20
+      }
+    ]
+  },
+  "dimensoes": {
+    "opcoes": [
+      {
+        "label": "9 cm",
+        "bercos": 20
+      },
+      {
+        "label": "7,5 cm",
+        "bercos": 22
+      },
+      {
+        "label": "12 cm",
+        "bercos": 18
+      }
+    ]
+  },
+  "tipos_montagem": {
+    "opcoes": [
+      {
+        "label": "2/P",
+        "modo": "simples",
+        "tipo": "2p",
+        "paineis_2p_por_berco": 2,
+        "cimenticia": {
+          "leva": true,
+          "quantidade": 2
+        },
+        "corHue": 210
+      },
+      {
+        "label": "S/P",
+        "modo": "simples",
+        "tipo": "sp",
+        "paineis_sp_por_berco": 2,
+        "cimenticia": {
+          "leva": false,
+          "quantidade": 0
+        },
+        "corHue": 105
+      },
+      {
+        "label": "3T",
+        "modo": "simples",
+        "tipo": "3t",
+        "paineis_3t_por_berco": 2,
+        "cimenticia": {
+          "leva": false,
+          "quantidade": 0
+        },
+        "corHue": 53
+      },
+      {
+        "label": "HÍBRIDA 2p/sp",
+        "modo": "hibrida",
+        "tipos": [
+          "2p",
+          "sp"
+        ],
+        "paineis_2p_por_berco": 1,
+        "paineis_sp_por_berco": 1
+      }
+    ]
+  },
+  "volume_por_placa": [
+    {
+      "label": "S/P - 7,5 cm",
+      "volume": 0.1373
+    },
+    {
+      "label": "2/P - 7,5 cm",
+      "volume": 0.1189
+    },
+    {
+      "label": "S/P - 9 cm",
+      "volume": 0.1647
+    },
+    {
+      "label": "2/P - 9 cm",
+      "volume": 0.1427
+    },
+    {
+      "label": "S/P - 12 cm",
+      "volume": 0.2196
+    },
+    {
+      "label": "2/P - 12 cm",
+      "volume": 0.1903
+    }
+  ]
+}

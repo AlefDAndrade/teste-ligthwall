@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acesso — Lightwall SC</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/login.css">
+</head>
+
+<body>
+
+    <div class="bg-grid"></div>
+    <div class="bg-vignette"></div>
+    <div class="bg-glow"></div>
+
+    <div class="login-wrap">
+
+        <div class="logo-block">
+            <span class="logo-hex">⬡</span>
+            <div class="logo-name">Teste<span>teste</span></div>
+            <div class="logo-sub">Sistema de Injeção · V1.0</div>
+        </div>
+
+        <div class="login-card">
+            <div class="card-question">Entrar como?</div>
+            <div class="roles">
+
+                <!-- OPERADOR -->
+                <button class="btn-operador" onclick="entrar('Operador')">
+                    <span class="btn-role-label">
+                        Operador
+                        <span class="badge-recommended">Principal</span>
+                    </span>
+                    <span class="btn-role-sub">Registro de injeções · Controle de turno</span>
+                    <span class="btn-role-icon">🏭</span>
+                </button>
+
+                <!-- ANALISTA -->
+                <button class="btn-admin" onclick="entrar('Analista')">
+                    <span class="btn-role-label">Analista</span>
+                    <span class="btn-role-sub">Dashboards · Relatórios · Análise</span>
+                    <span class="btn-role-icon">📈</span>
+                </button>
+
+                <!-- ADMINISTRADOR -->
+                <button class="btn-admin" id="btn-entrar-admin" onclick="solicitarSenhaAdmin()">
+                    <span class="btn-role-label">Administrador</span>
+                    <span class="btn-role-sub">Configurações · Backups · Acesso total</span>
+                    <span class="btn-role-icon">📊</span>
+                </button>
+
+            </div>
+        </div>
+
+        <div class="login-footer">Lightwall SC · Uso interno · Acesso restrito</div>
+
+    </div>
+
+    <!-- Loading transition -->
+    <div class="loading-overlay" id="loading-overlay">
+        <span class="logo-hex" style="font-size:2.4rem">⬡</span>
+        <div class="loading-role" id="loading-role-label">Operador</div>
+        <div class="loading-bar">
+            <div class="loading-fill" id="loading-fill"></div>
+        </div>
+        <div class="loading-label" id="loading-label">Carregando sistema...</div>
+    </div>
+
+    <script src="js/admin-auth.js"></script>
+    <script>
+        // ─── Restaura o estado normal da tela se a página voltar do cache do
+        // navegador (bfcache) — ex: botão "Voltar" depois de já ter entrado
+        // num perfil. Sem isso, a tela volta "congelada" no overlay de
+        // carregamento (barra em 100%, "Pronto!"), cobrindo os botões de
+        // login e dando a impressão de estar carregando pra sempre. ─────────
+        window.addEventListener('pageshow', (event) => {
+            if (!event.persisted) return; // carregamento normal, nada a fazer
+
+            const overlay = document.getElementById('loading-overlay');
+            const fill = document.getElementById('loading-fill');
+            const lbl = document.getElementById('loading-label');
+            const roleLabel = document.getElementById('loading-role-label');
+
+            if (overlay) overlay.classList.remove('active');
+            if (fill) fill.style.width = '0%';
+            if (lbl) lbl.textContent = 'Carregando sistema...';
+            if (roleLabel) roleLabel.textContent = 'Operador';
+        });
+
+        // Removido: indicativo de "acesso autorizado / clique para entrar".
+        // A senha agora é pedida sempre que o Administrador é acessado a
+        // partir da tela de login, então esse aviso deixou de ser verdade.
+
+        // ─── Intercepta o clique em "Administrador" ────────────────────────────────
+        function solicitarSenhaAdmin() {
+            // Sempre pede a senha aqui na tela de login, mesmo que já tenha
+            // autenticado como administrador antes nesta máquina/navegador.
+            // (O "ficar logado" só vale DENTRO do sistema — ex: apertar F5
+            // na área de administrador não pede senha de novo — porque ali
+            // a verificação é feita pelo index.html, não por aqui.)
+            AdminAuth.abrirModal(function onSuccess() {
+                entrar('Administrador');
+            });
+        }
+
+        function entrar(role) {
+            const overlay = document.getElementById('loading-overlay');
+            const roleLabel = document.getElementById('loading-role-label');
+            const fill = document.getElementById('loading-fill');
+            const lbl = document.getElementById('loading-label');
+
+            sessionStorage.setItem('lw_role', role);
+
+            roleLabel.textContent = role;
+            overlay.classList.add('active');
+
+            // Animate bar
+            requestAnimationFrame(() => {
+                fill.style.width = '30%';
+                lbl.textContent = 'Autenticando acesso...';
+            });
+
+            setTimeout(() => {
+                fill.style.width = '70%';
+                lbl.textContent = 'Carregando sistema...';
+            }, 300);
+
+            setTimeout(() => {
+                fill.style.width = '100%';
+                lbl.textContent = 'Pronto!';
+            }, 700);
+
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 1000);
+        }
+    </script>
+
+</body>
+
+</html>
