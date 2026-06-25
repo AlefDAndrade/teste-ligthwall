@@ -895,10 +895,10 @@
       // Ordena por data decrescente
       if (b.data !== a.data) return b.data.localeCompare(a.data);
 
-      // Como id_operacao agora está dentro de ultilizado, pegamos a primeira ou a última
-      const opA = a.ultilizado?.operacao?.[0]?.id_operacao || '';
-      const opB = b.ultilizado?.operacao?.[0]?.id_operacao || '';
-      return opB.localeCompare(opA);
+      // Dentro do mesmo dia, por nº do traço decrescente (5, 4, 3, 2, 1) —
+      // antes era pela ordem de chegada (id_operacao), que ficava
+      // bagunçada quando vários traços eram registrados de uma vez só.
+      return (Number(b.num_traco) || 0) - (Number(a.num_traco) || 0);
     });
     window._lwRelatorioMapTemp = {};
     tbody.innerHTML = sorted.map((l, lIdx) => {
