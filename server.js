@@ -101,6 +101,7 @@ const VALIDADORES_BACKUP_DADOS = {
   'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
   'historico.json':          v => Array.isArray(v),
   'historico_edicoes.json': v => Array.isArray(v),
+  'relatorio_edicoes.json':  v => Array.isArray(v),
   'relatorio_injecao.json': v => Array.isArray(v),
   'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
   'sobra.json':              v => v && typeof v === 'object',
@@ -118,6 +119,7 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'contador_tracos.json': {},
   'historico.json': [],
   'historico_edicoes.json': [],
+  'relatorio_edicoes.json': [],
   'relatorio_injecao.json': [],
   'sobra.json': {},
   'paradas.json': [],
@@ -615,6 +617,164 @@ const server = http.createServer((req, res) => {
         const tmpEdicoes = edicoesPath + '.tmp';
         fs.writeFileSync(tmpEdicoes, JSON.stringify(edicoes, null, 2), 'utf8');
         fs.renameSync(tmpEdicoes, edicoesPath);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── EDITAR TRAÇO (Relatório de Injeção): corrige um traço já registrado
+  // em relatorio_injecao.json (id_bateria/berços/obs do USO específico
+  // clicado, dados de identificação do traço, e os 5 insumos + tempo de
+  // batida) e, ao mesmo tempo, REGRAVA ajustes_tracos.json pra esse
+  // id_traco a partir da mesma lista de ajustes editada — esse arquivo é
+  // a fonte de verdade dos ajustes a partir de agora; os campos
+  // "*_real"/tempo_batida de relatorio_injecao.json (.ajustes[]) são
+  // sempre DERIVADOS dele aqui, nunca editados soltos, pra nunca mais
+  // ficarem fora de sincronia. Densidade/Flow não passam por
+  // ajustes_tracos.json (são remedições, não ajustes de receita — ver
+  // README), então continuam com sua própria lista de leituras.
+  // Auditoria em relatorio_edicoes.json (mesmo padrão de
+  // historico_edicoes.json, indexado por id_traco).
+  if (req.method === 'POST' && urlPath === '/editar-traco-relatorio') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { id_traco, id_operacao, novosValores, ajustes, diff } = payload;
+
+        if (!id_traco || typeof id_traco !== 'string') throw new Error('ID do traço ausente.');
+        if (!id_operacao || typeof id_operacao !== 'string') throw new Error('ID da operação (uso) ausente.');
+        if (!novosValores || typeof novosValores !== 'object' || Array.isArray(novosValores)) {
+          throw new Error('Payload inválido: "novosValores" ausente.');
+        }
+        if (!Array.isArray(ajustes)) throw new Error('Payload inválido: "ajustes" precisa ser uma lista.');
+        if (!Array.isArray(diff) || !diff.length) throw new Error('Nenhuma alteração informada.');
+
+        // Cada ajuste precisa de tempo_batida (minutos, > 0) — mesma regra
+        // do Ajuste de Receita ao vivo, em Registrar Operação.
+        ajustes.forEach((a, i) => {
+          if (!a || typeof a !== 'object' || typeof a.tempo_batida !== 'number' || a.tempo_batida <= 0) {
+            throw new Error(`Ajuste #${i + 1}: "tempo_batida" obrigatório (minutos, > 0).`);
+          }
+        });
+
+        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
+        const relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8') || '[]');
+        const traco = relatorio.find(r => r.id_traco === id_traco);
+        if (!traco) throw new Error('Traço não encontrado (id_traco: ' + id_traco + ').');
+
+        const uso = (traco.ultilizado?.operacao || []).find(o => o.id_operacao === id_operacao);
+        if (!uso) throw new Error('Uso/operação não encontrado pra esse traço (id_operacao: ' + id_operacao + ').');
+
+        // Dados do USO específico clicado (id_bateria/berços/obs) — só essa
+        // entrada dentro de ultilizado.operacao[], nunca as outras (mesmo
+        // traço pode ter sido reaproveitado em mais de uma bateria).
+        if (novosValores.uso) {
+          Object.assign(uso, novosValores.uso);
+        }
+
+        // Identificação do traço (compartilhada entre todos os usos)
+        ['num_traco', 'densidade_eps', 'silo', 'expansao'].forEach(campo => {
+          if (campo in novosValores) traco[campo] = novosValores[campo];
+        });
+
+        // Insumos + tempo de batida: o "original" vem direto do formulário,
+        // os ".ajustes[]" são SEMPRE recalculados a partir da lista de
+        // ajustes (nunca aceita um array vindo do cliente pra esses 6
+        // campos — evita o cliente mandar algo dessincronizado).
+        const MAPA_CAMPO_AJUSTE = {
+          cimento_real: 'cimento', agua_real: 'agua', eps_real: 'eps',
+          superplast_real: 'superplast', incorporador_real: 'incorporador',
+        };
+        const originais = novosValores.originais || {};
+
+        function colapsa(original, listaAjustes) {
+          const temOriginal = original !== '' && original !== null && original !== undefined;
+          if (!listaAjustes.length) return temOriginal ? Number(original) : '';
+          return { original: temOriginal ? Number(original) : '', ajustes: listaAjustes };
+        }
+
+        Object.entries(MAPA_CAMPO_AJUSTE).forEach(([campoReal, nomeAjuste]) => {
+          const lista = ajustes
+            .filter(a => a[nomeAjuste] !== undefined && a[nomeAjuste] !== null && a[nomeAjuste] !== '')
+            .map(a => Number(a[nomeAjuste]));
+          traco[campoReal] = colapsa(originais[campoReal], lista);
+        });
+        // tempo_batida: ajustes_tracos.json guarda em MINUTOS; relatorio_injecao.json
+        // (original e ajustes) guarda em SEGUNDOS — mesma unidade que o
+        // fluxo ao vivo do Ajuste de Receita já usa (ver operacao.js).
+        const listaTempoSegundos = ajustes.map(a => Number(a.tempo_batida) * 60);
+        const originalTempoSegundos = (originais.tempo_batida_min !== '' && originais.tempo_batida_min !== null && originais.tempo_batida_min !== undefined)
+          ? Number(originais.tempo_batida_min) * 60
+          : '';
+        traco.tempo_batida = colapsa(originalTempoSegundos, listaTempoSegundos);
+
+        // Densidade/Flow: remedições simples, sem relação com ajustes_tracos.json
+        // — cada "leitura" SUBSTITUI a anterior (não soma), igual ao vivo.
+        ['densidade', 'flow'].forEach(campo => {
+          if (novosValores[campo]) {
+            const { original, leituras } = novosValores[campo];
+            traco[campo] = colapsa(original, Array.isArray(leituras) ? leituras.map(Number) : []);
+          }
+        });
+
+        const tmpRelatorio = relatorioPath + '.tmp';
+        fs.writeFileSync(tmpRelatorio, JSON.stringify(relatorio, null, 2), 'utf8');
+        fs.renameSync(tmpRelatorio, relatorioPath);
+
+        // Regrava ajustes_tracos.json pra esse id_traco — substitui a
+        // entrada inteira (renumerando ajuste_1, ajuste_2, ... na ordem
+        // enviada), preservando o "registrado_em" de quem já existia
+        // (mandado de volta pelo cliente) e estampando agora só os novos.
+        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
+        let ajustesTracos = [];
+        try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
+
+        const idxEntrada = ajustesTracos.findIndex(e => e.id_traco === id_traco);
+        if (!ajustes.length) {
+          // Lista ficou vazia — remove a entrada inteira, não deixa um
+          // {id_traco} solto sem nenhum ajuste_N.
+          if (idxEntrada !== -1) ajustesTracos.splice(idxEntrada, 1);
+        } else {
+          const novaEntrada = { id_traco };
+          ajustes.forEach((a, i) => {
+            const entrada = { tempo_batida: a.tempo_batida };
+            ['cimento', 'agua', 'eps', 'superplast', 'incorporador'].forEach(nome => {
+              if (a[nome] !== undefined && a[nome] !== null && a[nome] !== '') entrada[nome] = Number(a[nome]);
+            });
+            entrada.registrado_em = a.registrado_em || new Date().toISOString();
+            novaEntrada['ajuste_' + (i + 1)] = entrada;
+          });
+          if (idxEntrada !== -1) ajustesTracos[idxEntrada] = novaEntrada;
+          else ajustesTracos.push(novaEntrada);
+        }
+
+        const tmpAjustes = ajustesPath + '.tmp';
+        fs.writeFileSync(tmpAjustes, JSON.stringify(ajustesTracos, null, 2), 'utf8');
+        fs.renameSync(tmpAjustes, ajustesPath);
+
+        // Log de auditoria — append-only, mesmo padrão de historico_edicoes.json.
+        const edicoesPath = path.join(DB_DIR, 'relatorio_edicoes.json');
+        let edicoes = [];
+        try { edicoes = JSON.parse(fs.readFileSync(edicoesPath, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(edicoes)) edicoes = [];
+        edicoes.push({
+          id_traco,
+          id_operacao,
+          data_edicao: new Date().toISOString(),
+          campos_alterados: diff,
+        });
+        const tmpEdicoesRel = edicoesPath + '.tmp';
+        fs.writeFileSync(tmpEdicoesRel, JSON.stringify(edicoes, null, 2), 'utf8');
+        fs.renameSync(tmpEdicoesRel, edicoesPath);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));

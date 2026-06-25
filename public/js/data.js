@@ -883,6 +883,24 @@ async function getAjustesTracos() {
 }
 
 /**
+ * Corrige um traço já registrado em relatorio_injecao.json — TODOS os
+ * dados (identificação, dados do uso/bateria específico clicado, insumos,
+ * tempo de batida) e, junto, regrava ajustes_tracos.json a partir da
+ * mesma lista de ajustes (fonte de verdade — ver rota no server.js).
+ * @param {object} payload - { id_traco, id_operacao, novosValores, ajustes, diff }
+ */
+async function editarTracoRelatorio(payload) {
+  const res = await fetch('/editar-traco-relatorio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro ao editar traço');
+  return json;
+}
+
+/**
  * Obtém o total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura,
  * não consome/incrementa nada. Usado para calcular a numeração de PRÉVIA
  * (total+1, total+2, ...) dos traços ainda em edição na operação atual.
@@ -1178,6 +1196,7 @@ const ARQUIVOS_BACKUP_DB = [
   'contador_tracos.json',
   'historico.json',
   'historico_edicoes.json',
+  'relatorio_edicoes.json',
   'paradas.json',
   'ajustes_tracos.json',
   'relatorio_injecao.json',
@@ -1446,6 +1465,7 @@ window.LW = {
   // Ajustes de Traço (auditoria de insumo + tempo de batida)
   registrarAjusteTraco,
   getAjustesTracos,
+  editarTracoRelatorio,
 
   // Dados e analytics
   registrarOperacao, getStats,

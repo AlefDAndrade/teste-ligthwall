@@ -776,6 +776,9 @@
               <span style="font-size:.78rem;color:var(--text-3)" id="rel-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-relatorio" style="display:none"
                 onclick="limparTodosFiltros('filtros-relatorio')">✕ Limpar Todos</button>
+              <button class="btn btn-ghost btn-sm" id="btn-editar-relatorio" data-admin-only
+                title="Corrigir dados de um traço já registrado" onclick="LWDash.toggleModoEdicaoRelatorio()">✏️
+                Editar</button>
             </div>
           </div>
           <!-- Filtros hierárquicos -->
@@ -784,6 +787,10 @@
           <div id="chips-filtros-relatorio"
             style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center">
             <span style="color:var(--text-3);font-size:.78rem">Nenhum filtro ativo</span>
+          </div>
+          <div id="relatorio-aviso-edicao"
+            style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(245,158,11,.1);border:1px solid var(--accent-dim);border-radius:var(--radius);color:var(--accent);font-size:.82rem">
+            ✏️ Modo de edição ativo — clique em uma linha da tabela para corrigir os dados daquele traço.
           </div>
         </div>
 
@@ -3719,6 +3726,298 @@
       }
     }
 
+    // ================================================================
+    //  EDITAR TRAÇO (Relatório de Injeção, admin)
+    // ================================================================
+    // Diferente da Edição de Operação (campo a campo, diff simples), aqui
+    // a parte mais delicada são os "ajustes": ajustes_tracos.json passa a
+    // ser a FONTE DE VERDADE da lista (cada item = uma ação real, com
+    // tempo de batida + insumos que vieram juntos) — os campos
+    // "*_real"/tempo_batida de relatorio_injecao.json são DERIVADOS dela
+    // no servidor ao salvar (ver /editar-traco-relatorio). Esta tela só
+    // edita a lista; nunca monta os arrays ".ajustes[]" na mão.
+
+    let _etTracoOriginal = null;  // cópia profunda do traço (l) ao abrir
+    let _etUsoOriginal = null;    // cópia profunda do uso (op) ao abrir
+    let _etAjustesOriginaisCarregados = []; // cópia da lista de ajustes tal como veio de ajustes_tracos.json, só pra diff
+    let _etAjustesAtuais = [];    // [{tempo_batida(min), cimento?, agua?, eps?, superplast?, incorporador?, registrado_em?}]
+    let _etLeiturasDensidade = []; // [number, ...] — remedições de densidade
+    let _etLeiturasFlow = [];      // [number, ...] — remedições de flow
+
+    // Extrai o valor "original" de um campo que pode ser número simples OU
+    // {original, ajustes}. Mesma lógica usada na exibição (dashboard.js
+    // _valRel), só que pegando o original em vez do total.
+    function _etExtrairOriginal(v) {
+      if (v && typeof v === 'object' && 'original' in v) return (v.original === '' ? '' : v.original);
+      return (v === undefined || v === null) ? '' : v;
+    }
+    function _etExtrairAjustesNumericos(v) {
+      return (v && typeof v === 'object' && Array.isArray(v.ajustes)) ? [...v.ajustes] : [];
+    }
+
+    async function abrirEdicaoTraco(traco, uso) {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      _etTracoOriginal = JSON.parse(JSON.stringify(traco));
+      _etUsoOriginal = JSON.parse(JSON.stringify(uso || {}));
+
+      document.getElementById('et-erro').style.display = 'none';
+
+      document.getElementById('et-ro-data').textContent = traco.data ? traco.data.split('-').reverse().join('/') : '—';
+      document.getElementById('et-ro-turno').textContent = traco.turno || '—';
+      document.getElementById('et-ro-id-traco').textContent = traco.id_traco || '—';
+      document.getElementById('et-ro-id-operacao').textContent = uso?.id_operacao || '—';
+
+      document.getElementById('et-num-traco').value = traco.num_traco ?? '';
+      document.getElementById('et-densidade-eps').value = traco.densidade_eps ?? '';
+      document.getElementById('et-silo').value = traco.silo ?? '';
+      document.getElementById('et-expansao').value = traco.expansao ?? '';
+
+      const selBateria = document.getElementById('et-id-bateria');
+      selBateria.innerHTML = LW.BATERIA_IDS.map(b =>
+        `<option value="${b.id}">${b.id} — ${b.label || ''} (${b.bercos} berços)</option>`).join('');
+      selBateria.value = uso?.id_bateria || '';
+      document.getElementById('et-berco-inicio').value = uso?.berco_inicio ?? '';
+      document.getElementById('et-berco-fim').value = uso?.berco_finalizacao ?? '';
+      document.getElementById('et-obs').value = (uso?.obs !== undefined ? uso.obs : traco.obs) || '';
+
+      document.getElementById('et-original-cimento').value = _etExtrairOriginal(traco.cimento_real);
+      document.getElementById('et-original-agua').value = _etExtrairOriginal(traco.agua_real);
+      document.getElementById('et-original-eps').value = _etExtrairOriginal(traco.eps_real);
+      document.getElementById('et-original-superplast').value = _etExtrairOriginal(traco.superplast_real);
+      document.getElementById('et-original-incorporador').value = _etExtrairOriginal(traco.incorporador_real);
+      // tempo_batida.original está em SEGUNDOS em relatorio_injecao.json — mostra em MINUTOS no formulário
+      const origTempoSeg = _etExtrairOriginal(traco.tempo_batida);
+      document.getElementById('et-original-tempo').value = origTempoSeg === '' ? '' : Math.round((origTempoSeg / 60) * 100) / 100;
+
+      document.getElementById('et-original-densidade').value = _etExtrairOriginal(traco.densidade);
+      document.getElementById('et-original-flow').value = _etExtrairOriginal(traco.flow);
+      _etLeiturasDensidade = _etExtrairAjustesNumericos(traco.densidade);
+      _etLeiturasFlow = _etExtrairAjustesNumericos(traco.flow);
+      _etRenderLeituras();
+
+      // ajustes_tracos.json é a fonte de verdade da lista de ajustes —
+      // carrega direto dele, não dos arrays soltos de relatorio_injecao.json
+      // (que podem nem estar correlacionados entre si — ver decisão no chat).
+      let entradaAjustes = null;
+      try {
+        const todosAjustes = await LW.getAjustesTracos();
+        entradaAjustes = todosAjustes.find(a => a.id_traco === traco.id_traco) || null;
+      } catch (_) { /* segue com lista vazia */ }
+
+      _etAjustesAtuais = [];
+      if (entradaAjustes) {
+        Object.keys(entradaAjustes)
+          .filter(k => /^ajuste_\d+$/.test(k))
+          .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10))
+          .forEach(k => _etAjustesAtuais.push({ ...entradaAjustes[k] }));
+      }
+      _etAjustesOriginaisCarregados = JSON.parse(JSON.stringify(_etAjustesAtuais));
+      _etRenderAjustes();
+
+      document.getElementById('editar-traco-modal').style.display = 'flex';
+    }
+
+    function fecharEdicaoTraco() {
+      document.getElementById('editar-traco-modal').style.display = 'none';
+      _etTracoOriginal = null;
+      _etUsoOriginal = null;
+    }
+
+    function _etRenderAjustes() {
+      const cont = document.getElementById('et-lista-ajustes');
+      if (!_etAjustesAtuais.length) {
+        cont.innerHTML = '<div style="color:var(--text-3);font-size:.82rem;padding:8px 0">Nenhum ajuste registrado pra este traço.</div>';
+        return;
+      }
+      const CAMPOS = [
+        { nome: 'cimento', label: 'Cimento' }, { nome: 'agua', label: 'Água' },
+        { nome: 'eps', label: 'EPS' }, { nome: 'superplast', label: 'Superplast.' },
+        { nome: 'incorporador', label: 'Incorp. Ar' },
+      ];
+      cont.innerHTML = _etAjustesAtuais.map((a, i) => `
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">
+          <div style="font-size:.7rem;color:var(--text-3);width:100%;margin-bottom:-2px">Ajuste #${i + 1}${a.registrado_em ? ' — ' + LW.formatDateTime(a.registrado_em) : ' (novo)'}</div>
+          <div class="form-group" style="margin:0;width:110px">
+            <label class="form-label" style="font-size:.68rem">Batida (min) *</label>
+            <input class="form-input" type="number" step="0.1" value="${a.tempo_batida ?? ''}"
+              oninput="_etAtualizarAjuste(${i},'tempo_batida',this.value)">
+          </div>
+          ${CAMPOS.map(c => `
+          <div class="form-group" style="margin:0;width:95px">
+            <label class="form-label" style="font-size:.68rem">${c.label}</label>
+            <input class="form-input" type="number" step="0.01" value="${a[c.nome] ?? ''}" placeholder="—"
+              oninput="_etAtualizarAjuste(${i},'${c.nome}',this.value)">
+          </div>`).join('')}
+          <button type="button" onclick="_etRemoverAjuste(${i})" title="Remover este ajuste"
+            style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;margin-left:auto">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function _etAtualizarAjuste(i, campo, valor) {
+      if (!_etAjustesAtuais[i]) return;
+      if (valor === '') { delete _etAjustesAtuais[i][campo]; return; }
+      _etAjustesAtuais[i][campo] = parseFloat(valor);
+    }
+
+    function _etRemoverAjuste(i) {
+      _etAjustesAtuais.splice(i, 1);
+      _etRenderAjustes();
+    }
+
+    function _etAdicionarAjuste() {
+      _etAjustesAtuais.push({}); // registrado_em ausente = será estampado agora, no servidor
+      _etRenderAjustes();
+    }
+
+    function _etRenderLeituras() {
+      const fmt = (campo, lista) => lista.map((v, i) => `
+        <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-2);border:1px solid var(--border);border-radius:20px;padding:4px 6px 4px 12px;margin:0 6px 6px 0;font-size:.82rem">
+          <input type="number" step="0.01" value="${v}" style="width:64px;background:none;border:none;color:var(--text);font-family:var(--font-mono)"
+            oninput="_etAtualizarLeitura('${campo}',${i},this.value)">
+          <button type="button" onclick="_etRemoverLeitura('${campo}',${i})" title="Remover esta leitura"
+            style="background:none;border:none;color:var(--red);cursor:pointer;padding:2px">✕</button>
+        </span>
+      `).join('') || '<span style="color:var(--text-3);font-size:.8rem">Nenhuma remedição.</span>';
+
+      document.getElementById('et-leituras-densidade').innerHTML = fmt('densidade', _etLeiturasDensidade);
+      document.getElementById('et-leituras-flow').innerHTML = fmt('flow', _etLeiturasFlow);
+    }
+
+    function _etAtualizarLeitura(campo, i, valor) {
+      const lista = campo === 'densidade' ? _etLeiturasDensidade : _etLeiturasFlow;
+      lista[i] = parseFloat(valor) || 0;
+    }
+    function _etRemoverLeitura(campo, i) {
+      const lista = campo === 'densidade' ? _etLeiturasDensidade : _etLeiturasFlow;
+      lista.splice(i, 1);
+      _etRenderLeituras();
+    }
+    function _etAdicionarLeitura(campo) {
+      const lista = campo === 'densidade' ? _etLeiturasDensidade : _etLeiturasFlow;
+      lista.push(0);
+      _etRenderLeituras();
+    }
+
+    async function salvarEdicaoTraco() {
+      if (!_etTracoOriginal) return;
+      const erroEl = document.getElementById('et-erro');
+      erroEl.style.display = 'none';
+
+      // Cada ajuste precisa de tempo de batida > 0 — mesma regra do Ajuste
+      // de Receita ao vivo. Valida ANTES de montar o payload.
+      for (let i = 0; i < _etAjustesAtuais.length; i++) {
+        const tb = _etAjustesAtuais[i].tempo_batida;
+        if (typeof tb !== 'number' || isNaN(tb) || tb <= 0) {
+          LW.mostrarAlerta(`Ajuste #${i + 1}: informe o tempo de batida (minutos, maior que zero).`, { tipo: 'aviso' });
+          return;
+        }
+      }
+
+      const lerNum = id => { const v = document.getElementById(id).value; return v === '' ? '' : parseFloat(v); };
+      const lerTxt = id => document.getElementById(id).value.trim();
+
+      const novosValores = {
+        num_traco: document.getElementById('et-num-traco').value === '' ? '' : parseInt(document.getElementById('et-num-traco').value, 10),
+        densidade_eps: lerTxt('et-densidade-eps'),
+        silo: lerTxt('et-silo'),
+        expansao: lerTxt('et-expansao'),
+        uso: {
+          id_bateria: document.getElementById('et-id-bateria').value,
+          berco_inicio: lerTxt('et-berco-inicio'),
+          berco_finalizacao: lerTxt('et-berco-fim'),
+          obs: document.getElementById('et-obs').value,
+        },
+        originais: {
+          cimento_real: lerNum('et-original-cimento'),
+          agua_real: lerNum('et-original-agua'),
+          eps_real: lerNum('et-original-eps'),
+          superplast_real: lerNum('et-original-superplast'),
+          incorporador_real: lerNum('et-original-incorporador'),
+          tempo_batida_min: lerNum('et-original-tempo'),
+        },
+        densidade: { original: lerNum('et-original-densidade'), leituras: _etLeiturasDensidade },
+        flow: { original: lerNum('et-original-flow'), leituras: _etLeiturasFlow },
+      };
+
+      // Diff por BLOCO (não campo a campo, diferente da Edição de Operação)
+      // — comparar o valor final calculado de cada insumo exigiria
+      // replicar no navegador a mesma lógica de derivação que o servidor
+      // já faz; mais simples e igualmente útil pra auditoria comparar os
+      // blocos de entrada inteiros.
+      const blocosOriginais = {
+        identificacao: {
+          num_traco: _etTracoOriginal.num_traco, densidade_eps: _etTracoOriginal.densidade_eps,
+          silo: _etTracoOriginal.silo, expansao: _etTracoOriginal.expansao,
+        },
+        uso: {
+          id_bateria: _etUsoOriginal.id_bateria, berco_inicio: _etUsoOriginal.berco_inicio,
+          berco_finalizacao: _etUsoOriginal.berco_finalizacao, obs: _etUsoOriginal.obs,
+        },
+        originais_insumos: {
+          cimento_real: _etExtrairOriginal(_etTracoOriginal.cimento_real),
+          agua_real: _etExtrairOriginal(_etTracoOriginal.agua_real),
+          eps_real: _etExtrairOriginal(_etTracoOriginal.eps_real),
+          superplast_real: _etExtrairOriginal(_etTracoOriginal.superplast_real),
+          incorporador_real: _etExtrairOriginal(_etTracoOriginal.incorporador_real),
+          tempo_batida_min: (() => { const s = _etExtrairOriginal(_etTracoOriginal.tempo_batida); return s === '' ? '' : Math.round((s / 60) * 100) / 100; })(),
+        },
+        ajustes: _etAjustesOriginaisCarregados,
+        densidade: { original: _etExtrairOriginal(_etTracoOriginal.densidade), leituras: _etExtrairAjustesNumericos(_etTracoOriginal.densidade) },
+        flow: { original: _etExtrairOriginal(_etTracoOriginal.flow), leituras: _etExtrairAjustesNumericos(_etTracoOriginal.flow) },
+      };
+      const blocosNovos = {
+        identificacao: { num_traco: novosValores.num_traco, densidade_eps: novosValores.densidade_eps, silo: novosValores.silo, expansao: novosValores.expansao },
+        uso: novosValores.uso,
+        originais_insumos: novosValores.originais,
+        ajustes: _etAjustesAtuais,
+        densidade: novosValores.densidade,
+        flow: novosValores.flow,
+      };
+
+      const diff = [];
+      Object.keys(blocosNovos).forEach(bloco => {
+        const de = blocosOriginais[bloco];
+        const para = blocosNovos[bloco];
+        if (JSON.stringify(de) !== JSON.stringify(para)) diff.push({ campo: bloco, de: de ?? null, para: para ?? null });
+      });
+
+      if (!diff.length) {
+        LW.mostrarAlerta('Nenhuma alteração foi feita.', { tipo: 'aviso' });
+        return;
+      }
+      const confirmouEdicao = await LW.mostrarConfirmacao(
+        `Confirma a alteração de ${diff.length} bloco(s) de dados deste traço?`,
+        { titulo: 'Confirmar edição', textoConfirmar: 'Salvar Alteração', icon: '✏️' }
+      );
+      if (!confirmouEdicao) return;
+
+      const btn = document.getElementById('et-btn-salvar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        await LW.editarTracoRelatorio({
+          id_traco: _etTracoOriginal.id_traco,
+          id_operacao: _etUsoOriginal.id_operacao,
+          novosValores,
+          ajustes: _etAjustesAtuais,
+          diff,
+        });
+
+        fecharEdicaoTraco();
+        await LWDash.initRelatorio();
+        LW.mostrarAlerta('Traço atualizado com sucesso!', { tipo: 'sucesso' });
+      } catch (e) {
+        erroEl.textContent = e.message;
+        erroEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
   </script>
   <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
   <div id="editar-operacao-modal"
@@ -3798,6 +4097,156 @@
       <div style="display:flex;justify-content:flex-end;gap:12px">
         <button class="btn btn-ghost" onclick="fecharEdicaoOperacao()">Cancelar</button>
         <button class="btn btn-danger" id="eo-btn-salvar" onclick="salvarEdicaoOperacao()">Salvar Alterações</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
+  <div id="editar-traco-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:760px;max-width:95vw;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);letter-spacing:.05em">✏️
+          EDITAR TRAÇO</h2>
+        <button onclick="fecharEdicaoTraco()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="et-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Capturados automaticamente -->
+      <div
+        style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:18px">
+        <div style="font-weight:700;color:var(--text);font-size:.8rem;margin-bottom:8px">📌 Capturados
+          automaticamente (não editáveis aqui)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;color:var(--text-2)">
+          <div>Data: <strong id="et-ro-data" class="mono">—</strong></div>
+          <div>Turno: <strong id="et-ro-turno" class="mono">—</strong></div>
+          <div>ID Traço: <strong id="et-ro-id-traco" class="mono">—</strong></div>
+          <div>ID Operação (este uso): <strong id="et-ro-id-operacao" class="mono">—</strong></div>
+        </div>
+      </div>
+
+      <!-- Identificação do Traço -->
+      <div class="card-title" style="margin-bottom:10px">Identificação do Traço</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:18px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Nº Traço</label>
+          <input class="form-input" type="number" id="et-num-traco">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Densidade EPS</label>
+          <input class="form-input" id="et-densidade-eps">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Silo</label>
+          <input class="form-input" id="et-silo">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Expansão</label>
+          <input class="form-input" id="et-expansao">
+        </div>
+      </div>
+
+      <!-- Dados desta Bateria/Uso -->
+      <div class="card-title" style="margin-bottom:10px">Dados desta Bateria <span
+          style="color:var(--text-3);font-weight:400;text-transform:none">(só este uso/reaproveitamento — não afeta outros usos deste mesmo traço)</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">ID Bateria</label>
+          <select class="form-select" id="et-id-bateria"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Berço Início</label>
+          <input class="form-input" id="et-berco-inicio">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Berço Fim</label>
+          <input class="form-input" id="et-berco-fim">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">Observações (deste uso)</label>
+        <textarea class="form-input" id="et-obs" rows="2" style="resize:vertical"></textarea>
+      </div>
+
+      <!-- Insumos e Tempo de Batida — valores ORIGINAIS (planejados) -->
+      <div class="card-title" style="margin-bottom:6px">Insumos e Tempo de Batida — Receita Original</div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:12px">Valor planejado antes de qualquer ajuste.
+        O total aplicado na injeção é este valor + a soma dos ajustes, abaixo.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Cimento (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-cimento">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Água (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-agua">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">EPS (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-eps">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Superplastificante (kg)</label>
+          <input class="form-input" type="number" step="0.001" id="et-original-superplast">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Incorporador de Ar (kg)</label>
+          <input class="form-input" type="number" step="0.001" id="et-original-incorporador">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Tempo de Batida (min)</label>
+          <input class="form-input" type="number" step="0.1" id="et-original-tempo">
+        </div>
+      </div>
+
+      <!-- Lista de Ajustes (fonte de verdade: ajustes_tracos.json) -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px">
+        <div class="card-title" style="margin-bottom:0">Ajustes Aplicados</div>
+        <button class="btn btn-outline-accent btn-sm" onclick="_etAdicionarAjuste()">+ Adicionar Ajuste</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">Cada ajuste é uma ação só (tempo de batida
+        sempre obrigatório; insumos só se de fato foram adicionados nessa ação) — mesma regra do "+ Ajuste de
+        Receita" ao vivo, em Registrar Operação. Esta lista também regrava <code
+          style="color:var(--blue)">ajustes_tracos.json</code> pra este traço.</p>
+      <div id="et-lista-ajustes" style="margin-bottom:18px"></div>
+
+      <!-- Resultados Medidos (Densidade, Flow) — remedições simples -->
+      <div class="card-title" style="margin-bottom:6px">Resultados Medidos</div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">Densidade e Flow não entram em
+        <code style="color:var(--blue)">ajustes_tracos.json</code> — são remedições (cada leitura nova substitui a
+        anterior), não ajuste de receita.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+        <div>
+          <div class="form-group">
+            <label class="form-label">Densidade — valor original</label>
+            <input class="form-input" type="number" step="0.01" id="et-original-densidade">
+          </div>
+          <label class="form-label">Leituras (remedições)</label>
+          <div id="et-leituras-densidade" style="margin-bottom:6px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="_etAdicionarLeitura('densidade')">+ Adicionar leitura</button>
+        </div>
+        <div>
+          <div class="form-group">
+            <label class="form-label">Flow — valor original</label>
+            <input class="form-input" type="number" step="0.01" id="et-original-flow">
+          </div>
+          <label class="form-label">Leituras (remedições)</label>
+          <div id="et-leituras-flow" style="margin-bottom:6px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="_etAdicionarLeitura('flow')">+ Adicionar leitura</button>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:12px">
+        <button class="btn btn-ghost" onclick="fecharEdicaoTraco()">Cancelar</button>
+        <button class="btn btn-danger" id="et-btn-salvar" onclick="salvarEdicaoTraco()">Salvar Alterações</button>
       </div>
 
     </div>

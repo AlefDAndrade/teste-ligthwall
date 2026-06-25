@@ -155,6 +155,11 @@
   // Injeção (ver onClickLinhaRegistro()).
   let _modoEdicaoRegistro = false;
 
+  // Modo de edição do Relatório de Injeção — enquanto ativo, clicar numa
+  // linha abre a edição daquele traço em vez do painel de detalhe de
+  // ajustes (ver onClickLinhaRelatorio()).
+  let _modoEdicaoRelatorio = false;
+
   const _filtrosRelatorio = {
     data_inicio: null, data_fim: null,
     id_bateria: new Set(), num_traco: new Set(),
@@ -895,6 +900,7 @@
       const opB = b.ultilizado?.operacao?.[0]?.id_operacao || '';
       return opB.localeCompare(opA);
     });
+    window._lwRelatorioMapTemp = {};
     tbody.innerHTML = sorted.map((l, lIdx) => {
       // Um traço pode ter sido reaproveitado em mais de uma bateria — cada uso
       // fica registrado em l.ultilizado.operacao. Aqui geramos UMA LINHA VISUAL
@@ -919,14 +925,19 @@
 
       if (!operacoes.length) return ''; // este traço não pertence à bateria filtrada
 
+      const tituloLinha = _modoEdicaoRelatorio
+        ? 'Clique para editar este traço'
+        : 'Clique para ver os reajustes de receita deste traço';
+
       return operacoes.map((op, idx) => {
         const rowId = `rel-${lIdx}-${(l.id_traco || '')}-${idx}`.replace(/[^a-zA-Z0-9_-]/g, '');
+        window._lwRelatorioMapTemp[rowId] = { traco: l, uso: op };
 
         return `
       <tr${idx > 0 ? ' class="linha-traco-reaproveitado linha-relatorio-clicavel"' : ' class="linha-relatorio-clicavel"'}
-        data-traco-row-id="${rowId}" title="Clique para ver os reajustes de receita deste traço"
-        onclick="LWDash.toggleDetalheRelatorio('${rowId}')">
-        <td class="mono"><span class="relatorio-expand-icon" id="icone-${rowId}">▸</span>${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
+        data-traco-row-id="${rowId}" title="${tituloLinha}"
+        onclick="LWDash.onClickLinhaRelatorio('${rowId}')">
+        <td class="mono"><span class="relatorio-expand-icon" id="icone-${rowId}">${_modoEdicaoRelatorio ? '✏️' : '▸'}</span>${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
         <td>${op.id_bateria || '—'}${idx > 0 ? ' <span class="badge badge-gray" title="Traço reaproveitado nesta bateria">♻</span>' : ''}</td>
         <td>${l.num_traco || '—'}</td>
         <td class="mono">${op.berco_inicio || '—'}</td>
@@ -1213,6 +1224,35 @@
   }
 
   // ================================================================
+  //  MODO DE EDIÇÃO do Relatório de Injeção (admin)
+  // ================================================================
+
+  function toggleModoEdicaoRelatorio() {
+    _modoEdicaoRelatorio = !_modoEdicaoRelatorio;
+    const btn = document.getElementById('btn-editar-relatorio');
+    if (btn) btn.classList.toggle('btn-primary', _modoEdicaoRelatorio);
+    const aviso = document.getElementById('relatorio-aviso-edicao');
+    if (aviso) aviso.style.display = _modoEdicaoRelatorio ? 'flex' : 'none';
+    renderRelatorio();
+  }
+
+  // Clique numa linha do Relatório de Injeção — em modo de edição, abre a
+  // tela de edição daquele traço/uso específico; fora dele, mantém o
+  // comportamento de sempre (abrir/fechar o painel de detalhe de ajustes).
+  // A função de abrir a edição (abrirEdicaoTraco) vive no index.html,
+  // junto com o resto do modal.
+  function onClickLinhaRelatorio(rowId) {
+    if (_modoEdicaoRelatorio) {
+      const dados = window._lwRelatorioMapTemp && window._lwRelatorioMapTemp[rowId];
+      if (dados && typeof window.abrirEdicaoTraco === 'function') {
+        window.abrirEdicaoTraco(dados.traco, dados.uso);
+      }
+      return;
+    }
+    toggleDetalheRelatorio(rowId);
+  }
+
+  // ================================================================
   //  NAVEGAÇÃO: Registro de Baterias → Relatório de Injeção por Traços
   // ================================================================
 
@@ -1326,6 +1366,8 @@
     navegarParaTracosDoRegistro,
     toggleModoEdicaoRegistro,
     onClickLinhaRegistro,
+    toggleModoEdicaoRelatorio,
+    onClickLinhaRelatorio,
     toggleDetalheRelatorio,
     exportCSV: exportXLSX, abrirExportModal, fecharExportModal, onExportPeriodoChange,
     selecionarTodasColunas, atualizarPreviewCount, confirmarExport,
