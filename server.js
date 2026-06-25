@@ -6,7 +6,7 @@ const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
-const PORT = 3000;
+const PORT = 5000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
