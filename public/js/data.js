@@ -540,16 +540,26 @@ function _agendarReconexaoOperacaoAndamento() {
  * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
  * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
  */
-function enviarOperacaoAndamento(dados, { imediato = false } = {}) {
+/**
+ * Manda o estado atual da operação pro servidor — debounced por padrão
+ * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
+ * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
+ * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
+ * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de um
+ * dispositivo autorizado limpar uma operação que outro dispositivo
+ * autorizado começou (ver dono da operação, em server.js).
+ * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
+ */
+function enviarOperacaoAndamento(dados, { imediato = false, forcar = false } = {}) {
   clearTimeout(_opAndamentoEnviarTimeout);
   if (imediato) {
-    _postOperacaoAndamento(dados);
+    _postOperacaoAndamento(dados, forcar);
   } else {
-    _opAndamentoEnviarTimeout = setTimeout(() => _postOperacaoAndamento(dados), 250);
+    _opAndamentoEnviarTimeout = setTimeout(() => _postOperacaoAndamento(dados, forcar), 250);
   }
 }
 
-async function _postOperacaoAndamento(dados) {
+async function _postOperacaoAndamento(dados, forcar = false) {
   const corpo = JSON.stringify(dados);
   if (corpo === _opAndamentoUltimoEnviado) return; // nada mudou de verdade — evita tráfego à toa
   _opAndamentoUltimoEnviado = corpo;
@@ -557,13 +567,14 @@ async function _postOperacaoAndamento(dados) {
     const res = await fetch(_comDeviceId('/salvar-operacao-andamento'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dados, clientId: OP_ANDAMENTO_CLIENT_ID }),
+      body: JSON.stringify({ dados, clientId: OP_ANDAMENTO_CLIENT_ID, forcar }),
     });
     if (!res.ok) {
       // Diferente de falha de rede (catch abaixo): o servidor respondeu e
-      // recusou — hoje, o único motivo é "dispositivo não autorizado" (ver
-      // Configurações → Autorizados). Mostra na hora, senão a pessoa fica
-      // digitando sem nenhum feedback de que nada está sendo transmitido.
+      // recusou — "dispositivo não autorizado" ou "operação já tem dono"
+      // (ver Configurações → Autorizados). Mostra na hora, senão a pessoa
+      // fica digitando sem nenhum feedback de que nada está sendo
+      // transmitido.
       _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
       const json = await res.json().catch(() => null);
       mostrarAlerta(json?.erro || 'Este computador não está autorizado a controlar a operação.', { tipo: 'erro' });

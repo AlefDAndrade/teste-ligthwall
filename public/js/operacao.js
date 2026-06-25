@@ -47,8 +47,7 @@
       wireEvents();
       setInterval(updateClock, 1000);
       updateClock();
-      renderAll();
-      _aplicarTravaDeAutorizacao();
+      renderAll(); // já reaplica a trava de autorização/dono no final
 
       // A partir daqui, qualquer mudança feita em OUTRA aba/computador
       // nesta mesma operação chega aqui ao vivo (cronômetro incluso).
@@ -247,29 +246,66 @@
    * imediato (sem esperar a rede) e cobre atalhos de teclado, que não
    * passam pelos campos/botões desabilitados na tela.
    */
-  function _bloqueadoPorAutorizacao() {
-    if (LW.dispositivoEstaAutorizado()) return false;
-    LW.mostrarAlerta(
-      'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
-      { tipo: 'erro' }
-    );
-    return true;
+  /**
+   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
+   * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
+   * pode agir agora: dispositivo fora da lista de Autorizados, OU a
+   * operação já tem outro dono (outro dispositivo autorizado que a
+   * iniciou — ver "dono da operação" em server.js). A trava de verdade é
+   * sempre no servidor; isto aqui só dá feedback imediato (sem esperar a
+   * rede) e cobre atalhos de teclado, que não passam pelos campos/botões
+   * desabilitados na tela.
+   * @param {object} opts
+   * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
+   *   que pode forçar a limpeza mesmo sem ser o dono atual.
+   */
+  function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
+    if (!LW.dispositivoEstaAutorizado()) {
+      LW.mostrarAlerta(
+        'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+        { tipo: 'erro' }
+      );
+      return true;
+    }
+    if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
+      LW.mostrarAlerta(
+        'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+        { tipo: 'erro' }
+      );
+      return true;
+    }
+    return false;
   }
 
   /**
    * Desabilita todos os campos/botões da tela (via <fieldset disabled> —
    * cobre até os elementos de traço, renderizados dinamicamente) e mostra
-   * o banner "só acompanhando" quando este dispositivo não está
-   * autorizado. Chamada uma vez no boot e de novo sempre que a aba
-   * Operação é aberta (a lista de autorizados pode ter mudado desde o
-   * boot — ver showPage() em index.html).
+   * o banner correspondente quando este dispositivo não pode controlar a
+   * operação agora — seja por não estar na lista de Autorizados, seja por
+   * outro dispositivo autorizado já ser o dono da operação atual. Chamada
+   * sempre que o estado é re-renderizado (renderAll()) — o "dono" muda
+   * dinamicamente, diferente da lista de Autorizados.
    */
   function _aplicarTravaDeAutorizacao() {
     const autorizado = LW.dispositivoEstaAutorizado();
+    const dono = state?.donoDeviceId || null;
+    const ehODono = !dono || dono === LW.getDeviceId();
+    const podeControlar = autorizado && ehODono;
+
     const fieldset = $('op-fieldset-trava');
-    if (fieldset) fieldset.disabled = !autorizado;
+    if (fieldset) fieldset.disabled = !podeControlar;
+
     const aviso = $('op-aviso-nao-autorizado');
-    if (aviso) aviso.style.display = autorizado ? 'none' : 'flex';
+    if (!aviso) return;
+    if (podeControlar) {
+      aviso.style.display = 'none';
+    } else if (!autorizado) {
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>';
+      aviso.style.display = 'flex';
+    } else {
+      aviso.innerHTML = '👀 <span>Outro computador autorizado está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
+      aviso.style.display = 'flex';
+    }
   }
 
   function iniciarInjecao() {
@@ -1493,7 +1529,7 @@
   }
 
   async function resetarOperacao() {
-    if (_bloqueadoPorAutorizacao()) return false;
+    if (_bloqueadoPorAutorizacao({ ignorarDono: true })) return false;
     const confirmou = await LW.mostrarConfirmacao(
       'Isso apaga turno, traços, horários e tudo mais preenchido nesta tela.',
       { titulo: 'Limpar todos os dados da operação atual?', textoConfirmar: 'Limpar Tudo', tipo: 'perigo', icon: '🗑️' }
@@ -1501,7 +1537,7 @@
     if (!confirmou) return false;
     clearInterval(timerInterval);
     LW.clearOperacaoAtual();
-    LW.enviarOperacaoAndamento(null, { imediato: true });
+    LW.enviarOperacaoAndamento(null, { imediato: true, forcar: true });
     resetState();
     renderAll();
     return true;
@@ -1583,6 +1619,7 @@
     recalcPaineis();
     updateStatusBanner();
     updatePendencias();
+    _aplicarTravaDeAutorizacao();
   }
 
   function persist() {

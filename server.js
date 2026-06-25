@@ -6,7 +6,7 @@ const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
-const PORT = 5000;
+const PORT = 3000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -752,8 +752,45 @@ const server = http.createServer((req, res) => {
         if (dados !== null && dados !== undefined && (typeof dados !== 'object' || Array.isArray(dados))) {
           throw new Error('Payload inválido: "dados" precisa ser um objeto ou null.');
         }
-        const dadosFinal = dados === undefined ? null : dados;
         const clientId = typeof payload.clientId === 'string' ? payload.clientId : null;
+        const ehLimpeza = dados === null || dados === undefined;
+        // "forcar" só existe pro botão "🗑️ Limpar Tudo" (ver resetarOperacao()
+        // em operacao.js) — é o jeito de qualquer dispositivo autorizado
+        // recuperar uma operação travada por outro computador que travou,
+        // ficou offline, ou simplesmente esqueceu de encerrar.
+        const forcar = payload.forcar === true && ehLimpeza;
+
+        // ── Dono da operação ──────────────────────────────────────────────
+        // Só existe UMA operação em andamento por vez (ver seção dedicada no
+        // README), mas a lista de Autorizados pode ter mais de um
+        // dispositivo. Quem inicia (primeiro push não-nulo depois de uma
+        // operação vazia) se torna o "dono" — só ele pode mandar mais
+        // mudanças, até a operação ser limpa (registrada, resetada, ou
+        // "forçada" por outro autorizado). Isso evita dois computadores
+        // autorizados brigando pela mesma operação ao mesmo tempo.
+        const atual = lerOperacaoAndamento();
+        const donoAtual = (atual && typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
+        const souODono = !donoAtual || donoAtual === deviceId;
+
+        if (!souODono && !forcar) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: false,
+            erro: 'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+          }));
+          return;
+        }
+
+        // Nunca confia no donoDeviceId que o cliente mandou (se mandou) —
+        // sempre recalculado aqui: mantém o dono atual, ou assume este
+        // deviceId como novo dono se a operação estava vazia.
+        let dadosFinal;
+        if (ehLimpeza) {
+          dadosFinal = null; // limpa o dono junto
+        } else {
+          const { donoDeviceId: _ignorarDoCliente, ...resto } = dados;
+          dadosFinal = { ...resto, donoDeviceId: donoAtual || deviceId };
+        }
 
         salvarOperacaoAndamentoNoDisco(dadosFinal);
         broadcastOperacaoAndamento(dadosFinal, clientId);
