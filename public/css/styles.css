@@ -2199,3 +2199,58 @@ td.mono {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Toggle Switch (reutilizável) ───────────────────────────────────────── */
+/* Usado pelo "🧪 Modo de Teste" em Registrar Operação — qualquer tela pode
+   reaproveitar: <span class="switch"><input type="checkbox" id="...">
+   <span class="switch-slider"></span></span> */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: var(--text-3);
+  border-radius: 50%;
+  transition: transform .15s ease, background .15s ease;
+}
+
+.switch input:checked + .switch-slider {
+  background: rgba(167, 139, 250, .22);
+  border-color: #a78bfa;
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(16px);
+  background: #a78bfa;
+}
+
+.switch input:disabled + .switch-slider {
+  opacity: .5;
+  cursor: not-allowed;
+}

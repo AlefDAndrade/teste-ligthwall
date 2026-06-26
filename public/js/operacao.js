@@ -18,6 +18,8 @@
     fim: null,
     status: 'idle',      // idle | running | finished
     tracos: [],
+    modo_teste: false,
+    bercos_personalizados: null, // [tipo|null, ...] — só usado quando tipo_montagem === 'PERSONALIZADA'
   };
 
   let timerInterval = null;
@@ -28,21 +30,30 @@
 
   function init() {
     // Carrega config.json e só depois inicializa a tela
-    LW.loadConfig().then(() => {
+    LW.loadConfig().then(async () => {
       populateSelects();
 
-      const saved = LW.getOperacaoAtual();
-      if (saved) {
-        state = saved;
-        expandedTracoIndex = state.tracos.length - 1; // Expande o último ao retomar
-        renderAll();
-        if (state.status === 'running') startTimerUI();
+      // Só existe UMA operação em andamento por vez, na fábrica inteira —
+      // a fonte de verdade passa a ser o servidor, não mais só o
+      // localStorage deste navegador. Sem conexão, cai pro rascunho local
+      // salvo aqui (mesmo comportamento de antes desta sincronização
+      // existir).
+      let estadoInicial;
+      try {
+        estadoInicial = await LW.getOperacaoAndamento();
+      } catch (_) {
+        estadoInicial = LW.getOperacaoAtual();
       }
+      _aplicarEstadoExterno(estadoInicial);
 
       wireEvents();
       setInterval(updateClock, 1000);
       updateClock();
-      renderAll();
+      renderAll(); // já reaplica a trava de autorização/dono no final
+
+      // A partir daqui, qualquer mudança feita em OUTRA aba/computador
+      // nesta mesma operação chega aqui ao vivo (cronômetro incluso).
+      LW.conectarOperacaoAndamento(_aplicarEstadoExterno);
 
       // Fecha popovers ao clicar fora
       document.addEventListener('click', (e) => {
@@ -51,6 +62,32 @@
         }
       });
     });
+  }
+
+  /**
+   * Aplica um estado vindo de FORA desta aba — snapshot inicial do servidor
+   * ao carregar a tela, ou atualização ao vivo via WebSocket (mudança feita
+   * por outra aba/computador). Nunca reenvia pro servidor (usa
+   * LW.saveOperacaoAtual, não persist()), senão criaria um eco infinito
+   * entre as abas.
+   */
+  function _aplicarEstadoExterno(dados) {
+    // Não deixa uma atualização de operação REAL sobrescrever um teste
+    // local em andamento — só se sai do modo de teste de propósito
+    // (toggle OFF com a operação parada, ou "🗑️ Limpar Tudo"). Sem isso,
+    // alguém começando uma operação real em outro computador apagaria
+    // sem aviso o teste em andamento aqui.
+    if (state.modo_teste) return;
+    clearInterval(timerInterval);
+    if (dados) {
+      state = dados;
+    } else {
+      resetState();
+    }
+    LW.saveOperacaoAtual(state); // mantém o cache local desta aba em dia
+    expandedTracoIndex = state.tracos.length - 1;
+    renderAll();
+    if (state.status === 'running') startTimerUI();
   }
 
   // Preenche os <select> com dados do config.json
@@ -73,6 +110,13 @@
       opt.value = m; opt.textContent = m;
       selMont.appendChild(opt);
     });
+    // "Personalizado" não é um tipo cadastrado em Configurações — é uma
+    // opção fixa, sempre disponível, que abre a grade de berço a berço
+    // (ver abrirGradeMontagemPersonalizada()).
+    const optPersonalizada = document.createElement('option');
+    optPersonalizada.value = LW.TIPO_MONTAGEM_PERSONALIZADA;
+    optPersonalizada.textContent = '🔧 Personalizado (definir por berço)';
+    selMont.appendChild(optPersonalizada);
 
     // Atualiza referência rápida
     renderReferencia();
@@ -98,16 +142,35 @@
   }
 
   function wireEvents() {
+    $('op-toggle-teste').addEventListener('change', e => {
+      // Só pode trocar de modo com a operação parada — evita misturar
+      // dados reais e de teste numa mesma operação em andamento.
+      if (state.status !== 'idle') {
+        e.target.checked = state.modo_teste; // desfaz visualmente
+        LW.mostrarAlerta('Encerre ou limpe a operação atual antes de trocar de modo.', { tipo: 'aviso' });
+        return;
+      }
+      state.modo_teste = e.target.checked;
+      persist();
+      _aplicarTravaDeAutorizacao();
+    });
     $('op-turno').addEventListener('change', e => {
       state.turno = e.target.value; persist();
     });
     $('op-montagem').addEventListener('change', e => {
       state.tipo_montagem = e.target.value;
+      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        abrirGradeMontagemPersonalizada();
+      }
       recalcPaineis();
       persist();
     });
     $('op-id-bateria').addEventListener('change', e => {
       state.id_bateria = e.target.value;
+      // Mudou de bateria — a grade (se já tinha alguma) não vale mais
+      // (capacidade pode ser diferente); melhor recomeçar do zero do que
+      // arriscar um tamanho errado.
+      if (state.bercos_personalizados) state.bercos_personalizados = null;
       updateCapacidade();
       recalcPaineis();
       persist();
@@ -180,7 +243,9 @@
       if (elM2Tipo) elM2Tipo.innerHTML = '';
       return;
     }
-    const r = LW.calcPaineis(state.tipo_montagem, bercos);
+    const r = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+      ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
+      : LW.calcPaineis(state.tipo_montagem, bercos);
     $('op-paineis-total').textContent = r.total_paineis;
     $('op-m2-total').textContent = r.m2_total.toFixed(2) + ' m²';
     $('op-placas-cimenticia').textContent = r.placas_cimenticia;
@@ -209,8 +274,95 @@
     }
   }
 
+  /**
+   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
+   * registrar, resetar) — mostra um aviso e retorna true se este
+   * dispositivo NÃO está autorizado (Configurações → Autorizados). A
+   * trava de verdade é sempre no servidor; isto aqui só dá feedback
+   * imediato (sem esperar a rede) e cobre atalhos de teclado, que não
+   * passam pelos campos/botões desabilitados na tela.
+   */
+  /**
+   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
+   * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
+   * pode agir agora: dispositivo fora da lista de Autorizados, OU a
+   * operação já tem outro dono (outro dispositivo autorizado que a
+   * iniciou — ver "dono da operação" em server.js). A trava de verdade é
+   * sempre no servidor; isto aqui só dá feedback imediato (sem esperar a
+   * rede) e cobre atalhos de teclado, que não passam pelos campos/botões
+   * desabilitados na tela.
+   * @param {object} opts
+   * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
+   *   que pode forçar a limpeza mesmo sem ser o dono atual.
+   */
+  function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
+    // Modo de teste é um sandbox local — nunca toca o servidor (ver
+    // persist()), então a trava de Autorizados/dono não faz sentido aqui:
+    // qualquer computador pode testar, autorizado ou não pra operações reais.
+    if (state.modo_teste) return false;
+    if (!LW.dispositivoEstaAutorizado()) {
+      LW.mostrarAlerta(
+        'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+        { tipo: 'erro' }
+      );
+      return true;
+    }
+    if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
+      LW.mostrarAlerta(
+        'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+        { tipo: 'erro' }
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Desabilita todos os campos/botões da tela (via <fieldset disabled> —
+   * cobre até os elementos de traço, renderizados dinamicamente) e mostra
+   * o banner correspondente quando este dispositivo não pode controlar a
+   * operação agora — seja por não estar na lista de Autorizados, seja por
+   * outro dispositivo autorizado já ser o dono da operação atual. Chamada
+   * sempre que o estado é re-renderizado (renderAll()) — o "dono" muda
+   * dinamicamente, diferente da lista de Autorizados.
+   */
+  function _aplicarTravaDeAutorizacao() {
+    const fieldset = $('op-fieldset-trava');
+    const aviso = $('op-aviso-nao-autorizado');
+    const avisoTeste = $('op-aviso-modo-teste');
+
+    // Modo de teste é um sandbox local — nunca trava a tela (ver
+    // _bloqueadoPorAutorizacao) — só troca o banner padrão pelo de teste.
+    if (state.modo_teste) {
+      if (fieldset) fieldset.disabled = false;
+      if (aviso) aviso.style.display = 'none';
+      if (avisoTeste) avisoTeste.style.display = 'flex';
+      return;
+    }
+    if (avisoTeste) avisoTeste.style.display = 'none';
+
+    const autorizado = LW.dispositivoEstaAutorizado();
+    const dono = state?.donoDeviceId || null;
+    const ehODono = !dono || dono === LW.getDeviceId();
+    const podeControlar = autorizado && ehODono;
+
+    if (fieldset) fieldset.disabled = !podeControlar;
+
+    if (!aviso) return;
+    if (podeControlar) {
+      aviso.style.display = 'none';
+    } else if (!autorizado) {
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>';
+      aviso.style.display = 'flex';
+    } else {
+      aviso.innerHTML = '👀 <span>Outro computador autorizado está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
+      aviso.style.display = 'flex';
+    }
+  }
+
   function iniciarInjecao() {
     if (state.status !== 'idle') return;
+    if (_bloqueadoPorAutorizacao()) return;
     state.inicio = nowBrasilia().toISOString();
     state.status = 'running';
     $('op-inicio').value = LW.formatTime(state.inicio);
@@ -224,6 +376,7 @@
 
   async function finalizarInjecao() {
     if (state.status !== 'running') return false;
+    if (_bloqueadoPorAutorizacao()) return false;
 
     const confirmou = await LW.mostrarConfirmacao(
       'Isso vai parar o cronômetro e travar os campos de tempo desta operação.',
@@ -289,6 +442,12 @@
       banner.innerHTML = '<span class="badge badge-amber">◉ Injeção em andamento</span>';
     } else {
       banner.innerHTML = '<span class="badge badge-green">✓ Finalizado</span>';
+    }
+    // Reforça a visibilidade do modo de teste bem ao lado do status — o
+    // banner grande no topo da página pode passar despercebido se a
+    // pessoa já tiver rolado a tela.
+    if (state.modo_teste) {
+      banner.innerHTML += ' <span class="badge" style="background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.5)">🧪 TESTE</span>';
     }
   }
 
@@ -409,7 +568,7 @@
   async function _garantirBaseNumTraco() {
     if (typeof state.baseNumTraco === 'number') return;
     try {
-      state.baseNumTraco = await LW.getTotalTracosHoje();
+      state.baseNumTraco = await LW.getTotalTracosHoje(state.modo_teste);
     } catch (err) {
       console.warn('[LW] Falha ao obter total de traços do dia, usando 0 como base:', err.message);
       state.baseNumTraco = 0;
@@ -526,7 +685,7 @@
    */
   async function addTraco() {
     let sobra = null;
-    try { sobra = await LW.getSobra(); } catch (_) { sobra = null; }
+    try { sobra = await LW.getSobra(state.modo_teste); } catch (_) { sobra = null; }
 
     if (!sobra) {
       // Fluxo normal — sem sobra ativa
@@ -597,7 +756,7 @@
       // Adiciona o traço reaproveitado ao state
       _adicionarTracoDeSobra(sobra);
       // Marca sobra como utilizada (em segundo plano para não travar a UI)
-      try { await LW.desativarSobra('utilizada'); } catch (_) { }
+      try { await LW.desativarSobra('utilizada', state.modo_teste); } catch (_) { }
     });
 
     document.getElementById('btn-criar-novo-traco').addEventListener('click', () => {
@@ -651,7 +810,7 @@
 
     document.getElementById('btn-descartar-sobra').addEventListener('click', async () => {
       modal.remove();
-      try { await LW.desativarSobra('descartada'); } catch (_) { }
+      try { await LW.desativarSobra('descartada', state.modo_teste); } catch (_) { }
       await callbackProsseguir();
     });
 
@@ -846,10 +1005,252 @@
     // falhar (o dado principal já está salvo no traço; isso é só o
     // histórico de qual ajuste veio com qual tempo de batida).
     try {
-      await LW.registrarAjusteTraco(t.id, ajusteAudit);
+      await LW.registrarAjusteTraco(t.id, ajusteAudit, state.modo_teste);
     } catch (err) {
       console.warn('[LW] Falha ao registrar auditoria do ajuste de receita:', err.message);
     }
+  }
+
+  // ── Montagem Personalizada (berço a berço) ─────────────────────────────
+  // Diferente de Simples/Híbrida (uma proporção fixa aplicada igualmente em
+  // todos os berços), aqui cada berço tem seu próprio tipo — pra baterias
+  // que misturam tipos diferentes em quantidades quaisquer (ex: 3 berços de
+  // 3T, o resto de S/P). Ver calcPaineisPersonalizado() em data.js.
+
+  let _gradeTipoAtivo = null;  // tipo selecionado nas abas (string) — null = nenhum selecionado ainda
+  let _gradeTrabalho = [];     // cópia de trabalho de state.bercos_personalizados — só vai pro state em "Confirmar"
+  let _gradeSomenteRevisao = false;
+
+  /**
+   * Abre a grade de berços. Em modo normal (somenteRevisao: false), mostra
+   * as abas de tipo + "De/Até — Aplicar" + a grade clicável. Em modo de
+   * revisão (usado pela reconciliação ao registrar — ver
+   * _reconciliarMontagemPersonalizada()), esconde as abas: todo clique ou
+   * "Aplicar" só LIMPA o berço (pra marcar quais não foram usados).
+   * @returns {Promise<boolean>} true se confirmado, false se cancelado
+   */
+  function abrirGradeMontagemPersonalizada({ somenteRevisao = false } = {}) {
+    return new Promise((resolve) => {
+      const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+      if (!bateria) {
+        LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
+        resolve(false);
+        return;
+      }
+      const capacidade = bateria.bercos || 0;
+
+      const atual = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+      _gradeTrabalho = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
+      _gradeSomenteRevisao = somenteRevisao;
+      _gradeTipoAtivo = somenteRevisao ? '' : null; // '' = ferramenta de limpar, em modo de revisão
+
+      const existente = document.getElementById('modal-grade-montagem');
+      if (existente) existente.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-grade-montagem';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+      modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                    padding:32px;width:560px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+          <div style="text-align:center;margin-bottom:18px">
+            <div style="font-size:2.2rem;margin-bottom:8px">🔧</div>
+            <h2 style="font-family:var(--font-display);font-size:1.25rem;color:var(--accent);margin:0">
+              ${somenteRevisao ? 'Quais berços não foram preenchidos?' : 'Montagem Personalizada — Bateria ' + bateria.id}
+            </h2>
+            <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
+              ${somenteRevisao
+          ? 'Clique nos berços que ficaram vazios (não foram usados nesta operação).'
+          : 'Selecione um tipo abaixo e clique nos berços (ou use "De/Até") pra aplicar.'}
+            </p>
+          </div>
+
+          <div id="grade-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
+
+          <div id="grade-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
+
+          <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">De</label>
+              <input type="number" id="grade-de" class="form-input" style="width:80px" min="1" max="${capacidade}">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Até</label>
+              <input type="number" id="grade-ate" class="form-input" style="width:80px" min="1" max="${capacidade}">
+            </div>
+            <button id="grade-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
+          </div>
+
+          <div id="grade-bercos" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+
+          <div style="display:flex;justify-content:flex-end;gap:12px">
+            <button id="grade-btn-cancelar" class="btn btn-ghost">Cancelar</button>
+            <button id="grade-btn-confirmar" class="btn btn-primary">Confirmar</button>
+          </div>
+        </div>`;
+
+      document.body.appendChild(modal);
+
+      _renderGradeMontagem();
+
+      document.getElementById('grade-btn-aplicar').addEventListener('click', _gradeAplicarRange);
+      document.getElementById('grade-btn-cancelar').addEventListener('click', () => {
+        modal.remove();
+        resolve(false);
+      });
+      document.getElementById('grade-btn-confirmar').addEventListener('click', () => {
+        // Em modo normal, exige ao menos 1 berço preenchido — senão não tem
+        // sentido nenhum ter escolhido "Personalizado".
+        if (!somenteRevisao && _gradeTrabalho.every(t => !t)) {
+          const erroEl = document.getElementById('grade-erro');
+          erroEl.textContent = 'Defina o tipo de pelo menos um berço antes de confirmar.';
+          erroEl.style.display = 'block';
+          return;
+        }
+        state.bercos_personalizados = [..._gradeTrabalho];
+        recalcPaineis();
+        persist();
+        modal.remove();
+        resolve(true);
+      });
+
+      // Resolve modal._resolve pra fechamentos externos (ex: reconciliação
+      // decide fechar sozinha depois de recalcular) — não usado por padrão.
+      modal._resolve = resolve;
+    });
+  }
+
+  function _renderGradeMontagem() {
+    const tabsEl = document.getElementById('grade-tabs');
+    if (tabsEl) {
+      if (_gradeSomenteRevisao) {
+        tabsEl.innerHTML = ''; // sem abas em modo de revisão — todo clique limpa
+      } else {
+        const tiposSimples = (LW.MONTAGEM_OPCOES || []).filter(o => o.modo === 'simples');
+        tabsEl.innerHTML = tiposSimples.map(o => {
+          const cor = LW.corPorTipoSimples(o.tipo);
+          const ativo = _gradeTipoAtivo === o.tipo;
+          return `<button type="button" class="btn btn-sm" data-tipo-tab="${o.tipo}"
+            style="background:${ativo ? cor.cor : cor.bg};color:${ativo ? '#fff' : cor.cor};border:1px solid ${cor.borda}">${o.label}</button>`;
+        }).join('') + `<button type="button" class="btn btn-sm" data-tipo-tab=""
+            style="background:${_gradeTipoAtivo === '' ? 'var(--red)' : 'rgba(239,68,68,.08)'};color:${_gradeTipoAtivo === '' ? '#fff' : 'var(--red)'};border:1px solid var(--red-dim)">🗑️ Limpar</button>`;
+
+        tabsEl.querySelectorAll('[data-tipo-tab]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            _gradeTipoAtivo = btn.getAttribute('data-tipo-tab');
+            _renderGradeMontagem();
+          });
+        });
+      }
+    }
+
+    const gridEl = document.getElementById('grade-bercos');
+    if (gridEl) {
+      gridEl.innerHTML = _gradeTrabalho.map((tipo, i) => {
+        const cor = tipo ? LW.corPorTipoSimples(tipo) : null;
+        const numero = String(i + 1).padStart(2, '0');
+        return `<button type="button" data-berco-idx="${i}"
+          style="padding:8px 4px;border-radius:var(--radius);font-size:.74rem;text-align:center;cursor:pointer;
+                 background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};
+                 border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+          B${numero}${tipo ? '<br><strong>' + tipo.toUpperCase() + '</strong>' : ''}
+        </button>`;
+      }).join('');
+
+      gridEl.querySelectorAll('[data-berco-idx]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.getAttribute('data-berco-idx'), 10);
+          _gradeClicarBerco(i);
+        });
+      });
+    }
+  }
+
+  function _gradeClicarBerco(i) {
+    if (_gradeSomenteRevisao) {
+      // Só limpa — não tem tipo pra "pintar" nesse modo.
+      _gradeTrabalho[i] = null;
+    } else {
+      if (_gradeTipoAtivo === null) {
+        LW.mostrarAlerta('Selecione um tipo de montagem nas abas acima primeiro.', { tipo: 'aviso' });
+        return;
+      }
+      _gradeTrabalho[i] = _gradeTipoAtivo || null; // '' (Limpar) -> null
+    }
+    _renderGradeMontagem();
+  }
+
+  function _gradeAplicarRange() {
+    const erroEl = document.getElementById('grade-erro');
+    erroEl.style.display = 'none';
+
+    const de = parseInt(document.getElementById('grade-de').value, 10);
+    const ate = parseInt(document.getElementById('grade-ate').value, 10);
+    if (!de || !ate || de < 1 || ate < de || ate > _gradeTrabalho.length) {
+      erroEl.textContent = `Informe um intervalo válido (de 1 até ${_gradeTrabalho.length}).`;
+      erroEl.style.display = 'block';
+      return;
+    }
+    if (!_gradeSomenteRevisao && _gradeTipoAtivo === null) {
+      erroEl.textContent = 'Selecione um tipo de montagem nas abas acima primeiro.';
+      erroEl.style.display = 'block';
+      return;
+    }
+
+    const valor = _gradeSomenteRevisao ? null : (_gradeTipoAtivo || null);
+    for (let i = de - 1; i <= ate - 1; i++) _gradeTrabalho[i] = valor;
+    _renderGradeMontagem();
+  }
+
+  /**
+   * Confere se a quantidade de berços com tipo definido na grade bate com
+   * "berços reais". Se bater, segue o registro normalmente. Se não:
+   * - Preenchidos > berços reais: pergunta se houve berço não usado — se
+   *   sim, reabre a grade só pra marcar quais (modo de revisão); se não,
+   *   berços reais SOBE pra bater com o que está preenchido.
+   * - Preenchidos < berços reais: faltam berços sem tipo — reabre a grade
+   *   completa (com abas) pra terminar de preencher.
+   * @returns {Promise<boolean>} true = pode prosseguir com o registro agora
+   */
+  async function _reconciliarMontagemPersonalizada() {
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    const capacidade = bateria?.bercos || 0;
+    const grade = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+    const preenchidos = grade.filter(t => !!t).length;
+    const bercosDeclarados = parseInt(state.bercos_reais) || capacidade;
+
+    if (preenchidos === bercosDeclarados) return true;
+
+    if (preenchidos < bercosDeclarados) {
+      LW.mostrarAlerta(
+        `Faltam ${bercosDeclarados - preenchidos} berço(s) sem tipo de montagem definido na grade. Complete antes de registrar.`,
+        { tipo: 'aviso' }
+      );
+      await abrirGradeMontagemPersonalizada();
+      return false; // sempre pede pra clicar Registrar de novo, depois de completar
+    }
+
+    // preenchidos > bercosDeclarados
+    const houveVazios = await LW.mostrarConfirmacao(
+      `Você definiu o tipo de ${preenchidos} berços, mas "Berços Reais" está em ${bercosDeclarados}. Houve berço que não foi usado nesta operação?`,
+      {
+        titulo: 'Berços reais não coincidem com a grade', icon: '🔢',
+        textoConfirmar: 'Sim, houve berços não usados', textoCancelar: 'Não, todos foram usados',
+      }
+    );
+
+    if (houveVazios) {
+      await abrirGradeMontagemPersonalizada({ somenteRevisao: true });
+      return false; // pede pra clicar Registrar de novo, depois de revisar
+    }
+
+    // "Não" -> berços reais sobe pra bater com o que está preenchido na grade
+    state.bercos_reais = String(preenchidos);
+    if ($('op-bercos-reais')) $('op-bercos-reais').value = state.bercos_reais;
+    recalcPaineis();
+    persist();
+    return true;
   }
 
   /**
@@ -929,7 +1330,7 @@
         status: 'ativa',
       };
       try {
-        await LW.salvarSobra(sobra);
+        await LW.salvarSobra(sobra, state.modo_teste);
       } catch (err) {
         console.warn('[LW] Falha ao salvar sobra:', err.message);
       }
@@ -939,7 +1340,7 @@
     document.getElementById('btn-sobra-nao').addEventListener('click', async () => {
       modal.remove();
       // Garante que não há sobra ativa residual para o traço encerrado
-      try { await LW.desativarSobra('descartada'); } catch (_) { }
+      try { await LW.desativarSobra('descartada', state.modo_teste); } catch (_) { }
       showSuccessModal(record);
     });
   }
@@ -1271,10 +1672,26 @@
   }
 
   function registrarOperacao() {
+    if (_bloqueadoPorAutorizacao()) return;
+    // Montagem Personalizada precisa que "berços reais" bata com a
+    // quantidade de berços com tipo definido na grade — confere (e resolve
+    // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
+    if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+      _reconciliarMontagemPersonalizada().then(podeSeguir => {
+        if (podeSeguir) _registrarOperacaoInterna();
+      });
+      return;
+    }
+    _registrarOperacaoInterna();
+  }
+
+  function _registrarOperacaoInterna() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
 
-    const calc = LW.calcPaineis(state.tipo_montagem, bercos);
+    const calc = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+      ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
+      : LW.calcPaineis(state.tipo_montagem, bercos);
 
     const dataLocal = state.inicio.split('T')[0];
 
@@ -1295,6 +1712,11 @@
       motivo_atraso: state.motivo_atraso || '',
       tipo_montagem: state.tipo_montagem,
       bercos_reais: bercos,
+      // Detalhe berço a berço — só presente em Montagem Personalizada; o
+      // resto do sistema nunca precisa disso (já usa paineis_por_tipo/
+      // m2_por_tipo, vindos de ...calc acima), é só pra exibir/auditar a
+      // composição exata desta bateria depois.
+      ...(state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? { bercos_personalizados: state.bercos_personalizados } : {}),
       ...calc,
       tracos: state.tracos.map(t => {
         // Se o traço foi reaproveitado, completa a entrada de reaproveitamento com o ID real
@@ -1327,18 +1749,22 @@
     // navigator.onLine é só um indício (pode estar errado em alguns casos),
     // então mesmo quando ele diz "online" ainda tentamos enviar de verdade;
     // é só uma forma de pular a tentativa quando já se sabe que vai falhar.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    // Em modo de teste, NUNCA enfileira — essa fila é só pra operações
+    // reais ("será registrada de verdade quando a conexão voltar"); um
+    // teste teria a mesma chance de ser sincronizado como dado real depois.
+    if (!state.modo_teste && typeof navigator !== 'undefined' && navigator.onLine === false) {
       _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos, fullRecord);
       return;
     }
 
     Promise.all([
-      LW.registrarOperacao(historyRecord),
-      LW.registrarRelatorioInjecao(fullRecord),
-      qtdTracosNovos > 0 ? LW.confirmarTracosHoje(qtdTracosNovos) : Promise.resolve(),
+      LW.registrarOperacao(historyRecord, state.modo_teste),
+      LW.registrarRelatorioInjecao(fullRecord, state.modo_teste),
+      qtdTracosNovos > 0 ? LW.confirmarTracosHoje(qtdTracosNovos, state.modo_teste) : Promise.resolve(),
     ])
       .then(() => {
         LW.clearOperacaoAtual();
+        LW.enviarOperacaoAndamento(null, { imediato: true });
         clearInterval(timerInterval);
         resetState();
         renderAll();
@@ -1353,11 +1779,11 @@
         // por algum motivo de verdade (esse caso continua mostrando o erro
         // pra a pessoa corrigir, não faz sentido enfileirar algo que o
         // servidor já disse que não aceita).
-        if (err instanceof TypeError) {
+        if (!state.modo_teste && err instanceof TypeError) {
           _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos, fullRecord);
           return;
         }
-        LW.mostrarAlerta('Erro ao salvar operação: ' + err.message, { tipo: 'erro' });
+        LW.mostrarAlerta('Erro ao salvar operação' + (state.modo_teste ? ' de TESTE' : '') + ': ' + err.message, { tipo: 'erro' });
       });
   }
 
@@ -1372,6 +1798,7 @@
     LW.enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos);
 
     LW.clearOperacaoAtual();
+    LW.enviarOperacaoAndamento(null, { imediato: true }); // melhor esforço — sem conexão, só não vai mesmo
     clearInterval(timerInterval);
     resetState();
     renderAll();
@@ -1425,6 +1852,7 @@
   }
 
   async function resetarOperacao() {
+    if (_bloqueadoPorAutorizacao({ ignorarDono: true })) return false;
     const confirmou = await LW.mostrarConfirmacao(
       'Isso apaga turno, traços, horários e tudo mais preenchido nesta tela.',
       { titulo: 'Limpar todos os dados da operação atual?', textoConfirmar: 'Limpar Tudo', tipo: 'perigo', icon: '🗑️' }
@@ -1432,6 +1860,7 @@
     if (!confirmou) return false;
     clearInterval(timerInterval);
     LW.clearOperacaoAtual();
+    LW.enviarOperacaoAndamento(null, { imediato: true, forcar: true });
     resetState();
     renderAll();
     return true;
@@ -1449,15 +1878,25 @@
       desemplaque: null,
       status: 'idle',
       tracos: [],
+      // Sempre volta pra false — exige reativar o toggle a cada operação
+      // nova, de propósito: evita o risco de "esquecer ligado" e uma
+      // operação REAL acabar indo pros arquivos de teste sem querer.
+      modo_teste: false,
+      bercos_personalizados: null,
     };
   }
 
   function renderAll() {
     // Set form values
+    $('op-toggle-teste').checked = !!state.modo_teste;
+    $('op-toggle-teste').disabled = state.status !== 'idle';
     $('op-turno').value = state.turno || '1º TURNO';
     $('op-dimensao').value = state.dimensao || '';
 
     $('op-montagem').value = state.tipo_montagem || '';
+    if ($('btn-configurar-bercos')) {
+      $('btn-configurar-bercos').style.display = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? 'block' : 'none';
+    }
     $('op-id-bateria').value = state.id_bateria || '';
     $('op-bercos-reais').value = state.bercos_reais || '';
     $('op-motivo').value = state.motivo_atraso || '';
@@ -1513,10 +1952,22 @@
     recalcPaineis();
     updateStatusBanner();
     updatePendencias();
+    _aplicarTravaDeAutorizacao();
   }
 
   function persist() {
     LW.saveOperacaoAtual(state);
+    // Operação de TESTE nunca é transmitida — fica só neste navegador, do
+    // início ao fim. É assim que ela nunca aparece pra quem mais estiver
+    // acompanhando a tela (que só vê operações reais) e nunca passa pela
+    // trava de Autorizados/dono (que só faz sentido pra operações reais).
+    if (!state.modo_teste) {
+      // Só transmite a partir do momento em que a operação É iniciada
+      // (status deixa de ser 'idle') — campos preenchidos ANTES de
+      // "Iniciar Injeção" continuam sendo só um rascunho local, sem
+      // aparecer pra quem mais estiver com a tela aberta.
+      LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
+    }
     updatePendencias();
   }
 
@@ -1526,6 +1977,8 @@
     iniciarInjecao,
     finalizarInjecao,
     resetarOperacao,
+    atualizarTravaAutorizacao: _aplicarTravaDeAutorizacao,
+    abrirGradeMontagem: abrirGradeMontagemPersonalizada,
     selectTraco(i) {
       expandedTracoIndex = i; // Define o traço ativo e foca na visualização exclusiva
       renderTracos();

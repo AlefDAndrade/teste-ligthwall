@@ -11,6 +11,13 @@ const TURNO_OPTS = ['1º TURNO', '2º TURNO', '3º TURNO'];
 const M2_POR_PAINEL = 1.83;  // m² por painel (calculado da planilha original)
 const LIMITE_INJECAO_MIN = 59;    // minutos limite antes de registrar atraso
 
+// Sentinela do tipo de montagem "Personalizado" — diferente dos outros
+// (simples/híbrida), não é um item de tipos_montagem.opcoes em config.json;
+// é uma opção fixa, sempre disponível, na tela de Registrar Operação. Ver
+// abrirGradeMontagemPersonalizada() em operacao.js e calcPaineisPersonalizado()
+// abaixo.
+const TIPO_MONTAGEM_PERSONALIZADA = 'PERSONALIZADA';
+
 // ---- Config dinâmica — carregada de config.json ----
 // Defaults vazios; preenchidos por loadConfig()
 let DIMENSAO_OPTS = [];
@@ -27,6 +34,11 @@ let MONTAGEM_OPCOES = [];
 let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
+// Dispositivos autorizados a controlar a operação em andamento (iniciar,
+// encerrar, registrar) — [{ deviceId, nome, autorizadoEm }]. Lista vazia =
+// sem restrição (qualquer computador pode controlar). Editável em
+// Configurações → Autorizados. Ver dispositivoAutorizado() em server.js.
+let DISPOSITIVOS_AUTORIZADOS = [];
 
 let _configReady = false;
 const _configCallbacks = [];
@@ -136,33 +148,34 @@ function corCssDoHex(hex) {
 //   gradiente (canvas não entende a string CSS linear-gradient()).
 // - Sem cor disponível (tipo desconhecido, ou híbrido cujos componentes
 //   ainda não têm cor): cinza neutro.
+// Extrai a cor (hex) de uma opção de tipos_montagem.opcoes simples — aceita
+// tanto o objeto da opção quanto o código do tipo (ex: 'sp'), nesse caso
+// procurando em MONTAGEM_OPCOES. Reaproveitado por corMontagemPorLabel()
+// (caso híbrido) e por corPorTipoSimples() (grade de Montagem Personalizada).
+function _hexDoTipoSimples(tipoOuOpcao) {
+  const op = typeof tipoOuOpcao === 'string'
+    ? (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipoOuOpcao)
+    : tipoOuOpcao;
+  if (!op) return null;
+  if (typeof op.cor === 'string' && op.cor) return op.cor;
+  if (typeof op.corHue === 'number') return hslParaHex(op.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO);
+  return null;
+}
+
 function corMontagemPorLabel(label) {
   const opcao = (MONTAGEM_OPCOES || []).find(o => o.label === label);
   if (!opcao) return _corMontagemNeutra();
 
   if (opcao.modo === 'simples') {
-    // cor (hex) é o formato atual; corHue (número) é o formato antigo,
-    // mantido só pra não perder a cor de registros salvos antes desta
-    // mudança — convertido na hora, nunca migrado silenciosamente no disco.
-    if (typeof opcao.cor === 'string' && opcao.cor) {
-      return { ...corCssDoHex(opcao.cor), hibrida: false };
-    }
-    if (typeof opcao.corHue === 'number') {
-      return { ...corCssDoHex(hslParaHex(opcao.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO)), hibrida: false };
-    }
+    const hex = _hexDoTipoSimples(opcao);
+    if (hex) return { ...corCssDoHex(hex), hibrida: false };
   }
 
   if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos) && opcao.tipos.length === 2) {
     const [op1, op2] = opcao.tipos.map(t =>
       (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === t));
-    const corDoTipo = op => {
-      if (!op) return null;
-      if (typeof op.cor === 'string' && op.cor) return op.cor;
-      if (typeof op.corHue === 'number') return hslParaHex(op.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO);
-      return null;
-    };
-    const hex1 = corDoTipo(op1);
-    const hex2 = corDoTipo(op2);
+    const hex1 = _hexDoTipoSimples(op1);
+    const hex2 = _hexDoTipoSimples(op2);
     if (hex1 && hex2) {
       const c1 = corCssDoHex(hex1);
       const c2 = corCssDoHex(hex2);
@@ -177,6 +190,17 @@ function corMontagemPorLabel(label) {
   }
 
   return _corMontagemNeutra();
+}
+
+/**
+ * Cor (mesmo formato de corMontagemPorLabel) de um tipo SIMPLES, dado o
+ * código do tipo (ex: 'sp', '2p', '3t') em vez do label — usado pela grade
+ * de Montagem Personalizada, onde cada berço guarda o tipo, não o label.
+ */
+function corPorTipoSimples(tipo) {
+  const hex = _hexDoTipoSimples(tipo);
+  if (!hex) return _corMontagemNeutra();
+  return { ...corCssDoHex(hex), hibrida: false };
 }
 
 function _corMontagemNeutra() {
@@ -303,6 +327,14 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "volume_por_placa" válido — mantendo lista já carregada.');
     }
 
+    // Lista vazia/ausente é o padrão (sem restrição) — não é um erro nem
+    // precisa de warning, diferente dos outros blocos acima.
+    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
+      ? cfg.dispositivosAutorizados.map(d => ({
+          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
+        }))
+      : [];
+
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
     DIMENSAO_OPTS = [
@@ -324,6 +356,10 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
+    // Falha pra ler config.json não deve travar quem já estava autorizado
+    // (nem ninguém, na falta de configuração) — fica vazio (sem
+    // restrição), nunca bloqueado por padrão.
+    if (!DISPOSITIVOS_AUTORIZADOS.length) DISPOSITIVOS_AUTORIZADOS = [];
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -368,6 +404,233 @@ function saveOperacaoAtual(op) {
 
 function clearOperacaoAtual() {
   localStorage.removeItem(DB_KEY_OP_CURRENT);
+}
+
+// ============================================================
+//  LOG DE ACESSO
+//
+//  Registra no servidor cada acesso a rotas "sensíveis" do app — por
+//  enquanto, só "Registrar Operação" (ver showPage() em index.html). Base
+//  pra, no futuro, restringir quem pode registrar operação a um único
+//  computador. ip + user-agent são capturados pelo SERVIDOR (fontes
+//  confiáveis); deviceId é gerado aqui e persistido neste navegador — os
+//  dois juntos identificam "qual computador é qual" sem exigir login real.
+// ============================================================
+
+const DB_KEY_DEVICE_ID = 'lw_device_id';
+
+/**
+ * ID estável deste navegador/computador — gerado uma única vez e
+ * persistido em localStorage (sobrevive a reabrir o navegador; some se os
+ * dados do navegador forem limpos).
+ */
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DB_KEY_DEVICE_ID);
+    if (!id) {
+      id = 'dev_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      localStorage.setItem(DB_KEY_DEVICE_ID, id);
+    }
+    return id;
+  } catch (_) {
+    return 'dev_sem_localstorage'; // navegador sem localStorage disponível
+  }
+}
+
+/**
+ * Anexa "?deviceId=..." (ou "&deviceId=..." se já houver query string) na
+ * URL — usado pelas rotas que controlam a operação em andamento (iniciar,
+ * encerrar, registrar), pra o servidor checar se este dispositivo está
+ * autorizado (ver dispositivoAutorizado() em server.js e a seção
+ * "Configurações → Autorizados").
+ */
+function _comDeviceId(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'deviceId=' + encodeURIComponent(getDeviceId());
+}
+
+/**
+ * Anexa "&modoTeste=true" (ou "?modoTeste=true") na URL quando `modoTeste`
+ * é truthy — usado pelo Toggle de Teste em Registrar Operação pra desviar
+ * a gravação pra public/db/teste/ em vez dos arquivos reais (ver
+ * dirParaModoTeste() em server.js). Sem efeito (URL inalterada) quando
+ * `modoTeste` é falso — combina com _comDeviceId(), em qualquer ordem.
+ */
+function _comModoTeste(url, modoTeste) {
+  if (!modoTeste) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + 'modoTeste=true';
+}
+
+/**
+ * Atualiza a cópia em memória de DISPOSITIVOS_AUTORIZADOS depois de salvar
+ * com sucesso em config.json (Configurações → Autorizados) — loadConfig()
+ * só roda uma vez por página (guarda em _configReady), então isto é o jeito
+ * de refletir a mudança sem precisar recarregar a página inteira.
+ */
+function atualizarDispositivosAutorizados(lista) {
+  DISPOSITIVOS_AUTORIZADOS = Array.isArray(lista) ? lista : [];
+}
+
+/**
+ * Registra um acesso à rota informada — melhor esforço: nunca lança erro
+ * pra quem chamou (sem conexão, simplesmente não loga; não é crítico a
+ * ponto de travar a navegação por isso).
+ * @param {string} rota - ex: '/operacao'
+ */
+async function registrarAcesso(rota) {
+  try {
+    await fetch('/registrar-acesso', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: getDeviceId(), rota }),
+    });
+  } catch (_) { /* sem conexão — ok, não é crítico */ }
+}
+
+/**
+ * Indica se ESTE dispositivo pode controlar a operação em andamento — true
+ * se a lista de Configurações → Autorizados estiver vazia (sem restrição)
+ * ou se o deviceId deste navegador estiver nela. Usado pela tela de
+ * Registrar Operação pra desabilitar campos/botões com feedback claro —
+ * a trava de verdade é sempre no servidor (ver dispositivoAutorizado() em
+ * server.js), isto aqui é só pra UI/UX.
+ */
+function dispositivoEstaAutorizado() {
+  if (!DISPOSITIVOS_AUTORIZADOS.length) return true;
+  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
+}
+
+// ============================================================
+//  OPERAÇÃO EM ANDAMENTO — sincronização ao vivo (WebSocket)
+//
+//  Só existe UMA operação em andamento por vez, pra fábrica inteira. Toda
+//  vez que a tela "Registrar Operação" muda algo no estado atual, manda
+//  pro servidor (debounced — agrupa digitação rápida numa única chamada) e
+//  o servidor propaga pra qualquer outra aba/computador com essa mesma
+//  tela aberta, em tempo real. Quem só está OLHANDO (não é quem está de
+//  fato operando) recebe essas atualizações e a tela se comporta como se a
+//  operação estivesse rodando ali também — cronômetro incluso (calculado
+//  localmente a partir do "inicio" recebido, não tick-a-tick pela rede).
+// ============================================================
+
+// ID único desta aba — usado só pra ela mesma ignorar o eco da própria
+// mudança que acabou de mandar (evita reaplicar/perder o foco de um campo
+// que a própria pessoa está digitando assim que ela termina de digitar).
+const OP_ANDAMENTO_CLIENT_ID = 'cli_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+
+let _opAndamentoWs = null;
+let _opAndamentoOnAtualizacao = null;
+let _opAndamentoReconectarTimeout = null;
+let _opAndamentoEnviarTimeout = null;
+let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
+
+/**
+ * Abre a conexão WebSocket com o servidor pra acompanhar, em tempo real,
+ * qualquer mudança feita em OUTRA aba/computador na operação em andamento
+ * (atualizações que esta própria aba mandou não disparam o callback — ver
+ * OP_ANDAMENTO_CLIENT_ID acima). Reconecta automaticamente se a conexão
+ * cair. `onAtualizacao(dados)` recebe o objeto inteiro do estado (ou null,
+ * quando não há nenhuma operação em andamento).
+ */
+function conectarOperacaoAndamento(onAtualizacao) {
+  _opAndamentoOnAtualizacao = onAtualizacao;
+  _abrirWsOperacaoAndamento();
+}
+
+function _abrirWsOperacaoAndamento() {
+  if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
+  try {
+    const protocolo = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocolo}//${window.location.host}/ws/operacao-andamento`);
+    _opAndamentoWs = ws;
+
+    ws.addEventListener('message', (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch (_) { return; }
+      if (!msg || msg.tipo !== 'estado') return;
+      if (msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora
+      if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
+    });
+
+    ws.addEventListener('close', _agendarReconexaoOperacaoAndamento);
+    ws.addEventListener('error', () => { /* o 'close' que segue já cuida da reconexão */ });
+  } catch (_) {
+    _agendarReconexaoOperacaoAndamento();
+  }
+}
+
+function _agendarReconexaoOperacaoAndamento() {
+  clearTimeout(_opAndamentoReconectarTimeout);
+  _opAndamentoReconectarTimeout = setTimeout(_abrirWsOperacaoAndamento, 3000);
+}
+
+/**
+ * Manda o estado atual da operação pro servidor — debounced por padrão
+ * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
+ * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
+ * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
+ * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
+ */
+/**
+ * Manda o estado atual da operação pro servidor — debounced por padrão
+ * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
+ * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
+ * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
+ * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de um
+ * dispositivo autorizado limpar uma operação que outro dispositivo
+ * autorizado começou (ver dono da operação, em server.js).
+ * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
+ */
+function enviarOperacaoAndamento(dados, { imediato = false, forcar = false } = {}) {
+  clearTimeout(_opAndamentoEnviarTimeout);
+  if (imediato) {
+    _postOperacaoAndamento(dados, forcar);
+  } else {
+    _opAndamentoEnviarTimeout = setTimeout(() => _postOperacaoAndamento(dados, forcar), 250);
+  }
+}
+
+async function _postOperacaoAndamento(dados, forcar = false) {
+  const corpo = JSON.stringify(dados);
+  if (corpo === _opAndamentoUltimoEnviado) return; // nada mudou de verdade — evita tráfego à toa
+  _opAndamentoUltimoEnviado = corpo;
+  try {
+    const res = await fetch(_comDeviceId('/salvar-operacao-andamento'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dados, clientId: OP_ANDAMENTO_CLIENT_ID, forcar }),
+    });
+    if (!res.ok) {
+      // Diferente de falha de rede (catch abaixo): o servidor respondeu e
+      // recusou — "dispositivo não autorizado" ou "operação já tem dono"
+      // (ver Configurações → Autorizados). Mostra na hora, senão a pessoa
+      // fica digitando sem nenhum feedback de que nada está sendo
+      // transmitido.
+      _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
+      const json = await res.json().catch(() => null);
+      mostrarAlerta(json?.erro || 'Este computador não está autorizado a controlar a operação.', { tipo: 'erro' });
+    }
+  } catch (_) {
+    _opAndamentoUltimoEnviado = undefined;
+    // Sem conexão — a tela segue funcionando normalmente em modo local
+    // (mesmo comportamento de antes desta sincronização existir); a
+    // próxima mudança tenta de novo.
+  }
+}
+
+/**
+ * Busca o snapshot atual da operação em andamento direto do servidor —
+ * usado ao abrir a tela. Lança erro só em falha de REDE de verdade (sem
+ * conexão); ausência de operação em andamento é null, não erro.
+ */
+async function getOperacaoAndamento() {
+  const res = await fetch('db/operacao_andamento.json?_=' + Date.now());
+  if (res.status === 404) return null; // arquivo ainda não existe = nenhuma operação ainda
+  if (!res.ok) throw new Error('Erro ao consultar operação em andamento');
+  const texto = await res.text();
+  if (!texto.trim()) return null;
+  try { return JSON.parse(texto) || null; } catch (_) { return null; }
 }
 
 // ---- Calculation helpers ----
@@ -420,6 +683,53 @@ function calcPaineis(tipoMontagem, bercos) {
     paineis_por_tipo,
     m2_por_tipo,
     // Aliases de compatibilidade (sempre presentes):
+    paineis_2p: paineis_por_tipo['2p'] || 0,
+    paineis_sp: paineis_por_tipo['sp'] || 0,
+    m2_2p: m2_por_tipo['2p'] || 0,
+    m2_sp: m2_por_tipo['sp'] || 0,
+  };
+}
+
+/**
+ * Equivalente a calcPaineis(), mas pra Montagem Personalizada — em vez de
+ * uma proporção fixa por berço (igual em todos os berços), cada berço tem
+ * seu próprio tipo (ou null = vazio/não usado), vindo da grade montada em
+ * Registrar Operação. Soma berço a berço e devolve EXATAMENTE o mesmo
+ * formato de calcPaineis(), pra tudo que já consome paineis_por_tipo/
+ * m2_por_tipo (OEE, Análise Operacional, exportações, Registro de
+ * Baterias) funcionar sem nenhuma mudança.
+ * @param {Array<string|null>} bercosPersonalizados - um item por berço, ex: ['sp','sp','3t',null,...]
+ */
+function calcPaineisPersonalizado(bercosPersonalizados) {
+  const paineis_por_tipo = {};
+  let paineis_total = 0;
+
+  (bercosPersonalizados || []).forEach(tipo => {
+    if (!tipo) return; // berço vazio/não usado — não soma em nenhum tipo
+    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo);
+    const porBerco = opcao ? (Number(opcao['paineis_' + tipo + '_por_berco']) || 0) : 0;
+    paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + porBerco;
+    paineis_total += porBerco;
+  });
+
+  const m2_por_tipo = {};
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    m2_por_tipo[tipo] = paineis_por_tipo[tipo] * M2_POR_PAINEL;
+  });
+  const m2_total = paineis_total * M2_POR_PAINEL;
+
+  let placas_cimenticia = 0;
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    const c = CIMENTICIA_POR_TIPO[tipo];
+    if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
+  });
+
+  return {
+    total_paineis: paineis_total,
+    m2_total,
+    placas_cimenticia,
+    paineis_por_tipo,
+    m2_por_tipo,
     paineis_2p: paineis_por_tipo['2p'] || 0,
     paineis_sp: paineis_por_tipo['sp'] || 0,
     m2_2p: m2_por_tipo['2p'] || 0,
@@ -562,7 +872,7 @@ function formatDateTime(isoString) {
 
 // ---- Relatório de Injeção ----
 
-async function registrarRelatorioInjecao(record) {
+async function registrarRelatorioInjecao(record, modoTeste = false) {
   const linhas = (record.tracos || []).map(t => ({
     id_traco: t.id || (record.id + '_t' + t.num),
     // Estrutura exata solicitada
@@ -596,7 +906,7 @@ async function registrarRelatorioInjecao(record) {
 
   if (!linhas.length) return;
 
-  const res = await fetch('/registrar-relatorio-injecao', {
+  const res = await fetch(_comModoTeste(_comDeviceId('/registrar-relatorio-injecao'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(linhas),
@@ -618,8 +928,8 @@ async function getRelatorioInjecao() {
 // feito num traço, guardado por id_traco em ajustes_tracos.json. A
 // numeração de "ajuste_N" é decidida no servidor (ver /registrar-ajuste-traco
 // em server.js) — não interfere no traço em si, é só o log de auditoria.
-async function registrarAjusteTraco(idTraco, ajuste) {
-  const res = await fetch('/registrar-ajuste-traco', {
+async function registrarAjusteTraco(idTraco, ajuste, modoTeste = false) {
+  const res = await fetch(_comModoTeste('/registrar-ajuste-traco', modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id_traco: idTraco, ajuste }),
@@ -639,6 +949,24 @@ async function getAjustesTracos() {
 }
 
 /**
+ * Corrige um traço já registrado em relatorio_injecao.json — TODOS os
+ * dados (identificação, dados do uso/bateria específico clicado, insumos,
+ * tempo de batida) e, junto, regrava ajustes_tracos.json a partir da
+ * mesma lista de ajustes (fonte de verdade — ver rota no server.js).
+ * @param {object} payload - { id_traco, id_operacao, novosValores, ajustes, diff }
+ */
+async function editarTracoRelatorio(payload) {
+  const res = await fetch('/editar-traco-relatorio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro ao editar traço');
+  return json;
+}
+
+/**
  * Obtém o total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura,
  * não consome/incrementa nada. Usado para calcular a numeração de PRÉVIA
  * (total+1, total+2, ...) dos traços ainda em edição na operação atual.
@@ -646,8 +974,9 @@ async function getAjustesTracos() {
  * confirmarTracosHoje().
  * @returns {Promise<number>} total de traços confirmados hoje
  */
-async function getTotalTracosHoje() {
-  const res = await fetch('/total-tracos-hoje?_=' + Date.now()); // evita cache
+async function getTotalTracosHoje(modoTeste = false) {
+  const url = _comModoTeste('/total-tracos-hoje?_=' + Date.now(), modoTeste); // evita cache
+  const res = await fetch(url);
   const json = await res.json();
   if (!json.ok) throw new Error(json.erro || 'Erro ao obter total de traços do dia');
   return json.total;
@@ -662,8 +991,8 @@ async function getTotalTracosHoje() {
  * @param {number} quantidade - quantos traços novos foram confirmados
  * @returns {Promise<number>} novo total acumulado do dia
  */
-async function confirmarTracosHoje(quantidade) {
-  const res = await fetch('/confirmar-tracos-hoje', {
+async function confirmarTracosHoje(quantidade, modoTeste = false) {
+  const res = await fetch(_comModoTeste(_comDeviceId('/confirmar-tracos-hoje'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quantidade }),
@@ -675,8 +1004,8 @@ async function confirmarTracosHoje(quantidade) {
 
 // ---- Analytics ----
 
-async function registrarOperacao(record) {
-  const res = await fetch('/registrar-operacao', {
+async function registrarOperacao(record, modoTeste = false) {
+  const res = await fetch(_comModoTeste(_comDeviceId('/registrar-operacao'), modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(record),
@@ -889,9 +1218,10 @@ async function getStats(filtros = {}) {
  * Carrega sobra.json do servidor.
  * Retorna o objeto de sobra, ou null se não existir / não estiver ativa.
  */
-async function getSobra() {
+async function getSobra(modoTeste = false) {
   try {
-    const res = await fetch('db/sobra.json?_=' + Date.now()); // evita cache
+    const caminho = modoTeste ? 'db/teste/sobra.json' : 'db/sobra.json';
+    const res = await fetch(caminho + '?_=' + Date.now()); // evita cache
     if (!res.ok) return null;
     const sobra = await res.json();
     // Só retorna se estiver realmente ativa
@@ -903,8 +1233,8 @@ async function getSobra() {
  * Persiste o objeto de sobra no servidor (sobra.json).
  * @param {object} sobra – objeto conforme estrutura definida
  */
-async function salvarSobra(sobra) {
-  const res = await fetch('/salvar-sobra', {
+async function salvarSobra(sobra, modoTeste = false) {
+  const res = await fetch(_comModoTeste('/salvar-sobra', modoTeste), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sobra),
@@ -917,10 +1247,10 @@ async function salvarSobra(sobra) {
  * Desativa a sobra atual, marcando-a como inativa e registrando motivo.
  * @param {'utilizada'|'descartada'} motivo
  */
-async function desativarSobra(motivo) {
-  const atual = await getSobra();
+async function desativarSobra(motivo, modoTeste = false) {
+  const atual = await getSobra(modoTeste);
   if (!atual) return; // já não existe sobra ativa
-  await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() });
+  await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() }, modoTeste);
 }
 
 // ---- Backup de Dados ----
@@ -932,6 +1262,7 @@ const ARQUIVOS_BACKUP_DB = [
   'contador_tracos.json',
   'historico.json',
   'historico_edicoes.json',
+  'relatorio_edicoes.json',
   'paradas.json',
   'ajustes_tracos.json',
   'relatorio_injecao.json',
@@ -1152,6 +1483,7 @@ window.LW = {
   get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
+  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
 
   // Config loader
@@ -1164,14 +1496,25 @@ window.LW = {
   hslParaHex,
   hexParaHue,
   corMontagemPorLabel,
+  corPorTipoSimples,
 
   // Storage
   getOperacaoAtual, saveOperacaoAtual, clearOperacaoAtual,
   enfileirarOperacaoPendente, tamanhoFilaPendentes,
   tentarSincronizarFilaPendentes, aoMudarFilaPendentes, aoSincronizarPendentes,
 
+  // Operação em Andamento (sincronização ao vivo via WebSocket)
+  conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+
+  // Log de Acesso
+  getDeviceId, registrarAcesso,
+  atualizarDispositivosAutorizados,
+  dispositivoEstaAutorizado,
+
   // Cálculos
   calcPaineis,
+  calcPaineisPersonalizado,
+  TIPO_MONTAGEM_PERSONALIZADA,
   normalizarPaineisRegistro,
   somarPorTipo,
   extrairComponentesMontagem,
@@ -1191,6 +1534,7 @@ window.LW = {
   // Ajustes de Traço (auditoria de insumo + tempo de batida)
   registrarAjusteTraco,
   getAjustesTracos,
+  editarTracoRelatorio,
 
   // Dados e analytics
   registrarOperacao, getStats,

@@ -1,9 +1,10 @@
-const http   = require('http');
-const fs     = require('fs');
-const path   = require('path');
-const crypto = require('crypto');
-const vm     = require('vm');
-const JSZip  = require('jszip');
+const http      = require('http');
+const fs        = require('fs');
+const path      = require('path');
+const crypto    = require('crypto');
+const vm        = require('vm');
+const JSZip     = require('jszip');
+const WebSocket = require('ws');
 
 const PORT = 3000;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
@@ -41,12 +42,26 @@ function horaMinutoBrasiliaServer() {
   return { hora, minuto };
 }
 
+// ─── MODO DE TESTE (Registrar Operação) ────────────────────────────────────
+// Toggle na tela "Registrar Operação" — quando ativo, a operação inteira
+// (historico, relatório de injeção, contador de traços, ajustes, sobra) é
+// salva em public/db/teste/ em vez de public/db/, pra treinar/testar o
+// fluxo sem misturar com dados reais de produção. Nunca toca nos arquivos
+// normais. Pasta criada na hora (mkdirSync) na primeira escrita.
+const DB_TESTE_DIR = path.join(DB_DIR, 'teste');
+
+function dirParaModoTeste(modoTesteFlag) {
+  if (!modoTesteFlag) return DB_DIR;
+  fs.mkdirSync(DB_TESTE_DIR, { recursive: true });
+  return DB_TESTE_DIR;
+}
+
 // Lê o contador de traços do dia, resetando automaticamente se a data mudou
 // (Brasília). NÃO incrementa — apenas garante que o objeto retornado é válido
 // para o dia de hoje. Quem chama decide se quer ler ou incrementar.
-function lerContadorTracosHoje() {
+function lerContadorTracosHoje(modoTesteFlag = false) {
   const hoje = todayBrasiliaServer();
-  const contadorPath = path.join(DB_DIR, 'contador_tracos.json');
+  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
   let contador = { data: hoje, total: 0 };
   try {
     contador = JSON.parse(fs.readFileSync(contadorPath, 'utf8'));
@@ -57,8 +72,8 @@ function lerContadorTracosHoje() {
   return contador;
 }
 
-function salvarContadorTracos(contador) {
-  const contadorPath = path.join(DB_DIR, 'contador_tracos.json');
+function salvarContadorTracos(contador, modoTesteFlag = false) {
+  const contadorPath = path.join(dirParaModoTeste(modoTesteFlag), 'contador_tracos.json');
   fs.writeFileSync(contadorPath, JSON.stringify(contador, null, 2), 'utf8');
 }
 
@@ -86,6 +101,7 @@ const VALIDADORES_BACKUP_DADOS = {
   'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
   'historico.json':          v => Array.isArray(v),
   'historico_edicoes.json': v => Array.isArray(v),
+  'relatorio_edicoes.json':  v => Array.isArray(v),
   'relatorio_injecao.json': v => Array.isArray(v),
   'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
   'sobra.json':              v => v && typeof v === 'object',
@@ -103,6 +119,7 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'contador_tracos.json': {},
   'historico.json': [],
   'historico_edicoes.json': [],
+  'relatorio_edicoes.json': [],
   'relatorio_injecao.json': [],
   'sobra.json': {},
   'paradas.json': [],
@@ -278,10 +295,89 @@ function validarSintaxeJS(codigo, nomeArquivo) {
   }
 }
 
-http.createServer((req, res) => {
+// ─── OPERAÇÃO EM ANDAMENTO: transmissão em tempo real (WebSocket) ─────────
+// Só existe UMA operação em andamento por vez, pra fábrica inteira — então
+// o arquivo guarda sempre um único objeto (ou null, sem nenhuma operação
+// rodando agora), nunca uma lista. A tela "Registrar Operação" manda pra cá
+// a cada mudança (ver POST /salvar-operacao-andamento, mais abaixo) e o
+// servidor propaga na hora pra qualquer outra aba/computador com essa
+// mesma tela aberta (ver wss.on('connection', ...), perto do final do
+// arquivo) — é assim que outras pessoas acompanham a operação ao vivo.
+const OPERACAO_ANDAMENTO_PATH = path.join(DB_DIR, 'operacao_andamento.json');
 
-  // Extrai apenas o caminho (pathname) da URL, ignorando parâmetros como ?_=...
-  const [urlPath] = req.url.split('?');
+function lerOperacaoAndamento() {
+  try {
+    const texto = fs.readFileSync(OPERACAO_ANDAMENTO_PATH, 'utf8').trim();
+    return texto ? JSON.parse(texto) : null;
+  } catch (_) {
+    return null; // arquivo ainda não existe / corrompido — trata como "nenhuma operação"
+  }
+}
+
+function salvarOperacaoAndamentoNoDisco(dados) {
+  const tmp = OPERACAO_ANDAMENTO_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), 'utf8');
+  fs.renameSync(tmp, OPERACAO_ANDAMENTO_PATH);
+}
+
+// ─── LOG DE ACESSO ──────────────────────────────────────────────────────────
+// Registra cada acesso a rotas "sensíveis" do app (por enquanto, só
+// "Registrar Operação" — ver POST /registrar-acesso, mais abaixo) com
+// ip + user-agent (capturados aqui, de fontes confiáveis do próprio
+// request) e deviceId (gerado e persistido no navegador de quem acessou).
+// Base pra, no futuro, restringir quem pode registrar operação a um único
+// computador. Cresce sem limite por enquanto — sem rotina de limpeza
+// automática (mesma ressalva já documentada pra backups-seguranca/).
+//
+// Fica em logs/, FORA de public/ — diferente dos arquivos de public/db/
+// (que são servidos como arquivo estático comum, ex: /db/security.json
+// funciona por URL direta — ver "Limitações conhecidas" no README), aqui
+// o IP de quem acessa não pode ficar visível pra qualquer um que souber a
+// URL. Pasta criada na hora (mkdirSync) se ainda não existir.
+const DIR_LOGS = path.join(ROOT_DIR, 'logs');
+const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
+
+// ─── DISPOSITIVOS AUTORIZADOS A CONTROLAR A OPERAÇÃO ───────────────────────
+// Lista opcional em config.json (dispositivosAutorizados: [{ deviceId, nome,
+// autorizadoEm }]), editável em Configurações → Autorizados. Regra: lista
+// VAZIA = sem restrição (qualquer computador pode iniciar/encerrar/registrar
+// — comportamento padrão, igual a antes desta funcionalidade existir).
+// Lista com pelo menos 1 item = só os deviceIds dela podem controlar; os
+// demais continuam podendo ACOMPANHAR ao vivo (WebSocket), só não interagir.
+function lerConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
+
+function dispositivoAutorizado(deviceId) {
+  const cfg = lerConfig();
+  const lista = Array.isArray(cfg.dispositivosAutorizados) ? cfg.dispositivosAutorizados : [];
+  if (!lista.length) return true; // sem restrição configurada ainda
+  return lista.some(d => d && d.deviceId === deviceId);
+}
+
+function negarDispositivoNaoAutorizado(res) {
+  res.writeHead(403, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    ok: false,
+    erro: 'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+  }));
+}
+
+const server = http.createServer((req, res) => {
+
+  // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
+  // ?deviceId=... — usado pra checar autorização de dispositivo em rotas
+  // que controlam a operação em andamento, ver dispositivoAutorizado();
+  // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
+  // ver dirParaModoTeste(), mais abaixo).
+  const [urlPath, queryString] = req.url.split('?');
+  const queryParams = new URLSearchParams(queryString || '');
+  const deviceId = queryParams.get('deviceId') || '';
+  const modoTeste = queryParams.get('modoTeste') === 'true';
 
   // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
   // POST /verificar-senha  { senha: "texto plano" }
@@ -357,7 +453,7 @@ http.createServer((req, res) => {
   // Total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura, não incrementa.
   if (req.method === 'GET' && urlPath === '/total-tracos-hoje') {
     try {
-      const contador = lerContadorTracosHoje();
+      const contador = lerContadorTracosHoje(modoTeste);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
     } catch (e) {
@@ -372,15 +468,16 @@ http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const payload = JSON.parse(body);
         const quantidade = Number(payload.quantidade);
         if (!Number.isInteger(quantidade) || quantidade < 0) {
           throw new Error('Quantidade inválida.');
         }
-        const contador = lerContadorTracosHoje();
+        const contador = lerContadorTracosHoje(modoTeste);
         contador.total += quantidade;
-        salvarContadorTracos(contador);
+        salvarContadorTracos(contador, modoTeste);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
       } catch (e) {
@@ -443,9 +540,10 @@ http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
-        const historicoPath = path.join(DB_DIR, 'historico.json');
+        const historicoPath = path.join(dirParaModoTeste(modoTeste), 'historico.json');
         let historico = [];
         try {
           historico = JSON.parse(fs.readFileSync(historicoPath, 'utf8'));
@@ -530,14 +628,173 @@ http.createServer((req, res) => {
     return;
   }
 
+  // ── EDITAR TRAÇO (Relatório de Injeção): corrige um traço já registrado
+  // em relatorio_injecao.json (id_bateria/berços/obs do USO específico
+  // clicado, dados de identificação do traço, e os 5 insumos + tempo de
+  // batida) e, ao mesmo tempo, REGRAVA ajustes_tracos.json pra esse
+  // id_traco a partir da mesma lista de ajustes editada — esse arquivo é
+  // a fonte de verdade dos ajustes a partir de agora; os campos
+  // "*_real"/tempo_batida de relatorio_injecao.json (.ajustes[]) são
+  // sempre DERIVADOS dele aqui, nunca editados soltos, pra nunca mais
+  // ficarem fora de sincronia. Densidade/Flow não passam por
+  // ajustes_tracos.json (são remedições, não ajustes de receita — ver
+  // README), então continuam com sua própria lista de leituras.
+  // Auditoria em relatorio_edicoes.json (mesmo padrão de
+  // historico_edicoes.json, indexado por id_traco).
+  if (req.method === 'POST' && urlPath === '/editar-traco-relatorio') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { id_traco, id_operacao, novosValores, ajustes, diff } = payload;
+
+        if (!id_traco || typeof id_traco !== 'string') throw new Error('ID do traço ausente.');
+        if (!id_operacao || typeof id_operacao !== 'string') throw new Error('ID da operação (uso) ausente.');
+        if (!novosValores || typeof novosValores !== 'object' || Array.isArray(novosValores)) {
+          throw new Error('Payload inválido: "novosValores" ausente.');
+        }
+        if (!Array.isArray(ajustes)) throw new Error('Payload inválido: "ajustes" precisa ser uma lista.');
+        if (!Array.isArray(diff) || !diff.length) throw new Error('Nenhuma alteração informada.');
+
+        // Cada ajuste precisa de tempo_batida (minutos, > 0) — mesma regra
+        // do Ajuste de Receita ao vivo, em Registrar Operação.
+        ajustes.forEach((a, i) => {
+          if (!a || typeof a !== 'object' || typeof a.tempo_batida !== 'number' || a.tempo_batida <= 0) {
+            throw new Error(`Ajuste #${i + 1}: "tempo_batida" obrigatório (minutos, > 0).`);
+          }
+        });
+
+        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
+        const relatorio = JSON.parse(fs.readFileSync(relatorioPath, 'utf8') || '[]');
+        const traco = relatorio.find(r => r.id_traco === id_traco);
+        if (!traco) throw new Error('Traço não encontrado (id_traco: ' + id_traco + ').');
+
+        const uso = (traco.ultilizado?.operacao || []).find(o => o.id_operacao === id_operacao);
+        if (!uso) throw new Error('Uso/operação não encontrado pra esse traço (id_operacao: ' + id_operacao + ').');
+
+        // Dados do USO específico clicado (id_bateria/berços/obs) — só essa
+        // entrada dentro de ultilizado.operacao[], nunca as outras (mesmo
+        // traço pode ter sido reaproveitado em mais de uma bateria).
+        if (novosValores.uso) {
+          Object.assign(uso, novosValores.uso);
+        }
+
+        // Identificação do traço (compartilhada entre todos os usos)
+        ['num_traco', 'densidade_eps', 'silo', 'expansao'].forEach(campo => {
+          if (campo in novosValores) traco[campo] = novosValores[campo];
+        });
+
+        // Insumos + tempo de batida: o "original" vem direto do formulário,
+        // os ".ajustes[]" são SEMPRE recalculados a partir da lista de
+        // ajustes (nunca aceita um array vindo do cliente pra esses 6
+        // campos — evita o cliente mandar algo dessincronizado).
+        const MAPA_CAMPO_AJUSTE = {
+          cimento_real: 'cimento', agua_real: 'agua', eps_real: 'eps',
+          superplast_real: 'superplast', incorporador_real: 'incorporador',
+        };
+        const originais = novosValores.originais || {};
+
+        function colapsa(original, listaAjustes) {
+          const temOriginal = original !== '' && original !== null && original !== undefined;
+          if (!listaAjustes.length) return temOriginal ? Number(original) : '';
+          return { original: temOriginal ? Number(original) : '', ajustes: listaAjustes };
+        }
+
+        Object.entries(MAPA_CAMPO_AJUSTE).forEach(([campoReal, nomeAjuste]) => {
+          const lista = ajustes
+            .filter(a => a[nomeAjuste] !== undefined && a[nomeAjuste] !== null && a[nomeAjuste] !== '')
+            .map(a => Number(a[nomeAjuste]));
+          traco[campoReal] = colapsa(originais[campoReal], lista);
+        });
+        // tempo_batida: ajustes_tracos.json guarda em MINUTOS; relatorio_injecao.json
+        // (original e ajustes) guarda em SEGUNDOS — mesma unidade que o
+        // fluxo ao vivo do Ajuste de Receita já usa (ver operacao.js).
+        const listaTempoSegundos = ajustes.map(a => Number(a.tempo_batida) * 60);
+        const originalTempoSegundos = (originais.tempo_batida_min !== '' && originais.tempo_batida_min !== null && originais.tempo_batida_min !== undefined)
+          ? Number(originais.tempo_batida_min) * 60
+          : '';
+        traco.tempo_batida = colapsa(originalTempoSegundos, listaTempoSegundos);
+
+        // Densidade/Flow: remedições simples, sem relação com ajustes_tracos.json
+        // — cada "leitura" SUBSTITUI a anterior (não soma), igual ao vivo.
+        ['densidade', 'flow'].forEach(campo => {
+          if (novosValores[campo]) {
+            const { original, leituras } = novosValores[campo];
+            traco[campo] = colapsa(original, Array.isArray(leituras) ? leituras.map(Number) : []);
+          }
+        });
+
+        const tmpRelatorio = relatorioPath + '.tmp';
+        fs.writeFileSync(tmpRelatorio, JSON.stringify(relatorio, null, 2), 'utf8');
+        fs.renameSync(tmpRelatorio, relatorioPath);
+
+        // Regrava ajustes_tracos.json pra esse id_traco — substitui a
+        // entrada inteira (renumerando ajuste_1, ajuste_2, ... na ordem
+        // enviada), preservando o "registrado_em" de quem já existia
+        // (mandado de volta pelo cliente) e estampando agora só os novos.
+        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
+        let ajustesTracos = [];
+        try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
+
+        const idxEntrada = ajustesTracos.findIndex(e => e.id_traco === id_traco);
+        if (!ajustes.length) {
+          // Lista ficou vazia — remove a entrada inteira, não deixa um
+          // {id_traco} solto sem nenhum ajuste_N.
+          if (idxEntrada !== -1) ajustesTracos.splice(idxEntrada, 1);
+        } else {
+          const novaEntrada = { id_traco };
+          ajustes.forEach((a, i) => {
+            const entrada = { tempo_batida: a.tempo_batida };
+            ['cimento', 'agua', 'eps', 'superplast', 'incorporador'].forEach(nome => {
+              if (a[nome] !== undefined && a[nome] !== null && a[nome] !== '') entrada[nome] = Number(a[nome]);
+            });
+            entrada.registrado_em = a.registrado_em || new Date().toISOString();
+            novaEntrada['ajuste_' + (i + 1)] = entrada;
+          });
+          if (idxEntrada !== -1) ajustesTracos[idxEntrada] = novaEntrada;
+          else ajustesTracos.push(novaEntrada);
+        }
+
+        const tmpAjustes = ajustesPath + '.tmp';
+        fs.writeFileSync(tmpAjustes, JSON.stringify(ajustesTracos, null, 2), 'utf8');
+        fs.renameSync(tmpAjustes, ajustesPath);
+
+        // Log de auditoria — append-only, mesmo padrão de historico_edicoes.json.
+        const edicoesPath = path.join(DB_DIR, 'relatorio_edicoes.json');
+        let edicoes = [];
+        try { edicoes = JSON.parse(fs.readFileSync(edicoesPath, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(edicoes)) edicoes = [];
+        edicoes.push({
+          id_traco,
+          id_operacao,
+          data_edicao: new Date().toISOString(),
+          campos_alterados: diff,
+        });
+        const tmpEdicoesRel = edicoesPath + '.tmp';
+        fs.writeFileSync(tmpEdicoesRel, JSON.stringify(edicoes, null, 2), 'utf8');
+        fs.renameSync(tmpEdicoesRel, edicoesPath);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
   // Registrar linhas do relatório de injeção — append em relatorio_injecao.json
   if (req.method === 'POST' && urlPath === '/registrar-relatorio-injecao') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
+      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const dadosRecebidos = JSON.parse(body);
-        const relatorioPath = path.join(DB_DIR, 'relatorio_injecao.json');
+        const relatorioPath = path.join(dirParaModoTeste(modoTeste), 'relatorio_injecao.json');
 
         let relatorio = [];
         try {
@@ -641,11 +898,136 @@ http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const sobra = JSON.parse(body);
-        const sobraPath = path.join(DB_DIR, 'sobra.json');
+        const sobraPath = path.join(dirParaModoTeste(modoTeste), 'sobra.json');
         fs.writeFileSync(sobraPath, JSON.stringify(sobra, null, 2), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── OPERAÇÃO EM ANDAMENTO: recebe o rascunho atual da tela "Registrar
+  // Operação" e propaga na hora pra quem mais estiver com essa mesma tela
+  // aberta, via WebSocket (ver broadcastOperacaoAndamento, perto do final
+  // do arquivo). "dados" é sempre o objeto inteiro do estado atual, ou
+  // null — quando a operação termina, é cancelada/resetada, ou ainda não
+  // foi iniciada (ver regra equivalente em persist(), no operacao.js).
+  if (req.method === 'POST' && urlPath === '/salvar-operacao-andamento') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+      try {
+        const payload = JSON.parse(body);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('Payload inválido.');
+        }
+        const dados = payload.dados;
+        if (dados !== null && dados !== undefined && (typeof dados !== 'object' || Array.isArray(dados))) {
+          throw new Error('Payload inválido: "dados" precisa ser um objeto ou null.');
+        }
+        const clientId = typeof payload.clientId === 'string' ? payload.clientId : null;
+        const ehLimpeza = dados === null || dados === undefined;
+        // "forcar" só existe pro botão "🗑️ Limpar Tudo" (ver resetarOperacao()
+        // em operacao.js) — é o jeito de qualquer dispositivo autorizado
+        // recuperar uma operação travada por outro computador que travou,
+        // ficou offline, ou simplesmente esqueceu de encerrar.
+        const forcar = payload.forcar === true && ehLimpeza;
+
+        // ── Dono da operação ──────────────────────────────────────────────
+        // Só existe UMA operação em andamento por vez (ver seção dedicada no
+        // README), mas a lista de Autorizados pode ter mais de um
+        // dispositivo. Quem inicia (primeiro push não-nulo depois de uma
+        // operação vazia) se torna o "dono" — só ele pode mandar mais
+        // mudanças, até a operação ser limpa (registrada, resetada, ou
+        // "forçada" por outro autorizado). Isso evita dois computadores
+        // autorizados brigando pela mesma operação ao mesmo tempo.
+        const atual = lerOperacaoAndamento();
+        const donoAtual = (atual && typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
+        const souODono = !donoAtual || donoAtual === deviceId;
+
+        if (!souODono && !forcar) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: false,
+            erro: 'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+          }));
+          return;
+        }
+
+        // Nunca confia no donoDeviceId que o cliente mandou (se mandou) —
+        // sempre recalculado aqui: mantém o dono atual, ou assume este
+        // deviceId como novo dono se a operação estava vazia.
+        let dadosFinal;
+        if (ehLimpeza) {
+          dadosFinal = null; // limpa o dono junto
+        } else {
+          const { donoDeviceId: _ignorarDoCliente, ...resto } = dados;
+          dadosFinal = { ...resto, donoDeviceId: donoAtual || deviceId };
+        }
+
+        salvarOperacaoAndamentoNoDisco(dadosFinal);
+        broadcastOperacaoAndamento(dadosFinal, clientId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── LOG DE ACESSO: registra ip + user-agent (do próprio request,
+  // confiáveis) + deviceId (mandado pelo navegador) toda vez que a rota
+  // informada é acessada. "rota" é livre (ex: '/operacao'), mas por
+  // enquanto só a tela "Registrar Operação" chama isso (ver showPage() em
+  // index.html) — é o primeiro passo pra, no futuro, restringir essa tela
+  // a um único computador.
+  if (req.method === 'POST' && urlPath === '/registrar-acesso') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new Error('Payload inválido.');
+        }
+        const rota = typeof payload.rota === 'string' ? payload.rota : '';
+        if (!rota) throw new Error('Payload inválido: "rota" obrigatória.');
+        const deviceId = typeof payload.deviceId === 'string' ? payload.deviceId : '';
+
+        // IPv4 mapeado em IPv6 (ex: "::ffff:192.168.1.10") vem assim por
+        // padrão do Node — remove o prefixo pra guardar só o IP "puro".
+        const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+        const userAgent = req.headers['user-agent'] || '';
+
+        const entrada = {
+          ip,
+          deviceId,
+          data: new Date().toISOString(),
+          rota,
+          userAgent,
+        };
+
+        let acessos = [];
+        try { acessos = JSON.parse(fs.readFileSync(ACESSOS_PATH, 'utf8') || '[]'); } catch (_) {}
+        if (!Array.isArray(acessos)) acessos = [];
+        acessos.push(entrada);
+
+        fs.mkdirSync(DIR_LOGS, { recursive: true });
+        const tmp = ACESSOS_PATH + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(acessos, null, 2), 'utf8');
+        fs.renameSync(tmp, ACESSOS_PATH);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
@@ -675,7 +1057,7 @@ http.createServer((req, res) => {
           throw new Error('"ajuste.tempo_batida" obrigatório (minutos, > 0).');
         }
 
-        const ajustesPath = path.join(DB_DIR, 'ajustes_tracos.json');
+        const ajustesPath = path.join(dirParaModoTeste(modoTeste), 'ajustes_tracos.json');
         let ajustesTracos = [];
         try { ajustesTracos = JSON.parse(fs.readFileSync(ajustesPath, 'utf8') || '[]'); } catch (_) {}
         if (!Array.isArray(ajustesTracos)) ajustesTracos = [];
@@ -1048,7 +1430,39 @@ http.createServer((req, res) => {
     res.end(data);
   });
 
-}).listen(PORT, () => {
+});
+
+// ── WEBSOCKET: transmite em tempo real qualquer mudança da operação em
+// andamento (tela "Registrar Operação") pra quem mais estiver com a tela
+// aberta. Quem dispara o broadcast é a rota POST /salvar-operacao-andamento,
+// acima; aqui só ficam a conexão e a lista de clientes conectados.
+const wss = new WebSocket.Server({ server, path: '/ws/operacao-andamento' });
+const clientesOperacaoAndamento = new Set();
+
+wss.on('connection', (ws) => {
+  clientesOperacaoAndamento.add(ws);
+
+  // Ao conectar, manda na hora o snapshot atual — é assim que a tela
+  // carrega já mostrando uma operação que outra pessoa tenha deixado
+  // rodando (ou null, se não houver nenhuma).
+  try {
+    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento() }));
+  } catch (_) { /* conexão pode ter caído nesse exato instante — ignora */ }
+
+  ws.on('close', () => clientesOperacaoAndamento.delete(ws));
+  ws.on('error', () => clientesOperacaoAndamento.delete(ws));
+});
+
+function broadcastOperacaoAndamento(dados, origemClientId) {
+  const msg = JSON.stringify({ tipo: 'estado', dados, origemClientId });
+  for (const ws of clientesOperacaoAndamento) {
+    if (ws.readyState === WebSocket.OPEN) {
+      try { ws.send(msg); } catch (_) { /* cliente pode ter caído nesse exato instante */ }
+    }
+  }
+}
+
+server.listen(PORT, () => {
   console.log(`Lightwall rodando em http://localhost:${PORT}`);
 
   // Checa a cada minuto se já é "fim de dia" e falta fazer o backup

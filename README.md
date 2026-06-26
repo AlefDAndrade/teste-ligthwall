@@ -43,16 +43,20 @@ public/
     ├── historico.json           # histórico de operações (Registro de Baterias)
     ├── historico_edicoes.json   # log de auditoria de edições em historico.json
     ├── relatorio_injecao.json   # traços injetados (Relatório de Injeção)
-    ├── ajustes_tracos.json      # auditoria de ajustes de receita por traço (insumo + tempo de batida)
+    ├── relatorio_edicoes.json   # log de auditoria de edições em relatorio_injecao.json
+    ├── ajustes_tracos.json      # ajustes de receita por traço (insumo + tempo de batida) — fonte de verdade após uma edição (ver "Editar Traço")
     ├── security.json            # hash da senha do admin + hash da chave de recuperação
     ├── sobra.json                # traço com sobra ativa entre operações
     ├── paradas.json              # paradas registradas (planejadas/não planejadas)
+    ├── operacao_andamento.json    # snapshot da operação em andamento agora (live), ou null
     └── contador_tracos.json      # contador diário de traços (reset automático)
 server.js               # servidor HTTP + rotas da API
 package.json
 ```
 
-`backups-seguranca/` e `backups-automaticos/` são criadas automaticamente pelo servidor (ver seção *Backup e Restauração*) e nunca devem ser versionadas — já estão no `.gitignore`.
+`backups-seguranca/`, `backups-automaticos/` e `logs/` são criadas automaticamente pelo servidor (ver seções *Backup e Restauração* e *Log de Acesso*, abaixo) e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta (diferente dos arquivos de `public/db/` — ver "Limitações conhecidas").
+
+`public/db/teste/` é criada automaticamente na primeira vez que o **Modo de Teste** é usado (ver seção dedicada, abaixo) — mesmos arquivos de uma operação normal (`historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json`, `sobra.json`), só que isolados, pra nunca misturar com dados reais. Também não é versionada.
 
 ## Perfis de usuário
 
@@ -102,7 +106,47 @@ Cada ajuste salvo também é registrado em `ajustes_tracos.json`, indexado pelo 
 ]
 ```
 
-Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes.
+Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — **durante a operação em si**, não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes. Isso muda ao **editar** um traço já registrado — ver seção dedicada, abaixo.
+
+## Montagem Personalizada (Registrar Operação)
+
+Além de **Simples** (todos os berços do mesmo tipo) e **Híbrida** (cada berço produz painéis de 2 tipos ao mesmo tempo, numa proporção fixa), existe **🔧 Personalizado**: cada berço da bateria tem seu próprio tipo, escolhido individualmente — pra baterias que misturam tipos em quantidades quaisquer (ex: 4 berços de 3T, 5 de S/P, 7 de 2/P e o resto de 1T).
+
+Ao escolher "Personalizado" em Tipo de Montagem, abre a grade de berços:
+
+- Abas no topo com cada tipo **simples** já cadastrado em Configurações → Baterias e Montagem (cores reaproveitadas das que cada tipo já tem).
+- Selecione um tipo, depois clique nos berços (pinta na hora) ou use **"De [ ] até [ ] — Aplicar"** pra um intervalo inteiro de uma vez.
+- Berço sem tipo definido = vazio/não usado — não entra em nenhum cálculo.
+- O botão **"🔧 Configurar Berços"** (abaixo do select) reabre a grade a qualquer momento, preservando o que já foi preenchido.
+
+**Reconciliação ao Registrar**: o número de berços com tipo definido na grade precisa bater com "Berços Reais". Se não bater:
+- **Mais berços com tipo do que "Berços Reais"** diz → pergunta se houve berço não usado nesta operação. Se sim, reabre a grade só pra marcar quais (sem abas — qualquer clique ali só limpa o berço). Se não, "Berços Reais" sobe pra bater com o que está preenchido.
+- **Menos berços com tipo do que "Berços Reais"** diz → faltam berços sem tipo — reabre a grade completa (com abas) pra terminar de preencher; não dá pra registrar até completar.
+
+**Compatibilidade**: `tipo_montagem` é gravado como `"PERSONALIZADA"` (um valor fixo, pra continuar agrupando junto nos filtros/gráficos que já existem — OEE, Análise Operacional, Registro de Baterias), com o detalhe berço a berço guardado à parte em `bercos_personalizados` (um array, um item por berço, ex: `["3t","3t","sp",null,...]`). Os totais (`paineis_por_tipo`, `m2_por_tipo`, `placas_cimenticia`) são somados a partir dessa grade e ficam no mesmo formato que Simples/Híbrida já produzem — então nada no resto do sistema precisou de nenhuma mudança pra exibir/somar baterias Personalizadas corretamente (inclusive tipos novos tipo "1T", "3T": as colunas da tabela de Registro de Baterias e os gráficos por tipo já são dinâmicos).
+
+**Limitação conhecida**: o badge de "Tipo de Montagem" pra uma bateria Personalizada usa a mesma cor neutra (cinza) de um tipo desconhecido — diferente de Simples/Híbrida, que têm cor própria. O detalhe da composição (quais berços, quais tipos) só fica visível olhando o registro completo (`bercos_personalizados`), sem uma visualização dedicada ainda.
+
+## Editar Traço (Relatório de Injeção)
+
+Em **Menu → Relatório de Injeção → ✏️ Editar** (Administrador): liga um modo de edição — clicar numa linha abre a edição completa daquele traço, em vez do painel de detalhe de ajustes. Mesmo padrão visual do "✏️ Editar" do Registro de Baterias.
+
+Dá pra editar **tudo**:
+- Identificação do traço (Nº, Densidade EPS, Silo, Expansão).
+- Dados **deste uso específico** (qual bateria, berço início/fim, observações) — só a entrada clicada dentro de `ultilizado.operacao[]`; outros usos/reaproveitamentos do mesmo traço não são afetados.
+- O valor **original** (planejado) de cada um dos 5 insumos e do tempo de batida.
+- Cada **ajuste individual** já aplicado — pode editar, remover ou adicionar, exatamente como a tela de detalhe (▾) já mostra.
+- Densidade e Flow — valor original + cada leitura/remedição.
+
+**A virada importante**: a partir de uma edição por aqui, `ajustes_tracos.json` passa a ser a **fonte de verdade** dos ajustes daquele traço — os campos `*_real`/`tempo_batida` de `relatorio_injecao.json` (a parte `.ajustes[]` de cada um) são **sempre recalculados no servidor** a partir da lista de ajustes editada, nunca aceitos prontos do navegador. Isso resolve o problema de hoje (os arrays de cada campo crescem cada um por conta própria, sem nenhuma correlação entre eles, então não dá pra saber com certeza "qual ajuste de cimento aconteceu junto com qual ajuste de tempo de batida") — a partir da primeira edição de um traço, os dois arquivos passam a ficar garantidamente consistentes entre si. Densidade e Flow não entram nessa derivação (não fazem parte de `ajustes_tracos.json` — são remedições simples, com sua própria lista de leituras).
+
+Unidade: o formulário sempre usa **minutos** pro tempo de batida (igual a `ajustes_tracos.json`); o servidor converte pra **segundos** ao gravar em `relatorio_injecao.json` (igual ao fluxo ao vivo do Ajuste de Receita).
+
+Se a lista de ajustes de um campo ficar vazia depois da edição, ele volta a ser um número simples em vez de `{original, ajustes}` — mesmo formato que um traço nunca ajustado.
+
+Auditoria em `relatorio_edicoes.json` (mesmo padrão de `historico_edicoes.json`, indexado por `id_traco` + `id_operacao`) — por bloco de dados alterado (identificação, uso, originais, ajustes, densidade, flow), não campo a campo.
+
+**Limitação conhecida**: igual à Edição de Operação, não há checagem de senha no servidor pra essa rota — a trava de "só Administrador" é só na tela (mesmo modelo de confiança já usado ali).
 
 ## Configuração (Administrador)
 
@@ -123,6 +167,25 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 - Saturação (60%) e luminosidade (52%) fixas, pra todas as cores terem o mesmo "peso" visual.
 - Tipos **híbridos** não geram cor própria: aparecem sempre com a tela dividida 50/50 entre a cor de cada um dos 2 tipos simples que os compõem (gradiente CSS no HTML; gradiente real desenhado no `<canvas>`, que não entende a sintaxe `linear-gradient()` do CSS).
 - Aparece em: badge de "Tipo de Montagem" no Registro de Baterias, gráfico "Montagem × Atrasos" da Análise Operacional, e uma bolinha de pré-visualização na própria tela de admin.
+
+### Autorizados
+
+Em **Menu → Configurações → Autorizados**: controla quais computadores podem iniciar, encerrar e registrar operações em **Registrar Operação** (ver *Operação em Andamento*, abaixo). Cada item é `{ deviceId, nome, autorizadoEm }`, guardado em `config.json` (`dispositivosAutorizados`).
+
+- **Lista vazia (padrão)**: sem restrição — qualquer computador pode controlar, igual ao comportamento antes desta funcionalidade existir.
+- **Lista com 1+ item**: só os `deviceId`s dela podem controlar. Os demais continuam podendo **acompanhar a operação ao vivo** (WebSocket), só não conseguem interagir.
+- A própria tela mostra o `deviceId` do computador que está olhando (gerado e persistido em `localStorage`, `lw_device_id` — ver *Log de Acesso*), já pré-preenchido no campo de autorizar — é assim que se autoriza "este computador aqui".
+- Cada autorizar/remover salva na hora (sem precisar do botão "✓ Salvar Configurações", que é só da aba Baterias e Montagem).
+- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao` e `/confirmar-tracos-hoje` recusam (HTTP 403) qualquer `deviceId` fora da lista, quando ela não está vazia.
+- **Na tela** (Registrar Operação): quem não está autorizado vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de autorizar este computador.
+- Atalhos de teclado (Iniciar/Encerrar/Registrar/Resetar) não dependem só do `<fieldset>` — cada uma dessas 4 ações também checa a autorização no próprio código, então um atalho não contorna a trava.
+
+**Dono da operação** (quando há 2+ dispositivos autorizados): só estar na lista não basta — o **primeiro** dispositivo autorizado a dar "Iniciar Injeção" numa operação vazia se torna o **dono** dela (`donoDeviceId`, gravado em `operacao_andamento.json`, recalculado sempre no servidor — nunca confia no que o cliente manda). Enquanto a operação estiver rodando:
+- Só o dono pode editar campos, encerrar ou registrar — outro dispositivo autorizado tentando qualquer uma dessas ações recebe HTTP 409 ("já está sendo controlada por outro computador") e vê o banner "👀 Outro computador autorizado está controlando esta operação agora".
+- **Escape hatch**: "🗑️ Limpar Tudo" funciona pra **qualquer** dispositivo autorizado, mesmo sem ser o dono — é assim que se recupera uma operação travada por um computador que ficou offline, travou, ou esqueceu de encerrar. Limpar também libera o "dono" — o próximo a iniciar assume.
+- O dono é zerado junto com a operação (registrar, resetar, ou forçar) — sempre há, no máximo, um dono por vez, nunca persiste entre operações.
+
+**Limitação conhecida**: `deviceId` não é uma credencial de segurança de verdade (ver *Log de Acesso*) — é só uma identidade de conveniência. Quem tiver acesso físico ao computador autorizado controla a operação; isso restringe *qual máquina*, não *quem* a está usando.
 
 ## Backup e Restauração (Administrador)
 
@@ -150,6 +213,55 @@ O próprio `server.js` gera um backup de dados todo fim de dia, sem depender de 
 - Arquivos ficam em `backups-automaticos/` (fora de `public/`, nunca servida como arquivo estático comum), nomeados por data: `backup-dados_AAAA-MM-DD.zip`.
 - Acessível só pelas rotas dedicadas (`/backups-automaticos` e `/backups-automaticos/<nome>`) — essa pasta cresce e diminui sozinha, sem precisar de limpeza manual (diferente de `backups-seguranca/`).
 
+## Operação em Andamento (tempo real)
+
+Só existe **uma operação em andamento por vez**, na fábrica inteira. A partir do momento em que "Iniciar Injeção" é clicado em **Registrar Operação**, todo campo preenchido — turno, traços, ajustes, horário de encerramento — é transmitido em tempo real (WebSocket, rota `/ws/operacao-andamento`) pra qualquer outra aba ou computador que também tenha essa mesma tela aberta. Quem só está acompanhando vê a tela se comportar exatamente como se a operação estivesse sendo feita ali, cronômetro incluso.
+
+- O estado atual fica espelhado em `public/db/operacao_andamento.json` — um único objeto (ou `null`, sem nenhuma operação rodando), nunca uma lista.
+- Campos preenchidos **antes** de clicar em "Iniciar Injeção" não são transmitidos (ainda é só um rascunho local) — a transmissão começa no clique de "Iniciar" e termina quando a operação é registrada, resetada (🗑️ Limpar Tudo) ou enfileirada por falta de conexão.
+- Sem necessidade de framework: o servidor (`server.js`) anexa um `WebSocket.Server` (lib `ws`) ao mesmo `http.Server` já existente.
+
+**Limitação conhecida**: a trava de quem pode editar é por **dispositivo** (ver *Configurações → Autorizados*, abaixo), não por sessão — se a lista de autorizados estiver vazia (padrão), continua valendo "última mudança enviada sobrescreve a anterior", sem nenhuma trava.
+
+## Modo de Teste (Registrar Operação)
+
+Toggle **🧪 Modo de Teste**, no topo da tela (só pode trocar com a operação parada — `status: 'idle'`). Existe pra treinar/testar o fluxo inteiro de uma operação sem misturar nada com dados reais de produção.
+
+Com o toggle ativo, a operação funciona normalmente (turno, traços, Iniciar/Finalizar/Registrar, ajustes, sobra), mas:
+
+- **Tudo é salvo em `public/db/teste/`** em vez de `public/db/` — `historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json` e `sobra.json` têm uma cópia isolada lá, criada na hora que o modo de teste é usado por aquela rota pela primeira vez. **Nunca** escreve nos arquivos reais.
+- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de Autorizados/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
+- **Qualquer computador pode usar**, mesmo um que não esteja autorizado a controlar operações reais — a trava de Autorizados é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
+- **Nunca cai na fila de sincronização offline** — se a conexão cair no meio de um teste, ele simplesmente não salva (com aviso de erro), em vez de ficar pendente pra "sincronizar de verdade" depois (essa fila é só pra operações reais).
+- **Sempre desliga ao limpar/zerar a tela** — de propósito, pra nunca ficar "esquecido" ligado numa operação real futura. Pra outro teste, é só ativar de novo.
+- Visualmente reforçado em 3 lugares: o toggle fica roxo/aceso, um banner roxo no topo diz "MODO DE TESTE ATIVO", e o badge de status ao lado do cronômetro ganha um selo "🧪 TESTE".
+
+O que fazer com os dados gerados em `public/db/teste/` (limpar, conferir, descartar) é decisão de uso — o sistema só garante que eles nunca se misturam com os reais.
+
+## Log de Acesso
+
+Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `logs/acessos.json`:
+
+```json
+{
+  "ip": "177.x.x.x",
+  "deviceId": "dev_1782345678901_ab12cd",
+  "data": "2026-06-24T09:15:20.123Z",
+  "rota": "/operacao",
+  "userAgent": "Mozilla/5.0 (Linux; Android 13) ... Chrome/120 Mobile"
+}
+```
+
+- `ip` e `userAgent` vêm do próprio request, capturados no servidor (fontes confiáveis).
+- `deviceId` é gerado uma única vez por navegador/computador e persistido em `localStorage` (`lw_device_id`) — não é um login de verdade, mas é o que dá pra usar como identidade estável de "qual aparelho é qual" sem exigir cadastro.
+- Fica em `logs/`, **fora** de `public/` — de propósito: arquivos em `public/db/` são servidos como arquivo estático comum (ver "Limitações conhecidas"), e isso exporia o IP de quem acessa pra qualquer um que soubesse a URL. Em `logs/`, não existe rota nenhuma que sirva esse arquivo — só o próprio servidor lê/escreve nele direto no disco.
+- O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
+- Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
+- Pensado como base pra restringir o registro de operação a um único computador — já implementado em **Configurações → Autorizados** (ver seção dedicada), usando esse mesmo `deviceId`.
+- Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
+
+**Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
+
 ## OEE
 
 Definições usadas, combinadas com o time de operação:
@@ -175,22 +287,30 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/verificar-senha` | POST | Confirma senha do administrador |
 | `/verificar-recovery` | POST | Confirma chave de recuperação de senha |
 | `/gerar-hash` | POST | Gera hash SHA-256 de uma senha (uso interno/setup) |
-| `/total-tracos-hoje` | GET | Contador diário de traços |
-| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário |
+| `/total-tracos-hoje` | GET | Contador diário de traços 🧪 |
+| `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒🧪 |
 | `/salvar-config` | POST | Salva `config.json` |
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) |
-| `/registrar-operacao` | POST | Grava um registro em `historico.json` |
-| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` |
-| `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` |
+| `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒🧪 |
+| `/editar-operacao` | POST | Corrige um registro existente em `historico.json` + audita em `historico_edicoes.json` |
+| `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒🧪 |
+| `/editar-traco-relatorio` | POST | Corrige um traço em `relatorio_injecao.json` + regrava `ajustes_tracos.json` pra ele + audita em `relatorio_edicoes.json` (ver *Editar Traço*) |
+| `/registrar-ajuste-traco` | POST | Grava um ajuste (insumo + tempo de batida) em `ajustes_tracos.json` 🧪 |
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
-| `/salvar-sobra` | POST | Salva/atualiza `sobra.json` |
+| `/salvar-sobra` | POST | Salva/atualiza `sobra.json` 🧪 |
+| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outro dispositivo autorizado já é o dono — ver *Autorizados*) |
+| `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
+| `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |
 | `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup |
 | `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
+
+- 🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada). Ignorado quando `?modoTeste=true`.
+- 🧪 = aceita `?modoTeste=true` — desvia a leitura/escrita pra `public/db/teste/` em vez de `public/db/` (ver *Modo de Teste*, acima).
 
 ## Limitações conhecidas
 

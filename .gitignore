@@ -2,3 +2,5 @@ node_modules/
 public/recovery.key
 backups-seguranca/
 backups-automaticos/
+logs/
+public/db/teste/
