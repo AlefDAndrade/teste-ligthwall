@@ -53,7 +53,7 @@
 
       // A partir daqui, qualquer mudança feita em OUTRA aba/computador
       // nesta mesma operação chega aqui ao vivo (cronômetro incluso).
-      LW.conectarOperacaoAndamento(_aplicarEstadoExterno);
+      LW.conectarOperacaoAndamento(_aplicarEstadoExterno, _notificarOperacaoFinalizadaPorOutro);
 
       // Fecha popovers ao clicar fora
       document.addEventListener('click', (e) => {
@@ -1887,8 +1887,25 @@
     }, 8000);
   }
 
-  function showSuccessModal(record) {
+  /**
+   * @param {object} record - resumo da operação (mesmo formato usado no Registrar Operação local)
+   * @param {object} [opts]
+   * @param {boolean} [opts.remoto] - true quando é a notificação de uma operação finalizada em
+   *   OUTRO dispositivo (ver _notificarOperacaoFinalizadaPorOutro) — só troca o título/subtítulo,
+   *   o resto do modal (KPIs, botões) é exatamente o mesmo de sempre.
+   */
+  function showSuccessModal(record, opts = {}) {
     const modal = $('success-modal');
+    const titulo = $('success-modal-titulo');
+    const subtitulo = $('success-modal-subtitulo');
+    if (opts.remoto) {
+      titulo.textContent = '✅ Bateria Finalizada';
+      subtitulo.textContent = 'Registrada agora por outro dispositivo — fim da dinâmica de dono desta operação.';
+      subtitulo.style.display = 'block';
+    } else {
+      titulo.textContent = 'Operação Registrada!';
+      subtitulo.style.display = 'none';
+    }
     $('modal-bateria').textContent = record.id_bateria;
     $('modal-tempo').textContent = LW.formatDuration(record.tempo_min);
     $('modal-paineis').textContent = record.total_paineis;
@@ -1898,6 +1915,31 @@
       ? '<span class="badge badge-red">SIM</span>'
       : '<span class="badge badge-green">NÃO</span>';
     modal.style.display = 'flex';
+  }
+
+  // Caminho do som da notificação — INTENCIONALMENTE sem o arquivo em si
+  // (não dá pra gerar um áudio de verdade por aqui): coloque o arquivo de
+  // som nesse caminho exato (public/sounds/operacao-finalizada.mp3) que ele
+  // passa a tocar sozinho. Até lá, o play() abaixo só falha em silêncio
+  // (404), sem quebrar nada nem mostrar erro pra quem está usando o sistema.
+  const SOM_OPERACAO_FINALIZADA = '/sounds/operacao-finalizada.mp3';
+
+  /**
+   * Chamada quando OUTRO dispositivo (não este) finaliza/registra uma
+   * operação — ver conectarOperacaoAndamento() em data.js, que dispara
+   * isto via WebSocket pra todo mundo "ligado" no sistema na hora, exceto
+   * quem de fato registrou (esse já vê o showSuccessModal local de sempre).
+   * Mostra o MESMO modal de sucesso (texto levemente diferente — ver
+   * showSuccessModal) e toca um som, já que é algo que pode acontecer sem
+   * ninguém estar olhando ativamente pra essa aba.
+   */
+  function _notificarOperacaoFinalizadaPorOutro(resumo) {
+    try {
+      const som = new Audio(SOM_OPERACAO_FINALIZADA);
+      som.volume = 1;
+      som.play().catch(() => { /* navegador pode bloquear autoplay sem interação prévia — ignora */ });
+    } catch (_) { /* Audio indisponível neste navegador — só não toca o som */ }
+    showSuccessModal(resumo, { remoto: true });
   }
 
   async function resetarOperacao() {

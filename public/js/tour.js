@@ -58,14 +58,14 @@
         texto: 'Aqui você registra cada traço: insumos (cimento, água...), o relógio ⏱ de tempo de batida, e os resultados de densidade/flow.',
       },
       {
-        selector: '#btn-registrar',
-        titulo: 'Registrar Traço',
-        texto: 'Depois de preencher um traço, registre-o aqui — ele entra automaticamente no Relatório de Injeção.',
-      },
-      {
         selector: '#btn-finalizar',
         titulo: 'Finalizar Injeção',
         texto: 'Quando a bateria terminar, finalize a operação aqui. Isso trava os campos e calcula a Previsão de Desemplaque.',
+      },
+      {
+        selector: '#btn-registrar',
+        titulo: 'Registrar Operação',
+        texto: 'Por fim, registre a operação aqui — ela é arquivada no histórico (e some da tela pra todo mundo), liberando pra uma próxima. Todo mundo online recebe um aviso com o resumo, com som.',
       },
     ],
 

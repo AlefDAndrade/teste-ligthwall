@@ -45,6 +45,9 @@ const MIME = {
   '.js':   'application/javascript',
   '.json': 'application/json',
   '.key':  'text/plain',
+  '.mp3':  'audio/mpeg',
+  '.wav':  'audio/wav',
+  '.ogg':  'audio/ogg',
 };
 
 // Retorna a data de hoje em Brasília no formato YYYY-MM-DD (consistente com
@@ -961,6 +964,18 @@ const server = http.createServer((req, res) => {
             modo_teste: 0,
             criado_em: new Date().toISOString(),
           });
+
+          // Avisa todo mundo conectado agora (exceto quem registrou) —
+          // dinâmica de "dono" da operação chegou ao fim. Nunca em modo de
+          // teste (esse ramo nem chega aqui — ver `if (modoTeste)` acima).
+          broadcastOperacaoFinalizada({
+            id_bateria: record.id_bateria,
+            tempo_min: record.tempo_min,
+            total_paineis: record.total_paineis,
+            m2_total: record.m2_total,
+            desemplaque: record.desemplaque,
+            houve_atraso: record.houve_atraso,
+          }, queryParams.get('wsClientId') || '');
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2261,13 +2276,26 @@ wss.on('connection', (ws) => {
   ws.on('error', () => clientesOperacaoAndamento.delete(ws));
 });
 
-function broadcastOperacaoAndamento(dados, origemClientId) {
-  const msg = JSON.stringify({ tipo: 'estado', dados, origemClientId });
+function _enviarWsParaTodos(msg) {
+  const texto = JSON.stringify(msg);
   for (const ws of clientesOperacaoAndamento) {
     if (ws.readyState === WebSocket.OPEN) {
-      try { ws.send(msg); } catch (_) { /* cliente pode ter caído nesse exato instante */ }
+      try { ws.send(texto); } catch (_) { /* cliente pode ter caído nesse exato instante */ }
     }
   }
+}
+
+function broadcastOperacaoAndamento(dados, origemClientId) {
+  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId });
+}
+
+// Avisa todo mundo "ligado" no sistema (exceto quem registrou — esse já
+// vê o resumo localmente) que uma operação foi finalizada/registrada —
+// fim da dinâmica de dono. Disparado por POST /registrar-operacao, nunca
+// em modo de teste. `resumo` é o mesmo formato que showSuccessModal()
+// (operacao.js) já usa pra exibir o modal de sucesso.
+function broadcastOperacaoFinalizada(resumo, origemClientId) {
+  _enviarWsParaTodos({ tipo: 'operacao_finalizada', resumo, origemClientId });
 }
 
 server.listen(PORT, () => {

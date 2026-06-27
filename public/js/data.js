@@ -553,6 +553,7 @@ const OP_ANDAMENTO_CLIENT_ID = 'cli_' + Date.now() + '_' + Math.random().toStrin
 
 let _opAndamentoWs = null;
 let _opAndamentoOnAtualizacao = null;
+let _opAndamentoOnFinalizadaPorOutro = null;
 let _opAndamentoReconectarTimeout = null;
 let _opAndamentoEnviarTimeout = null;
 let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
@@ -564,9 +565,16 @@ let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evi
  * OP_ANDAMENTO_CLIENT_ID acima). Reconecta automaticamente se a conexão
  * cair. `onAtualizacao(dados)` recebe o objeto inteiro do estado (ou null,
  * quando não há nenhuma operação em andamento).
+ *
+ * `onFinalizadaPorOutro(resumo)` (opcional) é chamado quando OUTRO
+ * dispositivo registra/finaliza uma operação (dinâmica de dono) — pra todo
+ * mundo "ligado" no sistema saber na hora, mesmo sem estar olhando a tela
+ * de Registrar Operação. Nunca dispara na própria aba que registrou (ela
+ * já mostra o resumo localmente, sem precisar do servidor avisar de volta).
  */
-function conectarOperacaoAndamento(onAtualizacao) {
+function conectarOperacaoAndamento(onAtualizacao, onFinalizadaPorOutro) {
   _opAndamentoOnAtualizacao = onAtualizacao;
+  _opAndamentoOnFinalizadaPorOutro = onFinalizadaPorOutro || null;
   _abrirWsOperacaoAndamento();
 }
 
@@ -580,9 +588,13 @@ function _abrirWsOperacaoAndamento() {
     ws.addEventListener('message', (event) => {
       let msg;
       try { msg = JSON.parse(event.data); } catch (_) { return; }
-      if (!msg || msg.tipo !== 'estado') return;
-      if (msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora
-      if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
+      if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, nos dois tipos de mensagem
+
+      if (msg.tipo === 'estado') {
+        if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
+      } else if (msg.tipo === 'operacao_finalizada') {
+        if (_opAndamentoOnFinalizadaPorOutro) _opAndamentoOnFinalizadaPorOutro(msg.resumo);
+      }
     });
 
     ws.addEventListener('close', _agendarReconexaoOperacaoAndamento);
@@ -1037,7 +1049,14 @@ async function confirmarTracosHoje(quantidade, modoTeste = false) {
 // ---- Analytics ----
 
 async function registrarOperacao(record, modoTeste = false) {
-  const res = await fetch(_comModoTeste(_comDeviceId('/registrar-operacao'), modoTeste), {
+  // wsClientId vai por query string (não no corpo) — é só pro servidor
+  // saber quem EXCLUIR do broadcast de "operação finalizada" (ver
+  // OP_ANDAMENTO_CLIENT_ID/conectarOperacaoAndamento acima); não tem nada
+  // a ver com o registro em si, então não deve poluir o `record` salvo.
+  let url = _comModoTeste(_comDeviceId('/registrar-operacao'), modoTeste);
+  url += (url.includes('?') ? '&' : '?') + 'wsClientId=' + encodeURIComponent(OP_ANDAMENTO_CLIENT_ID);
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(record),
@@ -1538,6 +1557,7 @@ window.LW = {
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+  get OP_ANDAMENTO_CLIENT_ID() { return OP_ANDAMENTO_CLIENT_ID; },
 
   // Log de Acesso
   getDeviceId, registrarAcesso,
