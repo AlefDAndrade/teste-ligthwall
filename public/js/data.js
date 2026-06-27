@@ -1325,7 +1325,10 @@ const ARQUIVOS_BACKUP_DB = [
  * Busca todos os arquivos de public/db/ (via fetch, igual ao resto do app) e
  * monta um .zip com eles no próprio navegador (usando JSZip, carregado via
  * CDN no index.html), disparando o download. Não depende de nenhuma rota
- * nova no servidor.
+ * nova no servidor — pros arquivos que migraram pra SQLite (Fase 5), o
+ * servidor tem rotas GET /db/<nome> dedicadas que devolvem o conteúdo
+ * sempre fresco a partir do banco (ver server.js); fetch('db/'+nome) aqui
+ * cai nelas automaticamente, sem essa função precisar saber a diferença.
  */
 async function gerarBackupDados() {
   if (typeof JSZip === 'undefined') {

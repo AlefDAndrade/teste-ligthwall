@@ -19,7 +19,7 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
-const PORT = 5000;
+const PORT = 5001;
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -233,6 +233,14 @@ async function gerarZipDadosServidor() {
         zip.file(nome, JSON.stringify(db.todosOsTracos(), null, 2));
       } else if (nome === 'ajustes_tracos.json') {
         zip.file(nome, JSON.stringify(db.todosOsAjustesTracosJSON(), null, 2));
+      } else if (nome === 'relatorio_edicoes.json') {
+        // Faltava este caso — sem ele, cai no fallback `else` (ler arquivo
+        // estático de DB_DIR), que não existe mais desde a migração pra
+        // SQLite (ver edicoes_traco): o fs.readFileSync falhava, o catch
+        // engolia o erro, e o arquivo simplesmente nunca entrava no zip,
+        // sem avisar ninguém — exatamente o bug visto na hora de restaurar.
+        const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
+        zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
       } else {
         zip.file(nome, fs.readFileSync(path.join(DB_DIR, nome)));
       }
@@ -881,6 +889,27 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && urlPath === '/db/historico_edicoes.json') {
     try {
       const rows = db.prepare('SELECT id_operacao, data_edicao, campos_alterados FROM edicoes_operacao ORDER BY id ASC').all();
+      const edicoes = rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(edicoes));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/relatorio_edicoes.json: mesma ideia, pra auditoria de edição
+  // de TRAÇO (edicoes_traco) — essa rota estava faltando (as outras 7
+  // existem desde a migração pra SQLite, esta nunca foi criada). Sem ela,
+  // fetch('db/relatorio_edicoes.json') em gerarBackupDados() caía direto
+  // no servidor de arquivo estático, que dá 404 (o arquivo não existe mais
+  // em disco) — o erro era engolido em silêncio ali, e o arquivo nunca
+  // entrava no .zip do "Backup de Dados". Era exatamente esse o motivo do
+  // restore acusar "está faltando": ele nunca chegou a ser incluído.
+  if (req.method === 'GET' && urlPath === '/db/relatorio_edicoes.json') {
+    try {
+      const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
       const edicoes = rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(edicoes));
@@ -1996,6 +2025,9 @@ const server = http.createServer((req, res) => {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsTracos(), null, 2), 'utf8');
             } else if (nome === 'ajustes_tracos.json') {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsAjustesTracosJSON(), null, 2), 'utf8');
+            } else if (nome === 'relatorio_edicoes.json') {
+              const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
             } else {
               fs.copyFileSync(path.join(DB_DIR, nome), path.join(dirSeguranca, nome));
             }
@@ -2015,7 +2047,7 @@ const server = http.createServer((req, res) => {
         // garantia de "tudo ou nada").
         const nomesArquivo = esperados.filter(n =>
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
-            'relatorio_injecao.json', 'ajustes_tracos.json'].includes(n));
+            'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
           tmp: path.join(DB_DIR, nome + '.tmp'),
           destino: path.join(DB_DIR, nome),
@@ -2041,6 +2073,20 @@ const server = http.createServer((req, res) => {
             db.prepare('DELETE FROM edicoes_operacao').run();
             for (const e of novasEdicoes) {
               inserirEdicao.run(e.id_operacao, e.data_edicao, JSON.stringify(e.campos_alterados || []));
+            }
+          })();
+        }
+        if (esperados.includes('relatorio_edicoes.json')) {
+          // Faltava completamente — o arquivo já era validado (formato
+          // certo), mas nunca era de fato usado pra repor nada: restaurar
+          // um backup sempre deixava o histórico de edição de traço como
+          // estava antes (perdido se o restore também limpou os traços).
+          const novasEdicoesTraco = JSON.parse(textosValidados['relatorio_edicoes.json']);
+          const inserirEdicaoTraco = db.prepare('INSERT INTO edicoes_traco (id_traco, id_operacao, data_edicao, campos_alterados) VALUES (?, ?, ?, ?)');
+          db.transaction(() => {
+            db.prepare('DELETE FROM edicoes_traco').run();
+            for (const e of novasEdicoesTraco) {
+              inserirEdicaoTraco.run(e.id_traco, e.id_operacao || null, e.data_edicao, JSON.stringify(e.campos_alterados || []));
             }
           })();
         }
