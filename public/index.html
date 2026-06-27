@@ -5185,38 +5185,12 @@
     </div>
   </div>
 
-  <!-- ============ COPILOTO IA (botão flutuante + painel de chat) ============ -->
-  <!-- Visível em qualquer página (fica fora dos <main> de cada tela) — só
-       LEITURA: as respostas vêm de ferramentas que consultam o banco no
-       servidor (ver POST /copiloto-chat, server.js), nunca inventadas. -->
-  <button id="copiloto-btn" onclick="LWCopiloto.toggle()" title="Copiloto — pergunte sobre a produção">🤖</button>
-
-  <div id="copiloto-panel">
-    <div class="copiloto-header">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:1.15rem">🤖</span>
-        <span style="font-family:var(--font-display);color:var(--accent);letter-spacing:.06em;font-size:.9rem">COPILOTO</span>
-      </div>
-      <button onclick="LWCopiloto.toggle()"
-        style="background:none;border:none;color:var(--text-3);font-size:1.2rem;cursor:pointer;line-height:1">✕</button>
-    </div>
-
-    <div id="copiloto-mensagens" class="copiloto-mensagens"></div>
-
-    <div class="copiloto-input-row">
-      <input class="form-input" id="copiloto-input" placeholder="Pergunte sobre a produção..."
-        onkeydown="if(event.key==='Enter'){event.preventDefault();LWCopiloto.enviar();}">
-      <button class="btn btn-primary btn-sm" id="copiloto-btn-enviar" onclick="LWCopiloto.enviar()">➤</button>
-    </div>
-  </div>
-
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
   <script src="js/oee.js"></script>
   <script src="js/paradas.js"></script>
   <script src="js/debriefing.js"></script>
   <script src="js/keyboard-shortcuts.js"></script>
-  <script src="js/copiloto.js"></script>
   <script src="js/tour.js"></script>
 </body>
 
