@@ -1135,7 +1135,8 @@
   // Lista efetiva usada pela UI de export — recalculada em abrirExportModal()
   let EXPORT_COLUNAS = [...EXPORT_COLUNAS_BASE];
 
-  function gerarDownloadXLSX(dados, colsSel, sufixo) {
+  function gerarDownloadXLSX(dados, colsSel, sufixo, opcoes = {}) {
+    const { nomeAba = 'Produção', prefixoArquivo = 'lightwall_baterias_' } = opcoes;
     // _gerarExportColunas() cria colunas dinâmicas como "paineis_3t"/"m2_3t" pra
     // tipos não nativos, mas o registro só guarda esses valores DENTRO de
     // paineis_por_tipo/m2_por_tipo (ex: item.paineis_por_tipo['3t']), nunca como
@@ -1193,10 +1194,10 @@
 
     // 5. Cria um Livro (Workbook) e adiciona a planilha
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Produção");
+    XLSX.utils.book_append_sheet(wb, ws, nomeAba);
 
     // 6. Gera o arquivo e inicia o download
-    const nomeArquivo = 'lightwall_baterias_' + sufixo + '.xlsx';
+    const nomeArquivo = prefixoArquivo + sufixo + '.xlsx';
     XLSX.writeFile(wb, nomeArquivo);
   }
 
@@ -1281,6 +1282,150 @@
     if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
     gerarDownloadXLSX(dados, colsSel, sufixo);
     fecharExportModal();
+  }
+
+  // ---- Export Excel — Relatório de Injeção ----
+  // Mesmo padrão/UI da exportação de Registro de Baterias (mesmo modal,
+  // só com ids "expr-" pra não colidir com o de baterias), reaproveitando
+  // gerarDownloadXLSX() — só os dados e as colunas mudam.
+
+  const EXPORT_COLUNAS_INJECAO = [
+    { campo: 'data', header: 'Data', padrao: true, fmt: v => v ? v.split('-').reverse().join('/') : '' },
+    { campo: 'id_bateria', header: 'ID Bateria', padrao: true },
+    { campo: 'reaproveitado', header: 'Traço Reaproveitado', padrao: true, fmt: v => v ? 'Sim' : 'Não' },
+    { campo: 'num_traco', header: 'Traço', padrao: true },
+    { campo: 'berco_inicio', header: 'Berço Início', padrao: true },
+    { campo: 'berco_fim', header: 'Berço Fim', padrao: true },
+    { campo: 'densidade', header: 'Densidade', padrao: true },
+    { campo: 'flow', header: 'Flow', padrao: true },
+    { campo: 'densidade_eps', header: 'Densidade EPS', padrao: true },
+    { campo: 'expansao', header: 'Expansão', padrao: true },
+    { campo: 'silo', header: 'Silo EPS', padrao: true },
+    { campo: 'cimento', header: 'Cimento', padrao: true },
+    { campo: 'agua', header: 'Água', padrao: true },
+    { campo: 'eps', header: 'EPS', padrao: true },
+    { campo: 'superplast', header: 'Superplastificante', padrao: true },
+    { campo: 'incorporador', header: 'Incorporador de Ar', padrao: true },
+    {
+      campo: 'tempo_batida_seg', header: 'Tempo de Batida', padrao: true,
+      fmt: v => (v === '' || v === null || v === undefined) ? '—' : LW.formatDuration(parseFloat(v) / 60),
+    },
+    { campo: 'obs', header: 'Observações', padrao: true },
+  ];
+
+  /**
+   * "Achata" relatorio_injecao.json em 1 linha por (traço × uso) — mesma
+   * expansão já feita em renderRelatorio() pra exibição na tela (um traço
+   * reaproveitado em 3 baterias gera 3 linhas) — e resolve cada campo
+   * {original, ajustes} pro valor TOTAL exibido na tabela (via _valRel),
+   * em vez do original sozinho.
+   */
+  function _gerarLinhasExportRelatorio(linhas) {
+    const out = [];
+    (linhas || []).forEach(l => {
+      const usos = (l.ultilizado?.operacao && l.ultilizado.operacao.length) ? l.ultilizado.operacao : [{}];
+      usos.forEach((op, idx) => {
+        const limpa = v => (v === '—' ? '' : v); // _valRel devolve '—' pra vazio — fica '' na planilha
+        const tempoTotal = limpa(_valRel(l.tempo_batida, 'tempo_batida'));
+        out.push({
+          data: l.data,
+          id_bateria: op.id_bateria || '',
+          reaproveitado: idx > 0,
+          num_traco: l.num_traco ?? '',
+          berco_inicio: op.berco_inicio ?? '',
+          berco_fim: op.berco_finalizacao ?? '',
+          densidade: limpa(_valRel(l.densidade, 'densidade')),
+          flow: limpa(_valRel(l.flow, 'flow')),
+          densidade_eps: l.densidade_eps ?? '',
+          expansao: l.expansao ?? '',
+          silo: l.silo ?? '',
+          cimento: limpa(_valRel(l.cimento_real)),
+          agua: limpa(_valRel(l.agua_real)),
+          eps: limpa(_valRel(l.eps_real)),
+          superplast: limpa(_valRel(l.superplast_real)),
+          incorporador: limpa(_valRel(l.incorporador_real)),
+          tempo_batida_seg: tempoTotal,
+          obs: (op.obs !== undefined ? op.obs : l.obs) || '',
+        });
+      });
+    });
+    return out;
+  }
+
+  async function abrirExportModalRelatorio() {
+    const grid = document.getElementById('expr-colunas-grid');
+    grid.innerHTML = EXPORT_COLUNAS_INJECAO.map((c, i) =>
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;' +
+      'border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2)">' +
+      '<input type="checkbox" id="expr-col-' + i + '" ' + (c.padrao ? 'checked' : '') +
+      ' style="accent-color:var(--accent);width:15px;height:15px" onchange="LWDash.atualizarPreviewCountRelatorio()">' +
+      '<span style="font-size:.85rem">' + c.header + '</span></label>'
+    ).join('');
+    document.getElementById('expr-radio-tudo').checked = true;
+    document.getElementById('expr-periodo-inputs').style.display = 'none';
+    document.getElementById('expr-data-inicio').value = '';
+    document.getElementById('expr-data-fim').value = '';
+    await atualizarPreviewCountRelatorio();
+    document.getElementById('export-relatorio-modal').style.display = 'flex';
+  }
+
+  function fecharExportModalRelatorio() {
+    document.getElementById('export-relatorio-modal').style.display = 'none';
+  }
+
+  function onExportPeriodoChangeRelatorio(valor) {
+    document.getElementById('expr-periodo-inputs').style.display = valor === 'periodo' ? 'flex' : 'none';
+    atualizarPreviewCountRelatorio();
+  }
+
+  function selecionarTodasColunasRelatorio(marcar) {
+    EXPORT_COLUNAS_INJECAO.forEach((_, i) => {
+      const el = document.getElementById('expr-col-' + i);
+      if (el) el.checked = marcar;
+    });
+    atualizarPreviewCountRelatorio();
+  }
+
+  async function atualizarPreviewCountRelatorio() {
+    const linhas = await LW.getRelatorioInjecao();
+    let dados = linhas;
+    const radio = document.querySelector('input[name="export-periodo-relatorio"]:checked');
+    if (radio && radio.value === 'periodo') {
+      const ini = document.getElementById('expr-data-inicio').value;
+      const fim = document.getElementById('expr-data-fim').value;
+      if (ini) dados = dados.filter(l => l.data >= ini);
+      if (fim) dados = dados.filter(l => l.data <= fim);
+    }
+    const qtdLinhasExport = _gerarLinhasExportRelatorio(dados).length;
+    const qtdCols = EXPORT_COLUNAS_INJECAO.filter((_, i) => {
+      const el = document.getElementById('expr-col-' + i);
+      return el && el.checked;
+    }).length;
+    const el = document.getElementById('expr-preview-count');
+    if (el) el.textContent = qtdLinhasExport + ' registros · ' + qtdCols + ' colunas selecionadas';
+  }
+
+  async function confirmarExportRelatorio() {
+    const linhas = await LW.getRelatorioInjecao();
+    let dados = linhas;
+    let sufixo = 'completo';
+    const radio = document.querySelector('input[name="export-periodo-relatorio"]:checked');
+    if (radio && radio.value === 'periodo') {
+      const ini = document.getElementById('expr-data-inicio').value;
+      const fim = document.getElementById('expr-data-fim').value;
+      if (ini) dados = dados.filter(l => l.data >= ini);
+      if (fim) dados = dados.filter(l => l.data <= fim);
+      if (ini || fim) sufixo = (ini || 'inicio') + '_a_' + (fim || 'fim');
+    }
+    const colsSel = EXPORT_COLUNAS_INJECAO.filter((_, i) => {
+      const el = document.getElementById('expr-col-' + i);
+      return el && el.checked;
+    });
+    if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
+
+    const linhasExport = _gerarLinhasExportRelatorio(dados);
+    gerarDownloadXLSX(linhasExport, colsSel, sufixo, { nomeAba: 'Traços', prefixoArquivo: 'lightwall_relatorio_injecao_' });
+    fecharExportModalRelatorio();
   }
 
   // ================================================================
@@ -1456,6 +1601,8 @@
     toggleDetalheRelatorio,
     exportCSV: exportXLSX, abrirExportModal, fecharExportModal, onExportPeriodoChange,
     selecionarTodasColunas, atualizarPreviewCount, confirmarExport,
+    abrirExportModalRelatorio, fecharExportModalRelatorio, onExportPeriodoChangeRelatorio,
+    selecionarTodasColunasRelatorio, atualizarPreviewCountRelatorio, confirmarExportRelatorio,
     toggleColMenu, toggleColunaRegistro, toggleGrupoTiposPlaca,
   };
 })();
