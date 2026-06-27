@@ -160,7 +160,7 @@
       linhas.push(`<span class="dbf-secao">BATERIA ${escapeHtml(bateria.id_bateria || '—')}</span>`);
       linhas.push(`Início: ${horaBrasilia(bateria.inicio)}`);
       linhas.push(`Fim: ${horaBrasilia(bateria.fim)}`);
-      linhas.push(`Desemplaque: ${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}`);
+      linhas.push(`Previsão Desemplaque: ${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}`);
 
       if (!tracos.length) {
         linhas.push('<span class="dbf-vazio">Sem traços registrados.</span>');
