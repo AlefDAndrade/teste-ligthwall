@@ -2323,3 +2323,38 @@ td.mono {
   opacity: .5;
   cursor: not-allowed;
 }
+
+/* ── "Tema de Teste" — Registrar Operação ───────────────────────────────
+   Antes, ativar o Modo de Teste só trocava um banner no topo — fácil de
+   perder de vista ao rolar a página. Agora a página inteira ganha um tom
+   violeta: retinta --accent/--accent-dim (consumidos por botões, bordas
+   de foco, badges etc. em ~40 regras deste arquivo — qualquer componente
+   que já usa var(--accent) muda de cor automaticamente, sem precisar
+   listar cada um) e adiciona uma textura diagonal sutil de fundo, pra
+   ficar óbvio à distância — mesmo sem ler o banner — que esta sessão é um
+   teste e não afeta dados reais. Ativada/desativada via JS em
+   _aplicarTravaDeAutorizacao() (operacao.js), que dá toggle na classe
+   "modo-teste-ativo" no #page-operacao. */
+#page-operacao.modo-teste-ativo {
+  --accent: #a78bfa;
+  --accent-dim: #4c1d95;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(167, 139, 250, .05) 0px,
+    rgba(167, 139, 250, .05) 14px,
+    transparent 14px,
+    transparent 28px
+  );
+  box-shadow: inset 0 0 0 2px rgba(167, 139, 250, .25);
+}
+
+/* Banner "MODO DE TESTE ATIVO" fixo no topo da rolagem — #page-operacao
+   é o próprio elemento com scroll (overflow-y:auto), então sticky aqui
+   ancora nele: o aviso continua visível mesmo depois de rolar a página
+   pra baixo, em vez de desaparecer assim que o topo sai da tela. */
+#op-aviso-modo-teste {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}

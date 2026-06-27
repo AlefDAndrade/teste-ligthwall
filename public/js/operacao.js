@@ -332,6 +332,14 @@
     const aviso = $('op-aviso-nao-autorizado');
     const avisoTeste = $('op-aviso-modo-teste');
 
+    // "Tema de teste" na página inteira (não só o banner do topo) — ver
+    // CSS de #page-operacao.modo-teste-ativo (styles.css): retinta os
+    // botões/bordas/badges (que já usam var(--accent)) pra violeta e
+    // adiciona uma textura de fundo, pra ficar claro à distância que esta
+    // sessão é um teste, mesmo rolando a página pra baixo.
+    const pagina = $('page-operacao');
+    if (pagina) pagina.classList.toggle('modo-teste-ativo', !!state.modo_teste);
+
     // Modo de teste é um sandbox local — nunca trava a tela (ver
     // _bloqueadoPorAutorizacao) — só troca o banner padrão pelo de teste.
     if (state.modo_teste) {
