@@ -952,6 +952,57 @@ td.mono {
   padding: 4px 2px;
 }
 
+/* Mini tabela por AJUSTE (ação) — 1º ajuste, 2º ajuste, etc. */
+.relatorio-ajusteN-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+
+.relatorio-ajusteN-tabela th {
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-2);
+}
+
+.relatorio-ajusteN-tabela td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.relatorio-ajusteN-tabela tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.relatorio-ajusteN-tabela tbody tr:hover td {
+  background: rgba(255, 255, 255, .02);
+}
+
+.relatorio-ajusteN-num {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.relatorio-ajusteN-quando {
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  font-size: .76rem;
+  white-space: nowrap;
+}
+
+.relatorio-ajusteN-vazio {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
 /* ---- Grid helpers ---- */
 .grid-2 {
   display: grid;

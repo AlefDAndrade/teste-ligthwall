@@ -832,8 +832,80 @@
       </div>`;
   }
 
+  // ── Mini tabela por AJUSTE (ação) — fonte: ajustes_tracos.json ──────────
+  // Cada ajuste_N já é uma ação só (tempo de batida + insumos que vieram
+  // junto naquele momento) — diferente dos arrays soltos de cada campo em
+  // relatorio_injecao.json, que não garantem dizer quais aconteceram juntos
+  // (ver README, seção "Editar Traço"). Por isso essa é a fonte preferida
+  // pra exibir "1º ajuste: cimento -5 / 2º ajuste: cimento -10" etc.
+  const _CAMPOS_AJUSTE_EVENTO = [
+    { nome: 'tempo_batida', label: '⏱ Batida', formatador: v => LW.formatDuration(v) }, // já em MINUTOS em ajustes_tracos.json
+    { nome: 'cimento', label: 'Cimento', unidade: 'kg' },
+    { nome: 'agua', label: 'Água', unidade: 'L' },
+    { nome: 'eps', label: 'EPS', unidade: 'kg' },
+    { nome: 'superplast', label: 'Superplastificante', unidade: 'kg' },
+    { nome: 'incorporador', label: 'Incorp. de Ar', unidade: 'kg' },
+  ];
+
+  // Monta a mini tabela. Retorna null se a entrada não tiver nenhum
+  // "ajuste_N" (ex: traço legado, nunca migrado pra ajustes_tracos.json).
+  function _construirTabelaAjustesPorEvento(entradaAjustes) {
+    const chaves = Object.keys(entradaAjustes)
+      .filter(k => /^ajuste_\d+$/.test(k))
+      .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10));
+    if (!chaves.length) return null;
+
+    const ajustesOrdenados = chaves.map(k => entradaAjustes[k]);
+
+    // Só mostra coluna pra insumo que teve valor em PELO MENOS um ajuste
+    // deste traço — evita colunas vazias pra insumos nunca tocados.
+    const colunas = _CAMPOS_AJUSTE_EVENTO.filter(def =>
+      ajustesOrdenados.some(aj => aj && aj[def.nome] !== undefined && aj[def.nome] !== null && aj[def.nome] !== ''));
+
+    const linhas = ajustesOrdenados.map((aj, i) => {
+      const celulas = colunas.map(def => {
+        const v = aj?.[def.nome];
+        if (v === undefined || v === null || v === '') {
+          return `<td class="relatorio-ajusteN-vazio">—</td>`;
+        }
+        const num = parseFloat(v);
+        const texto = def.formatador ? def.formatador(num) : `${_fmtNumDetalhe(num)}${def.unidade || ''}`;
+        return `<td class="mono">${texto}</td>`;
+      }).join('');
+      return `
+        <tr>
+          <td class="relatorio-ajusteN-num">${i + 1}º ajuste</td>
+          <td class="relatorio-ajusteN-quando">${aj?.registrado_em ? LW.formatDateTime(aj.registrado_em) : '—'}</td>
+          ${celulas}
+        </tr>`;
+    }).join('');
+
+    return `
+      <table class="relatorio-ajusteN-tabela">
+        <thead>
+          <tr>
+            <th>Ajuste</th>
+            <th>Quando</th>
+            ${colunas.map(def => `<th>${def.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+      </table>`;
+  }
+
   // Monta o painel completo de detalhamento de reajustes pra um traço `l`.
-  function _construirDetalheRelatorio(l) {
+  // entradaAjustes (opcional) é a entrada de ajustes_tracos.json pra este
+  // id_traco, se existir — buscada uma única vez em renderRelatorio().
+  function _construirDetalheRelatorio(l, entradaAjustes) {
+    if (entradaAjustes) {
+      const tabela = _construirTabelaAjustesPorEvento(entradaAjustes);
+      if (tabela) return tabela;
+    }
+
+    // Fallback: traços sem entrada em ajustes_tracos.json (anteriores à
+    // migração/Editar Traço) — não dá pra saber quais ajustes de campos
+    // diferentes aconteceram juntos, então mostra do jeito antigo, por
+    // insumo (total acumulado), em vez de por ação.
     const itens = _CAMPOS_DETALHE_RELATORIO
       .map(def => _linhaDetalheCampo(def, l[def.campo]))
       .filter(Boolean);
@@ -841,7 +913,9 @@
     if (!itens.length) {
       return `<div class="relatorio-ajuste-vazio">Nenhum reajuste de receita foi registrado para este traço — os valores aplicados na injeção foram exatamente os planejados.</div>`;
     }
-    return `<div class="relatorio-ajuste-grid">${itens.join('')}</div>`;
+    return `
+      <div class="relatorio-ajuste-vazio" style="margin-bottom:8px">Traço sem histórico individual de ajustes (dado anterior à migração) — mostrando o total acumulado por insumo:</div>
+      <div class="relatorio-ajuste-grid">${itens.join('')}</div>`;
   }
 
   // Verifica se o traço teve QUALQUER reajuste em qualquer campo — usado
@@ -872,6 +946,10 @@
     tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-3);padding:20px">Carregando...</td></tr>`;
 
     let linhas = await LW.getRelatorioInjecao();
+    // Busca a fonte de verdade dos ajustes (por id_traco) uma única vez —
+    // usada no painel de detalhe pra agrupar por AÇÃO, não por campo.
+    const todosAjustes = await LW.getAjustesTracos();
+    const mapaAjustesPorTraco = new Map(todosAjustes.map(a => [a.id_traco, a]));
 
     const f = _filtrosRelatorio;
     if (f.data_inicio) linhas = linhas.filter(l => l.data >= f.data_inicio);
@@ -960,7 +1038,7 @@
         <td>${(op.obs !== undefined ? op.obs : l.obs) || '—'}</td>
       </tr>
       <tr class="relatorio-detalhe-row" id="detalhe-${rowId}" style="display:none">
-        <td colspan="17">${_construirDetalheRelatorio(l)}</td>
+        <td colspan="17">${_construirDetalheRelatorio(l, mapaAjustesPorTraco.get(l.id_traco))}</td>
       </tr>
     `;
       }).join('');
