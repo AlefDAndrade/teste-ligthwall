@@ -1987,6 +1987,24 @@ td.mono {
   border-color: var(--border-2);
 }
 
+/* Relógio de Tempo de Batida travado (traço reaproveitado ou já com
+   ajuste aplicado) — as regras acima não cobriam o duration-picker
+   (nenhuma usava .dur-input/.dur-btn), por isso os botões não ficavam
+   visualmente travados mesmo quando deveriam. */
+.duration-picker.readonly-reaproveitado .dur-input {
+  background-color: var(--bg-2);
+  opacity: 0.7;
+  cursor: not-allowed;
+  border-color: var(--border-2);
+}
+
+.duration-picker.readonly-reaproveitado .dur-btn {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--bg-3);
+}
+
 /* Estilo para o modal de confirmação de exclusão */
 .modal-confirmacao-exclusao {
   position: fixed;

@@ -277,6 +277,18 @@
           </div>
         </div>
 
+        <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin:24px 0 10px">
+          Mesclar dados de outra instalação <span style="text-transform:none;font-weight:400">— adiciona sem apagar
+            nada do que já existe aqui</span></div>
+        <div style="display:grid;grid-template-columns:1fr;gap:12px">
+          <div class="menu-card" onclick="fecharBackupHub();abrirMesclarBackup()">
+            <div class="menu-card-icon">🔗</div>
+            <div class="menu-card-title">Mesclar Backup de Dados</div>
+            <div class="menu-card-desc">A partir de um "Backup de Dados" gerado em OUTRA instalação deste sistema —
+              soma operações, traços, ajustes e paradas aos dados atuais, sem apagar nem sobrescrever nada.</div>
+          </div>
+        </div>
+
         <div
           style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin:24px 0 10px">
           Backups Automáticos <span style="text-transform:none;font-weight:400">— gerados todo fim de dia, mantém os
@@ -2504,6 +2516,181 @@
       }
     }
 
+    // ---- Mesclar Backup de Dados (admin) — de OUTRA instalação ----
+    // Mesmo mecanismo de leitura/validação de .zip do Restaurar Backup de
+    // Dados, mas só com os arquivos que fazem sentido SOMAR de outra
+    // instalação (nunca config/security/sobra/contador — isso é estado
+    // DESTA instalação). O servidor (/mesclar-backup-dados) é quem
+    // garante, de fato, que nada existente é apagado — aqui é só
+    // leitura/validação do arquivo antes de enviar.
+    const MESCLAR_VALIDACOES = {
+      'historico.json':         v => Array.isArray(v),
+      'historico_edicoes.json': v => Array.isArray(v),
+      'relatorio_injecao.json': v => Array.isArray(v),
+      'ajustes_tracos.json':    v => Array.isArray(v),
+      'paradas.json':           v => Array.isArray(v),
+    };
+    const MESCLAR_DEFAULT_SE_VAZIO = {
+      'historico.json': [], 'historico_edicoes.json': [], 'relatorio_injecao.json': [],
+      'ajustes_tracos.json': [], 'paradas.json': [],
+    };
+    const MESCLAR_LABELS = {
+      'historico.json': 'Operações (Registro de Baterias)',
+      'historico_edicoes.json': 'Histórico de edição de operações',
+      'relatorio_injecao.json': 'Traços (Relatório de Injeção)',
+      'ajustes_tracos.json': 'Ajustes de receita',
+      'paradas.json': 'Paradas',
+    };
+
+    function parseArquivoMesclar(nome, texto) {
+      if (texto.trim() === '' && MESCLAR_DEFAULT_SE_VAZIO.hasOwnProperty(nome)) {
+        return MESCLAR_DEFAULT_SE_VAZIO[nome];
+      }
+      return JSON.parse(texto);
+    }
+
+    let _mesclarArquivos = null; // { 'historico.json': '<texto original>', ... } já validados
+
+    function abrirMesclarBackup() {
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      document.getElementById('mesclar-backup-modal').style.display = 'flex';
+      resetMesclarBackupModal();
+    }
+
+    function fecharMesclarBackup() {
+      document.getElementById('mesclar-backup-modal').style.display = 'none';
+    }
+
+    function resetMesclarBackupModal() {
+      _mesclarArquivos = null;
+      document.getElementById('mesclar-step-0').style.display = 'block';
+      document.getElementById('mesclar-step-1').style.display = 'none';
+      document.getElementById('mesclar-step-2').style.display = 'none';
+      document.getElementById('mesclar-erro').style.display = 'none';
+      document.getElementById('mesclar-file-input').value = '';
+      document.getElementById('mesclar-senha').value = '';
+    }
+
+    function voltarMesclarStep0() {
+      document.getElementById('mesclar-step-0').style.display = 'block';
+      document.getElementById('mesclar-step-1').style.display = 'none';
+    }
+
+    function mostrarErroMesclar(msg) {
+      const el = document.getElementById('mesclar-erro');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function handleMesclarDrop(e) {
+      e.preventDefault();
+      e.currentTarget.style.borderColor = 'var(--border)';
+      e.currentTarget.style.background = 'var(--bg-2)';
+      const file = e.dataTransfer.files[0];
+      if (file) handleMesclarArquivo(file);
+    }
+
+    async function handleMesclarArquivo(file) {
+      document.getElementById('mesclar-erro').style.display = 'none';
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        mostrarErroMesclar('Selecione um arquivo .zip — o gerado pelo botão "Backup de Dados", na OUTRA instalação.');
+        return;
+      }
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+        // Diferente do Restaurar (que exige TODOS os 9 arquivos), aqui só
+        // processa os que existirem dentre os mescláveis — um backup só com
+        // relatório de injeção, por exemplo, ainda é válido pra mesclar.
+        const presentes = Object.keys(MESCLAR_VALIDACOES).filter(nome => !!zip.file(nome));
+        if (!presentes.length) {
+          mostrarErroMesclar('Nenhum arquivo mesclável encontrado neste .zip (historico.json, relatorio_injecao.json, ajustes_tracos.json ou paradas.json).');
+          return;
+        }
+
+        const conteudos = {};
+        const resumo = [];
+        for (const nome of presentes) {
+          const texto = await zip.file(nome).async('string');
+          let valor;
+          try {
+            valor = parseArquivoMesclar(nome, texto);
+          } catch (e) {
+            mostrarErroMesclar(`"${nome}" não é um JSON válido.`);
+            return;
+          }
+          if (!MESCLAR_VALIDACOES[nome](valor)) {
+            mostrarErroMesclar(`"${nome}" não tem o formato esperado.`);
+            return;
+          }
+          conteudos[nome] = texto;
+          resumo.push(`• ${MESCLAR_LABELS[nome]}: ${valor.length} registro(s)`);
+        }
+
+        _mesclarArquivos = conteudos;
+        document.getElementById('mesclar-preview').innerHTML = resumo.map(l => `<div>${l}</div>`).join('');
+        document.getElementById('mesclar-step-0').style.display = 'none';
+        document.getElementById('mesclar-step-1').style.display = 'block';
+      } catch (e) {
+        mostrarErroMesclar('Não foi possível ler o .zip: ' + e.message);
+      }
+    }
+
+    async function confirmarMesclarBackup() {
+      if (!_mesclarArquivos) return;
+      document.getElementById('mesclar-erro').style.display = 'none';
+
+      const senha = document.getElementById('mesclar-senha').value;
+      if (!senha) { mostrarErroMesclar('Digite sua senha de administrador.'); return; }
+
+      const confirmou = await LW.mostrarConfirmacao(
+        'Isso vai ADICIONAR os registros deste backup aos dados atuais. Nada do que já existe aqui será apagado ou alterado.',
+        { titulo: 'Mesclar backup de dados?', textoConfirmar: 'Mesclar', icon: '🔗' }
+      );
+      if (!confirmou) return;
+
+      const btn = document.getElementById('mesclar-btn-confirmar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Mesclando...';
+
+        const res = await fetch('/mesclar-backup-dados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senha, arquivos: _mesclarArquivos }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao mesclar backup.');
+
+        const r = json.resultado;
+        const linhas = [];
+        if (r.operacoes.inseridos || r.operacoes.duplicatas) {
+          linhas.push(`Operações: <strong>${r.operacoes.inseridos} adicionadas</strong>, ${r.operacoes.duplicatas} já existiam aqui`);
+        }
+        if (r.tracos.inseridos || r.tracos.duplicatas) {
+          linhas.push(`Traços: <strong>${r.tracos.inseridos} adicionados</strong>, ${r.tracos.duplicatas} já existiam aqui`);
+        }
+        if (r.paradas.inseridos || r.paradas.duplicatas) {
+          linhas.push(`Paradas: <strong>${r.paradas.inseridos} adicionadas</strong>, ${r.paradas.duplicatas} já existiam aqui`);
+        }
+        if (r.edicoes_operacao.inseridos) {
+          linhas.push(`Histórico de edição: <strong>${r.edicoes_operacao.inseridos}</strong> registro(s)`);
+        }
+        if (!linhas.length) linhas.push('Nenhum registro novo encontrado — tudo neste backup já existia aqui.');
+
+        document.getElementById('mesclar-step-1').style.display = 'none';
+        document.getElementById('mesclar-step-2').style.display = 'block';
+        document.getElementById('mesclar-resultado').innerHTML = linhas.map(l => `<div>${l}</div>`).join('');
+      } catch (e) {
+        mostrarErroMesclar(e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
     // ---- Restaurar Backup Geral (admin) ----
     // Mesmas ideias do Restaurar Backup de Dados, com camadas extras dado o
     // risco maior: frase de confirmação explícita, e o backup pode conter
@@ -4531,6 +4718,94 @@
           <button class="btn btn-ghost" onclick="fecharRestaurarBackup()">Cancelar</button>
           <button class="btn btn-danger" id="restaurar-btn-confirmar" onclick="confirmarRestaurarBackup()">Restaurar
             agora</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
+  <div id="mesclar-backup-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--accent);letter-spacing:.06em">🔗
+          MESCLAR BACKUP DE DADOS</h2>
+        <button onclick="fecharMesclarBackup()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="mesclar-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Passo 0: escolher o arquivo -->
+      <div id="mesclar-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
+          Some <strong>operações, traços, ajustes de receita e paradas</strong> de um arquivo "Backup de Dados" (.zip)
+          gerado em <strong>OUTRA instalação</strong> deste mesmo sistema — diferente de "Restaurar Dados", aqui nada
+          do que já existe aqui é apagado ou alterado, só registros novos são adicionados. Configurações, senha,
+          sobra e contador de traços desta instalação não são tocados.
+        </p>
+
+        <div id="mesclar-dropzone" style="
+            border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+            text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+            background:var(--bg-2)
+          " onclick="document.getElementById('mesclar-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(0,229,255,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleMesclarDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o backup da OUTRA instalação aqui
+          </div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .zip</div>
+        </div>
+        <input type="file" id="mesclar-file-input" accept=".zip" style="display:none"
+          onchange="handleMesclarArquivo(this.files[0])">
+      </div>
+
+      <!-- Passo 1: preview do conteúdo + senha + confirmação -->
+      <div id="mesclar-step-1" style="display:none">
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="voltarMesclarStep0()">←
+          Voltar</button>
+
+        <div
+          style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;font-size:.85rem;color:var(--text-2)">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px">Encontrado neste backup:</div>
+          <div id="mesclar-preview"></div>
+        </div>
+
+        <p style="color:var(--accent);font-size:.85rem;font-weight:600;margin-bottom:16px">
+          ✓ Isso vai ADICIONAR esses registros aos dados atuais — nada existente é apagado ou alterado.
+        </p>
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
+          administrador para continuar:</label>
+        <input type="password" id="mesclar-senha" class="form-input" style="margin-bottom:20px;width:100%"
+          placeholder="Senha de administrador" autocomplete="current-password">
+
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharMesclarBackup()">Cancelar</button>
+          <button class="btn btn-success" id="mesclar-btn-confirmar" onclick="confirmarMesclarBackup()">🔗 Mesclar
+            agora</button>
+        </div>
+      </div>
+
+      <!-- Passo 2: resultado -->
+      <div id="mesclar-step-2" style="display:none">
+        <div style="text-align:center;padding:8px 0 20px">
+          <div style="font-size:2.5rem;margin-bottom:10px">✅</div>
+          <div style="color:var(--text);font-weight:700;margin-bottom:14px">Mesclagem concluída!</div>
+          <div id="mesclar-resultado"
+            style="text-align:left;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:.85rem;color:var(--text-2);display:flex;flex-direction:column;gap:4px">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharMesclarBackup()">Fechar</button>
+          <button class="btn btn-outline-accent" onclick="resetMesclarBackupModal()">Mesclar outro arquivo</button>
         </div>
       </div>
 

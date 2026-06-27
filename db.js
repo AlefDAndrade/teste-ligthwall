@@ -1087,3 +1087,111 @@ function substituirTracosEAjustes(relatorioArray, ajustesArray) {
 }
 
 module.exports.substituirTracosEAjustes = substituirTracosEAjustes;
+
+/**
+ * Mescla um relatorio_injecao.json + ajustes_tracos.json de OUTRA
+ * instalação do sistema pro banco ATUAL, sem apagar nada — usado por
+ * "Mesclar Backup de Dados" (ver server.js POST /mesclar-backup-dados).
+ * Diferente de substituirTracosEAjustes (que sobrescreve tudo):
+ *   - nenhum DELETE — só INSERT;
+ *   - cada id_traco é gerado de novo (o da origem pode colidir com o
+ *     daqui — duas instalações nunca combinaram esse id entre si);
+ *   - deduplica um traço pela MESMA chave (id_operacao + num_traco) já
+ *     usada por /importar-relatorio-injecao — um traço só é pulado se
+ *     algum dos seus usos já existir aqui com esse mesmo par. Traço sem
+ *     nenhum uso (sobra nunca usada) cai num fallback por (data+num_traco).
+ * @returns {{tracosInseridos:number, tracosDuplicados:number}}
+ */
+function mesclarTracosEAjustes(relatorioArray, ajustesArray) {
+  const ajustesPorTracoOrigem = new Map((ajustesArray || []).map(a => [a.id_traco, a]));
+
+  const existentesPorUso = new Set(
+    db.prepare(`
+      SELECT tu.id_operacao || '|' || t.num_traco AS chave
+      FROM traco_usos tu JOIN tracos t ON t.id_traco = tu.id_traco
+    `).all().map(r => r.chave)
+  );
+  const existentesPorDataNum = new Set(
+    db.prepare(`SELECT data || '|' || num_traco AS chave FROM tracos`).all().map(r => r.chave)
+  );
+
+  const inserirTraco = db.prepare(SQL_INSERIR_TRACO);
+  const inserirUso = db.prepare(SQL_INSERIR_USO);
+  const inserirAjuste = db.prepare(SQL_INSERIR_AJUSTE);
+  const inserirLeitura = db.prepare(SQL_INSERIR_LEITURA);
+
+  let tracosInseridos = 0, tracosDuplicados = 0;
+
+  (relatorioArray || []).forEach((r, i) => {
+    const usos = r.ultilizado?.operacao || [];
+    const chaveDataNum = (r.data ?? '') + '|' + (r.num_traco ?? '');
+
+    const jaExiste = usos.length
+      ? usos.some(u => existentesPorUso.has((u.id_operacao ?? '') + '|' + (r.num_traco ?? '')))
+      : existentesPorDataNum.has(chaveDataNum); // traço sem uso (sobra nunca usada)
+
+    if (jaExiste) { tracosDuplicados++; return; }
+
+    const idTracoNovo = 'merge_traco_' + Date.now() + '_' + i;
+    const entradaAjustes = ajustesPorTracoOrigem.get(r.id_traco);
+    const paramsTraco = { id_traco: idTracoNovo, data: r.data, turno: r.turno ?? null, num_traco: r.num_traco ?? null };
+
+    CAMPOS_SOMA.forEach(({ campoJson, colunaOriginal }) => {
+      const original = extrairOriginal(r[campoJson]);
+      const ajustesDoCampo = extrairAjustesNumericos(r[campoJson]);
+      paramsTraco[colunaOriginal] = (entradaAjustes || !ajustesDoCampo.length)
+        ? original
+        : (original || 0) + ajustesDoCampo.reduce((s, v) => s + v, 0);
+    });
+    {
+      const original = extrairOriginal(r.tempo_batida);
+      const ajustesDoCampo = extrairAjustesNumericos(r.tempo_batida);
+      paramsTraco.tempo_batida_original = (entradaAjustes || !ajustesDoCampo.length)
+        ? original
+        : (original || 0) + ajustesDoCampo.reduce((s, v) => s + v, 0);
+    }
+    paramsTraco.densidade_original = extrairOriginal(r.densidade);
+    paramsTraco.flow_original = extrairOriginal(r.flow);
+    paramsTraco.obs = r.obs ?? null;
+    paramsTraco.silo = r.silo ?? null;
+    paramsTraco.expansao = r.expansao ?? null;
+    paramsTraco.densidade_eps = r.densidade_eps ?? null;
+    inserirTraco.run(paramsTraco);
+
+    usos.forEach(uso => {
+      inserirUso.run({
+        id_traco: idTracoNovo, id_operacao: uso.id_operacao ?? '', id_bateria: uso.id_bateria ?? null,
+        berco_inicio: uso.berco_inicio ?? null, berco_finalizacao: uso.berco_finalizacao ?? null, obs: uso.obs ?? null,
+      });
+      existentesPorUso.add((uso.id_operacao ?? '') + '|' + (r.num_traco ?? ''));
+    });
+    if (!usos.length) existentesPorDataNum.add(chaveDataNum);
+
+    if (entradaAjustes) {
+      Object.keys(entradaAjustes)
+        .filter(k => /^ajuste_\d+$/.test(k))
+        .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10))
+        .forEach((k, idx) => {
+          const a = entradaAjustes[k];
+          inserirAjuste.run({
+            id_traco: idTracoNovo, ordem: idx + 1, tempo_batida: a.tempo_batida,
+            cimento: a.cimento ?? null, agua: a.agua ?? null, eps: a.eps ?? null,
+            superplast: a.superplast ?? null, incorporador: a.incorporador ?? null,
+            registrado_em: a.registrado_em || new Date().toISOString(),
+          });
+        });
+    }
+
+    ['densidade', 'flow'].forEach(campo => {
+      extrairAjustesNumericos(r[campo]).forEach((valor, idx) => {
+        inserirLeitura.run({ id_traco: idTracoNovo, campo, valor, ordem: idx + 1 });
+      });
+    });
+
+    tracosInseridos++;
+  });
+
+  return { tracosInseridos, tracosDuplicados };
+}
+
+module.exports.mesclarTracosEAjustes = mesclarTracosEAjustes;

@@ -1438,6 +1438,16 @@
     return `${s}s`;
   }
 
+  // Mesma regra de trava dos outros insumos (ver renderCampoInsumo): traço
+  // reaproveitado, OU o campo já tem pelo menos 1 ajuste aplicado — daí só
+  // editável de novo via "Ajuste de Receita". Usado tanto na renderização
+  // do relógio quanto como defesa extra em ajustarDuracao/onDuracaoInput.
+  function _tempoBatidaTravado(t) {
+    const insumo = t?.tempo_batida;
+    const temAjustes = !!(insumo && typeof insumo === 'object' && insumo.ajustes && insumo.ajustes.length > 0);
+    return !!(t?._reaproveitado || temAjustes);
+  }
+
   function renderCampoTempoBatida(t, i) {
     const insumo = t.tempo_batida || { original: '', ajustes: [] };
     const temAjustes = insumo.ajustes && insumo.ajustes.length > 0;
@@ -1453,34 +1463,42 @@
       return partes.join(' + ') + ' = ' + formatDuracao(parseInt(total));
     })() : '';
 
+    // Trava igual aos outros insumos: traço reaproveitado OU este campo já
+    // teve algum ajuste aplicado — só editável de novo via "Ajuste de
+    // Receita". Antes só checava t._reaproveitado (faltava temAjustes), e
+    // o "disabled" dos botões ▲▼ estava escrito DENTRO da string do
+    // onclick (nunca virava atributo de verdade — por isso os botões
+    // nunca ficavam de fato travados, mesmo quando deveriam).
+    const travado = t._reaproveitado || temAjustes;
+
     return `
       <div class="form-group insumo-group tempo-batida-group" id="tempo-batida-group-${i}">
         <label class="form-label">⏱ Tempo de Batida <span class="required">*</span></label>
-        <div class="duration-picker">
+        <div class="duration-picker ${travado ? 'readonly-reaproveitado' : ''}">
           <div class="duration-col">
-            <button class="dur-btn dur-up ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'h',1) ${t._reaproveitado ? 'disabled' : ''}">▲</button>
+            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'h',1)" ${travado ? 'disabled' : ''}>▲</button>
             <input class="dur-input" type="number" min="0" max="23"
               id="dur-h-${i}" value="${temValor ? h : ''}" placeholder="0"
-              oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'h',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
+              ${travado ? 'readonly' : ''} oninput="LWOp.onDuracaoInput(${i})">
+            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'h',-1)" ${travado ? 'disabled' : ''}>▼</button>
             <span class="dur-label">h</span>
           </div>
           <span class="dur-sep">:</span>
           <div class="duration-col">
-            <button class="dur-btn dur-up  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'m',1)  ${t._reaproveitado ? 'disabled' : ''}">▲</button>
+            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'m',1)" ${travado ? 'disabled' : ''}>▲</button>
             <input class="dur-input" type="number" min="0" max="59"
               id="dur-m-${i}" value="${temValor ? m : ''}" placeholder="0"
-              oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn  ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'m',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
+              ${travado ? 'readonly' : ''} oninput="LWOp.onDuracaoInput(${i})">
+            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'m',-1)" ${travado ? 'disabled' : ''}>▼</button>
             <span class="dur-label">min</span>
           </div>
           <span class="dur-sep">:</span>
           <div class="duration-col">
-            <button class="dur-btn dur-up ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'s',1)  ${t._reaproveitado ? 'disabled' : ''}">▲</button>
+            <button class="dur-btn dur-up" onclick="LWOp.ajustarDuracao(${i},'s',1)" ${travado ? 'disabled' : ''}>▲</button>
             <input class="dur-input" type="number" min="0" max="59"
               id="dur-s-${i}" value="${temValor ? s : ''}" placeholder="0"
-              oninput="LWOp.onDuracaoInput(${i})">
-            <button class="dur-btn dur-dn ${t._reutilizado ? 'readonly-reaproveitado' : ''}" onclick="LWOp.ajustarDuracao(${i},'s',-1)  ${t._reaproveitado ? 'disabled' : ''}">▼</button>
+              ${travado ? 'readonly' : ''} oninput="LWOp.onDuracaoInput(${i})">
+            <button class="dur-btn dur-dn" onclick="LWOp.ajustarDuracao(${i},'s',-1)" ${travado ? 'disabled' : ''}>▼</button>
             <span class="dur-label">seg</span>
           </div>
         </div>
@@ -2043,6 +2061,8 @@
 
     // Ajusta um campo (h/m/s) do picker principal com ▲▼, com wrap-around
     ajustarDuracao(i, campo, delta) {
+      const t = state.tracos[i];
+      if (!t || _tempoBatidaTravado(t)) return; // mesma trava do HTML (defesa extra)
       const id = `dur-${campo}-${i}`;
       const el = document.getElementById(id);
       if (!el) return;
@@ -2056,6 +2076,8 @@
 
     // Chamado quando o operador digita diretamente num campo do picker
     onDuracaoInput(i) {
+      const t = state.tracos[i];
+      if (!t || _tempoBatidaTravado(t)) { renderTracos(); return; } // desfaz qualquer digitação que tenha escapado do readonly
       const seg = this._lerDuracaoPicker('dur', i);
       let insumo = state.tracos[i].tempo_batida;
       if (!insumo || typeof insumo !== 'object' || !('ajustes' in insumo)) {

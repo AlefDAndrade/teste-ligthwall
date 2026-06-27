@@ -1143,6 +1143,131 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── MESCLAR BACKUP DE DADOS: soma os registros de um "Backup de Dados"
+  // de OUTRA instalação do mesmo sistema ao banco ATUAL — diferente de
+  // /restaurar-backup-dados (que SUBSTITUI tudo), aqui nada existente é
+  // apagado ou alterado, só linhas novas são adicionadas (com a mesma
+  // deduplicação de sempre, pra rodar de novo com o mesmo arquivo não
+  // duplicar nada). Usa a MESMA validação de formato/senha do restore.
+  // De propósito, NUNCA mescla: config.json, security.json, sobra.json,
+  // contador_tracos.json — são estado/config DESTA instalação, não dados
+  // de produção pra trazer de outra fábrica/linha.
+  if (req.method === 'POST' && urlPath === '/mesclar-backup-dados') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { senha, arquivos } = payload;
+
+        if (typeof senha !== 'string' || !senha) {
+          throw new Error('Senha de administrador obrigatória.');
+        }
+        const security = lerSecurity();
+        if (sha256(senha) !== (security.passwordHash || HASH_FALLBACK)) {
+          throw new Error('Senha incorreta.');
+        }
+
+        if (!arquivos || typeof arquivos !== 'object') {
+          throw new Error('Payload inválido: "arquivos" ausente.');
+        }
+
+        const MESCLAVEIS = ['historico.json', 'historico_edicoes.json', 'relatorio_injecao.json', 'ajustes_tracos.json', 'paradas.json'];
+        const presentes = MESCLAVEIS.filter(nome => typeof arquivos[nome] === 'string');
+        if (!presentes.length) {
+          throw new Error('Nenhum arquivo mesclável encontrado no backup (historico.json, relatorio_injecao.json, ajustes_tracos.json ou paradas.json).');
+        }
+
+        // Mesma validação de formato de sempre — nunca confia só no que o
+        // navegador já checou antes de mandar pra cá.
+        const conteudo = {};
+        for (const nome of presentes) {
+          let valor;
+          try {
+            valor = parseArquivoBackupDados(nome, arquivos[nome]);
+          } catch (_) {
+            throw new Error(`"${nome}" não é um JSON válido.`);
+          }
+          if (!VALIDADORES_BACKUP_DADOS[nome](valor)) {
+            throw new Error(`"${nome}" não tem o formato esperado.`);
+          }
+          conteudo[nome] = valor;
+        }
+
+        const resultado = {
+          operacoes: { inseridos: 0, duplicatas: 0 },
+          edicoes_operacao: { inseridos: 0 },
+          tracos: { inseridos: 0, duplicatas: 0 },
+          paradas: { inseridos: 0, duplicatas: 0 },
+        };
+        const idsOperacoesImportadas = new Set();
+
+        db.transaction(() => {
+          // Operações (historico.json) — mesma chave de dedup de /importar-historico.
+          if (conteudo['historico.json']) {
+            const existentesRows = db.prepare('SELECT id, data, id_bateria, turno FROM operacoes').all();
+            const existentes = new Set(existentesRows.map(r => r.id || (r.data + '|' + r.id_bateria + '|' + r.turno)));
+            const inserirOperacao = db.prepare(db.SQL_INSERIR_OPERACAO);
+
+            for (const r of conteudo['historico.json']) {
+              const chave = r.id || (r.data + '|' + r.id_bateria + '|' + r.turno);
+              if (existentes.has(chave)) { resultado.operacoes.duplicatas++; continue; }
+              inserirOperacao.run({ ...db.operacaoParaRow(r), modo_teste: 0, criado_em: r.fim || r.inicio || new Date().toISOString() });
+              existentes.add(chave);
+              if (r.id) idsOperacoesImportadas.add(r.id);
+              resultado.operacoes.inseridos++;
+            }
+          }
+
+          // Auditoria de edição (historico_edicoes.json) — só entra a edição
+          // de uma operação que TAMBÉM veio nesta mesma mescla (edição de
+          // uma operação que já existia aqui antes não agrega nada de novo).
+          if (conteudo['historico_edicoes.json']) {
+            const existentesEdicoes = new Set(
+              db.prepare(`SELECT id_operacao || '|' || data_edicao AS chave FROM edicoes_operacao`).all().map(r => r.chave)
+            );
+            const inserirEdicao = db.prepare('INSERT INTO edicoes_operacao (id_operacao, data_edicao, campos_alterados) VALUES (?, ?, ?)');
+
+            for (const e of conteudo['historico_edicoes.json']) {
+              if (!idsOperacoesImportadas.has(e.id_operacao)) continue;
+              const chave = e.id_operacao + '|' + e.data_edicao;
+              if (existentesEdicoes.has(chave)) continue;
+              inserirEdicao.run(e.id_operacao, e.data_edicao, JSON.stringify(e.campos_alterados || []));
+              existentesEdicoes.add(chave);
+              resultado.edicoes_operacao.inseridos++;
+            }
+          }
+
+          // Traços + ajustes + leituras (relatorio_injecao.json + ajustes_tracos.json)
+          if (conteudo['relatorio_injecao.json']) {
+            const ajustes = conteudo['ajustes_tracos.json'] || [];
+            const r = db.mesclarTracosEAjustes(conteudo['relatorio_injecao.json'], ajustes);
+            resultado.tracos.inseridos = r.tracosInseridos;
+            resultado.tracos.duplicatas = r.tracosDuplicados;
+          }
+
+          // Paradas — id próprio já globalmente único, dedup direto por ele.
+          if (conteudo['paradas.json']) {
+            const existentesParadas = new Set(db.prepare('SELECT id FROM paradas').all().map(r => r.id));
+            const inserirParada = db.prepare(db.SQL_INSERIR_PARADA);
+            for (const p of conteudo['paradas.json']) {
+              if (existentesParadas.has(p.id)) { resultado.paradas.duplicatas++; continue; }
+              inserirParada.run(db.paradaParaRow(p));
+              existentesParadas.add(p.id);
+              resultado.paradas.inseridos++;
+            }
+          }
+        })();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, resultado }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
   // ── SOBRA: salvar sobra (real -> tabela sobra; Modo de Teste -> JSON isolado) ──
   if (req.method === 'POST' && urlPath === '/salvar-sobra') {
     let body = '';
