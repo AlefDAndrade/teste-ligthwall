@@ -393,12 +393,14 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">Tipo de Montagem <span class="required">*</span></label>
-                  <select class="form-select" id="op-montagem">
-                    <option value="">Carregando...</option>
-                  </select>
-                  <button type="button" id="btn-configurar-bercos" style="display:none;margin-top:6px;width:100%"
-                    class="btn btn-outline-accent btn-sm" onclick="LWOp.abrirGradeMontagem()">🔧 Configurar
-                    Berços</button>
+                  <div style="display:flex;gap:6px;align-items:stretch">
+                    <select class="form-select" id="op-montagem" style="flex:1;min-width:0">
+                      <option value="">Carregando...</option>
+                    </select>
+                    <button type="button" id="btn-configurar-bercos" style="display:none;flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
+                      class="btn btn-outline-accent btn-sm" title="Ver/editar os berços da Montagem Personalizada"
+                      onclick="LWOp.abrirGradeMontagem()">🔧</button>
+                  </div>
                 </div>
                 <div class="form-group berco-parcial">
                   <label class="form-label">Berços Injetados (Real)</label>

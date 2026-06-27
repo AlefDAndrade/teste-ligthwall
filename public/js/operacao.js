@@ -115,7 +115,7 @@
     // (ver abrirGradeMontagemPersonalizada()).
     const optPersonalizada = document.createElement('option');
     optPersonalizada.value = LW.TIPO_MONTAGEM_PERSONALIZADA;
-    optPersonalizada.textContent = '🔧 Personalizado (definir por berço)';
+    optPersonalizada.textContent = 'Personalizada';
     selMont.appendChild(optPersonalizada);
 
     // Atualiza referência rápida
@@ -159,6 +159,7 @@
     });
     $('op-montagem').addEventListener('change', e => {
       state.tipo_montagem = e.target.value;
+      _atualizarBtnConfigurarBercos();
       if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
         abrirGradeMontagemPersonalizada();
       }
@@ -1886,6 +1887,17 @@
     };
   }
 
+  // Mostra/escurece o botão "🔧 Configurar Berços" conforme o tipo de
+  // montagem atual — chamada tanto no render completo (renderAll) quanto
+  // direto no listener de change do select (ver wireEvents()), que antes
+  // só recalculava painéis e persistia, sem atualizar este botão: ao
+  // escolher "Personalizada" pela primeira vez, o botão pra reabrir a
+  // grade depois nunca aparecia (só surgia num reload, via renderAll).
+  function _atualizarBtnConfigurarBercos() {
+    if (!$('btn-configurar-bercos')) return;
+    $('btn-configurar-bercos').style.display = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? 'inline-flex' : 'none';
+  }
+
   function renderAll() {
     // Set form values
     $('op-toggle-teste').checked = !!state.modo_teste;
@@ -1894,9 +1906,7 @@
     $('op-dimensao').value = state.dimensao || '';
 
     $('op-montagem').value = state.tipo_montagem || '';
-    if ($('btn-configurar-bercos')) {
-      $('btn-configurar-bercos').style.display = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? 'block' : 'none';
-    }
+    _atualizarBtnConfigurarBercos();
     $('op-id-bateria').value = state.id_bateria || '';
     $('op-bercos-reais').value = state.bercos_reais || '';
     $('op-motivo').value = state.motivo_atraso || '';
