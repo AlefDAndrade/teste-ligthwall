@@ -124,9 +124,12 @@
     } catch (_) { /* localStorage indisponível — segue só em memória */ }
   }
 
-  /** Combo em uso de fato pra um atalho — o personalizado, se houver, senão o padrão. */
+  /** Combo em uso de fato pra um atalho — o personalizado, se houver, senão
+   * o padrão. Usa `in` (não truthiness) pra diferenciar "nunca personalizado"
+   * (cai no padrão) de "personalizado pra vazio" (string '' = sem atalho,
+   * de propósito — ver _definirAtalho ao substituir um conflito). */
   function _comboEfetivo(id, comboPadrao) {
-    return _overrides[id] || comboPadrao;
+    return (id in _overrides) ? _overrides[id] : comboPadrao;
   }
 
   /** Lista plana de todos os atalhos remapeáveis (navegação + ações), cada
@@ -144,22 +147,36 @@
   }
 
   /**
-   * Define um novo combo pra um atalho (por id). Recusa se o combo já
-   * estiver em uso por OUTRO atalho (compara contra o combo EFETIVO de
-   * todos os outros, não só os padrões de fábrica).
-   * @returns {{ok:true}|{ok:false, erro:string}}
+   * Define um novo combo pra um atalho (por id).
+   *
+   * Se o combo já estiver em uso por OUTRO atalho (compara contra o combo
+   * EFETIVO de todos os outros, não só os padrões de fábrica) e
+   * `opts.substituirConflito` não foi passado como `true`, a troca é
+   * recusada e o conflito é devolvido pra quem chamou decidir (normalmente:
+   * perguntar pro usuário se quer substituir mesmo assim).
+   *
+   * Quando `opts.substituirConflito` é `true`, a troca segue mesmo com
+   * conflito — e o atalho que antes usava esse combo fica SEM atalho
+   * nenhum (string vazia), nunca herda o combo antigo de `id`.
+   *
+   * @returns {{ok:true, substituiu?:{id,label}} | {ok:false, erro?:string, conflito?:{id,label,icon}}}
    */
-  function _definirAtalho(id, novoCombo) {
+  function _definirAtalho(id, novoCombo, opts = {}) {
     const todos = _todosAtalhos();
     const alvo = todos.find(a => a.id === id);
     if (!alvo) return { ok: false, erro: 'Atalho não encontrado.' };
 
     const conflito = todos.find(a => a.id !== id && a.comboAtual === novoCombo);
-    if (conflito) return { ok: false, erro: `"${novoCombo}" já está em uso por "${conflito.label}".` };
+    if (conflito && !opts.substituirConflito) {
+      return { ok: false, conflito: { id: conflito.id, label: conflito.label, icon: conflito.icon } };
+    }
 
     _overrides[id] = novoCombo;
+    // Substituição confirmada: o antigo titular do combo fica sem atalho —
+    // nunca "troca" pro combo anterior de `id` (ele pode nem ter um).
+    if (conflito) _overrides[conflito.id] = '';
     _salvarOverrides();
-    return { ok: true };
+    return { ok: true, substituiu: conflito ? { id: conflito.id, label: conflito.label } : null };
   }
 
   /** Restaura TODOS os atalhos pro padrão de fábrica, de uma vez. */
@@ -453,7 +470,10 @@
     document.getElementById('kb-help-modal')?.remove();
 
     const navRows = NAV_CONFIG.map(n => {
-      const kbds = _comboEfetivo(n.id, n.comboPadrao).split('+').map(p => `<kbd>${p}</kbd>`).join(' + ');
+      const combo = _comboEfetivo(n.id, n.comboPadrao);
+      const kbds = combo === ''
+        ? '<span class="kb-help-sem-atalho">Sem atalho</span>'
+        : combo.split('+').map(p => `<kbd>${p}</kbd>`).join(' + ');
       return `<tr>
         <td>${kbds}</td>
         <td class="kb-help-desc">${n.icon} ${n.label}</td>
@@ -471,8 +491,10 @@
       </tr>`;
 
     const actionRows = ACTION_CONFIG.map(a => {
-      const parts = _comboEfetivo(a.id, a.comboPadrao).split('+');
-      const kbds = parts.map(p => `<kbd>${p}</kbd>`).join(' + ');
+      const combo = _comboEfetivo(a.id, a.comboPadrao);
+      const kbds = combo === ''
+        ? '<span class="kb-help-sem-atalho">Sem atalho</span>'
+        : combo.split('+').map(p => `<kbd>${p}</kbd>`).join(' + ');
       return `<tr>
         <td>${kbds}</td>
         <td class="kb-help-desc">${a.icon} ${a.description}</td>
@@ -760,6 +782,11 @@
     .kb-help-desc {
       color: var(--text-2, #9aa3b2);
     }
+    .kb-help-sem-atalho {
+      color: var(--text-3, #5c6475);
+      font-size: .74rem;
+      font-style: italic;
+    }
     .kb-help-footer {
       border-top: 1px solid var(--border, #2a2f3a);
       padding: 12px 24px;
@@ -814,7 +841,9 @@
 
     /** Lista todos os atalhos remapeáveis, já com o combo efetivo calculado. */
     listarAtalhos: _todosAtalhos,
-    /** Define um novo combo pra um atalho (por id). Recusa se houver conflito. */
+    /** Define um novo combo pra um atalho (por id). Se houver conflito,
+     * devolve { ok:false, conflito } em vez de aplicar — passe
+     * { substituirConflito: true } pra confirmar e liberar o atalho antigo. */
     definirAtalho: _definirAtalho,
     /** Restaura todos os atalhos pro padrão de fábrica. */
     resetarAtalhos: _resetarAtalhos,

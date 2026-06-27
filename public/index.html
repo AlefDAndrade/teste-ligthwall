@@ -3112,9 +3112,11 @@
       const outroCapturando = _cfgAtalhoCapturando && !capturando;
       const comboHtml = capturando
         ? '<span style="color:var(--accent);font-size:.78rem">Pressione a nova combinação... (Esc cancela)</span>'
-        : a.comboAtual.split('+').map(p =>
-          `<kbd style="display:inline-block;padding:2px 7px;font-family:var(--font-mono);font-size:.74rem;color:var(--text);background:var(--bg-3);border:1px solid var(--border-2);border-radius:4px">${p}</kbd>`
-        ).join(' + ');
+        : (a.comboAtual === ''
+          ? '<span style="color:var(--text-3);font-size:.78rem;font-style:italic">Sem atalho</span>'
+          : a.comboAtual.split('+').map(p =>
+            `<kbd style="display:inline-block;padding:2px 7px;font-family:var(--font-mono);font-size:.74rem;color:var(--text);background:var(--bg-3);border:1px solid var(--border-2);border-radius:4px">${p}</kbd>`
+          ).join(' + '));
       return `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-3);border:1px solid ${capturando ? 'var(--accent)' : 'var(--border)'};border-radius:var(--radius);padding:9px 14px;flex-wrap:wrap">
           <span style="font-size:.84rem;color:var(--text-2)">${a.icon} ${a.label}</span>
@@ -3148,10 +3150,32 @@
           cfgRenderAtalhos();
           return;
         }
-        const r = LWKeyboard.definirAtalho(id, resultado.combo);
-        if (!r.ok) LW.mostrarAlerta(r.erro, { tipo: 'erro' });
-        cfgRenderAtalhos();
+        _cfgAplicarNovoCombo(id, resultado.combo);
       });
+    }
+
+    // Tenta aplicar o novo combo; se já estiver em uso por outro atalho,
+    // pergunta antes de substituir — confirmado, o antigo titular do combo
+    // fica sem atalho (não herda o combo anterior de `id`).
+    async function _cfgAplicarNovoCombo(id, combo) {
+      const r = LWKeyboard.definirAtalho(id, combo);
+      if (r.ok) { cfgRenderAtalhos(); return; }
+
+      if (r.conflito) {
+        const confirmou = await LW.mostrarConfirmacao(
+          `"${combo}" já está em uso por "${r.conflito.icon ? r.conflito.icon + ' ' : ''}${r.conflito.label}". Substituir mesmo assim? "${r.conflito.label}" ficará sem atalho.`,
+          { titulo: 'Atalho já em uso', textoConfirmar: 'Substituir', icon: '⌨️' }
+        );
+        if (confirmou) {
+          const r2 = LWKeyboard.definirAtalho(id, combo, { substituirConflito: true });
+          if (!r2.ok) LW.mostrarAlerta(r2.erro || 'Não foi possível definir o atalho.', { tipo: 'erro' });
+        }
+        cfgRenderAtalhos();
+        return;
+      }
+
+      LW.mostrarAlerta(r.erro || 'Não foi possível definir o atalho.', { tipo: 'erro' });
+      cfgRenderAtalhos();
     }
 
     async function cfgResetarAtalhos() {
