@@ -302,9 +302,12 @@
 
     <!-- ============ PAGE: OPERAÇÃO ============ -->
     <main class="main" id="page-operacao">
-      <div class="page-header">
+      <div class="page-header" style="position:relative">
         <h1 class="page-title">Registro de <span>Operação</span></h1>
         <p class="page-desc" id="op-data">Carregando...</p>
+        <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
+          onclick="LWTour.iniciar('operacao', { forcado: true })" title="Refazer o tour guiado desta página">❔
+          Tour</button>
       </div>
 
       <div class="page-body">
@@ -676,11 +679,14 @@
 
     <!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
-      <div class="page-header">
+      <div class="page-header" style="position:relative">
         <h1 class="page-title">Registro de <span>Baterias</span></h1>
         <p class="page-desc">Histórico completo de injeções &nbsp;·&nbsp; <span
             style="color:var(--accent);font-size:.82rem">🔗 Clique em qualquer linha para ver os traços vinculados no
             Relatório de Injeção</span></p>
+        <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
+          onclick="LWTour.iniciar('registro', { forcado: true })" title="Refazer o tour guiado desta página">❔
+          Tour</button>
       </div>
 
 
@@ -709,7 +715,7 @@
                 <div class="col-menu-divider"></div>
                 <div id="col-menu-list"></div>
               </div>
-              <button class="btn btn-ghost btn-sm" onclick="LWDash.abrirExportModal()">⬇ Exportar Excel (.xlsx)</button>
+              <button class="btn btn-ghost btn-sm" id="btn-exportar-registro" onclick="LWDash.abrirExportModal()">⬇ Exportar Excel (.xlsx)</button>
               <button class="btn btn-ghost btn-sm" id="btn-editar-registro" data-admin-only
                 title="Corrigir dados de uma operação já registrada" onclick="LWDash.toggleModoEdicaoRegistro()">✏️
                 Editar</button>
@@ -768,9 +774,12 @@
     </main>
     <!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
     <main class="main" id="page-relatorio">
-      <div class="page-header">
+      <div class="page-header" style="position:relative">
         <h1 class="page-title">Relatório de <span>Injeção</span></h1>
         <p class="page-desc">Histórico completo de injeções</p>
+        <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
+          onclick="LWTour.iniciar('relatorio', { forcado: true })" title="Refazer o tour guiado desta página">❔
+          Tour</button>
       </div>
 
       <div class="page-body">
@@ -793,7 +802,7 @@
               <span style="font-size:.78rem;color:var(--text-3)" id="rel-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-relatorio" style="display:none"
                 onclick="limparTodosFiltros('filtros-relatorio')">✕ Limpar Todos</button>
-              <button class="btn btn-ghost btn-sm" onclick="LWDash.abrirExportModalRelatorio()">⬇ Exportar Excel
+              <button class="btn btn-ghost btn-sm" id="btn-exportar-relatorio" onclick="LWDash.abrirExportModalRelatorio()">⬇ Exportar Excel
                 (.xlsx)</button>
               <button class="btn btn-ghost btn-sm" id="btn-editar-relatorio" data-admin-only
                 title="Corrigir dados de um traço já registrado" onclick="LWDash.toggleModoEdicaoRelatorio()">✏️
@@ -814,7 +823,7 @@
         </div>
 
         <div class="table-wrap">
-          <table>
+          <table id="relatorio-table">
             <thead>
               <tr>
                 <th>Data</th>
@@ -1671,8 +1680,12 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
         <h2 style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em">⚙
           CONFIGURAÇÕES</h2>
-        <button onclick="fecharConfig()"
-          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-ghost btn-sm" onclick="LWTour.iniciar('config', { forcado: true })"
+            title="Refazer o tour guiado desta tela">❔ Tour</button>
+          <button onclick="fecharConfig()"
+            style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+        </div>
       </div>
 
       <div style="display:flex;gap:24px;align-items:flex-start">
@@ -1710,8 +1723,9 @@
                     <input class="form-input" id="cfg-bateria-novo" placeholder="Ex: B14" style="width:130px">
                   </div>
                   <div class="form-group" style="margin-bottom:0">
-                    <label class="form-label">Dimensão</label>
-                    <input class="form-input" id="cfg-bateria-label" placeholder="Ex: 15 cm" style="width:130px">
+                    <label class="form-label">Dimensão (em cm)</label>
+                    <input class="form-input" type="text" inputmode="decimal" id="cfg-bateria-label"
+                      placeholder="Ex: 15" style="width:130px">
                   </div>
                   <div class="form-group" style="margin-bottom:0">
                     <label class="form-label">Qtd. Berços</label>
@@ -1798,15 +1812,18 @@
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
               <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">Label</label>
-                <input class="form-input" id="cfg-mont-hibrida-label" placeholder="Ex: HÍBRIDA 2P/3T" style="width:200px">
+                <input class="form-input auto-filled" id="cfg-mont-hibrida-label" readonly
+                  placeholder="Escolha os 2 tipos →" style="width:200px">
               </div>
               <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">1º Tipo</label>
-                <select class="form-select" id="cfg-mont-hibrida-tipo1" style="width:170px"></select>
+                <select class="form-select" id="cfg-mont-hibrida-tipo1" style="width:170px"
+                  onchange="_cfgAtualizarLabelHibrida()"></select>
               </div>
               <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">2º Tipo</label>
-                <select class="form-select" id="cfg-mont-hibrida-tipo2" style="width:170px"></select>
+                <select class="form-select" id="cfg-mont-hibrida-tipo2" style="width:170px"
+                  onchange="_cfgAtualizarLabelHibrida()"></select>
               </div>
             </div>
             <div style="display:flex;justify-content:flex-end">
@@ -2009,6 +2026,13 @@
         window._relatorioInit = true;
         LWDash.initRelatorio();
       }
+
+      // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
+      // não faz nada se essa página não tem tour, ou se já foi visto antes
+      // (guardado em localStorage). Roda por último, depois dos inits
+      // acima, pra já achar a tabela/conteúdo carregado na hora de medir
+      // a posição dos elementos.
+      if (typeof LWTour !== 'undefined') LWTour.aoMudarPagina(pageId);
     }
 
     // ---- Tema ----
@@ -3250,6 +3274,7 @@
       cfgRenderTudo();
       cfgMostrarSecao('dados');
       document.getElementById('config-modal').style.display = 'flex';
+      if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
     }
 
     function fecharConfig() {
@@ -3427,11 +3452,18 @@
       const inputBercos = document.getElementById('cfg-bateria-bercos');
 
       const id = inputId.value.trim().toUpperCase();
-      const label = inputLabel.value.trim();
+      const dimRaw = inputLabel.value.trim();
       const bercos = parseInt(inputBercos.value);
 
       if (!id) { LW.mostrarAlerta('Digite o ID da bateria (ex: B14).', { tipo: 'aviso' }); return; }
-      if (!label) { LW.mostrarAlerta('Digite a dimensão da bateria (ex: 15 cm).', { tipo: 'aviso' }); return; }
+      if (!dimRaw) { LW.mostrarAlerta('Digite a dimensão da bateria, em cm (ex: 15).', { tipo: 'aviso' }); return; }
+      // Só número — quem digita não precisa (e não deve) escrever "cm" aqui;
+      // o "cm" é adicionado automaticamente ao montar o label exibido.
+      if (!/^\d+([.,]\d+)?$/.test(dimRaw)) {
+        LW.mostrarAlerta('Digite só o número da dimensão, em cm (ex: 15) — sem "cm" ou outro texto.', { tipo: 'aviso' });
+        return;
+      }
+      const label = dimRaw + 'cm';
       if (!bercos || bercos < 1) { LW.mostrarAlerta('Digite a quantidade de berços válida.', { tipo: 'aviso' }); return; }
       if (_cfgDados.baterias.find(b => b.id === id)) { LW.mostrarAlerta('Este ID de bateria já existe.', { tipo: 'aviso' }); return; }
 
@@ -3502,6 +3534,23 @@
       sel1.innerHTML = '<option value="">— selecione —</option>' + opts;
       sel2.innerHTML = '<option value="">— selecione —</option>' + opts;
       sel1.value = valor1; sel2.value = valor2;
+      _cfgAtualizarLabelHibrida();
+    }
+
+    // Monta o label do tipo Híbrida automaticamente a partir dos 2 tipos
+    // simples escolhidos — sempre "HÍBRIDA <tipo1>/<tipo2>" (ex: escolher
+    // 2p e 4t gera "HÍBRIDA 2P/4T"). Quem cadastra não digita o label dessa
+    // combinação — só escolhe os tipos; o campo de label é só exibição
+    // (readonly), recalculado aqui a cada troca de 1º/2º Tipo.
+    function _cfgAtualizarLabelHibrida() {
+      const elLabel = document.getElementById('cfg-mont-hibrida-label');
+      if (!elLabel) return;
+      const tipo1 = document.getElementById('cfg-mont-hibrida-tipo1')?.value;
+      const tipo2 = document.getElementById('cfg-mont-hibrida-tipo2')?.value;
+      if (!tipo1 || !tipo2) { elLabel.value = ''; return; }
+      elLabel.value = tipo1 === tipo2
+        ? '⚠ escolha dois tipos diferentes'
+        : `HÍBRIDA ${tipo1.toUpperCase()}/${tipo2.toUpperCase()}`;
     }
 
     // Cria um novo tipo de montagem SIMPLES: 1 tipo de placa, painéis/berço
@@ -3550,18 +3599,23 @@
     // cimentícia não é perguntada aqui — é herdada de cada tipo simples na
     // hora do cálculo (calcPaineis(), em data.js).
     function cfgAdicionarMontagemHibrida() {
-      const label = document.getElementById('cfg-mont-hibrida-label').value.trim().toUpperCase();
       const tipo1 = document.getElementById('cfg-mont-hibrida-tipo1').value;
       const tipo2 = document.getElementById('cfg-mont-hibrida-tipo2').value;
 
-      if (!label) { LW.mostrarAlerta('Digite um label para o tipo híbrido.', { tipo: 'aviso' }); return; }
       if (!tipo1 || !tipo2) { LW.mostrarAlerta('Escolha os dois tipos que compõem a montagem híbrida.', { tipo: 'aviso' }); return; }
       if (tipo1 === tipo2) { LW.mostrarAlerta('Escolha dois tipos diferentes.', { tipo: 'aviso' }); return; }
+
+      // Label sempre derivado dos 2 tipos escolhidos — nunca digitado (ver
+      // _cfgAtualizarLabelHibrida) — recalculado aqui de novo, direto dos
+      // selects, em vez de confiar no campo readonly (só exibição).
+      const label = `HÍBRIDA ${tipo1.toUpperCase()}/${tipo2.toUpperCase()}`;
       if (_cfgDados.montagens.find(m => m.label === label)) { LW.mostrarAlerta('Este label já existe.', { tipo: 'aviso' }); return; }
 
       _cfgDados.montagens.push({ label, modo: 'hibrida', tipos: [tipo1, tipo2] });
 
-      document.getElementById('cfg-mont-hibrida-label').value = '';
+      document.getElementById('cfg-mont-hibrida-tipo1').value = '';
+      document.getElementById('cfg-mont-hibrida-tipo2').value = '';
+      _cfgAtualizarLabelHibrida();
       cfgRenderTudo();
     }
 
@@ -5099,12 +5153,40 @@
 
     </div>
   </div>
+
+  <!-- ============ COPILOTO IA (botão flutuante + painel de chat) ============ -->
+  <!-- Visível em qualquer página (fica fora dos <main> de cada tela) — só
+       LEITURA: as respostas vêm de ferramentas que consultam o banco no
+       servidor (ver POST /copiloto-chat, server.js), nunca inventadas. -->
+  <button id="copiloto-btn" onclick="LWCopiloto.toggle()" title="Copiloto — pergunte sobre a produção">🤖</button>
+
+  <div id="copiloto-panel">
+    <div class="copiloto-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.15rem">🤖</span>
+        <span style="font-family:var(--font-display);color:var(--accent);letter-spacing:.06em;font-size:.9rem">COPILOTO</span>
+      </div>
+      <button onclick="LWCopiloto.toggle()"
+        style="background:none;border:none;color:var(--text-3);font-size:1.2rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+
+    <div id="copiloto-mensagens" class="copiloto-mensagens"></div>
+
+    <div class="copiloto-input-row">
+      <input class="form-input" id="copiloto-input" placeholder="Pergunte sobre a produção..."
+        onkeydown="if(event.key==='Enter'){event.preventDefault();LWCopiloto.enviar();}">
+      <button class="btn btn-primary btn-sm" id="copiloto-btn-enviar" onclick="LWCopiloto.enviar()">➤</button>
+    </div>
+  </div>
+
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
   <script src="js/oee.js"></script>
   <script src="js/paradas.js"></script>
   <script src="js/debriefing.js"></script>
   <script src="js/keyboard-shortcuts.js"></script>
+  <script src="js/copiloto.js"></script>
+  <script src="js/tour.js"></script>
 </body>
 
 </html>
