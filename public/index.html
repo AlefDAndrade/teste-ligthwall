@@ -3758,6 +3758,27 @@
       return (v && typeof v === 'object' && Array.isArray(v.ajustes)) ? [...v.ajustes] : [];
     }
 
+    // ---- Relógio (h:m:s) de Tempo de Batida — mesma lógica de conversão
+    // usada no picker de Registrar Operação (operacao.js: segParaHMS/hmsParaSeg) ----
+    function _etSegParaHMS(seg) {
+      const s = Math.max(0, Math.round(seg || 0));
+      return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), s: s % 60 };
+    }
+    function _etHmsParaSeg(h, m, s) {
+      return (parseInt(h) || 0) * 3600 + (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
+    }
+    // tempo_batida.original (relatorio_injecao.json) está em SEGUNDOS; o
+    // formulário envia tempo_batida_min (minutos) — mesma conversão que
+    // já era feita no número simples, só que agora a partir do relógio.
+    function _etSegParaMin(seg) {
+      return Math.round((seg / 60) * 100) / 100;
+    }
+    // ajustes_tracos.json guarda tempo_batida em MINUTOS — converte pra
+    // h:m:s (via segundos) só pra exibir no relógio.
+    function _etMinParaHMS(min) {
+      return _etSegParaHMS(Math.round((min || 0) * 60));
+    }
+
     async function abrirEdicaoTraco(traco, uso) {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       _etTracoOriginal = JSON.parse(JSON.stringify(traco));
@@ -3788,9 +3809,12 @@
       document.getElementById('et-original-eps').value = _etExtrairOriginal(traco.eps_real);
       document.getElementById('et-original-superplast').value = _etExtrairOriginal(traco.superplast_real);
       document.getElementById('et-original-incorporador').value = _etExtrairOriginal(traco.incorporador_real);
-      // tempo_batida.original está em SEGUNDOS em relatorio_injecao.json — mostra em MINUTOS no formulário
+      // tempo_batida.original está em SEGUNDOS em relatorio_injecao.json — mostra no relógio h:m:s
       const origTempoSeg = _etExtrairOriginal(traco.tempo_batida);
-      document.getElementById('et-original-tempo').value = origTempoSeg === '' ? '' : Math.round((origTempoSeg / 60) * 100) / 100;
+      const hmsOriginal = _etSegParaHMS(origTempoSeg === '' ? 0 : origTempoSeg);
+      document.getElementById('et-original-tempo-h').value = hmsOriginal.h;
+      document.getElementById('et-original-tempo-m').value = hmsOriginal.m;
+      document.getElementById('et-original-tempo-s').value = hmsOriginal.s;
 
       document.getElementById('et-original-densidade').value = _etExtrairOriginal(traco.densidade);
       document.getElementById('et-original-flow').value = _etExtrairOriginal(traco.flow);
@@ -3820,6 +3844,30 @@
       document.getElementById('editar-traco-modal').style.display = 'flex';
     }
 
+    // Ajusta um campo (h/m/s) do relógio do tempo de batida original com
+    // ▲▼ — mesmo padrão de wrap-around do picker de Registrar Operação.
+    function _etAjustarDuracaoOriginal(campo, delta) {
+      const el = document.getElementById(`et-original-tempo-${campo}`);
+      if (!el) return;
+      const max = campo === 'h' ? 23 : 59;
+      let val = (parseInt(el.value) || 0) + delta;
+      if (val < 0) val = max;
+      if (val > max) val = 0;
+      el.value = val;
+    }
+    // Só pra normalizar o campo se o admin digitar direto (sem setas).
+    function _etOnDuracaoOriginalInput() { /* leitura é feita ao salvar — ver _etLerDuracaoOriginalMin() */ }
+
+    // Lê o relógio h:m:s do tempo de batida original e devolve em MINUTOS
+    // (formato que o servidor espera em originais.tempo_batida_min).
+    function _etLerDuracaoOriginalMin() {
+      const h = document.getElementById('et-original-tempo-h').value;
+      const m = document.getElementById('et-original-tempo-m').value;
+      const s = document.getElementById('et-original-tempo-s').value;
+      const seg = _etHmsParaSeg(h, m, s);
+      return seg === 0 ? '' : _etSegParaMin(seg);
+    }
+
     function fecharEdicaoTraco() {
       document.getElementById('editar-traco-modal').style.display = 'none';
       _etTracoOriginal = null;
@@ -3837,13 +3885,35 @@
         { nome: 'eps', label: 'EPS' }, { nome: 'superplast', label: 'Superplast.' },
         { nome: 'incorporador', label: 'Incorp. Ar' },
       ];
-      cont.innerHTML = _etAjustesAtuais.map((a, i) => `
+      cont.innerHTML = _etAjustesAtuais.map((a, i) => {
+        const hms = _etMinParaHMS(a.tempo_batida);
+        return `
         <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:8px">
           <div style="font-size:.7rem;color:var(--text-3);width:100%;margin-bottom:-2px">Ajuste #${i + 1}${a.registrado_em ? ' — ' + LW.formatDateTime(a.registrado_em) : ' (novo)'}</div>
-          <div class="form-group" style="margin:0;width:110px">
-            <label class="form-label" style="font-size:.68rem">Batida (min) *</label>
-            <input class="form-input" type="number" step="0.1" value="${a.tempo_batida ?? ''}"
-              oninput="_etAtualizarAjuste(${i},'tempo_batida',this.value)">
+          <div class="form-group" style="margin:0;width:190px">
+            <label class="form-label" style="font-size:.68rem">⏱ Batida *</label>
+            <div class="duration-picker duration-picker--sm">
+              <div class="duration-col">
+                <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoAjuste(${i},'h',1)">▲</button>
+                <input class="dur-input" type="number" min="0" max="23" id="et-aj-${i}-h" value="${hms.h}" readonly>
+                <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoAjuste(${i},'h',-1)">▼</button>
+                <span class="dur-label">h</span>
+              </div>
+              <span class="dur-sep">:</span>
+              <div class="duration-col">
+                <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoAjuste(${i},'m',1)">▲</button>
+                <input class="dur-input" type="number" min="0" max="59" id="et-aj-${i}-m" value="${hms.m}" readonly>
+                <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoAjuste(${i},'m',-1)">▼</button>
+                <span class="dur-label">min</span>
+              </div>
+              <span class="dur-sep">:</span>
+              <div class="duration-col">
+                <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoAjuste(${i},'s',1)">▲</button>
+                <input class="dur-input" type="number" min="0" max="59" id="et-aj-${i}-s" value="${hms.s}" readonly>
+                <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoAjuste(${i},'s',-1)">▼</button>
+                <span class="dur-label">seg</span>
+              </div>
+            </div>
           </div>
           ${CAMPOS.map(c => `
           <div class="form-group" style="margin:0;width:95px">
@@ -3854,7 +3924,27 @@
           <button type="button" onclick="_etRemoverAjuste(${i})" title="Remover este ajuste"
             style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;margin-left:auto">✕</button>
         </div>
-      `).join('');
+      `;
+      }).join('');
+    }
+
+    // Ajusta um campo (h/m/s) do relógio de um ajuste específico (i) com
+    // ▲▼ — readonly/só-setas, igual ao modal de Ajuste de Receita ao vivo
+    // (operacao.js) — e já recalcula o total em minutos pro state.
+    function _etAjustarDuracaoAjuste(i, campo, delta) {
+      const el = document.getElementById(`et-aj-${i}-${campo}`);
+      if (!el) return;
+      const max = campo === 'h' ? 23 : 59;
+      let val = (parseInt(el.value) || 0) + delta;
+      if (val < 0) val = max;
+      if (val > max) val = 0;
+      el.value = val;
+
+      const h = document.getElementById(`et-aj-${i}-h`).value;
+      const m = document.getElementById(`et-aj-${i}-m`).value;
+      const s = document.getElementById(`et-aj-${i}-s`).value;
+      const seg = _etHmsParaSeg(h, m, s);
+      _etAtualizarAjuste(i, 'tempo_batida', seg === 0 ? '' : _etSegParaMin(seg));
     }
 
     function _etAtualizarAjuste(i, campo, valor) {
@@ -3937,7 +4027,7 @@
           eps_real: lerNum('et-original-eps'),
           superplast_real: lerNum('et-original-superplast'),
           incorporador_real: lerNum('et-original-incorporador'),
-          tempo_batida_min: lerNum('et-original-tempo'),
+          tempo_batida_min: _etLerDuracaoOriginalMin(),
         },
         densidade: { original: lerNum('et-original-densidade'), leituras: _etLeiturasDensidade },
         flow: { original: lerNum('et-original-flow'), leituras: _etLeiturasFlow },
@@ -4205,8 +4295,32 @@
           <input class="form-input" type="number" step="0.001" id="et-original-incorporador">
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Tempo de Batida (min)</label>
-          <input class="form-input" type="number" step="0.1" id="et-original-tempo">
+          <label class="form-label">⏱ Tempo de Batida</label>
+          <div class="duration-picker">
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('h',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="23" id="et-original-tempo-h" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('h',-1)">▼</button>
+              <span class="dur-label">h</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('m',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="et-original-tempo-m" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('m',-1)">▼</button>
+              <span class="dur-label">min</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('s',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="et-original-tempo-s" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('s',-1)">▼</button>
+              <span class="dur-label">seg</span>
+            </div>
+          </div>
         </div>
       </div>
 
