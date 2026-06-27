@@ -286,10 +286,10 @@ const AdminAuth = (() => {
     });
 
     btnEntrar.addEventListener('click', _tentarLogin);
-    btnCancel.addEventListener('click', fecharModal);
+    btnCancel.addEventListener('click', _cancelar);
 
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) fecharModal();
+      if (e.target === overlay) _cancelar();
     });
 
     btnEsquec.addEventListener('click', () => {
@@ -298,8 +298,21 @@ const AdminAuth = (() => {
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && overlay.style.display === 'flex') fecharModal();
+      if (e.key === 'Escape' && overlay.style.display === 'flex') _cancelar();
     });
+
+    // Fecha por cancelamento explícito (botão Cancelar, Esc, clique fora) —
+    // diferente de um login bem-sucedido, que fecha direto via fecharModal()
+    // dentro de _tentarLogin. Dispara onCancel (se foi passado pra
+    // abrirModal), pra quem abriu saber que NÃO foi autenticado.
+    function _cancelar() {
+      fecharModal();
+      if (typeof AdminAuth._onCancel === 'function') {
+        const cb = AdminAuth._onCancel;
+        AdminAuth._onCancel = null;
+        cb();
+      }
+    }
 
     async function _tentarLogin() {
       const senha = senhaInput.value;
@@ -316,6 +329,7 @@ const AdminAuth = (() => {
       if (ok) {
         _salvarSessao();
         fecharModal();
+        AdminAuth._onCancel = null; // autenticou — não é mais uma "recusa" se o modal fechar de novo depois
         if (typeof AdminAuth._onSuccess === 'function') {
           AdminAuth._onSuccess();
         }
@@ -328,9 +342,15 @@ const AdminAuth = (() => {
   }
 
   // ─── Abre o modal de login ─────────────────────────────────────────────────
-  function abrirModal(onSuccess) {
+  // onCancel (opcional): chamado se a pessoa fechar sem entrar a senha
+  // certa (botão Cancelar, Esc, clique fora) — diferente de simplesmente
+  // não fazer nada, útil quando reabrir o modal foi uma EXIGÊNCIA (ex:
+  // reautenticação ao voltar do cache do navegador — ver index.html) e
+  // cancelar precisa ter uma consequência (tirar a pessoa da área admin).
+  function abrirModal(onSuccess, onCancel) {
     _criarModal();
     AdminAuth._onSuccess = onSuccess || null;
+    AdminAuth._onCancel = onCancel || null;
 
     const overlay = document.getElementById('admin-auth-modal');
     const erroEl  = document.getElementById('admin-auth-erro');
@@ -765,6 +785,7 @@ const AdminAuth = (() => {
     logout,
     abrirModalRecuperacao,
     _onSuccess: null,
+    _onCancel: null,
   };
 
 })();

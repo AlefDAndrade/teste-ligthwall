@@ -1918,6 +1918,34 @@
   <script src="js/dashboard.js"></script>
   <script>
 
+    // ─── Re-exige a senha de admin se a página voltar do cache do navegador
+    // (bfcache) já como Administrador — ex: deu F5/saiu, voltou pro login,
+    // e alguém aperta "Avançar" no navegador depois. Sem isso, o navegador
+    // restaura a tela exatamente como estava (ainda como Administrador),
+    // sem passar pela senha de novo. Só entra em ação no caso de restauração
+    // do cache (event.persisted) — um F5 normal como Administrador continua
+    // sem pedir senha de novo, como já era de propósito (ver login.html).
+    window.addEventListener('pageshow', (event) => {
+      if (!event.persisted) return;
+      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+
+      document.documentElement.style.visibility = 'hidden'; // esconde tudo até confirmar a senha
+      if (typeof AdminAuth === 'undefined') { window.location.href = 'login.html'; return; }
+
+      AdminAuth.abrirModal(
+        function onSuccess() { document.documentElement.style.visibility = 'visible'; },
+        function onCancel() {
+          sessionStorage.removeItem('lw_role'); // não deixa 'Administrador' parado na sessão enquanto está no login
+          window.location.href = 'login.html';
+        }
+      );
+      // O modal herdaria visibility:hidden do <html> (ele não define a
+      // própria visibility) e ficaria escondido junto com o resto da
+      // página — força visible só nele, por cima da herança.
+      const overlayAuth = document.getElementById('admin-auth-modal');
+      if (overlayAuth) overlayAuth.style.visibility = 'visible';
+    });
+
     // ---- Navigation ----
     // Páginas bloqueadas por perfil — Analista não acessa Registrar Operação,
     // mesmo navegando direto (atalho de teclado, URL, etc.), não só pela UI.
