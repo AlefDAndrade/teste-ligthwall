@@ -208,6 +208,38 @@ function _corMontagemNeutra() {
 }
 
 /**
+ * Resumo legível da composição de uma Montagem Personalizada — ex: "3T: 4
+ * berços · S/P: 5 berços · 2/P: 7 berços". Usado no tooltip (hover) do badge
+ * "PERSONALIZADA" no Registro de Baterias, pra mostrar quais tipos foram
+ * usados sem precisar abrir o registro completo (ver "Limitação conhecida"
+ * no README — o detalhe berço a berço só ficava visível ali até agora).
+ * @param {Array<string|null>} bercosPersonalizados - um item por berço, ex: ['sp','sp','3t',null,...]
+ */
+function resumoBercosPersonalizados(bercosPersonalizados) {
+  if (!Array.isArray(bercosPersonalizados) || !bercosPersonalizados.length) {
+    return 'Composição não disponível.';
+  }
+
+  const contagem = {};
+  let semTipo = 0;
+  bercosPersonalizados.forEach(tipo => {
+    if (!tipo) { semTipo++; return; }
+    contagem[tipo] = (contagem[tipo] || 0) + 1;
+  });
+
+  const partes = Object.keys(contagem).map(tipo => {
+    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo);
+    const label = opcao ? opcao.label : tipo.toUpperCase();
+    const n = contagem[tipo];
+    return `${label}: ${n} berço${n > 1 ? 's' : ''}`;
+  });
+
+  if (semTipo > 0) partes.push(`Sem tipo: ${semTipo} berço${semTipo > 1 ? 's' : ''}`);
+
+  return partes.join(' · ') || 'Composição não disponível.';
+}
+
+/**
  * Extrai os componentes de painéis de uma opção de tipo de montagem,
  * de forma genérica — suporta qualquer quantidade de tipos (2p, sp, 3p, ...).
  * Uma chave é considerada um componente se terminar em "_por_berco".
@@ -1497,6 +1529,7 @@ window.LW = {
   hexParaHue,
   corMontagemPorLabel,
   corPorTipoSimples,
+  resumoBercosPersonalizados,
 
   // Storage
   getOperacaoAtual, saveOperacaoAtual, clearOperacaoAtual,

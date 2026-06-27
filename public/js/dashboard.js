@@ -450,6 +450,13 @@
       `).join('');
       const corMont = _corBadgeMontagem(b.tipo_montagem);
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
+      // Montagem Personalizada não tem cor própria (cinza neutro — ver
+      // README, "Limitação conhecida") e até agora não tinha como ver quais
+      // tipos foram usados sem abrir o registro completo. O hover no badge
+      // mostra esse resumo (contagem por tipo), sem precisar de UI nova.
+      const tituloMontagem = b.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+        ? LW.resumoBercosPersonalizados(b.bercos_personalizados).replace(/"/g, '&quot;')
+        : '';
       const tituloLinha = _modoEdicaoRegistro
         ? 'Clique para editar esta operação'
         : 'Clique para ver os traços desta bateria no Relatório de Injeção';
@@ -470,7 +477,7 @@
           ? `<span class="badge badge-red" title="${b.motivo_atraso || ''}">⚠ SIM</span>`
           : '<span class="badge badge-green">✓ NÃO</span>'}</td>
         <td data-col="motivo_atraso">${b.motivo_atraso || '—'}</td>
-        <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}">${b.tipo_montagem || '—'}</span></td>
+        <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `title="${tituloMontagem}"` : ''}>${b.tipo_montagem || '—'}</span></td>
         <td data-col="paineis_2psp">${b.total_paineis || 0}</td>
         <td data-col="paineis_2p">${b.paineis_2p || 0}</td>
         <td data-col="paineis_sp">${b.paineis_sp || 0}</td>
