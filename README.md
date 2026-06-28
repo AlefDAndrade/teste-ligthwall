@@ -4,10 +4,10 @@ Sistema interno de controle de operações de injeção de baterias (placas cime
 
 ## Stack
 
-- **Backend**: Node.js puro (módulo `http`, sem framework), servindo arquivos estáticos e uma API simples em JSON.
-- **Frontend**: HTML/CSS/JS sem framework nem build step — tudo é `<script>` global.
+- **Backend**: Node.js puro (módulo `http`, sem framework), servindo arquivos estáticos e uma API simples em JSON. A lógica vinha toda num `server.js` só; está sendo fatiada por fases pra `lib/` (ver *Fatiamento de server.js*, abaixo).
+- **Frontend**: HTML/CSS/JS sem framework — `index.html` é gerado a partir de pedaços (`public/partials/` + `public/index.template.html`) por um pequeno script (`build-index.js`), em vez de ser editado à mão como um arquivo só de 5 mil linhas (ver *Fatiamento de index.html*, abaixo). Fora isso, continua sem framework nem bundler — é só um passo extra antes de rodar/editar.
 - **"Banco de dados"**: em migração, por fases, de arquivos JSON (`public/db/`) pra **SQLite** (`better-sqlite3`) — ver seção dedicada, abaixo. Os arquivos JSON que ainda não foram migrados continuam exatamente como sempre.
-- **Dependências**: `xlsx` (exportação/importação de Excel), `jszip` (geração e leitura de backups `.zip`), `ws` (WebSocket da Operação em Andamento), `better-sqlite3` (banco de dados).
+- **Dependências**: `xlsx` (exportação/importação de Excel), `jszip` (geração e leitura de backups `.zip`), `ws` (WebSocket da Operação em Andamento), `better-sqlite3` (banco de dados). Nenhuma dependência nova foi adicionada nas mudanças de segurança/testes abaixo — `lib/sessao.js` usa só `crypto` nativo do Node, e os testes usam o test runner nativo (`node:test`).
 
 ## Como rodar
 
@@ -16,19 +16,32 @@ npm install
 npm start
 ```
 
-O servidor sobe em `http://localhost:3000`. Requer Node `>= 18`.
+`npm start` (e `npm run dev`) já rodam `node build-index.js` automaticamente antes de subir o servidor (via `prestart`/`predev` no `package.json`) — então `public/index.html` está sempre atualizado com o que tiver em `public/partials/`, sem precisar lembrar de um passo manual. Pra gerar manualmente sem subir o servidor (ex: só pra conferir o resultado), `npm run build`.
+
+O servidor sobe em `http://localhost:3000` (ou na porta da variável de ambiente `PORT`, se definida — útil pra rodar os testes numa porta separada sem conflitar com um servidor de desenvolvimento já aberto). Requer Node `>= 18`.
+
+## Testes automatizados
+
+```bash
+npm test
+```
+
+Roda a suíte em `test/` usando o test runner nativo do Node (`node --test` — nenhuma dependência nova). `test/helpers/servidor-teste.js` sobe uma cópia ISOLADA do `server.js` de verdade (não um mock) numa porta própria, dentro de `.test-tmp/` (gitignored) — nunca toca nos dados da instalação de verdade. Cobertura atual: autenticação (hash de senha, migração do formato legado, rate limiting) e a sessão de administrador que protege `GET /db/security.json` e `POST /salvar-security`. Ainda não cobre o resto das rotas (registrar operação, traços, backup geral etc.) — é um começo, não a suíte completa.
 
 ## Estrutura de pastas
 
 ```
 public/
-├── index.html        # app principal (todas as páginas, exceto login)
+├── index.html          # GERADO por build-index.js — não editar à mão (ver index.template.html)
+├── index.template.html  # "casca" do index.html, com marcadores <!-- INCLUDE:nome.html -->
+├── partials/             # cada página/modal do app principal, um arquivo por pedaço
 ├── login.html         # tela de login / escolha de perfil
 ├── css/
 │   ├── styles.css     # tema e estilos do app principal
 │   └── login.css      # estilos da tela de login
 ├── js/
 │   ├── data.js                # camada de dados/config — fetch, calcPaineis, getStats etc.
+│   ├── app-core.js              # navegação entre páginas, modais, tema (era um <script> inline)
 │   ├── operacao.js             # tela "Registrar Operação"
 │   ├── dashboard.js             # Registro de Baterias, Relatório de Injeção, Desempenho Turnos
 │   ├── analise-operacional.js   # dashboard "Análise Operacional"
@@ -45,18 +58,47 @@ public/
     ├── relatorio_injecao.json   # traços injetados (Relatório de Injeção)
     ├── relatorio_edicoes.json   # log de auditoria de edições em relatorio_injecao.json
     ├── ajustes_tracos.json      # ajustes de receita por traço (insumo + tempo de batida) — fonte de verdade após uma edição (ver "Editar Traço")
-    ├── security.json            # hash da senha do admin + hash da chave de recuperação
     ├── sobra.json                # traço com sobra ativa entre operações
     ├── paradas.json              # paradas registradas (planejadas/não planejadas)
     ├── operacao_andamento.json    # snapshot da operação em andamento agora (live), ou null
     └── contador_tracos.json      # contador diário de traços (reset automático)
+private/
+└── security.json         # hash da senha do admin + hash da chave de recuperação — FORA de public/ de propósito (ver Autenticação e Sessão, abaixo)
+lib/
+├── auth.js                # hash de senha (scrypt + compat. legado) e rate limiting de tentativas
+└── sessao.js               # sessão de Administrador (cookie HttpOnly)
+test/
+├── auth.test.js            # ver "Testes automatizados", acima
+└── helpers/servidor-teste.js
 server.js               # servidor HTTP + rotas da API
+build-index.js          # monta public/index.html a partir do template + partials
 package.json
 ```
 
-`backups-seguranca/`, `backups-automaticos/` e `logs/` são criadas automaticamente pelo servidor (ver seções *Backup e Restauração* e *Log de Acesso*, abaixo) e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta (diferente dos arquivos de `public/db/` — ver "Limitações conhecidas").
+`backups-seguranca/`, `backups-automaticos/`, `logs/` e `private/` são criadas automaticamente pelo servidor e nunca devem ser versionadas — já estão no `.gitignore`. Todas ficam **fora** de `public/`, então nenhuma é servida como arquivo estático nem acessível por URL direta.
 
 `public/db/teste/` é criada automaticamente na primeira vez que o **Modo de Teste** é usado (ver seção dedicada, abaixo) — mesmos arquivos de uma operação normal (`historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json`, `sobra.json`), só que isolados, pra nunca misturar com dados reais. Também não é versionada.
+
+## Fatiamento de server.js
+
+`server.js` era um arquivo único que cresceu bastante; está sendo fatiado por fases pra `lib/`, extraindo um pedaço autocontido por vez (sem mudar lógica nenhuma — só onde o código mora):
+
+| Fase | O que saiu | Pra onde |
+|---|---|---|
+| 1 | Hash de senha (scrypt + compat. legado) e rate limiting de tentativas | `lib/auth.js` |
+| 2 | Sessão de Administrador | `lib/sessao.js` |
+
+Ainda por fazer: validação de path/restauração de backup, geração/restauração dos `.zip` de Backup de Dados, e o canal WebSocket da Operação em Andamento — são os próximos candidatos, mas ainda vivem em `server.js`.
+
+## Fatiamento de index.html
+
+`index.html` tinha ~5.200 linhas — quase metade era um único `<script>` inline sem nome, e o resto eram as 9 páginas + 11 modais do app, tudo num arquivo só. Diferente de `server.js` (módulos Node de verdade, com `require()`), o navegador não tem como "importar" pedaços de HTML — então a solução foi um **build step**: cada página/modal vive em `public/partials/`, a "casca" (head, topbar, sidebar, scripts) vive em `public/index.template.html` com marcadores `<!-- INCLUDE:nome.html -->`, e `build-index.js` monta o `index.html` final a partir dos dois. A reconstrução foi validada **byte a byte** (diff + checksum) contra o arquivo original antes de qualquer commit dessa mudança — zero risco de comportamento diferente no navegador.
+
+O bloco `<script>` inline foi extraído primeiro, separadamente, pra `public/js/app-core.js` — um `<script src="...">` executa exatamente na mesma ordem que um inline (sem `defer`/`async` em nenhum dos dois), então essa parte não precisou de build step nenhum.
+
+**Editar uma tela agora**: edite o partial correspondente em `public/partials/` (ou `app-core.js`, pro código compartilhado) — `npm start`/`npm run dev` já rodam o build de novo automaticamente. Pra ver o resultado sem reiniciar o servidor, `npm run build`. Nunca edite `public/index.html` direto, ele é sobrescrito no próximo build.
+
+
 
 ## Banco de Dados (SQLite)
 
@@ -118,7 +160,7 @@ A mais complexa, e a única que muda a FORMA dos dados, não só o lugar onde mo
 
 ### Migração concluída
 
-As 5 fases estão feitas — `public/db/` só guarda mais `config.json`, `security.json` e `operacao_andamento.json` (configuração/estado efêmero, nunca migrados de propósito). Tudo que crescia sem limite e tinha risco real de concorrência agora é SQLite. Ainda falta rodar isso de verdade no servidor de produção (`npm install` lá, já que o `better-sqlite3` não instala neste ambiente de desenvolvimento — ver "Limitação conhecida da instalação", acima) e confirmar a migração automática com os dados reais de produção.
+As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `operacao_andamento.json` (`security.json` saiu de `public/db/` numa mudança separada — ver *Autenticação e Sessão*, abaixo). Tudo que crescia sem limite e tinha risco real de concorrência agora é SQLite. Ainda falta rodar isso de verdade no servidor de produção (`npm install` lá, já que o `better-sqlite3` não instala neste ambiente de desenvolvimento — ver "Limitação conhecida da instalação", acima) e confirmar a migração automática com os dados reais de produção.
 
 **Atenção pra quem escrever as queries de total, na Fase 5**: `original + SUM(ajustes.campo)` só dá o valor certo com `COALESCE` dos **dois** lados — `COALESCE(original, 0) + COALESCE(SUM(ajustes.campo), 0)`. Sem o primeiro `COALESCE`, um traço cujo insumo nunca foi preenchido (`original` NULL) faz a soma inteira virar `NULL` (regra do SQL: `NULL + qualquer coisa = NULL`), mesmo tendo ajustes reais somados. Validado durante o desenvolvimento, com teste isolado, antes de chegar a valer pra alguma rota de verdade.
 
@@ -350,13 +392,15 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 
 | Rota | Método | Descrição |
 |---|---|---|
-| `/verificar-senha` | POST | Confirma senha do administrador |
-| `/verificar-recovery` | POST | Confirma chave de recuperação de senha |
-| `/gerar-hash` | POST | Gera hash SHA-256 de uma senha (uso interno/setup) |
+| `/verificar-senha` | POST | Confirma senha do administrador — emite sessão (cookie) se correta 🚦 |
+| `/verificar-recovery` | POST | Confirma chave de recuperação de senha — emite sessão (cookie) se válida 🚦 |
+| `/gerar-hash` | POST | Gera hash de uma senha no formato novo (scrypt — ver *Autenticação e Sessão*) |
 | `/total-tracos-hoje` | GET | Contador diário de traços 🧪 |
 | `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒🧪 |
 | `/salvar-config` | POST | Salva `config.json` |
-| `/salvar-security` | POST | Salva `security.json` (troca de senha) |
+| `/salvar-security` | POST | Salva `security.json` (troca de senha) 🔐 |
+| `/db/security.json` | GET | Lê `security.json` (ver *Autenticação e Sessão*) 🔐 |
+| `/logout-admin` | POST | Destrói a sessão de administrador atual |
 | `/registrar-operacao` | POST | Grava um registro em `historico.json` 🔒🧪 |
 | `/editar-operacao` | POST | Corrige um registro existente em `historico.json` + audita em `historico_edicoes.json` |
 | `/registrar-relatorio-injecao` | POST | Grava traços em `relatorio_injecao.json` 🔒🧪 |
@@ -371,16 +415,34 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
 | `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |
-| `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup |
-| `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup |
+| `/mesclar-backup-dados` | POST | Mescla traços/operações/paradas de um backup de OUTRA instalação (exige senha de admin, reverificada) |
+| `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup (exige senha de admin, reverificada) |
+| `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup (exige senha de admin, reverificada) |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
 
 - 🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada). Ignorado quando `?modoTeste=true`.
 - 🧪 = aceita `?modoTeste=true` — desvia a leitura/escrita pra `public/db/teste/` em vez de `public/db/` (ver *Modo de Teste*, acima).
+- 🔐 = exige sessão de Administrador válida (cookie — ver *Autenticação e Sessão*, abaixo). HTTP 403 sem ela.
+- 🚦 = protegido por rate limiting de tentativas (ver *Autenticação e Sessão*, abaixo). HTTP 429 se bloqueado.
+
+## Autenticação e Sessão
+
+A senha do Administrador é guardada com hash **scrypt** (nativo do Node — sem dependência nova), com salt aleatório por hash. Hashes antigos (SHA-256 puro, de antes desta mudança) continuam sendo aceitos na comparação e são promovidos automaticamente pro formato novo no primeiro acerto — sem exigir troca manual de senha.
+
+`/verificar-senha`, `/verificar-recovery`, `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` compartilham um rate limiting por IP: 5 tentativas erradas bloqueiam por 5 minutos (HTTP 429, com cabeçalho `Retry-After`). Em memória — reinicia o servidor e zera, mas é o suficiente pra fechar a porta de um script tentando senha atrás de senha sem limite.
+
+`security.json` (hash da senha + hash da chave de recuperação) mora em `private/`, **fora** de `public/` — antes desta mudança, vivia em `public/db/` e era servido como arquivo estático comum, sem proteção nenhuma (qualquer um que soubesse a URL acessava os hashes direto; e `/salvar-security` aceitava qualquer hash bem formatado, **sem verificar senha nenhuma** — bastava saber o formato pra assumir a conta). As duas brechas estão fechadas:
+
+- O arquivo físico não existe mais em `public/db/` (migração automática no boot, se uma instalação antiga ainda tiver o arquivo no lugar velho — renomeia, nunca apaga).
+- `GET /db/security.json` (mesma URL de sempre — o front continua usando ela) e `POST /salvar-security` agora exigem uma **sessão de Administrador** válida: um cookie `HttpOnly`, emitido depois de uma senha ou chave de recuperação confirmada com sucesso, válido por 30 minutos, destruído em `/logout-admin` (chamado automaticamente pelo botão de logout). Em memória, igual ao rate limiting.
+
+Essa sessão **não substitui** a re-verificação de senha das rotas de restauração/mesclagem (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade pra ações destrutivas). A sessão cobre especificamente as 2 rotas que não tinham proteção própria nenhuma antes.
+
+**Limitação conhecida**: ainda não há um conceito de sessão pra rotas administrativas em geral (config, backup) — continuam pedindo senha a cada chamada sensível, e a sessão acima é deliberadamente restrita a 2 rotas. Extender pra mais rotas é possível, mas não foi feito ainda.
 
 ## Limitações conhecidas
 
-- **Sem sessão real no servidor**: o controle de perfil é feito no navegador (`sessionStorage`); rotas administrativas sensíveis (config, backup, restauração) exigem senha re-verificada no servidor a cada chamada, mas não há um token de sessão — quem tiver a senha do admin pode chamar essas rotas diretamente.
-- `public/db/*.json` continuam sendo servidos como arquivos estáticos (ex: `/db/security.json` é acessível por URL direta). O hash da senha ali não é reversível, mas a exposição do arquivo em si não foi endurecida.
+- **Sessão real só pra 2 rotas**: `GET /db/security.json` e `POST /salvar-security` agora exigem sessão de Administrador (ver *Autenticação e Sessão*, acima) — mas o resto das rotas administrativas sensíveis (config, backup, restauração) continua exigindo senha re-verificada a cada chamada, sem token de sessão. Quem tiver a senha do admin ainda pode chamar essas outras rotas diretamente.
 - Backups de segurança (`backups-seguranca/`) não têm rotina de limpeza automática.
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
+- Testes automatizados (`test/`) cobrem só autenticação/sessão por enquanto — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste nenhum.

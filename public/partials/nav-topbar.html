@@ -1,0 +1,53 @@
+    <!-- ============ TOP BAR ============ -->
+    <header class="topbar">
+      <div class="sidebar-toggle-wrapper">
+        <button class="btn-sidebar-toggle" id="sidebar-toggle" title="Alternar Menu">
+          ☰
+        </button>
+      </div>
+      <div class="topbar-logo">⬡ Lightwall</div>
+      <div class="topbar-sub">Sistema de Injeção V1.0</div>
+
+      <span id="topbar-fila-pendentes" title="Operações salvas localmente, aguardando conexão para serem registradas de verdade"
+        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:rgba(245,158,11,.15);border:1px solid var(--accent-dim);color:var(--accent);font-size:.78rem;font-weight:600;white-space:nowrap">
+        📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
+      </span>
+
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="LWDebriefing.toggle(event)">
+          📓 Debriefing do Dia
+        </button>
+        <div id="popover-debriefing" class="ao-popover debriefing-popover">
+          <div class="debriefing-header">
+            <span class="debriefing-header-label">📓 Debriefing</span>
+            <input type="date" id="debriefing-data-input" class="debriefing-date-input" oninput="LWDebriefing.mudarData(this.value)">
+          </div>
+          <div class="debriefing-paper" id="debriefing-content">Carregando...</div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <span id="topbar-date"></span>
+        <span class="topbar-clock" id="topbar-clock">--:--:--</span>
+        <span id="topbar-role"
+          style="font-size:.7rem;color:var(--text-2);letter-spacing:.08em;text-transform:uppercase"></span>
+        <div class="theme-picker" id="theme-picker">
+          <button class="btn-theme" id="btn-tema" onclick="toggleTemaDropdown()" title="Escolher tema">
+            <span id="btn-tema-label">🌙 Tema</span>
+            <span class="theme-arrow" id="theme-arrow">▾</span>
+          </button>
+          <div class="theme-dropdown" id="theme-dropdown">
+            <div class="theme-dropdown-title">Escolher tema</div>
+          </div>
+        </div>
+        <button onclick="AdminAuth.logout()"
+          style="font-size:.7rem;padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer">
+          Sair
+        </button>
+        <button id="btn-config" data-admin-only onclick="abrirConfig()"
+          style="display:none;font-size:.7rem;padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer">
+          ⚙ Configurações
+        </button>
+      </div>
+    </header>
+

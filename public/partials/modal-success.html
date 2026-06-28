@@ -1,0 +1,52 @@
+  <!-- ============ SUCCESS MODAL ============ -->
+  <div id="success-modal" style="
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:999;align-items:center;justify-content:center
+">
+    <div style="
+    background:var(--bg-card);border:1px solid var(--border);
+    border-radius:var(--radius-lg);padding:36px;width:420px;max-width:90vw;
+    box-shadow:0 24px 80px rgba(0,0,0,.6)
+  ">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:3rem;margin-bottom:12px">✅</div>
+        <h2 id="success-modal-titulo" style="font-family:var(--font-display);font-size:1.6rem;color:var(--green)">Operação Registrada!</h2>
+        <p id="success-modal-subtitulo" style="display:none;color:var(--text-3);font-size:.82rem;margin:4px 0 0"></p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+        <div class="kpi-card" style="padding:14px">
+          <div class="kpi-label">Bateria</div>
+          <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--accent)"
+            id="modal-bateria">—</div>
+        </div>
+        <div class="kpi-card" style="padding:14px">
+          <div class="kpi-label">Duração</div>
+          <div style="font-family:var(--font-mono);font-size:1rem;color:var(--text);margin-top:4px" id="modal-tempo">—
+          </div>
+        </div>
+        <div class="kpi-card" style="padding:14px">
+          <div class="kpi-label">Painéis</div>
+          <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--text)"
+            id="modal-paineis">—</div>
+        </div>
+        <div class="kpi-card" style="padding:14px">
+          <div class="kpi-label">m² Produzido</div>
+          <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:var(--text)" id="modal-m2">
+            —</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:10px 14px;background:var(--bg-2);border-radius:var(--radius)">
+        <span style="color:var(--text-2);font-size:.85rem">🔓 Previsão de Desemplaque (cura de 8h):</span>
+        <strong id="modal-desemplaque" class="mono" style="color:var(--accent)">—</strong>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <span style="color:var(--text-2);font-size:.85rem">Atraso:</span>
+        <span id="modal-atraso"></span>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-success" style="flex:1" onclick="LWOp.closeModal()">Nova Operação</button>
+        <button class="btn btn-ghost" onclick="LWOp.closeModal();showPage('registro')">Ver Registro</button>
+      </div>
+    </div>
+  </div>
+

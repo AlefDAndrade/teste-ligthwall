@@ -23,9 +23,22 @@ const AdminAuth = (() => {
     BLOQUEIO_MS: 5 * 60 * 1000, // 5 minutos
   };
 
+  // ─── Estado do bloqueio de LOGIN (rate limit aplicado pelo SERVIDOR) ───────
+  // Diferente do _recuperacao acima (só client-side), bloqueadoAte aqui só
+  // existe DEPOIS que o servidor já respondeu 429 pelo menos uma vez —
+  // reflete um bloqueio de verdade (sobrevive a um F5; um F5 só reseta a
+  // contagem regressiva exibida, não a proteção real — ver server.js).
+  const _loginRateLimit = { bloqueadoAte: null };
+  let _timerBloqueioLogin = null;
+
   // ─── Verifica a senha no back-end ──────────────────────────────────────────
-  // Envia a senha em texto plano via HTTPS/HTTP para o servidor,
-  // que compara com o hash SHA-256 armazenado em security.json.
+  // Envia a senha em texto plano via HTTPS/HTTP para o servidor, que compara
+  // com o hash salvo em security.json (scrypt, com fallback pro formato
+  // antigo — ver server.js). Devolve um objeto, não só um booleano: o
+  // servidor também aplica rate limiting (5 tentativas erradas por IP
+  // bloqueiam por 5 min), que chega aqui como HTTP 429 + cabeçalho
+  // Retry-After — guardado em _loginRateLimit pra alimentar uma contagem
+  // regressiva real (ver _mostrarBloqueioLogin, abaixo).
   async function verificarSenha(senha) {
     try {
       const res = await fetch('/verificar-senha', {
@@ -33,13 +46,65 @@ const AdminAuth = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ senha }),
       });
-      if (!res.ok) return false;
+      if (res.status === 429) {
+        const segundos = Number(res.headers.get('Retry-After')) || (5 * 60);
+        _loginRateLimit.bloqueadoAte = Date.now() + segundos * 1000;
+        return { ok: false, bloqueado: true };
+      }
+      if (!res.ok) return { ok: false, bloqueado: false };
       const data = await res.json();
-      return data.ok === true;
+      return { ok: data.ok === true, bloqueado: false };
     } catch (_) {
-      return false;
+      return { ok: false, bloqueado: false };
     }
   }
+
+  function _loginEstaBloqueado() {
+    if (!_loginRateLimit.bloqueadoAte) return false;
+    if (Date.now() < _loginRateLimit.bloqueadoAte) return true;
+    _loginRateLimit.bloqueadoAte = null;
+    return false;
+  }
+
+  function _loginTempoRestante() {
+    if (!_loginRateLimit.bloqueadoAte) return '';
+    const ms = _loginRateLimit.bloqueadoAte - Date.now();
+    if (ms <= 0) return '';
+    const min = Math.floor(ms / 60000);
+    const seg = Math.floor((ms % 60000) / 1000);
+    return `${min}m ${seg.toString().padStart(2, '0')}s`;
+  }
+
+  // Mostra (e mantém atualizada, a cada segundo) a mensagem de bloqueio no
+  // modal de login — desabilita campo e botão até o tempo acabar. Função
+  // module-level (não fica dentro de _bindEventos) pra poder ser chamada
+  // também por abrirModal(), caso o modal seja reaberto ainda bloqueado.
+  function _mostrarBloqueioLogin() {
+    const erroEl     = document.getElementById('admin-auth-erro');
+    const btnEntrar  = document.getElementById('admin-auth-btn-entrar');
+    const senhaInput = document.getElementById('admin-auth-senha');
+    if (!erroEl || !btnEntrar || !senhaInput) return; // modal ainda não foi criado
+
+    if (_timerBloqueioLogin) clearInterval(_timerBloqueioLogin);
+
+    function _atualizar() {
+      if (!_loginEstaBloqueado()) {
+        clearInterval(_timerBloqueioLogin);
+        erroEl.style.display = 'none';
+        senhaInput.disabled  = false;
+        btnEntrar.disabled   = false;
+        return;
+      }
+      senhaInput.disabled  = true;
+      btnEntrar.disabled   = true;
+      erroEl.textContent   = `🔒 Muitas tentativas erradas. Aguarde ${_loginTempoRestante()} para tentar de novo.`;
+      erroEl.style.display = 'block';
+    }
+
+    _atualizar();
+    _timerBloqueioLogin = setInterval(_atualizar, 1000);
+  }
+
 
   // ─── Verifica arquivo de recuperação no back-end ───────────────────────────
   async function _validarArquivoRecuperacao(conteudo) {
@@ -82,6 +147,10 @@ const AdminAuth = (() => {
 
   // ─── Remove autenticação (logout) ──────────────────────────────────────────
   function logout() {
+    // Best-effort: avisa o servidor pra destruir a sessão (ver lib/sessao.js
+    // e server.js) — não espera a resposta, pra não atrasar o logout se a
+    // rede estiver lenta/fora; mesmo sem isso, a sessão expira sozinha.
+    fetch('/logout-admin', { method: 'POST' }).catch(() => {});
     localStorage.removeItem(LS_KEY);
     sessionStorage.clear();
     window.location.href = 'login.html';
@@ -315,25 +384,33 @@ const AdminAuth = (() => {
     }
 
     async function _tentarLogin() {
+      // Já sabemos (de uma tentativa anterior) que o servidor está
+      // bloqueando — nem manda a senha de novo, só mostra a contagem.
+      if (_loginEstaBloqueado()) { _mostrarBloqueioLogin(); return; }
+
       const senha = senhaInput.value;
       erroEl.style.display = 'none';
 
       btnEntrar.textContent = '…';
       btnEntrar.disabled = true;
 
-      const ok = await verificarSenha(senha);
+      const resultado = await verificarSenha(senha);
 
       btnEntrar.textContent = 'Entrar';
       btnEntrar.disabled = false;
 
-      if (ok) {
+      if (resultado.ok) {
         _salvarSessao();
         fecharModal();
         AdminAuth._onCancel = null; // autenticou — não é mais uma "recusa" se o modal fechar de novo depois
         if (typeof AdminAuth._onSuccess === 'function') {
           AdminAuth._onSuccess();
         }
+      } else if (resultado.bloqueado) {
+        senhaInput.value = '';
+        _mostrarBloqueioLogin();
       } else {
+        erroEl.textContent = 'Senha incorreta.';
         erroEl.style.display = 'block';
         senhaInput.value = '';
         senhaInput.focus();
@@ -357,10 +434,16 @@ const AdminAuth = (() => {
     const senhaEl = document.getElementById('admin-auth-senha');
 
     erroEl.style.display = 'none';
-    senhaEl.value        = '';
+    senhaEl.value         = '';
+    senhaEl.disabled      = false;
 
     overlay.style.display = 'flex';
-    setTimeout(() => senhaEl.focus(), 60);
+
+    if (_loginEstaBloqueado()) {
+      _mostrarBloqueioLogin();
+    } else {
+      setTimeout(() => senhaEl.focus(), 60);
+    }
   }
 
   // ─── Fecha o modal de login ────────────────────────────────────────────────

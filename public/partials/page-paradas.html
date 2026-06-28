@@ -1,0 +1,154 @@
+    <!-- ============ PAGE: PARADAS ============ -->
+    <main class="main" id="page-paradas">
+      <div class="page-header">
+        <h1 class="page-title">Registro de <span>Paradas</span></h1>
+        <p class="page-desc">Controle de interrupções da produção — disponibilidade e análise de perdas</p>
+      </div>
+      <div class="page-body">
+
+        <!-- Toast -->
+        <div id="parada-toast" class="parada-toast" style="display:none"></div>
+
+        <!-- Layout: formulário + KPIs -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;align-items:start">
+
+          <!-- Formulário de registro -->
+          <div class="card" id="parada-form-card" style="padding:20px 24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+              <h2 id="parada-form-title" style="font-family:var(--font-display);font-size:1.1rem;color:var(--accent);letter-spacing:.06em">＋ Nova Parada</h2>
+              <button id="btn-cancelar-edicao-parada" class="btn btn-ghost btn-sm" style="display:none" onclick="LWParadas.cancelarEdicao()">✕ Cancelar edição</button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Início da Parada</label>
+                <input class="form-input" type="datetime-local" id="parada-inicio">
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">Término da Parada</label>
+                <input class="form-input" type="datetime-local" id="parada-fim">
+              </div>
+            </div>
+
+            <div style="margin-bottom:12px;padding:8px 12px;background:var(--bg-2);border-radius:var(--radius);font-size:.82rem;color:var(--text-2)">
+              ⏱ Duração: <strong id="parada-duracao-preview" style="color:var(--text)">—</strong>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">Motivo da Parada</label>
+              <select class="form-input" id="parada-motivo"></select>
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">Equipamento Afetado</label>
+              <input class="form-input" type="text" id="parada-equipamento" placeholder="Ex: Bomba 01, Misturador, Esteira...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">Classificação</label>
+              <select class="form-input" id="parada-classificacao"></select>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px">
+              <label class="form-label">Observações</label>
+              <textarea class="form-input" id="parada-obs" rows="2" placeholder="Detalhes adicionais sobre a parada..." style="resize:vertical;min-height:52px"></textarea>
+            </div>
+
+            <button class="btn btn-primary" id="btn-salvar-parada" style="width:100%" onclick="LWParadas.salvarFormParada()">✓ Salvar Parada</button>
+          </div>
+
+          <!-- KPIs -->
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="kpi-card">
+                <div class="kpi-label">Total de Paradas</div>
+                <div class="kpi-value" id="parada-kpi-total">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">no período filtrado</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Tempo Perdido</div>
+                <div class="kpi-value" id="parada-kpi-tempo">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">total acumulado</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Planejadas</div>
+                <div class="kpi-value" id="parada-kpi-planejadas" style="color:var(--blue)">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">manutenção, setup etc.</div>
+              </div>
+              <div class="kpi-card" style="border-color:var(--red-dim)">
+                <div class="kpi-label">Não Planejadas</div>
+                <div class="kpi-value" id="parada-kpi-nao-planejadas" style="color:var(--red)">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">falhas e emergências</div>
+              </div>
+            </div>
+
+            <!-- Gráfico por motivo -->
+            <div class="card" style="padding:16px 20px">
+              <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:10px">Tempo perdido por motivo (min)</div>
+              <canvas id="paradas-chart-motivo" style="width:100%;display:block"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráfico de tendência -->
+        <div class="card mb-4" style="padding:16px 20px;margin-bottom:20px">
+          <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:10px">Paradas por dia (quantidade)</div>
+          <canvas id="paradas-chart-tendencia" style="width:100%;height:180px;display:block"></canvas>
+        </div>
+
+        <!-- Filtros -->
+        <div class="card mb-4" style="padding:16px 20px;margin-bottom:16px">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Início</label>
+              <input class="form-input" type="date" id="paradas-filtro-inicio" style="height:34px;font-size:.84rem;padding:5px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Fim</label>
+              <input class="form-input" type="date" id="paradas-filtro-fim" style="height:34px;font-size:.84rem;padding:5px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Classificação</label>
+              <select class="form-input" id="paradas-filtro-class" style="height:34px;font-size:.84rem;padding:5px 10px">
+                <option value="">Todas</option>
+                <option>Planejada</option>
+                <option>Não Planejada</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Motivo</label>
+              <select class="form-input" id="paradas-filtro-motivo" style="height:34px;font-size:.84rem;padding:5px 10px;min-width:180px"></select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Equipamento</label>
+              <input class="form-input" type="text" id="paradas-filtro-equip" placeholder="buscar..." style="height:34px;font-size:.84rem;padding:5px 10px;width:140px">
+            </div>
+            <button class="btn btn-primary" style="height:34px" onclick="LWParadas.aplicarFiltros()">Filtrar</button>
+            <button class="btn btn-ghost" style="height:34px" onclick="LWParadas.limparFiltros()">Limpar</button>
+          </div>
+        </div>
+
+        <!-- Tabela de paradas -->
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:.84rem">
+              <thead>
+                <tr style="background:var(--bg-2);border-bottom:1px solid var(--border)">
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3);white-space:nowrap">INÍCIO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3);white-space:nowrap">TÉRMINO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3)">DURAÇÃO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3)">MOTIVO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3)">EQUIPAMENTO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3)">CLASSIFICAÇÃO</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:var(--font-display);font-size:.75rem;letter-spacing:.06em;color:var(--text-3)">AÇÕES</th>
+                </tr>
+              </thead>
+              <tbody id="paradas-tbody">
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-3)">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- .page-body -->
+    </main><!-- #page-paradas -->

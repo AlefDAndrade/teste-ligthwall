@@ -1,7 +1,6 @@
 const http      = require('http');
 const fs        = require('fs');
 const path      = require('path');
-const crypto    = require('crypto');
 const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
@@ -19,10 +18,54 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
-const PORT = 5001;
+const PORT = process.env.PORT || 3000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
+
+// ─── security.json mora FORA de public/ ────────────────────────────────────
+// Antes, security.json vivia em public/db/ — e por isso era servido como
+// arquivo estático comum (GET /db/security.json acessível por qualquer um,
+// sem senha nenhuma; ver README, "Limitações conhecidas"). Agora mora em
+// private/ (irmã de public/, nunca servida como estático — mesmo padrão já
+// usado por backups-seguranca/ e logs/). O acesso por HTTP passa a exigir
+// uma sessão de admin válida (ver GET /db/security.json e lib/sessao.js,
+// mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
+const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
+const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
+fs.mkdirSync(PRIVATE_DIR, { recursive: true });
+
+// Migração automática, só na 1ª vez que sobe depois desta mudança: se o
+// arquivo antigo (public/db/security.json) ainda existir e o novo ainda
+// não, copia o conteúdo pro novo lugar e RENOMEIA o antigo (nunca apaga —
+// mesmo padrão das migrações de db.js, que preferem deixar um rastro
+// "<nome>.migrado-<timestamp>" a apagar dados).
+(function migrarSecurityJsonSeNecessario() {
+  const caminhoAntigo = path.join(DB_DIR, 'security.json');
+  if (fs.existsSync(SECURITY_PATH)) return; // já migrado
+  if (!fs.existsSync(caminhoAntigo)) return; // instalação nova — nada pra migrar
+  fs.copyFileSync(caminhoAntigo, SECURITY_PATH);
+  fs.renameSync(caminhoAntigo, caminhoAntigo + `.migrado-${Date.now()}`);
+})();
+
+// Autenticação do Administrador (hash de senha + rate limiting de
+// tentativas) — extraído pra lib/auth.js (ver esse arquivo pros detalhes
+// e comentários originais; aqui só instanciamos e usamos).
+const auth = require('./lib/auth.js')(SECURITY_PATH);
+
+// Sessão de Administrador (token em cookie HttpOnly) — extraído pra
+// lib/sessao.js. Cobre as 2 rotas que não tinham proteção própria nenhuma
+// antes desta mudança: GET /db/security.json e POST /salvar-security.
+const sessao = require('./lib/sessao.js')();
+
+// Resolve o caminho real, no disco, de um arquivo de public/db/ — quase
+// todos vivem em DB_DIR, mas security.json é a única exceção (ver
+// PRIVATE_DIR/SECURITY_PATH, acima). Centralizar essa decisão aqui evita
+// ter que repetir o "if (nome === 'security.json')" em cada rota de
+// backup/restauração que itera a lista de arquivos genericamente.
+function caminhoArquivoDb(nome) {
+  return nome === 'security.json' ? SECURITY_PATH : path.join(DB_DIR, nome);
+}
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -133,23 +176,6 @@ function incrementarContadorTracosHoje(quantidade, modoTesteFlag = false) {
   return lerContadorTracosHoje(false);
 }
 
-// ─── Utilitário: hash SHA-256 no servidor (Node.js crypto nativo) ──────────
-function sha256(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-// ─── Lê security.json do disco ────────────────────────────────────────────
-const HASH_FALLBACK = 'c415e920e0281339d3633ab0c19d3b11c5a70a52ad2e17e405ef66723c51294c';
-
-function lerSecurity() {
-  const securityPath = path.join(DB_DIR, 'security.json');
-  try {
-    return JSON.parse(fs.readFileSync(securityPath, 'utf8'));
-  } catch (_) {
-    return { passwordHash: HASH_FALLBACK, recoveryKeyHash: null };
-  }
-}
-
 // ─── Validação de formato dos arquivos de public/db/ — usada ao restaurar
 // um backup, pra recusar arquivo errado/corrompido antes de gravar no disco.
 const VALIDADORES_BACKUP_DADOS = {
@@ -242,7 +268,7 @@ async function gerarZipDadosServidor() {
         const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
         zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
       } else {
-        zip.file(nome, fs.readFileSync(path.join(DB_DIR, nome)));
+        zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
     } catch (_) {
       // Arquivo/tabela pode não existir/estar vazia ainda — ok, só não entra no zip.
@@ -460,262 +486,6 @@ function negarDispositivoNaoAutorizado(res) {
   }));
 }
 
-// ─── COPILOTO IA (Fase 1 — só leitura) ──────────────────────────────────────
-// Chat com IA (Claude, via API da Anthropic) que responde perguntas sobre os
-// dados REAIS do sistema, usando "tools" (function calling): o modelo nunca
-// inventa números, ele só pode responder com o que as ferramentas abaixo
-// devolverem. De propósito, NENHUMA ferramenta cria/edita/apaga nada — fase
-// só de leitura (ver conversa que definiu o plano: fácil → médio → difícil).
-//
-// A chave da API (ANTHROPIC_API_KEY) só existe aqui no servidor — nunca é
-// enviada pro navegador. Configure como variável de ambiente antes de
-// iniciar o servidor, ex:
-//   ANTHROPIC_API_KEY=sk-ant-... node server.js
-// Pra trocar de modelo sem editar código, defina também (opcional):
-//   ANTHROPIC_COPILOTO_MODEL=claude-sonnet-4-6
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-// Haiku por padrão: perguntas de chão de fábrica são simples (são só
-// consultas com filtro), então um modelo mais rápido/barato já basta —
-// troque pra um Sonnet via env var acima se quiser respostas mais elaboradas.
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_COPILOTO_MODEL || 'claude-haiku-4-5-20251001';
-const ANTHROPIC_MAX_TOOL_ROUNDS = 5; // limite de idas-e-voltas de ferramenta por pergunta — nunca loop sem fim
-
-const COPILOTO_TOOLS = [
-  {
-    name: 'resumo_producao_periodo',
-    description: 'Resumo agregado de produção num período: quantidade de baterias, traços, painéis, m² e paradas. Use pra perguntas como "quanto produzimos hoje/essa semana".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        data_inicio: { type: 'string', description: 'Data inicial, formato YYYY-MM-DD. Se omitido, usa a data de hoje.' },
-        data_fim: { type: 'string', description: 'Data final, formato YYYY-MM-DD. Se omitido, usa a data de hoje.' },
-      },
-    },
-  },
-  {
-    name: 'buscar_baterias',
-    description: 'Lista operações (baterias) registradas, com filtros opcionais. Use pra perguntas sobre baterias específicas, atrasos ou histórico de produção.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        data: { type: 'string', description: 'Filtra por uma data exata, formato YYYY-MM-DD.' },
-        id_bateria: { type: 'string', description: 'Filtra por ID da bateria, ex: B14.' },
-        turno: { type: 'string', description: 'Filtra por turno, ex: "1º TURNO".' },
-        apenas_com_atraso: { type: 'boolean', description: 'Se true, retorna só operações com atraso registrado.' },
-        limite: { type: 'integer', description: 'Máximo de resultados (padrão 20, máximo 100).' },
-      },
-    },
-  },
-  {
-    name: 'buscar_tracos',
-    description: 'Lista traços (Relatório de Injeção), com os valores já TOTALIZADOS (original + ajustes de receita aplicados). Use pra perguntas sobre receitas, ajustes ou qualidade de traços específicos.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        data: { type: 'string', description: 'Filtra por uma data exata, formato YYYY-MM-DD.' },
-        num_traco: { type: 'integer', description: 'Filtra por número do traço naquele dia.' },
-        id_bateria: { type: 'string', description: 'Filtra por traços usados nesta bateria.' },
-        limite: { type: 'integer', description: 'Máximo de resultados (padrão 20, máximo 100).' },
-      },
-    },
-  },
-  {
-    name: 'consultar_paradas',
-    description: 'Lista paradas de produção registradas num período, com motivo, equipamento e duração. Use pra perguntas sobre paradas, manutenção ou tempo parado.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        data_inicio: { type: 'string', description: 'Data/hora inicial (YYYY-MM-DD ou ISO completo). Se omitido, usa as últimas 24h.' },
-        data_fim: { type: 'string', description: 'Data/hora final (YYYY-MM-DD ou ISO completo). Se omitido, usa agora.' },
-        limite: { type: 'integer', description: 'Máximo de resultados (padrão 20, máximo 100).' },
-      },
-    },
-  },
-  {
-    name: 'operacao_em_andamento',
-    description: 'Status da operação rodando AGORA no chão de fábrica (se houver alguma). Use pra perguntas como "o que está rodando agora" ou "tem operação em andamento".',
-    input_schema: { type: 'object', properties: {} },
-  },
-];
-
-function _copilotoClamp(n, padrao, max) {
-  const v = parseInt(n);
-  if (!Number.isFinite(v) || v <= 0) return padrao;
-  return Math.min(v, max);
-}
-
-/** Executa 1 ferramenta do Copiloto (todas só-leitura) e devolve um objeto plano (vira JSON no tool_result). */
-function copilotoExecutarFerramenta(nome, input) {
-  input = input || {};
-  switch (nome) {
-    case 'resumo_producao_periodo': {
-      const hoje = todayBrasiliaServer();
-      const ini = input.data_inicio || hoje;
-      const fim = input.data_fim || hoje;
-      const prod = db.prepare(`
-        SELECT COUNT(*) AS qtd_baterias, COALESCE(SUM(qtd_tracos),0) AS qtd_tracos,
-               COALESCE(SUM(total_paineis),0) AS total_paineis, COALESCE(SUM(m2_total),0) AS m2_total
-        FROM operacoes WHERE data BETWEEN @ini AND @fim AND modo_teste = 0
-      `).get({ ini, fim });
-      const paradas = db.prepare(`
-        SELECT COUNT(*) AS qtd_paradas, COALESCE(SUM(duracao_min),0) AS duracao_total_min
-        FROM paradas WHERE substr(inicio,1,10) BETWEEN @ini AND @fim
-      `).get({ ini, fim });
-      return { periodo: { de: ini, ate: fim }, ...prod, ...paradas };
-    }
-
-    case 'buscar_baterias': {
-      const limite = _copilotoClamp(input.limite, 20, 100);
-      const rows = db.prepare(`
-        SELECT id, data, turno, id_bateria, dimensao, tipo_montagem, inicio, fim,
-               qtd_tracos, total_paineis, m2_total, houve_atraso, motivo_atraso
-        FROM operacoes
-        WHERE modo_teste = 0
-          AND (@data IS NULL OR data = @data)
-          AND (@id_bateria IS NULL OR id_bateria = @id_bateria)
-          AND (@turno IS NULL OR turno = @turno)
-          AND (@apenas_atraso = 0 OR houve_atraso = 'Sim')
-        ORDER BY data DESC, inicio DESC
-        LIMIT @limite
-      `).all({
-        data: input.data || null,
-        id_bateria: input.id_bateria || null,
-        turno: input.turno || null,
-        apenas_atraso: input.apenas_com_atraso ? 1 : 0,
-        limite,
-      });
-      return { total_encontrado: rows.length, baterias: rows };
-    }
-
-    case 'buscar_tracos': {
-      const limite = _copilotoClamp(input.limite, 20, 100);
-      const numTraco = parseInt(input.num_traco);
-      const rows = db.prepare(`
-        SELECT t.id_traco, t.data, t.turno, t.num_traco,
-          ROUND(COALESCE(t.cimento_original,0) + COALESCE((SELECT SUM(cimento) FROM ajustes WHERE id_traco=t.id_traco),0), 2) AS cimento_kg,
-          ROUND(COALESCE(t.agua_original,0) + COALESCE((SELECT SUM(agua) FROM ajustes WHERE id_traco=t.id_traco),0), 2) AS agua_kg,
-          ROUND((COALESCE(t.tempo_batida_original,0) + COALESCE((SELECT SUM(tempo_batida)*60 FROM ajustes WHERE id_traco=t.id_traco),0)) / 60.0, 1) AS tempo_batida_min,
-          COALESCE((SELECT valor FROM leituras_resultado WHERE id_traco=t.id_traco AND campo='densidade' ORDER BY ordem DESC LIMIT 1), t.densidade_original) AS densidade,
-          COALESCE((SELECT valor FROM leituras_resultado WHERE id_traco=t.id_traco AND campo='flow' ORDER BY ordem DESC LIMIT 1), t.flow_original) AS flow,
-          (SELECT GROUP_CONCAT(DISTINCT id_bateria) FROM traco_usos WHERE id_traco=t.id_traco) AS baterias_onde_foi_usado
-        FROM tracos t
-        WHERE (@data IS NULL OR t.data = @data)
-          AND (@num_traco IS NULL OR t.num_traco = @num_traco)
-          AND (@id_bateria IS NULL OR EXISTS (SELECT 1 FROM traco_usos WHERE id_traco=t.id_traco AND id_bateria=@id_bateria))
-        ORDER BY t.data DESC, t.num_traco DESC
-        LIMIT @limite
-      `).all({
-        data: input.data || null,
-        num_traco: Number.isFinite(numTraco) ? numTraco : null,
-        id_bateria: input.id_bateria || null,
-        limite,
-      });
-      return { total_encontrado: rows.length, tracos: rows };
-    }
-
-    case 'consultar_paradas': {
-      const limite = _copilotoClamp(input.limite, 20, 100);
-      const agora = new Date().toISOString();
-      const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const rows = db.prepare(`
-        SELECT id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs
-        FROM paradas
-        WHERE inicio >= @ini AND inicio <= @fim
-        ORDER BY inicio DESC
-        LIMIT @limite
-      `).all({ ini: input.data_inicio || ontem, fim: input.data_fim || agora, limite });
-      return { total_encontrado: rows.length, paradas: rows };
-    }
-
-    case 'operacao_em_andamento': {
-      const op = lerOperacaoAndamento();
-      if (!op) return { rodando: false, mensagem: 'Nenhuma operação em andamento agora.' };
-      return {
-        rodando: true,
-        status: op.status, turno: op.turno, dimensao: op.dimensao, tipo_montagem: op.tipo_montagem,
-        id_bateria: op.id_bateria, bercos_reais: op.bercos_reais, inicio: op.inicio,
-        qtd_tracos: Array.isArray(op.tracos) ? op.tracos.length : 0, modo_teste: !!op.modo_teste,
-      };
-    }
-
-    default:
-      return { erro: `Ferramenta desconhecida: ${nome}` };
-  }
-}
-
-/** 1 chamada à API de Mensagens da Anthropic. Lança erro se a chave não estiver configurada ou se a API recusar. */
-async function copilotoChamarAnthropic(messages, system) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY não configurada no servidor — defina essa variável de ambiente antes de iniciar.');
-  }
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: 1024, system, messages, tools: COPILOTO_TOOLS }),
-  });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data?.error?.message || `Erro ${resp.status} na API da Anthropic.`);
-  return data;
-}
-
-/**
- * Roda o loop completo de tool-use: manda a conversa pra Claude, executa
- * qualquer ferramenta que ele pedir, manda o resultado de volta, repete —
- * até ele responder com texto final (sem pedir mais ferramentas) ou até
- * o limite de rodadas (ANTHROPIC_MAX_TOOL_ROUNDS, evita custo/loop sem fim).
- */
-async function copilotoResponder(mensagensCliente) {
-  const hoje = todayBrasiliaServer();
-  const system = 'Você é o copiloto do sistema Lightwall SC (injeção de baterias EPS). ' +
-    `Hoje é ${hoje} (fuso de Brasília). Responda em português, de forma direta e curta — ` +
-    'está sendo usado por operadores no chão de fábrica, então evite parágrafos longos. ' +
-    'SEMPRE use as ferramentas disponíveis pra responder qualquer pergunta sobre dados de produção — ' +
-    'nunca invente números. Se a pergunta não tiver relação com produção/operação da fábrica, diga ' +
-    'educadamente que você só responde sobre os dados deste sistema. Você é SOMENTE LEITURA: não pode ' +
-    'nem finge poder registrar, editar ou apagar nada — se pedirem isso, explique que ainda não tem essa ' +
-    'permissão e oriente a fazer pela tela normal do sistema.';
-
-  // Só as últimas 20 mensagens de texto do cliente — não deixa o contexto
-  // (nem o custo) crescer sem limite numa conversa longa.
-  const messages = mensagensCliente.slice(-20).map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: String(m.content || '').slice(0, 4000),
-  }));
-
-  const ferramentasUsadas = [];
-
-  for (let rodada = 0; rodada < ANTHROPIC_MAX_TOOL_ROUNDS; rodada++) {
-    const data = await copilotoChamarAnthropic(messages, system);
-
-    if (data.stop_reason !== 'tool_use') {
-      const texto = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-      return { resposta: texto || '(sem resposta)', ferramentasUsadas };
-    }
-
-    // Acrescenta a resposta do assistant (com os tool_use) e executa cada
-    // ferramenta pedida, devolvendo o resultado num próximo turno "user".
-    messages.push({ role: 'assistant', content: data.content });
-    const toolResults = [];
-    for (const bloco of data.content) {
-      if (bloco.type !== 'tool_use') continue;
-      let resultado;
-      try {
-        resultado = copilotoExecutarFerramenta(bloco.name, bloco.input);
-      } catch (e) {
-        resultado = { erro: e.message };
-      }
-      ferramentasUsadas.push({ nome: bloco.name, entrada: bloco.input });
-      toolResults.push({ type: 'tool_result', tool_use_id: bloco.id, content: JSON.stringify(resultado) });
-    }
-    messages.push({ role: 'user', content: toolResults });
-  }
-
-  return {
-    resposta: 'Não consegui terminar de responder (limite de consultas internas atingido) — tente reformular a pergunta de forma mais específica.',
-    ferramentasUsadas,
-  };
-}
-
 const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
@@ -732,18 +502,37 @@ const server = http.createServer((req, res) => {
   // POST /verificar-senha  { senha: "texto plano" }
   // Retorna { ok: true } se correta, { ok: false } se incorreta.
   // A senha nunca é logada — apenas comparada com o hash em security.json.
+  // Protegida por rate limiting (ver validarSegredo/rateLimit*, acima):
+  // depois de muitas tentativas erradas do mesmo IP, responde 429 em vez
+  // de continuar testando a senha enviada.
   if (req.method === 'POST' && urlPath === '/verificar-senha') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          const segundos = auth.rateLimitSegundosRestantes(req);
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(segundos) });
+          res.end(JSON.stringify({ ok: false, erro: `Muitas tentativas erradas. Tente de novo em ${Math.ceil(segundos / 60)} min.` }));
+          return;
+        }
         const { senha } = JSON.parse(body);
         if (typeof senha !== 'string') throw new Error('Payload inválido.');
-        const security = lerSecurity();
-        const hashEnviado = sha256(senha);
-        const hashEsperado = security.passwordHash || HASH_FALLBACK;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: hashEnviado === hashEsperado }));
+        const security = auth.lerSecurity();
+        const hashEsperado = security.passwordHash || auth.HASH_FALLBACK;
+        const ok = auth.validarSegredo(senha, hashEsperado, 'passwordHash');
+        const headers = { 'Content-Type': 'application/json' };
+        if (ok) {
+          auth.rateLimitRegistrarSucesso(req);
+          // Emite sessão (ver lib/sessao.js) — usada por GET /db/security.json
+          // e POST /salvar-security, que não tinham proteção própria nenhuma
+          // antes desta mudança.
+          headers['Set-Cookie'] = sessao.criarCookieSessao();
+        } else {
+          auth.rateLimitRegistrarFalha(req);
+        }
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ ok }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -754,23 +543,41 @@ const server = http.createServer((req, res) => {
 
   // ── NOVO: Verificar arquivo de recuperação no servidor ────────────────────
   // POST /verificar-recovery  { chave: "conteudo do .key" }
-  // Retorna { ok: true } se válido.
+  // Retorna { ok: true } se válido. Mesmo rate limiting de /verificar-senha
+  // (contador compartilhado por IP — ver rateLimit*, acima).
   if (req.method === 'POST' && urlPath === '/verificar-recovery') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          const segundos = auth.rateLimitSegundosRestantes(req);
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(segundos) });
+          res.end(JSON.stringify({ ok: false, erro: `Muitas tentativas erradas. Tente de novo em ${Math.ceil(segundos / 60)} min.` }));
+          return;
+        }
         const { chave } = JSON.parse(body);
         if (typeof chave !== 'string') throw new Error('Payload inválido.');
-        const security = lerSecurity();
+        const security = auth.lerSecurity();
         if (!security.recoveryKeyHash) {
+          auth.rateLimitRegistrarFalha(req);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false }));
           return;
         }
-        const hashEnviado = sha256(chave.trim());
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: hashEnviado === security.recoveryKeyHash }));
+        const ok = auth.validarSegredo(chave.trim(), security.recoveryKeyHash, 'recoveryKeyHash');
+        const headers = { 'Content-Type': 'application/json' };
+        if (ok) {
+          auth.rateLimitRegistrarSucesso(req);
+          // Mesma sessão de /verificar-senha — é o que permite o fluxo de
+          // recuperação chamar POST /salvar-security depois (ver
+          // admin-auth.js, _salvarNovaSenha) sem precisar reenviar a chave.
+          headers['Set-Cookie'] = sessao.criarCookieSessao();
+        } else {
+          auth.rateLimitRegistrarFalha(req);
+        }
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ ok }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -781,7 +588,9 @@ const server = http.createServer((req, res) => {
 
   // ── NOVO: Gerar hash de uma senha no servidor ──────────────────────────────
   // POST /gerar-hash  { senha: "texto plano" }
-  // Retorna { hash: "hex64" } — usado ao redefinir senha via recuperação.
+  // Retorna { hash: "scrypt:salt:hash" } — usado ao redefinir senha via
+  // recuperação ou troca normal de senha (ver admin-auth.js). Antes gerava
+  // SHA-256 puro; agora sempre gera no formato novo (scrypt com salt).
   if (req.method === 'POST' && urlPath === '/gerar-hash') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -790,7 +599,7 @@ const server = http.createServer((req, res) => {
         const { senha } = JSON.parse(body);
         if (typeof senha !== 'string') throw new Error('Payload inválido.');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ hash: sha256(senha) }));
+        res.end(JSON.stringify({ hash: auth.gerarHashSenha(senha) }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -854,21 +663,35 @@ const server = http.createServer((req, res) => {
   }
 
   // Salvar security.json via POST
+  // ── IMPORTANTE: antes desta mudança, esta rota não exigia senha NEM
+  // sessão — bastava mandar um hash no formato certo pra sobrescrever a
+  // senha do Administrador sem precisar saber a senha atual. Agora exige
+  // uma sessão válida (ver lib/sessao.js), criada em /verificar-senha ou
+  // /verificar-recovery — as duas formas de chegar até aqui legitimamente
+  // (troca de senha via recuperação é o único fluxo que usa esta rota
+  // hoje, ver admin-auth.js, _salvarNovaSenha).
   if (req.method === 'POST' && urlPath === '/salvar-security') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const hexRE = /^[0-9a-f]{64}$/;
-        if (
-          typeof payload.passwordHash    !== 'string' || !hexRE.test(payload.passwordHash) ||
-          typeof payload.recoveryKeyHash !== 'string' || !hexRE.test(payload.recoveryKeyHash)
-        ) {
-          throw new Error('Payload inválido: hashes SHA-256 esperados.');
+        // Aceita tanto o formato novo ("scrypt:salt:hash", gerado por
+        // /gerar-hash a partir desta mudança) quanto o formato legado
+        // (SHA-256 puro, 64 hex) — necessário porque, ao trocar só a
+        // senha, o front reenvia o recoveryKeyHash ATUAL sem alterar (ver
+        // admin-auth.js, _salvarNovaSenha), que pode ainda estar no
+        // formato antigo se a chave de recuperação nunca foi regerada.
+        // Validação centralizada em lib/auth.js (auth.formatoDeHashValido).
+        if (!auth.formatoDeHashValido(payload.passwordHash) || !auth.formatoDeHashValido(payload.recoveryKeyHash)) {
+          throw new Error('Payload inválido: hash de senha em formato inesperado.');
         }
-        const securityPath = path.join(DB_DIR, 'security.json');
-        fs.writeFileSync(securityPath, JSON.stringify({
+        fs.writeFileSync(SECURITY_PATH, JSON.stringify({
           passwordHash:    payload.passwordHash,
           recoveryKeyHash: payload.recoveryKeyHash,
         }, null, 2), 'utf8');
@@ -879,6 +702,45 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
     });
+    return;
+  }
+
+  // ── GET /db/security.json: ANTES desta mudança, era servido como arquivo
+  // estático comum (qualquer um podia acessar /db/security.json direto,
+  // sem senha — ver README, "Limitações conhecidas"). O arquivo de verdade
+  // já não vive mais em public/ (ver SECURITY_PATH) — então essa URL só
+  // funciona se vier com sessão válida (ver lib/sessao.js). É a mesma URL
+  // de sempre porque dois lugares no front ainda fazem fetch('db/security.json')
+  // direto: admin-auth.js (pra preservar o recoveryKeyHash atual ao trocar
+  // de senha) e data.js (LW.gerarBackupDados(), pro "Backup de Dados").
+  // Os dois só rodam depois de uma senha/chave de recuperação confirmada,
+  // então a sessão já existe nesse ponto — nenhuma mudança no front foi
+  // necessária além disso.
+  if (req.method === 'GET' && urlPath === '/db/security.json') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const conteudo = fs.readFileSync(SECURITY_PATH, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(conteudo);
+    } catch (_) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ passwordHash: auth.HASH_FALLBACK, recoveryKeyHash: null }));
+    }
+    return;
+  }
+
+  // ── POST /logout-admin: destrói a sessão (ver lib/sessao.js) e expira o
+  // cookie no navegador. Chamado por AdminAuth.logout() (admin-auth.js)
+  // antes de limpar o localStorage e voltar pro login — sem isso, a sessão
+  // no servidor continuaria válida até o tempo expirar por conta própria.
+  if (req.method === 'POST' && urlPath === '/logout-admin') {
+    sessao.logout(req);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': sessao.cookieDeLogout() });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
@@ -1463,10 +1325,15 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        if (sha256(senha) !== (security.passwordHash || HASH_FALLBACK)) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        if (!auth.validarSegredo(senha, security.passwordHash || auth.HASH_FALLBACK, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
 
         if (!arquivos || typeof arquivos !== 'object') {
           throw new Error('Payload inválido: "arquivos" ausente.');
@@ -1966,11 +1833,16 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        const hashEsperado = security.passwordHash || HASH_FALLBACK;
-        if (sha256(senha) !== hashEsperado) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        const hashEsperado = security.passwordHash || auth.HASH_FALLBACK;
+        if (!auth.validarSegredo(senha, hashEsperado, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
 
         // 2) Valida a estrutura de cada arquivo — nunca confiamos só na
         // validação já feita no navegador.
@@ -2029,7 +1901,7 @@ const server = http.createServer((req, res) => {
               const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
             } else {
-              fs.copyFileSync(path.join(DB_DIR, nome), path.join(dirSeguranca, nome));
+              fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
           } catch (_) {
             // Arquivo/tabela pode estar vazio ainda (ex.: primeira execução) — ok.
@@ -2049,8 +1921,8 @@ const server = http.createServer((req, res) => {
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
             'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
-          tmp: path.join(DB_DIR, nome + '.tmp'),
-          destino: path.join(DB_DIR, nome),
+          tmp: caminhoArquivoDb(nome) + '.tmp',
+          destino: caminhoArquivoDb(nome),
           texto: textosValidados[nome],
         }));
         pendentes.forEach(p => fs.writeFileSync(p.tmp, p.texto, 'utf8'));
@@ -2176,10 +2048,15 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        if (sha256(senha) !== (security.passwordHash || HASH_FALLBACK)) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        if (!auth.validarSegredo(senha, security.passwordHash || auth.HASH_FALLBACK, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
         if (confirmacao !== 'RESTAURAR TUDO') {
           throw new Error('Frase de confirmação incorreta.');
         }
@@ -2259,27 +2136,6 @@ const server = http.createServer((req, res) => {
           arquivosRestaurados: nomes.length,
           backupSeguranca: path.relative(ROOT_DIR, caminhoZipSeguranca),
         }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── COPILOTO IA: chat de leitura sobre os dados do sistema ────────────────
-  if (req.method === 'POST' && urlPath === '/copiloto-chat') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body);
-        const mensagens = Array.isArray(payload.mensagens) ? payload.mensagens : [];
-        if (!mensagens.length) throw new Error('Nenhuma mensagem enviada.');
-
-        const { resposta, ferramentasUsadas } = await copilotoResponder(mensagens);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, resposta, ferramentasUsadas }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));

@@ -1,0 +1,238 @@
+    <!-- ============ PAGE: QUALIDADE DOS TRAÇOS ============ -->
+    <main class="main" id="page-qualidade-tracos">
+      <div class="page-header">
+        <h1 class="page-title">CEP — Controle <span>Estatístico de Processo</span></h1>
+        <p class="page-desc">Estabilidade de receitas · Análise de insumos · Insights automáticos · Alertas de qualidade
+        </p>
+      </div>
+      <div class="page-body">
+
+        <!-- ── FILTROS (inalterados) ── -->
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Início</label>
+              <input class="form-input" type="date" id="qt-data-inicio"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Fim</label>
+              <input class="form-input" type="date" id="qt-data-fim"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Bateria</label>
+              <select class="form-input" id="qt-bateria" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Turno</label>
+              <select class="form-input" id="qt-turno" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todos</option>
+                <option>1º TURNO</option>
+                <option>2º TURNO</option>
+                <option>3º TURNO</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Tipo de Montagem</label>
+              <select class="form-input" id="qt-tipo-montagem" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-qt-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+          </div>
+        </div>
+
+        <!-- ── ALERTAS ── -->
+        <div id="qt-alertas" style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px"></div>
+
+        <!-- ── KPIs LINHA 1: Taxa + Total + Média + Receita estável/instável ── -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px">
+          <!-- Taxa de acerto -->
+          <div class="card" style="padding:16px;grid-column:span 2">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:10px">
+              Taxa de Acerto da Receita</div>
+            <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:8px">
+              <span id="qt-taxa-acerto"
+                style="font-size:2.8rem;font-weight:800;color:var(--accent);font-family:var(--font-mono);line-height:1">—%</span>
+              <div style="padding-bottom:4px;font-size:.78rem;color:var(--text-3)">
+                <span id="qt-sem-ajuste" style="color:#10b981;font-weight:700">—</span> sem ajuste /
+                <span id="qt-total-tracos" style="color:var(--text-2);font-weight:600">—</span> total
+              </div>
+            </div>
+            <div style="background:var(--bg-3);border-radius:6px;height:6px;overflow:hidden">
+              <div id="qt-taxa-bar"
+                style="height:100%;background:linear-gradient(90deg,#10b981,#34d399);border-radius:6px;transition:width .6s;width:0%">
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.74rem;color:var(--text-3)">
+              <span><span id="qt-com-ajuste" style="color:#f59e0b;font-weight:700">—</span> com ajuste</span>
+              <span id="qt-tendencia-taxa" style="font-style:italic"></span>
+            </div>
+          </div>
+          <!-- Total ajustes + Média -->
+          <div class="card" style="padding:16px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Total de Ajustes</div>
+            <div id="qt-total-ajustes-num"
+              style="font-size:2.2rem;font-weight:800;color:#f59e0b;font-family:var(--font-mono);line-height:1.1">—
+            </div>
+            <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ajustes registrados</div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Média / Traço</div>
+            <div id="qt-media-ajustes"
+              style="font-size:2.2rem;font-weight:800;color:var(--accent);font-family:var(--font-mono);line-height:1.1">
+              —</div>
+            <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ajustes por traço</div>
+          </div>
+          <!-- Receita mais estável -->
+          <div class="card" style="padding:16px;border-left:3px solid #10b981">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Receita Mais Estável</div>
+            <div id="qt-receita-estavel"
+              style="font-size:1rem;font-weight:700;color:#10b981;font-family:var(--font-mono)">—</div>
+            <div id="qt-receita-estavel-pct" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+          <!-- Receita mais instável -->
+          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Receita Mais Instável</div>
+            <div id="qt-receita-instavel"
+              style="font-size:1rem;font-weight:700;color:#ef4444;font-family:var(--font-mono)">—</div>
+            <div id="qt-receita-instavel-pct" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+        </div>
+
+        <!-- ── KPIs LINHA 2: Insumo mais ajustado + maior desvio + Distribuição donut ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Insumo Mais Ajustado</div>
+            <div id="qt-insumo-mais-ajustado" style="font-size:1.15rem;font-weight:700;color:#ef4444">—</div>
+            <div id="qt-insumo-mais-ajustado-cnt" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+          <div class="card" style="padding:16px;border-left:3px solid #f59e0b">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Maior Desvio Percentual</div>
+            <div id="qt-insumo-maior-desvio" style="font-size:1.15rem;font-weight:700;color:#f59e0b">—</div>
+            <div id="qt-insumo-maior-desvio-val" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+          <!-- Donut distribuição -->
+          <div class="card" style="padding:16px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:10px">
+              Distribuição dos Traços</div>
+            <div style="display:flex;align-items:center;gap:14px;justify-content:center">
+              <canvas id="qt-donut" width="90" height="90"></canvas>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:9px;height:9px;border-radius:50%;background:#10b981;flex-shrink:0"></div>
+                  <div>
+                    <div style="font-size:.7rem;color:var(--text-3)">Sem ajuste</div>
+                    <div id="qt-donut-sem"
+                      style="font-size:.9rem;font-weight:700;color:#10b981;font-family:var(--font-mono)">—</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="width:9px;height:9px;border-radius:50%;background:#f59e0b;flex-shrink:0"></div>
+                  <div>
+                    <div style="font-size:.7rem;color:var(--text-3)">Com ajuste</div>
+                    <div id="qt-donut-com"
+                      style="font-size:.9rem;font-weight:700;color:#f59e0b;font-family:var(--font-mono)">—</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── INSIGHTS AUTOMÁTICOS ── -->
+        <div class="card" style="padding:18px 20px;margin-bottom:16px;border-left:3px solid var(--accent)">
+          <div
+            style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:12px">
+            💡 Insights Automáticos do Processo</div>
+          <div id="qt-insights" style="display:flex;flex-direction:column;gap:8px">
+            <div style="color:var(--text-3);font-size:.84rem">Calculando insights...</div>
+          </div>
+        </div>
+
+        <!-- ── RANKING MATERIAIS + ESTABILIDADE RECEITAS ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card" style="padding:20px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+              🔧 Insumos Mais Corrigidos — Ranking de Problemas</div>
+            <div id="qt-ranking-materiais">
+              <div style="color:var(--text-3);font-size:.84rem;text-align:center;padding:20px 0">Calculando...</div>
+            </div>
+          </div>
+          <div class="card" style="padding:20px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+              📊 Estabilidade por Tipo de Montagem</div>
+            <div id="qt-ranking-receitas">
+              <div style="color:var(--text-3);font-size:.84rem;text-align:center;padding:20px 0">Calculando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ANÁLISE ESTATÍSTICA DOS INSUMOS (CEP) ── -->
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <div
+            style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+            📐 Controle Estatístico por Insumo — Média · Mediana · Desvio Padrão · CV</div>
+          <div id="qt-cep-tabela" style="overflow-x:auto">
+            <div style="color:var(--text-3);font-size:.84rem">Calculando estatísticas...</div>
+          </div>
+        </div>
+
+        <!-- ── CONSUMO PLANEJADO × REAL ── -->
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <div
+            style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+            ⚖️ Consumo Planejado × Real por Insumo — Desvio Absoluto e Percentual</div>
+          <div id="qt-consumo-grid"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px">
+            <div style="color:var(--text-3);font-size:.84rem">Calculando...</div>
+          </div>
+        </div>
+
+        <!-- ── TENDÊNCIAS + EVOLUÇÃO ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card" style="padding:20px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+              📈 Evolução da Taxa de Acerto — % Traços Ajustados por Mês</div>
+            <canvas id="qt-evolucao-chart" style="width:100%;height:160px;display:block"></canvas>
+          </div>
+          <div class="card" style="padding:20px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+              📉 Distribuição de Ajustes por Insumo</div>
+            <canvas id="qt-barras-insumos" style="width:100%;height:160px;display:block"></canvas>
+          </div>
+        </div>
+
+        <!-- ── TENDÊNCIA TEMPORAL POR TIPO DE MONTAGEM ── -->
+        <div class="card" style="padding:20px">
+          <div
+            style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
+            🏭 Frequência de Ajustes por Tipo de Montagem — Tendência Temporal</div>
+          <div id="qt-tendencia-montagem" style="color:var(--text-3);font-size:.84rem">Calculando...</div>
+        </div>
+
+      </div>
+    </main>
+
+

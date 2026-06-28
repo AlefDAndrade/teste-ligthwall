@@ -1,0 +1,130 @@
+  <div id="import-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h2 id="import-modal-titulo"
+          style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em">📥 IMPORTAR
+          DOCUMENTO</h2>
+        <button onclick="fecharImportacao()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <!-- Passo 0: escolher destino -->
+      <div id="import-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:24px">
+          Para qual tabela deseja importar os dados?
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+          <button onclick="escolherDestino('historico')" style="
+            background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius-lg);
+            padding:28px 20px;cursor:pointer;text-align:left;transition:border-color .15s,background .15s;
+          " onmouseover="this.style.borderColor='var(--accent)';this.style.background='rgba(245,158,11,.06)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--bg-3)'">
+            <div style="font-size:2rem;margin-bottom:10px">📋</div>
+            <div
+              style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--text);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">
+              Relatorio de Baterias
+            </div>
+            <div style="font-size:.8rem;color:var(--text-3);line-height:1.5">
+              Importa dados de produção: baterias, painéis, m², tempo e atrasos.<br>
+              Destino: <code style="color:var(--accent);font-family:var(--font-mono)">db/historico.json</code>
+            </div>
+          </button>
+
+          <button onclick="escolherDestino('relatorio_injecao')" style="
+            background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius-lg);
+            padding:28px 20px;cursor:pointer;text-align:left;transition:border-color .15s,background .15s;
+          " onmouseover="this.style.borderColor='var(--blue)';this.style.background='rgba(59,130,246,.06)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--bg-3)'">
+            <div style="font-size:2rem;margin-bottom:10px">🧾</div>
+            <div
+              style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--text);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">
+              Relatório de Injeção
+            </div>
+            <div style="font-size:.8rem;color:var(--text-3);line-height:1.5">
+              Importa dados de traços: berços, densidade, flow e observações.<br>
+              Destino: <code style="color:var(--blue);font-family:var(--font-mono)">db/relatorio_injecao.json</code>
+            </div>
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Passo 1: selecionar arquivo -->
+      <div id="import-step-1" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button class="btn btn-ghost btn-sm" onclick="resetImportModal()">← Voltar</button>
+          <span style="font-size:.85rem;color:var(--text-3)" id="import-destino-label"></span>
+        </div>
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
+          Selecione a planilha Excel. O sistema vai detectar as colunas automaticamente e mostrar um preview antes de
+          importar.
+        </p>
+
+        <!-- Drop zone -->
+        <div id="import-dropzone" style="
+          border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+          text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+          background:var(--bg-2)
+        " onclick="document.getElementById('import-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(99,102,241,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleImportDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📂</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o arquivo aqui</div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .xlsx, .xls</div>
+        </div>
+        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="display:none"
+          onchange="handleImportFile(this.files[0])">
+
+        <!-- Mapeamento de colunas -->
+        <div id="import-mapping-area" style="display:none;margin-top:24px">
+          <div class="card-title" style="margin-bottom:14px">Mapeamento de Colunas</div>
+          <p style="color:var(--text-3);font-size:.82rem;margin-bottom:14px">
+            Associe cada campo do sistema com a coluna correspondente da sua planilha. Campos com <span
+              style="color:var(--accent)">*</span> são obrigatórios.
+          </p>
+          <div id="import-mapping-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+
+          <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:10px">
+            <button class="btn btn-ghost" onclick="fecharImportacao()">Cancelar</button>
+            <button class="btn btn-primary" onclick="gerarPreview()">Ver Preview →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Passo 2: preview -->
+      <div id="import-step-2" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button class="btn btn-ghost btn-sm" onclick="voltarParaStep1()">← Voltar</button>
+          <div id="import-preview-info" style="color:var(--text-2);font-size:.88rem"></div>
+        </div>
+        <div style="overflow-x:auto;margin-bottom:20px;border:1px solid var(--border);border-radius:var(--radius)">
+          <table id="import-preview-table" style="width:100%;border-collapse:collapse;font-size:.8rem">
+            <thead id="import-preview-head" style="background:var(--bg-2)"></thead>
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="import-erros"
+          style="display:none;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:.82rem;color:var(--red)">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button class="btn btn-ghost" onclick="fecharImportacao()">Cancelar</button>
+          <button class="btn btn-success" id="btn-confirmar-import" onclick="confirmarImportacao()">✓ Importar
+            Registros</button>
+        </div>
+      </div>
+
+      <!-- Passo 3: resultado -->
+      <div id="import-step-3" style="display:none;text-align:center;padding:20px 0">
+        <div style="font-size:3rem;margin-bottom:12px" id="import-result-icon">✅</div>
+        <div id="import-result-msg" style="font-size:1.1rem;font-weight:600;margin-bottom:8px"></div>
+        <div id="import-result-sub" style="color:var(--text-3);font-size:.88rem;margin-bottom:28px"></div>
+        <button class="btn btn-primary" onclick="fecharImportacao()">Fechar</button>
+      </div>
+
+    </div>
+  </div>

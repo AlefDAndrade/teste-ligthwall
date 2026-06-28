@@ -1,0 +1,168 @@
+    <!-- ============ PAGE: OEE ============ -->
+    <main class="main" id="page-oee">
+      <div class="page-header">
+        <h1 class="page-title">Análise de <span>OEE</span></h1>
+        <p class="page-desc">Disponibilidade × Performance × Qualidade</p>
+      </div>
+      <div class="page-body">
+
+        <!-- Filtros -->
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Início</label>
+              <input class="form-input" type="date" id="oee-data-inicio"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Data Fim</label>
+              <input class="form-input" type="date" id="oee-data-fim"
+                style="height:36px;font-size:.84rem;padding:6px 10px">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Bateria</label>
+              <select class="form-input" id="oee-bateria" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todas</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label" style="font-size:.75rem">Turno</label>
+              <select class="form-input" id="oee-turno" style="height:36px;font-size:.84rem;padding:6px 10px">
+                <option value="">Todos</option>
+                <option>1º TURNO</option>
+                <option>2º TURNO</option>
+                <option>3º TURNO</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-oee-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+          </div>
+        </div>
+
+        <div id="oee-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando
+          dados...</div>
+        <div id="oee-empty" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Nenhum registro no
+          período selecionado.</div>
+
+        <div id="oee-content">
+
+          <!-- KPIs principais -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
+            <div class="kpi-card">
+              <div class="kpi-label">Disponibilidade</div>
+              <div class="kpi-value" id="oee-kpi-disp" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">tempo produzindo ÷ 7h por turno</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Performance</div>
+              <div class="kpi-value" id="oee-kpi-perf" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ciclo ideal: 59 min/operação</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Qualidade</div>
+              <div class="kpi-value" id="oee-kpi-qual" style="font-size:1.7rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">traços sem nenhum ajuste</div>
+            </div>
+            <div class="kpi-card" style="border-color:var(--accent)">
+              <div class="kpi-label" style="color:var(--accent)">OEE Geral</div>
+              <div class="kpi-value accent" id="oee-kpi-geral" style="font-size:2rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">disp. × performance × qualidade</div>
+            </div>
+          </div>
+
+          <!-- Composição visual -->
+          <div class="card mb-4" style="padding:20px 24px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Composição do OEE</div>
+            <div id="oee-waterfall" style="display:flex;flex-direction:column;gap:14px"></div>
+          </div>
+
+          <!-- Tempo perdido — detalhamento via Registro de Paradas -->
+          <div class="card mb-4" style="padding:20px 24px">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:4px">
+              🛑 De onde vem o tempo sem produção</div>
+            <p style="font-size:.74rem;color:var(--text-3);margin:0 0 14px">
+              Não altera o cálculo de Disponibilidade — apenas detalha, dentro do tempo planejado de cada turno, quanto
+              foi parada registrada (Planejada/Não Planejada) e quanto ainda não tem nenhum registro explicando.
+            </p>
+            <div id="oee-paradas-bar" style="display:flex;height:18px;border-radius:6px;overflow:hidden;background:var(--bg-3);margin-bottom:14px"></div>
+            <div id="oee-paradas-legenda" style="display:flex;flex-wrap:wrap;gap:12px 22px"></div>
+            <div id="oee-paradas-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0">
+              Sem tempo planejado no período pra detalhar.</div>
+          </div>
+
+          <!-- OEE por turno (tendência) -->
+          <div class="card mb-4" style="padding:20px 24px">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              📈 OEE por Turno — cada barra é uma data + turno</div>
+            <canvas id="oee-chart-turnos" height="160"></canvas>
+            <div id="oee-turnos-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:20px 0">
+              Sem dados suficientes no período.</div>
+          </div>
+
+          <!-- Tabela por turno -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Detalhe por Turno</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Turno</th>
+                  <th>Operações</th>
+                  <th>Tempo Produzindo</th>
+                  <th>Disponibilidade</th>
+                  <th>Performance</th>
+                  <th>Qualidade</th>
+                  <th>OEE</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-turnos"></tbody>
+            </table>
+          </div>
+
+          <!-- Ranking por bateria -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Performance e Qualidade por Bateria</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Bateria</th>
+                  <th>Operações</th>
+                  <th>Performance</th>
+                  <th>Traços</th>
+                  <th>Qualidade</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-bateria"></tbody>
+            </table>
+          </div>
+
+          <!-- Ranking por tipo de montagem -->
+          <div class="card mb-4" style="padding:20px 24px;overflow-x:auto">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:16px">
+              Performance e Qualidade por Tipo de Montagem</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo de Montagem</th>
+                  <th>Operações</th>
+                  <th>Performance</th>
+                  <th>Traços</th>
+                  <th>Qualidade</th>
+                </tr>
+              </thead>
+              <tbody id="oee-tabela-montagem"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+

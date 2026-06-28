@@ -1,0 +1,72 @@
+  <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
+  <div id="restaurar-backup-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2
+          style="font-family:var(--font-display);font-size:1.3rem;color:var(--red);letter-spacing:.06em">♻️ RESTAURAR
+          BACKUP DE DADOS</h2>
+        <button onclick="fecharRestaurarBackup()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="restaurar-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Passo 0: escolher o arquivo -->
+      <div id="restaurar-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
+          Restaura <strong>config, histórico, relatório de injeção, segurança, sobra e contador de traços</strong> a
+          partir de um arquivo gerado pelo botão "Backup de Dados" (.zip). Uma cópia de segurança do estado atual é
+          salva automaticamente no servidor antes de qualquer substituição.
+        </p>
+
+        <div id="restaurar-dropzone" style="
+            border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+            text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+            background:var(--bg-2)
+          " onclick="document.getElementById('restaurar-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--red)';this.style.background='rgba(239,68,68,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleRestaurarDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o backup aqui</div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .zip</div>
+        </div>
+        <input type="file" id="restaurar-file-input" accept=".zip" style="display:none"
+          onchange="handleRestaurarArquivo(this.files[0])">
+      </div>
+
+      <!-- Passo 1: preview do conteúdo + senha + confirmação -->
+      <div id="restaurar-step-1" style="display:none">
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="voltarRestaurarStep0()">←
+          Voltar</button>
+
+        <div
+          style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;font-size:.85rem;color:var(--text-2)">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px">Conteúdo do backup:</div>
+          <div id="restaurar-preview"></div>
+        </div>
+
+        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:16px">
+          ⚠ Isso vai substituir TODOS os dados atuais pelos deste backup.
+        </p>
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
+          administrador para continuar:</label>
+        <input type="password" id="restaurar-senha" class="form-input" style="margin-bottom:20px;width:100%"
+          placeholder="Senha de administrador" autocomplete="current-password">
+
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharRestaurarBackup()">Cancelar</button>
+          <button class="btn btn-danger" id="restaurar-btn-confirmar" onclick="confirmarRestaurarBackup()">Restaurar
+            agora</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+

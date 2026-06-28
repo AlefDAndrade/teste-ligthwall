@@ -5,3 +5,5 @@ backups-automaticos/
 logs/
 public/db/teste/
 data/
+private/
+.test-tmp/
