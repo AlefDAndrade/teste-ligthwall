@@ -1,4 +1,4 @@
-    <!-- ============ TOP BAR ============ -->
+<!-- ============ TOP BAR ============ -->
     <header class="topbar">
       <div class="sidebar-toggle-wrapper">
         <button class="btn-sidebar-toggle" id="sidebar-toggle" title="Alternar Menu">
@@ -26,6 +26,18 @@
         </div>
       </div>
 
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="LWBateriaAtual.toggle(event)">
+          🔋 Bateria Atual
+        </button>
+        <div id="popover-bateria-atual" class="ao-popover bateria-atual-popover">
+          <div class="ba-header">
+            <span class="ba-header-label">🔋 Bateria Atual</span>
+          </div>
+          <div class="ba-content" id="bateria-atual-content">Carregando...</div>
+        </div>
+      </div>
+
       <div class="topbar-right">
         <span id="topbar-date"></span>
         <span class="topbar-clock" id="topbar-clock">--:--:--</span>
@@ -50,4 +62,3 @@
         </button>
       </div>
     </header>
-

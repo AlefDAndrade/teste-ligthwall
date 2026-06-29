@@ -2406,6 +2406,104 @@ td.mono {
   color: var(--text-3);
   font-style: italic;
 }
+
+/* ============================================================
+   "BATERIA ATUAL" (popover da topbar, ao lado do Debriefing)
+   ============================================================ */
+/* Mesmo padrão visual do Debriefing (.ao-popover + cabeçalho próprio) —
+   só leitura: mostra os berços da operação em andamento agora, no
+   formato visual da grade de Montagem Personalizada (ver operacao.js),
+   mas aqui o berço em si não é clicável — só os 2 indicadores (●/•)
+   dentro de cada um, que por enquanto não têm função associada (ver
+   bateria-atual.js, _baCliqueIndicador). */
+.bateria-atual-popover {
+  width: 360px;
+  max-width: min(360px, calc(100vw - 48px));
+  max-height: 70vh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.bateria-atual-popover.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.ba-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ba-header-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.ba-content {
+  padding: 14px;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.ba-resumo {
+  font-size: .82rem;
+  color: var(--text-2);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.ba-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.ba-celula {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px;
+  border-radius: var(--radius);
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.ba-numero {
+  flex: 1;
+  text-align: center;
+}
+
+/* Os dois indicadores — só estes são clicáveis dentro da célula (o
+   berço em si é estático). Sem função definida ainda (ver
+   bateria-atual.js), mas já reagem visualmente ao hover pra deixar
+   claro que SÃO clicáveis, mesmo sem fazer nada ainda. */
+.ba-dot {
+  cursor: pointer;
+  font-size: .85rem;
+  line-height: 1;
+  padding: 2px 3px;
+  opacity: .55;
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.ba-dot:hover {
+  opacity: 1;
+  transform: scale(1.3);
+}
+
+.ba-vazio {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: .82rem;
+}
+
 /* ============================================================
    MÓDULO DE PARADAS
    ============================================================ */

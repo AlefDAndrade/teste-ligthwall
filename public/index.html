@@ -12,7 +12,7 @@
 
   <div class="app-shell">
 
-    <!-- ============ TOP BAR ============ -->
+<!-- ============ TOP BAR ============ -->
     <header class="topbar">
       <div class="sidebar-toggle-wrapper">
         <button class="btn-sidebar-toggle" id="sidebar-toggle" title="Alternar Menu">
@@ -37,6 +37,18 @@
             <input type="date" id="debriefing-data-input" class="debriefing-date-input" oninput="LWDebriefing.mudarData(this.value)">
           </div>
           <div class="debriefing-paper" id="debriefing-content">Carregando...</div>
+        </div>
+      </div>
+
+      <div style="position:relative">
+        <button class="btn btn-ghost btn-sm" onclick="LWBateriaAtual.toggle(event)">
+          🔋 Bateria Atual
+        </button>
+        <div id="popover-bateria-atual" class="ao-popover bateria-atual-popover">
+          <div class="ba-header">
+            <span class="ba-header-label">🔋 Bateria Atual</span>
+          </div>
+          <div class="ba-content" id="bateria-atual-content">Carregando...</div>
         </div>
       </div>
 
@@ -2696,8 +2708,9 @@
   <script src="js/oee.js"></script>
   <script src="js/paradas.js"></script>
   <script src="js/debriefing.js"></script>
+  <script src="js/bateria-atual.js"></script>
   <script src="js/keyboard-shortcuts.js"></script>
   <script src="js/tour.js"></script>
 </body>
 
-</html>
+</html> 
