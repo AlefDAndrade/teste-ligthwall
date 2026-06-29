@@ -443,11 +443,11 @@
       window._lwRegistroMapTemp[idx] = b;
       const ppt = b.paineis_por_tipo || {};
       const m2pt = b.m2_por_tipo || {};
-      // <td> extras para tipos de placa alem de 2p/sp (ex: 3p), na mesma ordem das colunas injetadas
-      const tdsExtras = tiposExtras.map(tipo => `
-        <td data-col="paineis_${tipo}">${ppt[tipo] || 0}</td>
-        <td data-col="m2_${tipo}">${(m2pt[tipo] || 0).toFixed(2)}</td>
-      `).join('');
+      // <td> extras para tipos de placa alem de 2p/sp (ex: 3p) — separados em
+      // 2 grupos (Painéis e m²) pra entrar em cada grupo da tabela, na mesma
+      // ordem das colunas injetadas em _garantirColunasDinamicasTipo().
+      const tdsExtrasPaineis = tiposExtras.map(tipo => `<td data-col="paineis_${tipo}">${ppt[tipo] || 0}</td>`).join('');
+      const tdsExtrasM2 = tiposExtras.map(tipo => `<td data-col="m2_${tipo}">${(m2pt[tipo] || 0).toFixed(2)}</td>`).join('');
       const corMont = _corBadgeMontagem(b.tipo_montagem);
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
       // Montagem Personalizada não tem cor própria (cinza neutro — ver
@@ -478,13 +478,14 @@
           : '<span class="badge badge-green">✓ NÃO</span>'}</td>
         <td data-col="motivo_atraso">${b.motivo_atraso || '—'}</td>
         <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `title="${tituloMontagem}"` : ''}>${b.tipo_montagem || '—'}</span></td>
-        <td data-col="paineis_2psp">${b.total_paineis || 0}</td>
         <td data-col="paineis_2p">${b.paineis_2p || 0}</td>
         <td data-col="paineis_sp">${b.paineis_sp || 0}</td>
-        <td data-col="m2_2psp">${(b.m2_total || 0).toFixed(2)}</td>
+        ${tdsExtrasPaineis}
         <td data-col="m2_2p">${(b.m2_2p || 0).toFixed(2)}</td>
         <td data-col="m2_sp">${(b.m2_sp || 0).toFixed(2)}</td>
-        ${tdsExtras}
+        ${tdsExtrasM2}
+        <td data-col="paineis_2psp">${b.total_paineis || 0}</td>
+        <td data-col="m2_2psp">${(b.m2_total || 0).toFixed(2)}</td>
         <td data-col="bercos_reais">${b.bercos_reais || '—'}</td>
         <td data-col="placas_cimenticia">${b.placas_cimenticia || 0}</td>
       </tr>`;
@@ -516,12 +517,12 @@
     { key: 'atraso', label: 'Atraso' },
     { key: 'motivo_atraso', label: 'Motivo Atraso' },
     { key: 'montagem', label: 'Montagem' },
-    { key: 'paineis_2psp', label: 'Painéis (Total)' },
     { key: 'paineis_2p', label: 'Painéis 2/P', tipoPlaca: true },
     { key: 'paineis_sp', label: 'Painéis S/P', tipoPlaca: true },
-    { key: 'm2_2psp', label: 'm² (Total)' },
     { key: 'm2_2p', label: 'm² 2/P', tipoPlaca: true },
     { key: 'm2_sp', label: 'm² S/P', tipoPlaca: true },
+    { key: 'paineis_2psp', label: 'Painéis (Total)' },
+    { key: 'm2_2psp', label: 'm² (Total)' },
     { key: 'bercos_reais', label: 'Berços Reais' },
     { key: 'placas_cimenticia', label: 'Placas Cimenticia' },
   ];
@@ -556,8 +557,7 @@
     if (!tiposEncontrados.size) return;
 
     const thead = document.querySelector('#registro-table thead tr');
-    const thBercosReais = thead?.querySelector('th[data-col="bercos_reais"]');
-    if (!thead || !thBercosReais) return;
+    if (!thead) return;
 
     tiposEncontrados.forEach(tipo => {
       const keyPaineis = `paineis_${tipo}`;
@@ -565,21 +565,39 @@
       if (COLUNAS_REGISTRO.some(c => c.key === keyPaineis)) return; // já injetada
 
       const label = _labelTipoPlaca(tipo);
-      const thPaineis = document.createElement('th');
-      thPaineis.setAttribute('data-col', keyPaineis);
-      thPaineis.textContent = `Painéis ${label}`;
-      const thM2 = document.createElement('th');
-      thM2.setAttribute('data-col', keyM2);
-      thM2.textContent = `m² ${label}`;
-      thead.insertBefore(thPaineis, thBercosReais);
-      thead.insertBefore(thM2, thBercosReais);
 
-      // Insere antes de 'bercos_reais' na lista de colunas (mesma posição visual)
-      const idx = COLUNAS_REGISTRO.findIndex(c => c.key === 'bercos_reais');
-      COLUNAS_REGISTRO.splice(idx, 0,
-        { key: keyPaineis, label: `Painéis ${label}`, tipoPlaca: true, dinamica: true },
-        { key: keyM2, label: `m² ${label}`, tipoPlaca: true, dinamica: true },
-      );
+      // "Painéis <tipo>" entra no FIM do grupo de Painéis — logo antes da
+      // 1ª coluna de m² (m2_2p) — pra todos os "Painéis" ficarem juntos,
+      // não misturados com m².
+      const thAncoraPaineis = thead.querySelector('th[data-col="m2_2p"]');
+      if (thAncoraPaineis) {
+        const thPaineis = document.createElement('th');
+        thPaineis.setAttribute('data-col', keyPaineis);
+        thPaineis.textContent = `Painéis ${label}`;
+        thead.insertBefore(thPaineis, thAncoraPaineis);
+      }
+
+      // "m² <tipo>" entra no FIM do grupo de m² — logo antes do Total de
+      // Painéis (paineis_2psp), que junto com o Total de m² fecha a
+      // tabela por último.
+      const thAncoraM2 = thead.querySelector('th[data-col="paineis_2psp"]');
+      if (thAncoraM2) {
+        const thM2 = document.createElement('th');
+        thM2.setAttribute('data-col', keyM2);
+        thM2.textContent = `m² ${label}`;
+        thead.insertBefore(thM2, thAncoraM2);
+      }
+
+      // Mesma lógica na lista COLUNAS_REGISTRO (índices recalculados a
+      // cada chamada de findIndex, já que a splice anterior desloca
+      // posições — nunca reaproveitar um índice "antigo").
+      const idxAncoraPaineis = COLUNAS_REGISTRO.findIndex(c => c.key === 'm2_2p');
+      COLUNAS_REGISTRO.splice(idxAncoraPaineis, 0,
+        { key: keyPaineis, label: `Painéis ${label}`, tipoPlaca: true, dinamica: true });
+
+      const idxAncoraM2 = COLUNAS_REGISTRO.findIndex(c => c.key === 'paineis_2psp');
+      COLUNAS_REGISTRO.splice(idxAncoraM2, 0,
+        { key: keyM2, label: `m² ${label}`, tipoPlaca: true, dinamica: true });
     });
 
     // Atualiza colspan da mensagem "Carregando/Nenhum registro" e o menu de colunas
