@@ -1327,6 +1327,12 @@
     // ---- Config Modal ----
 
     let _cfgDados = null; // cópia local enquanto edita
+    // Snapshot (JSON) de _cfgDados no instante em que o modal abriu — usado
+    // só pra saber se algo mudou, na hora de fechar (ver
+    // fecharConfigComConfirmacao()). Comparação simples por string: o
+    // volume de dados aqui é pequeno (baterias + tipos de montagem), então
+    // JSON.stringify a cada fechamento não é um problema de performance.
+    let _cfgSnapshotInicial = null;
 
     // Converte uma opção bruta de tipos_montagem.opcoes (do config.json) pra
     // a forma usada na tela de admin.
@@ -1392,6 +1398,7 @@
         baterias: LW.BATERIA_IDS.map(b => ({ id: b.id, label: b.label || '', bercos: b.bercos || 20 })),
         montagens: LW.MONTAGEM_OPCOES.map(_montagemDoConfigParaUI),
       };
+      _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
       cfgRenderTudo();
       cfgMostrarSecao('dados');
@@ -1402,11 +1409,39 @@
     function fecharConfig() {
       document.getElementById('config-modal').style.display = 'none';
       _cfgDados = null;
+      _cfgSnapshotInicial = null;
       // Se tinha alguma captura de tecla pendente (remapeando um atalho),
       // cancela — não faz sentido continuar escutando com o modal fechado.
       if (_cfgAtalhoCapturando && typeof LWKeyboard !== 'undefined') {
         LWKeyboard.cancelarCaptura();
         _cfgAtalhoCapturando = null;
+      }
+    }
+
+    // ── Fecha o modal de Configurações, perguntando antes se há alterações
+    // não salvas em "Baterias e Montagem" (a única seção com um rascunho
+    // pra confirmar/cancelar — "Atalhos" e "Autorizados" salvam cada ação
+    // na hora, então não têm o que descartar). Usado pelo ✕ e por
+    // "Cancelar" no lugar de fecharConfig() direto.
+    async function fecharConfigComConfirmacao() {
+      const houveAlteracoes = _cfgDados && JSON.stringify(_cfgDados) !== _cfgSnapshotInicial;
+      if (!houveAlteracoes) {
+        fecharConfig();
+        return;
+      }
+
+      const salvar = await LW.mostrarConfirmacao(
+        'Você tem alterações não salvas em Baterias e Montagem. O que deseja fazer?',
+        {
+          titulo: 'Alterações não salvas', icon: '💾',
+          textoConfirmar: '💾 Salvar e Fechar', textoCancelar: '🗑️ Descartar Alterações',
+        }
+      );
+
+      if (salvar) {
+        await cfgSalvar(); // já fecha o modal (e recarrega a página) se salvar com sucesso
+      } else {
+        fecharConfig();
       }
     }
 
