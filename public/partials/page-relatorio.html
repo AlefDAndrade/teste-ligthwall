@@ -1,0 +1,84 @@
+    <!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
+    <main class="main" id="page-relatorio">
+      <div class="page-header" style="position:relative">
+        <h1 class="page-title">Relatório de <span>Injeção</span></h1>
+        <p class="page-desc">Histórico completo de injeções</p>
+        <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
+          onclick="LWTour.iniciar('relatorio', { forcado: true })" title="Refazer o tour guiado desta página">❔
+          Tour</button>
+      </div>
+
+      <div class="page-body">
+
+        <div class="card mb-4" style="padding:16px 20px">
+          <!-- Período — separado conforme spec -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="form-input" type="date" id="rel-data-inicio" style="width:150px" title="Data início">
+            <span style="color:var(--text-3);font-size:.85rem">até</span>
+            <input class="form-input" type="date" id="rel-data-fim" style="width:150px" title="Data fim">
+            <label for="rel-apenas-ajuste" id="rel-apenas-ajuste-label" style="
+              display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-2);
+              cursor:pointer;user-select:none;padding:6px 12px;border-radius:20px;
+              border:1px solid var(--border);transition:background .15s,border-color .15s">
+              <input type="checkbox" id="rel-apenas-ajuste"
+                style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer;margin:0">
+              ⚙️ Apenas com reajustes
+            </label>
+            <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+              <span style="font-size:.78rem;color:var(--text-3)" id="rel-count"></span>
+              <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-relatorio" style="display:none"
+                onclick="limparTodosFiltros('filtros-relatorio')">✕ Limpar Todos</button>
+              <button class="btn btn-ghost btn-sm" id="btn-exportar-relatorio" onclick="LWDash.abrirExportModalRelatorio()">⬇ Exportar Excel
+                (.xlsx)</button>
+              <button class="btn btn-ghost btn-sm" id="btn-editar-relatorio" data-admin-only
+                title="Corrigir dados de um traço já registrado" onclick="LWDash.toggleModoEdicaoRelatorio()">✏️
+                Editar</button>
+            </div>
+          </div>
+          <!-- Filtros hierárquicos -->
+          <div id="filtros-relatorio" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+          <!-- Chips de filtros ativos -->
+          <div id="chips-filtros-relatorio"
+            style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center">
+            <span style="color:var(--text-3);font-size:.78rem">Nenhum filtro ativo</span>
+          </div>
+          <div id="relatorio-aviso-edicao"
+            style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(245,158,11,.1);border:1px solid var(--accent-dim);border-radius:var(--radius);color:var(--accent);font-size:.82rem">
+            ✏️ Modo de edição ativo — clique em uma linha da tabela para corrigir os dados daquele traço.
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="relatorio-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>ID Bateria</th>
+                <th>Traços</th>
+                <th>Berços inicio</th> <!-- Nova -->
+                <th>Berços fim</th> <!-- Nova -->
+                <th>Densidade</th>
+                <th>Flow</th>
+                <th>Densidade EPS</th>
+                <th>Expansão</th>
+                <th>Silo EPS</th>
+                <th>Cimento</th>
+                <th>Água</th>
+                <th>eps_real</th>
+                <th>Superplástico</th>
+                <th>Incorporador</th>
+                <th>Tempo de Batida</th>
+                <th>Observações</th> <!-- Nova -->
+              </tr>
+            </thead>
+            <tbody id="relatorio-tbody">
+              <tr>
+                <td colspan="11" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </main>
+

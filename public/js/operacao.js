@@ -1079,7 +1079,7 @@
             <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
               ${somenteRevisao
           ? 'Clique nos berços que ficaram vazios (não foram usados nesta operação).'
-          : 'Selecione um tipo abaixo e clique nos berços (ou use "De/Até") pra aplicar.'}
+          : 'Selecione um tipo abaixo (ou use os números/Ctrl+número de atalho) e clique nos berços — ou use "De/Até" ou "Completar Vazios" pra aplicar de uma vez.'}
             </p>
           </div>
 
@@ -1097,6 +1097,8 @@
               <input type="number" id="grade-ate" class="form-input" style="width:80px" min="1" max="${capacidade}">
             </div>
             <button id="grade-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
+            ${somenteRevisao ? '' : `<button id="grade-btn-completar" type="button" class="btn btn-outline-accent btn-sm"
+              title="Preenche todos os berços ainda vazios com o tipo selecionado nas abas, sem alterar os que já têm tipo">✅ Completar Vazios</button>`}
           </div>
 
           <div id="grade-bercos" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
@@ -1110,9 +1112,13 @@
       document.body.appendChild(modal);
 
       _renderGradeMontagem();
+      document.addEventListener('keydown', _gradeKeydownHandler);
 
       document.getElementById('grade-btn-aplicar').addEventListener('click', _gradeAplicarRange);
+      const btnCompletar = document.getElementById('grade-btn-completar');
+      if (btnCompletar) btnCompletar.addEventListener('click', _gradeCompletarVazios);
       document.getElementById('grade-btn-cancelar').addEventListener('click', () => {
+        document.removeEventListener('keydown', _gradeKeydownHandler);
         modal.remove();
         resolve(false);
       });
@@ -1128,6 +1134,7 @@
         state.bercos_personalizados = [..._gradeTrabalho];
         recalcPaineis();
         persist();
+        document.removeEventListener('keydown', _gradeKeydownHandler);
         modal.remove();
         resolve(true);
       });
@@ -1145,11 +1152,13 @@
         tabsEl.innerHTML = ''; // sem abas em modo de revisão — todo clique limpa
       } else {
         const tiposSimples = (LW.MONTAGEM_OPCOES || []).filter(o => o.modo === 'simples');
-        tabsEl.innerHTML = tiposSimples.map(o => {
+        tabsEl.innerHTML = tiposSimples.map((o, idx) => {
           const cor = LW.corPorTipoSimples(o.tipo);
           const ativo = _gradeTipoAtivo === o.tipo;
+          const atalho = _gradeAtalhoLabel(idx);
           return `<button type="button" class="btn btn-sm" data-tipo-tab="${o.tipo}"
-            style="background:${ativo ? cor.cor : cor.bg};color:${ativo ? '#fff' : cor.cor};border:1px solid ${cor.borda}">${o.label}</button>`;
+            style="background:${ativo ? cor.cor : cor.bg};color:${ativo ? '#fff' : cor.cor};border:1px solid ${cor.borda}">
+            ${atalho ? `<span style="opacity:.6;font-size:.72em;margin-right:3px">${atalho}</span>` : ''}${o.label}</button>`;
         }).join('') + `<button type="button" class="btn btn-sm" data-tipo-tab=""
             style="background:${_gradeTipoAtivo === '' ? 'var(--red)' : 'rgba(239,68,68,.08)'};color:${_gradeTipoAtivo === '' ? '#fff' : 'var(--red)'};border:1px solid var(--red-dim)">🗑️ Limpar</button>`;
 
@@ -1193,6 +1202,48 @@
     }
   }
 
+  /**
+   * Atalhos de teclado pra selecionar o tipo ativo sem precisar clicar na
+   * aba: dígitos 1-9 e 0 pros 10 primeiros tipos (na ordem em que aparecem
+   * nas abas), Ctrl+1 até Ctrl+0 pros 10 seguintes — até 20 tipos no
+   * total. Calculado a partir de MONTAGEM_OPCOES (mesma lista que monta as
+   * abas), então se um tipo simples novo for cadastrado em Configurações,
+   * os atalhos se reorganizam sozinhos, sem precisar tocar neste código.
+   * Acima de 20 tipos, os excedentes simplesmente não ganham atalho (só
+   * clique) — limitação aceita por enquanto.
+   */
+  function _gradeAtalhoLabel(idx) {
+    if (idx < 9) return String(idx + 1);            // 1º-9º tipo → tecla 1-9
+    if (idx === 9) return '0';                        // 10º tipo → tecla 0
+    if (idx < 19) return 'Ctrl+' + String(idx - 9);    // 11º-19º tipo → Ctrl+1...Ctrl+9
+    if (idx === 19) return 'Ctrl+0';                   // 20º tipo → Ctrl+0
+    return ''; // 21º tipo em diante: sem atalho
+  }
+
+  // Só existe enquanto a grade está aberta (ver abrirGradeMontagemPersonalizada,
+  // que liga/desliga este listener junto com o modal).
+  function _gradeKeydownHandler(e) {
+    if (_gradeSomenteRevisao) return; // sem abas pra atalho selecionar nesse modo
+    if (e.altKey || e.metaKey) return; // não interfere com Alt+seta etc.
+
+    // Nos campos De/Até, deixa digitar números normalmente — só Ctrl+dígito
+    // (que não digita nada num campo numérico) continua valendo ali.
+    const digitandoEmCampo = e.target && (e.target.id === 'grade-de' || e.target.id === 'grade-ate');
+    if (digitandoEmCampo && !e.ctrlKey) return;
+
+    let idx = null;
+    if (e.key >= '1' && e.key <= '9') idx = (e.ctrlKey ? 10 : 0) + (Number(e.key) - 1);
+    else if (e.key === '0') idx = e.ctrlKey ? 19 : 9;
+    if (idx === null) return;
+
+    const tiposSimples = (LW.MONTAGEM_OPCOES || []).filter(o => o.modo === 'simples');
+    if (idx >= tiposSimples.length) return; // tecla sem tipo correspondente ainda
+
+    e.preventDefault();
+    _gradeTipoAtivo = tiposSimples[idx].tipo;
+    _renderGradeMontagem();
+  }
+
   function _gradeClicarBerco(i) {
     if (_gradeSomenteRevisao) {
       // Alterna: 1º clique apaga (marca como não usado); um 2º clique no
@@ -1231,6 +1282,48 @@
 
     const valor = _gradeSomenteRevisao ? null : (_gradeTipoAtivo || null);
     for (let i = de - 1; i <= ate - 1; i++) _gradeTrabalho[i] = valor;
+    _renderGradeMontagem();
+  }
+
+  /**
+   * "✅ Completar Vazios" — preenche TODOS os berços que ainda não têm
+   * tipo definido (null) com o tipo ativo nas abas, sem tocar nos que já
+   * foram preenchidos (diferente de "Aplicar", que sobrescreve um
+   * intervalo inteiro, preenchido ou não). Pensado pro caso comum de
+   * preencher um monte de berços com um tipo e, no final, "o resto" com
+   * outro — sem precisar saber quais números sobraram nem clicar um a um.
+   * Não existe em modo de revisão (o botão nem é criado nesse caso — ver
+   * abrirGradeMontagemPersonalizada).
+   */
+  function _gradeCompletarVazios() {
+    const erroEl = document.getElementById('grade-erro');
+    erroEl.style.display = 'none';
+
+    if (_gradeTipoAtivo === null) {
+      erroEl.textContent = 'Selecione um tipo de montagem nas abas acima primeiro.';
+      erroEl.style.display = 'block';
+      return;
+    }
+    if (_gradeTipoAtivo === '') {
+      erroEl.textContent = '"🗑️ Limpar" não combina com Completar Vazios — selecione um tipo de montagem.';
+      erroEl.style.display = 'block';
+      return;
+    }
+
+    let qtdPreenchidos = 0;
+    for (let i = 0; i < _gradeTrabalho.length; i++) {
+      if (!_gradeTrabalho[i]) {
+        _gradeTrabalho[i] = _gradeTipoAtivo;
+        qtdPreenchidos++;
+      }
+    }
+
+    if (qtdPreenchidos === 0) {
+      erroEl.textContent = 'Não há berços vazios — todos já têm um tipo definido.';
+      erroEl.style.display = 'block';
+      return;
+    }
+
     _renderGradeMontagem();
   }
 

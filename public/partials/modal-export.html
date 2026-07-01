@@ -1,0 +1,70 @@
+  <!-- ============ MODAL IMPORTAÇÃO ============ -->
+  <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
+  <div id="export-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:640px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h2 style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em">⬇ EXPORTAR
+          EXCEL (.XLSX)</h2>
+        <button onclick="LWDash.fecharExportModal()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <!-- Período -->
+      <div style="margin-bottom:20px">
+        <div
+          style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+          Período</div>
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="export-periodo" id="exp-radio-tudo" value="tudo" checked
+              onchange="LWDash.onExportPeriodoChange(this.value)"
+              style="accent-color:var(--accent);width:16px;height:16px">
+            <span style="font-size:.9rem">Exportar tudo</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="radio" name="export-periodo" id="exp-radio-periodo" value="periodo"
+              onchange="LWDash.onExportPeriodoChange(this.value)"
+              style="accent-color:var(--accent);width:16px;height:16px">
+            <span style="font-size:.9rem">Por período</span>
+          </label>
+        </div>
+        <div id="exp-periodo-inputs" style="display:none;align-items:center;gap:10px;flex-wrap:wrap">
+          <input class="form-input" type="date" id="exp-data-inicio" style="width:155px"
+            onchange="LWDash.atualizarPreviewCount()">
+          <span style="color:var(--text-3);font-size:.85rem">até</span>
+          <input class="form-input" type="date" id="exp-data-fim" style="width:155px"
+            onchange="LWDash.atualizarPreviewCount()">
+        </div>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin-bottom:20px"></div>
+
+      <!-- Seleção de colunas -->
+      <div style="margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">Colunas</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="LWDash.selecionarTodasColunas(true)">Marcar todas</button>
+            <button class="btn btn-ghost btn-sm" onclick="LWDash.selecionarTodasColunas(false)">Desmarcar todas</button>
+          </div>
+        </div>
+        <div id="exp-colunas-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin-bottom:20px"></div>
+
+      <!-- Rodapé -->
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span id="exp-preview-count" style="font-size:.82rem;color:var(--text-3)"></span>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" onclick="LWDash.fecharExportModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="LWDash.confirmarExport()">⬇ Baixar Excel (.xlsx)</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+

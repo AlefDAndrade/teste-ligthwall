@@ -1,0 +1,201 @@
+    <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
+    <main class="main" id="page-analise-operacional">
+      <div class="page-header">
+        <h1 class="page-title">Análise <span>Operacional</span></h1>
+        <p class="page-desc">KPIs avançados · Gargalos · Correlações · Insights automáticos</p>
+      </div>
+
+      <div class="page-body">
+
+        <!-- Loading / Empty states -->
+        <div id="ao-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando dados...
+        </div>
+        <div id="ao-empty" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Nenhum registro no
+          período selecionado.</div>
+
+        <!-- Filtros -->
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">De</label>
+              <input class="form-input" type="date" id="ao-data-inicio" style="width:150px">
+            </div>
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">Até</label>
+              <input class="form-input" type="date" id="ao-data-fim" style="width:150px">
+            </div>
+            <button class="btn btn-outline-accent" id="btn-ao-filtrar">Filtrar</button>
+          </div>
+        </div>
+
+        <div id="ao-content">
+
+          <!-- ═══ KPIs PRINCIPAIS ═══ -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr) 2fr;gap:16px;margin-bottom:20px">
+
+            <!-- Coluna 1: Produção -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="kpi-card" style="flex:1">
+                <div class="kpi-label">Produção Total</div>
+                <div class="kpi-value accent" id="ao-kpi-m2" style="font-size:1.7rem">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">metros quadrados</div>
+              </div>
+              <div class="kpi-card" style="flex:1">
+                <div class="kpi-label">Painéis Produzidos</div>
+                <div class="kpi-value" id="ao-kpi-paineis" style="font-size:1.7rem">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">unidades no período</div>
+              </div>
+            </div>
+
+            <!-- Coluna 2: Ciclo -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="kpi-card" style="flex:1">
+                <div class="kpi-label">Tempo Médio de Ciclo</div>
+                <div class="kpi-value" id="ao-kpi-ciclo" style="font-size:1.5rem;font-family:var(--font-mono)">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">referência: 45 min</div>
+              </div>
+              <div class="kpi-card" style="flex:1">
+                <div class="kpi-label">Tempo Médio / Bateria</div>
+                <div class="kpi-value" id="ao-kpi-tempo-bat" style="font-size:1.5rem;font-family:var(--font-mono)">—
+                </div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ponderado por operações</div>
+              </div>
+            </div>
+
+            <!-- Coluna 3: Atrasos -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="kpi-card red" style="flex:1">
+                <div class="kpi-label">Taxa de Atrasos</div>
+                <div class="kpi-value red" id="ao-kpi-atraso-pct" style="font-size:1.7rem">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações com atraso</div>
+              </div>
+              <div class="kpi-card" style="flex:1;border-left:3px solid var(--red)">
+                <div class="kpi-label">Horas Perdidas</div>
+                <div class="kpi-value" id="ao-kpi-horas-perd" style="font-size:1.7rem;color:var(--red)">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">excedente acima de 59 min</div>
+              </div>
+            </div>
+
+            <!-- Coluna 4: Eficiência + Melhores/Piores -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="kpi-card" style="flex:1">
+                <div class="kpi-label">Eficiência Operacional</div>
+                <div class="kpi-value green" id="ao-kpi-eficiencia" style="font-size:2.2rem">—</div>
+                <div style="background:var(--bg-3);border-radius:4px;height:6px;margin-top:8px;overflow:hidden">
+                  <div id="ao-eficiencia-bar" style="height:100%;border-radius:4px;transition:width .8s"></div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1">
+                <div class="kpi-card" style="border-top:3px solid var(--green)">
+                  <div class="kpi-label">🥇 Melhor Bateria</div>
+                  <div class="kpi-value green" id="ao-kpi-melhor-bat" style="font-size:1.5rem">—</div>
+                </div>
+                <div class="kpi-card" style="border-top:3px solid var(--red)">
+                  <div class="kpi-label">⚠️ Pior Bateria</div>
+                  <div class="kpi-value red" id="ao-kpi-pior-bat" style="font-size:1.5rem">—</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ═══ INSIGHTS AUTOMÁTICOS ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:12px">
+              <span>💡 Insights Automáticos</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Gerados automaticamente com base nos
+                dados do período</span>
+            </div>
+            <div id="ao-insights"></div>
+          </div>
+
+          <!-- ═══ RANKING BATERIAS ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:14px">
+              <span>🔋 Ranking de Baterias</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Ordenado por eficiência — 🥇 melhor ·
+                ⚠️ pior</span>
+            </div>
+            <div style="overflow-x:auto;margin-bottom:16px" id="ao-rank-baterias"></div>
+            <div style="margin-top:16px">
+              <div
+                style="font-size:.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+                Operações por Bateria</div>
+              <canvas id="ao-chart-bat-ops" style="width:100%;height:180px;display:block"></canvas>
+            </div>
+          </div>
+
+          <!-- ═══ 2 COLUNAS: Motivos + Correlações ═══ -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+            <!-- Motivos de Atraso -->
+            <div class="card">
+              <div class="card-title" style="margin-bottom:16px">
+                <span>🚨 Ranking de Motivos de Atraso</span>
+              </div>
+              <div id="ao-rank-motivos"></div>
+            </div>
+
+            <!-- Correlações -->
+            <div class="card">
+              <div class="card-title" style="margin-bottom:12px">🔗 Correlações</div>
+
+              <div style="margin-bottom:18px">
+                <div
+                  style="font-size:.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">
+                  % Atraso por Tipo de Montagem</div>
+                <canvas id="ao-cor-montagem" style="width:100%;height:160px;display:block"></canvas>
+              </div>
+
+              <div>
+                <div
+                  style="font-size:.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">
+                  Tempo Médio por Dimensão (min)</div>
+                <canvas id="ao-cor-dimensao" style="width:100%;height:160px;display:block"></canvas>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ═══ TENDÊNCIAS + DETERIORAÇÃO ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:6px">
+              <span>📈 Tendências Temporais</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">% atrasos e tempo médio por mês</span>
+            </div>
+            <canvas id="ao-trend-chart" style="width:100%;height:220px;display:block;margin-bottom:16px"></canvas>
+            <div style="font-size:.8rem;color:var(--text-2);margin-bottom:8px;font-weight:600">Baterias com tendência de
+              deterioração:</div>
+            <div id="ao-baterias-piora"></div>
+          </div>
+
+          <!-- ═══ PRODUTIVIDADE ═══ -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+            <div class="card">
+              <div class="card-title" style="margin-bottom:12px">📦 m² Produzido por Bateria (Top 8)</div>
+              <canvas id="ao-prod-m2" style="width:100%;height:160px;display:block"></canvas>
+            </div>
+
+            <div class="card">
+              <div class="card-title" style="margin-bottom:16px">📐 Produção por Dimensão</div>
+              <div id="ao-prod-dimensao"></div>
+            </div>
+
+          </div>
+
+          <!-- ═══ CORRELAÇÃO BATERIA x TEMPO ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:8px">
+              <span>⏱ Bateria × Tempo Médio de Ciclo</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">verde &lt;50 min · amarelo 50-59 ·
+                vermelho &gt;59 min</span>
+            </div>
+            <canvas id="ao-cor-bat-tempo" style="width:100%;height:180px;display:block"></canvas>
+          </div>
+
+        </div><!-- #ao-content -->
+
+      </div><!-- .page-body -->
+    </main>
+

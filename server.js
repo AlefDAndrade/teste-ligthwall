@@ -1,7 +1,6 @@
 const http      = require('http');
 const fs        = require('fs');
 const path      = require('path');
-const crypto    = require('crypto');
 const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
@@ -19,10 +18,54 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
+
+// ─── security.json mora FORA de public/ ────────────────────────────────────
+// Antes, security.json vivia em public/db/ — e por isso era servido como
+// arquivo estático comum (GET /db/security.json acessível por qualquer um,
+// sem senha nenhuma; ver README, "Limitações conhecidas"). Agora mora em
+// private/ (irmã de public/, nunca servida como estático — mesmo padrão já
+// usado por backups-seguranca/ e logs/). O acesso por HTTP passa a exigir
+// uma sessão de admin válida (ver GET /db/security.json e lib/sessao.js,
+// mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
+const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
+const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
+fs.mkdirSync(PRIVATE_DIR, { recursive: true });
+
+// Migração automática, só na 1ª vez que sobe depois desta mudança: se o
+// arquivo antigo (public/db/security.json) ainda existir e o novo ainda
+// não, copia o conteúdo pro novo lugar e RENOMEIA o antigo (nunca apaga —
+// mesmo padrão das migrações de db.js, que preferem deixar um rastro
+// "<nome>.migrado-<timestamp>" a apagar dados).
+(function migrarSecurityJsonSeNecessario() {
+  const caminhoAntigo = path.join(DB_DIR, 'security.json');
+  if (fs.existsSync(SECURITY_PATH)) return; // já migrado
+  if (!fs.existsSync(caminhoAntigo)) return; // instalação nova — nada pra migrar
+  fs.copyFileSync(caminhoAntigo, SECURITY_PATH);
+  fs.renameSync(caminhoAntigo, caminhoAntigo + `.migrado-${Date.now()}`);
+})();
+
+// Autenticação do Administrador (hash de senha + rate limiting de
+// tentativas) — extraído pra lib/auth.js (ver esse arquivo pros detalhes
+// e comentários originais; aqui só instanciamos e usamos).
+const auth = require('./lib/auth.js')(SECURITY_PATH);
+
+// Sessão de Administrador (token em cookie HttpOnly) — extraído pra
+// lib/sessao.js. Cobre as 2 rotas que não tinham proteção própria nenhuma
+// antes desta mudança: GET /db/security.json e POST /salvar-security.
+const sessao = require('./lib/sessao.js')();
+
+// Resolve o caminho real, no disco, de um arquivo de public/db/ — quase
+// todos vivem em DB_DIR, mas security.json é a única exceção (ver
+// PRIVATE_DIR/SECURITY_PATH, acima). Centralizar essa decisão aqui evita
+// ter que repetir o "if (nome === 'security.json')" em cada rota de
+// backup/restauração que itera a lista de arquivos genericamente.
+function caminhoArquivoDb(nome) {
+  return nome === 'security.json' ? SECURITY_PATH : path.join(DB_DIR, nome);
+}
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -133,23 +176,6 @@ function incrementarContadorTracosHoje(quantidade, modoTesteFlag = false) {
   return lerContadorTracosHoje(false);
 }
 
-// ─── Utilitário: hash SHA-256 no servidor (Node.js crypto nativo) ──────────
-function sha256(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-// ─── Lê security.json do disco ────────────────────────────────────────────
-const HASH_FALLBACK = 'c415e920e0281339d3633ab0c19d3b11c5a70a52ad2e17e405ef66723c51294c';
-
-function lerSecurity() {
-  const securityPath = path.join(DB_DIR, 'security.json');
-  try {
-    return JSON.parse(fs.readFileSync(securityPath, 'utf8'));
-  } catch (_) {
-    return { passwordHash: HASH_FALLBACK, recoveryKeyHash: null };
-  }
-}
-
 // ─── Validação de formato dos arquivos de public/db/ — usada ao restaurar
 // um backup, pra recusar arquivo errado/corrompido antes de gravar no disco.
 const VALIDADORES_BACKUP_DADOS = {
@@ -242,7 +268,7 @@ async function gerarZipDadosServidor() {
         const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
         zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
       } else {
-        zip.file(nome, fs.readFileSync(path.join(DB_DIR, nome)));
+        zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
     } catch (_) {
       // Arquivo/tabela pode não existir/estar vazia ainda — ok, só não entra no zip.
@@ -476,18 +502,37 @@ const server = http.createServer((req, res) => {
   // POST /verificar-senha  { senha: "texto plano" }
   // Retorna { ok: true } se correta, { ok: false } se incorreta.
   // A senha nunca é logada — apenas comparada com o hash em security.json.
+  // Protegida por rate limiting (ver validarSegredo/rateLimit*, acima):
+  // depois de muitas tentativas erradas do mesmo IP, responde 429 em vez
+  // de continuar testando a senha enviada.
   if (req.method === 'POST' && urlPath === '/verificar-senha') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          const segundos = auth.rateLimitSegundosRestantes(req);
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(segundos) });
+          res.end(JSON.stringify({ ok: false, erro: `Muitas tentativas erradas. Tente de novo em ${Math.ceil(segundos / 60)} min.` }));
+          return;
+        }
         const { senha } = JSON.parse(body);
         if (typeof senha !== 'string') throw new Error('Payload inválido.');
-        const security = lerSecurity();
-        const hashEnviado = sha256(senha);
-        const hashEsperado = security.passwordHash || HASH_FALLBACK;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: hashEnviado === hashEsperado }));
+        const security = auth.lerSecurity();
+        const hashEsperado = security.passwordHash || auth.HASH_FALLBACK;
+        const ok = auth.validarSegredo(senha, hashEsperado, 'passwordHash');
+        const headers = { 'Content-Type': 'application/json' };
+        if (ok) {
+          auth.rateLimitRegistrarSucesso(req);
+          // Emite sessão (ver lib/sessao.js) — usada por GET /db/security.json
+          // e POST /salvar-security, que não tinham proteção própria nenhuma
+          // antes desta mudança.
+          headers['Set-Cookie'] = sessao.criarCookieSessao();
+        } else {
+          auth.rateLimitRegistrarFalha(req);
+        }
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ ok }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -498,23 +543,41 @@ const server = http.createServer((req, res) => {
 
   // ── NOVO: Verificar arquivo de recuperação no servidor ────────────────────
   // POST /verificar-recovery  { chave: "conteudo do .key" }
-  // Retorna { ok: true } se válido.
+  // Retorna { ok: true } se válido. Mesmo rate limiting de /verificar-senha
+  // (contador compartilhado por IP — ver rateLimit*, acima).
   if (req.method === 'POST' && urlPath === '/verificar-recovery') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          const segundos = auth.rateLimitSegundosRestantes(req);
+          res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(segundos) });
+          res.end(JSON.stringify({ ok: false, erro: `Muitas tentativas erradas. Tente de novo em ${Math.ceil(segundos / 60)} min.` }));
+          return;
+        }
         const { chave } = JSON.parse(body);
         if (typeof chave !== 'string') throw new Error('Payload inválido.');
-        const security = lerSecurity();
+        const security = auth.lerSecurity();
         if (!security.recoveryKeyHash) {
+          auth.rateLimitRegistrarFalha(req);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false }));
           return;
         }
-        const hashEnviado = sha256(chave.trim());
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: hashEnviado === security.recoveryKeyHash }));
+        const ok = auth.validarSegredo(chave.trim(), security.recoveryKeyHash, 'recoveryKeyHash');
+        const headers = { 'Content-Type': 'application/json' };
+        if (ok) {
+          auth.rateLimitRegistrarSucesso(req);
+          // Mesma sessão de /verificar-senha — é o que permite o fluxo de
+          // recuperação chamar POST /salvar-security depois (ver
+          // admin-auth.js, _salvarNovaSenha) sem precisar reenviar a chave.
+          headers['Set-Cookie'] = sessao.criarCookieSessao();
+        } else {
+          auth.rateLimitRegistrarFalha(req);
+        }
+        res.writeHead(200, headers);
+        res.end(JSON.stringify({ ok }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -525,7 +588,9 @@ const server = http.createServer((req, res) => {
 
   // ── NOVO: Gerar hash de uma senha no servidor ──────────────────────────────
   // POST /gerar-hash  { senha: "texto plano" }
-  // Retorna { hash: "hex64" } — usado ao redefinir senha via recuperação.
+  // Retorna { hash: "scrypt:salt:hash" } — usado ao redefinir senha via
+  // recuperação ou troca normal de senha (ver admin-auth.js). Antes gerava
+  // SHA-256 puro; agora sempre gera no formato novo (scrypt com salt).
   if (req.method === 'POST' && urlPath === '/gerar-hash') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -534,7 +599,7 @@ const server = http.createServer((req, res) => {
         const { senha } = JSON.parse(body);
         if (typeof senha !== 'string') throw new Error('Payload inválido.');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ hash: sha256(senha) }));
+        res.end(JSON.stringify({ hash: auth.gerarHashSenha(senha) }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -598,21 +663,35 @@ const server = http.createServer((req, res) => {
   }
 
   // Salvar security.json via POST
+  // ── IMPORTANTE: antes desta mudança, esta rota não exigia senha NEM
+  // sessão — bastava mandar um hash no formato certo pra sobrescrever a
+  // senha do Administrador sem precisar saber a senha atual. Agora exige
+  // uma sessão válida (ver lib/sessao.js), criada em /verificar-senha ou
+  // /verificar-recovery — as duas formas de chegar até aqui legitimamente
+  // (troca de senha via recuperação é o único fluxo que usa esta rota
+  // hoje, ver admin-auth.js, _salvarNovaSenha).
   if (req.method === 'POST' && urlPath === '/salvar-security') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const hexRE = /^[0-9a-f]{64}$/;
-        if (
-          typeof payload.passwordHash    !== 'string' || !hexRE.test(payload.passwordHash) ||
-          typeof payload.recoveryKeyHash !== 'string' || !hexRE.test(payload.recoveryKeyHash)
-        ) {
-          throw new Error('Payload inválido: hashes SHA-256 esperados.');
+        // Aceita tanto o formato novo ("scrypt:salt:hash", gerado por
+        // /gerar-hash a partir desta mudança) quanto o formato legado
+        // (SHA-256 puro, 64 hex) — necessário porque, ao trocar só a
+        // senha, o front reenvia o recoveryKeyHash ATUAL sem alterar (ver
+        // admin-auth.js, _salvarNovaSenha), que pode ainda estar no
+        // formato antigo se a chave de recuperação nunca foi regerada.
+        // Validação centralizada em lib/auth.js (auth.formatoDeHashValido).
+        if (!auth.formatoDeHashValido(payload.passwordHash) || !auth.formatoDeHashValido(payload.recoveryKeyHash)) {
+          throw new Error('Payload inválido: hash de senha em formato inesperado.');
         }
-        const securityPath = path.join(DB_DIR, 'security.json');
-        fs.writeFileSync(securityPath, JSON.stringify({
+        fs.writeFileSync(SECURITY_PATH, JSON.stringify({
           passwordHash:    payload.passwordHash,
           recoveryKeyHash: payload.recoveryKeyHash,
         }, null, 2), 'utf8');
@@ -623,6 +702,45 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
     });
+    return;
+  }
+
+  // ── GET /db/security.json: ANTES desta mudança, era servido como arquivo
+  // estático comum (qualquer um podia acessar /db/security.json direto,
+  // sem senha — ver README, "Limitações conhecidas"). O arquivo de verdade
+  // já não vive mais em public/ (ver SECURITY_PATH) — então essa URL só
+  // funciona se vier com sessão válida (ver lib/sessao.js). É a mesma URL
+  // de sempre porque dois lugares no front ainda fazem fetch('db/security.json')
+  // direto: admin-auth.js (pra preservar o recoveryKeyHash atual ao trocar
+  // de senha) e data.js (LW.gerarBackupDados(), pro "Backup de Dados").
+  // Os dois só rodam depois de uma senha/chave de recuperação confirmada,
+  // então a sessão já existe nesse ponto — nenhuma mudança no front foi
+  // necessária além disso.
+  if (req.method === 'GET' && urlPath === '/db/security.json') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const conteudo = fs.readFileSync(SECURITY_PATH, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(conteudo);
+    } catch (_) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ passwordHash: auth.HASH_FALLBACK, recoveryKeyHash: null }));
+    }
+    return;
+  }
+
+  // ── POST /logout-admin: destrói a sessão (ver lib/sessao.js) e expira o
+  // cookie no navegador. Chamado por AdminAuth.logout() (admin-auth.js)
+  // antes de limpar o localStorage e voltar pro login — sem isso, a sessão
+  // no servidor continuaria válida até o tempo expirar por conta própria.
+  if (req.method === 'POST' && urlPath === '/logout-admin') {
+    sessao.logout(req);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': sessao.cookieDeLogout() });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
@@ -1207,10 +1325,15 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        if (sha256(senha) !== (security.passwordHash || HASH_FALLBACK)) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        if (!auth.validarSegredo(senha, security.passwordHash || auth.HASH_FALLBACK, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
 
         if (!arquivos || typeof arquivos !== 'object') {
           throw new Error('Payload inválido: "arquivos" ausente.');
@@ -1710,11 +1833,16 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        const hashEsperado = security.passwordHash || HASH_FALLBACK;
-        if (sha256(senha) !== hashEsperado) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        const hashEsperado = security.passwordHash || auth.HASH_FALLBACK;
+        if (!auth.validarSegredo(senha, hashEsperado, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
 
         // 2) Valida a estrutura de cada arquivo — nunca confiamos só na
         // validação já feita no navegador.
@@ -1773,7 +1901,7 @@ const server = http.createServer((req, res) => {
               const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
             } else {
-              fs.copyFileSync(path.join(DB_DIR, nome), path.join(dirSeguranca, nome));
+              fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
           } catch (_) {
             // Arquivo/tabela pode estar vazio ainda (ex.: primeira execução) — ok.
@@ -1793,8 +1921,8 @@ const server = http.createServer((req, res) => {
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
             'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
-          tmp: path.join(DB_DIR, nome + '.tmp'),
-          destino: path.join(DB_DIR, nome),
+          tmp: caminhoArquivoDb(nome) + '.tmp',
+          destino: caminhoArquivoDb(nome),
           texto: textosValidados[nome],
         }));
         pendentes.forEach(p => fs.writeFileSync(p.tmp, p.texto, 'utf8'));
@@ -1920,10 +2048,15 @@ const server = http.createServer((req, res) => {
         if (typeof senha !== 'string' || !senha) {
           throw new Error('Senha de administrador obrigatória.');
         }
-        const security = lerSecurity();
-        if (sha256(senha) !== (security.passwordHash || HASH_FALLBACK)) {
+        if (auth.rateLimitEstaBloqueado(req)) {
+          throw new Error(`Muitas tentativas erradas. Tente de novo em ${Math.ceil(auth.rateLimitSegundosRestantes(req) / 60)} min.`);
+        }
+        const security = auth.lerSecurity();
+        if (!auth.validarSegredo(senha, security.passwordHash || auth.HASH_FALLBACK, 'passwordHash')) {
+          auth.rateLimitRegistrarFalha(req);
           throw new Error('Senha incorreta.');
         }
+        auth.rateLimitRegistrarSucesso(req);
         if (confirmacao !== 'RESTAURAR TUDO') {
           throw new Error('Frase de confirmação incorreta.');
         }

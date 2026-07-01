@@ -2005,6 +2005,114 @@ td.mono {
   background: var(--bg-3);
 }
 
+/* ── Copiloto IA (botão flutuante + painel de chat) ─────────────────────── */
+#copiloto-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+  z-index: 998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s ease;
+}
+
+#copiloto-btn:hover {
+  transform: scale(1.06);
+}
+
+#copiloto-panel {
+  display: none;
+  position: fixed;
+  bottom: 92px;
+  right: 24px;
+  width: 380px;
+  max-width: 92vw;
+  height: 520px;
+  max-height: 75vh;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, .5);
+  z-index: 998;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#copiloto-panel.active {
+  display: flex;
+}
+
+.copiloto-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-2);
+  flex-shrink: 0;
+}
+
+.copiloto-mensagens {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.copiloto-msg {
+  max-width: 85%;
+  padding: 8px 12px;
+  font-size: .85rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.copiloto-msg-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px 12px 2px 12px;
+}
+
+.copiloto-msg-bot {
+  align-self: flex-start;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 12px 2px;
+}
+
+.copiloto-msg-carregando {
+  align-self: flex-start;
+  color: var(--text-3);
+  font-size: .82rem;
+  font-style: italic;
+}
+
+.copiloto-input-row {
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.copiloto-input-row .form-input {
+  flex: 1;
+}
+
 /* ── Product Tour (overlay + spotlight + balão) ─────────────────────────── */
 #tour-overlay {
   display: none;
@@ -2298,6 +2406,104 @@ td.mono {
   color: var(--text-3);
   font-style: italic;
 }
+
+/* ============================================================
+   "BATERIA ATUAL" (popover da topbar, ao lado do Debriefing)
+   ============================================================ */
+/* Mesmo padrão visual do Debriefing (.ao-popover + cabeçalho próprio) —
+   só leitura: mostra os berços da operação em andamento agora, no
+   formato visual da grade de Montagem Personalizada (ver operacao.js),
+   mas aqui o berço em si não é clicável — só os 2 indicadores (●/•)
+   dentro de cada um, que por enquanto não têm função associada (ver
+   bateria-atual.js, _baCliqueIndicador). */
+.bateria-atual-popover {
+  width: 360px;
+  max-width: min(360px, calc(100vw - 48px));
+  max-height: 70vh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.bateria-atual-popover.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.ba-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ba-header-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.ba-content {
+  padding: 14px;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.ba-resumo {
+  font-size: .82rem;
+  color: var(--text-2);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.ba-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.ba-celula {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px;
+  border-radius: var(--radius);
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.ba-numero {
+  flex: 1;
+  text-align: center;
+}
+
+/* Os dois indicadores — só estes são clicáveis dentro da célula (o
+   berço em si é estático). Sem função definida ainda (ver
+   bateria-atual.js), mas já reagem visualmente ao hover pra deixar
+   claro que SÃO clicáveis, mesmo sem fazer nada ainda. */
+.ba-dot {
+  cursor: pointer;
+  font-size: .85rem;
+  line-height: 1;
+  padding: 2px 3px;
+  opacity: .55;
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.ba-dot:hover {
+  opacity: 1;
+  transform: scale(1.3);
+}
+
+.ba-vazio {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: .82rem;
+}
+
 /* ============================================================
    MÓDULO DE PARADAS
    ============================================================ */

@@ -1,0 +1,88 @@
+  <!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
+  <div id="mesclar-backup-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--accent);letter-spacing:.06em">🔗
+          MESCLAR BACKUP DE DADOS</h2>
+        <button onclick="fecharMesclarBackup()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="mesclar-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Passo 0: escolher o arquivo -->
+      <div id="mesclar-step-0">
+        <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
+          Some <strong>operações, traços, ajustes de receita e paradas</strong> de um arquivo "Backup de Dados" (.zip)
+          gerado em <strong>OUTRA instalação</strong> deste mesmo sistema — diferente de "Restaurar Dados", aqui nada
+          do que já existe aqui é apagado ou alterado, só registros novos são adicionados. Configurações, senha,
+          sobra e contador de traços desta instalação não são tocados.
+        </p>
+
+        <div id="mesclar-dropzone" style="
+            border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
+            text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
+            background:var(--bg-2)
+          " onclick="document.getElementById('mesclar-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='rgba(0,229,255,.06)'"
+          ondragleave="this.style.borderColor='var(--border)';this.style.background='var(--bg-2)'"
+          ondrop="handleMesclarDrop(event)">
+          <div style="font-size:2.5rem;margin-bottom:12px">📦</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:6px">Arraste o backup da OUTRA instalação aqui
+          </div>
+          <div style="color:var(--text-3);font-size:.85rem">ou clique para selecionar — .zip</div>
+        </div>
+        <input type="file" id="mesclar-file-input" accept=".zip" style="display:none"
+          onchange="handleMesclarArquivo(this.files[0])">
+      </div>
+
+      <!-- Passo 1: preview do conteúdo + senha + confirmação -->
+      <div id="mesclar-step-1" style="display:none">
+        <button class="btn btn-ghost btn-sm" style="margin-bottom:16px" onclick="voltarMesclarStep0()">←
+          Voltar</button>
+
+        <div
+          style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;font-size:.85rem;color:var(--text-2)">
+          <div style="font-weight:700;color:var(--text);margin-bottom:10px">Encontrado neste backup:</div>
+          <div id="mesclar-preview"></div>
+        </div>
+
+        <p style="color:var(--accent);font-size:.85rem;font-weight:600;margin-bottom:16px">
+          ✓ Isso vai ADICIONAR esses registros aos dados atuais — nada existente é apagado ou alterado.
+        </p>
+
+        <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
+          administrador para continuar:</label>
+        <input type="password" id="mesclar-senha" class="form-input" style="margin-bottom:20px;width:100%"
+          placeholder="Senha de administrador" autocomplete="current-password">
+
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharMesclarBackup()">Cancelar</button>
+          <button class="btn btn-success" id="mesclar-btn-confirmar" onclick="confirmarMesclarBackup()">🔗 Mesclar
+            agora</button>
+        </div>
+      </div>
+
+      <!-- Passo 2: resultado -->
+      <div id="mesclar-step-2" style="display:none">
+        <div style="text-align:center;padding:8px 0 20px">
+          <div style="font-size:2.5rem;margin-bottom:10px">✅</div>
+          <div style="color:var(--text);font-weight:700;margin-bottom:14px">Mesclagem concluída!</div>
+          <div id="mesclar-resultado"
+            style="text-align:left;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:.85rem;color:var(--text-2);display:flex;flex-direction:column;gap:4px">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:12px">
+          <button class="btn btn-ghost" onclick="fecharMesclarBackup()">Fechar</button>
+          <button class="btn btn-outline-accent" onclick="resetMesclarBackupModal()">Mesclar outro arquivo</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+

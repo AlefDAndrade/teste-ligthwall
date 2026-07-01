@@ -1,0 +1,238 @@
+  <!-- ============ MODAL CONFIGURAÇÕES ============ -->
+  <div id="config-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:880px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+        <h2 style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em">⚙
+          CONFIGURAÇÕES</h2>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-ghost btn-sm" onclick="LWTour.iniciar('config', { forcado: true })"
+            title="Refazer o tour guiado desta tela">❔ Tour</button>
+          <button onclick="fecharConfigComConfirmacao()"
+            style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:24px;align-items:flex-start">
+
+        <!-- ---- Menu lateral ---- -->
+        <div style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--border);padding-right:20px">
+          <button type="button" id="cfg-nav-dados" onclick="cfgMostrarSecao('dados')"
+            style="text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600">
+            🔧 Baterias e Montagem</button>
+          <button type="button" id="cfg-nav-atalhos" onclick="cfgMostrarSecao('atalhos')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            ⌨️ Atalhos de Teclado</button>
+          <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔒 Autorizados</button>
+        </div>
+
+        <!-- ---- Conteúdo ---- -->
+        <div style="flex:1;min-width:0;max-height:68vh;overflow-y:auto;padding-right:6px">
+
+          <!-- ========== SEÇÃO: Baterias e Tipos de Montagem ========== -->
+          <div id="cfg-secao-dados">
+
+            <!-- ---- IDs de Bateria ---- -->
+            <div style="margin-bottom:28px">
+              <div class="card-title">Baterias Cadastradas</div>
+              <div id="cfg-baterias-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+              <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+                <div
+                  style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                  Nova Bateria</div>
+                <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">ID da Bateria</label>
+                    <input class="form-input" id="cfg-bateria-novo" placeholder="Ex: B14" style="width:130px">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">Dimensão (em cm)</label>
+                    <input class="form-input" type="text" inputmode="decimal" id="cfg-bateria-label"
+                      placeholder="Ex: 15" style="width:130px">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">Qtd. Berços</label>
+                    <input class="form-input" type="number" id="cfg-bateria-bercos" placeholder="20" style="width:90px">
+                  </div>
+                  <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarBateria()">+ Adicionar</button>
+                </div>
+              </div>
+            </div>
+
+            <hr class="divider">
+
+      <!-- ---- Tipos de Montagem ---- -->
+      <div style="margin-bottom:28px">
+        <div class="card-title">Tipos de Montagem</div>
+        <div id="cfg-montagem-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+          <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+            Novo Tipo de Montagem</div>
+
+          <!-- Escolha do modo -->
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button type="button" id="cfg-mont-modo-simples" class="btn btn-outline-accent btn-sm"
+              onclick="cfgEscolherModoMontagem('simples')">Simples</button>
+            <button type="button" id="cfg-mont-modo-hibrida" class="btn btn-ghost btn-sm"
+              onclick="cfgEscolherModoMontagem('hibrida')">Híbrida</button>
+          </div>
+
+          <!-- ---- Formulário: SIMPLES ---- -->
+          <div id="cfg-mont-form-simples">
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:12px">
+              Um único tipo de placa por berço. Limite físico da operação: no máximo 2 painéis/berço.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Label</label>
+                <input class="form-input" id="cfg-mont-simples-label" placeholder="Ex: 3/T" style="width:160px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Tipo de Montagem</label>
+                <input class="form-input" id="cfg-mont-simples-tipo" placeholder="Ex: 3t" style="width:120px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Painéis/Berço</label>
+                <select class="form-select" id="cfg-mont-simples-paineis" style="width:110px">
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Cor</label>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input type="color" id="cfg-mont-simples-cor"
+                    style="width:42px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);cursor:pointer">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="_cfgSugerirCorMontagem()"
+                    title="O programa já sugere uma cor automaticamente — clique aqui pra sortear outra sugestão, ou escolha à mão no quadradinho">🎲</button>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text-2);cursor:pointer">
+                <input type="checkbox" id="cfg-mont-simples-leva-cimenticia" onchange="cfgToggleCimenticiaQtd()">
+                Leva placas cimentícias
+              </label>
+              <div class="form-group" id="cfg-mont-simples-cimenticia-qtd-wrap" style="margin-bottom:0;display:none">
+                <label class="form-label">Cimentícias por painel</label>
+                <input class="form-input" type="number" id="cfg-mont-simples-cimenticia-qtd" placeholder="0"
+                  style="width:160px">
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarMontagemSimples()">+ Salvar Tipo
+                Simples</button>
+            </div>
+          </div>
+
+          <!-- ---- Formulário: HÍBRIDA ---- -->
+          <div id="cfg-mont-form-hibrida" style="display:none">
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:12px">
+              Combina dois tipos simples já cadastrados. O berço sempre terá 2 painéis — 1 de cada tipo escolhido.
+              A cimentícia é herdada automaticamente de cada tipo simples escolhido.
+            </p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Label</label>
+                <input class="form-input auto-filled" id="cfg-mont-hibrida-label" readonly
+                  placeholder="Escolha os 2 tipos →" style="width:200px">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">1º Tipo</label>
+                <select class="form-select" id="cfg-mont-hibrida-tipo1" style="width:170px"
+                  onchange="_cfgAtualizarLabelHibrida()"></select>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">2º Tipo</label>
+                <select class="form-select" id="cfg-mont-hibrida-tipo2" style="width:170px"
+                  onchange="_cfgAtualizarLabelHibrida()"></select>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarMontagemHibrida()">+ Salvar Tipo
+                Híbrida</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" onclick="fecharConfigComConfirmacao()">Cancelar</button>
+        <button class="btn btn-primary" onclick="cfgSalvar()">✓ Salvar Configurações</button>
+      </div>
+
+          </div>
+          <!-- ========== /SEÇÃO: Baterias e Tipos de Montagem ========== -->
+
+          <!-- ========== SEÇÃO: Atalhos de Teclado ========== -->
+          <div id="cfg-secao-atalhos" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">
+              <div class="card-title" style="margin-bottom:0">Atalhos de Teclado</div>
+              <button class="btn btn-ghost btn-sm" onclick="cfgResetarAtalhos()">↺ Restaurar Padrões</button>
+            </div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px">
+              Escolha a combinação mais confortável pra você em cada atalho. Clique em "Alterar" e pressione a nova
+              combinação — precisa ter ao menos uma tecla modificadora (Ctrl, Alt ou Shift), exceto teclas F1–F12.
+              Fica salvo só neste navegador.
+            </p>
+
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px">
+              Navegação entre páginas</div>
+            <div id="cfg-atalhos-navegacao" style="display:flex;flex-direction:column;gap:6px;margin-bottom:22px"></div>
+
+            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px">
+              Ações</div>
+            <div id="cfg-atalhos-acoes" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+          <!-- ========== /SEÇÃO: Atalhos de Teclado ========== -->
+
+          <!-- ========== SEÇÃO: Dispositivos Autorizados ========== -->
+          <div id="cfg-secao-autorizados" style="display:none">
+            <div class="card-title">Dispositivos Autorizados</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Controla quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong>.
+              Enquanto a lista estiver <strong>vazia</strong>, qualquer computador pode controlar (comportamento
+              atual). Ao autorizar pelo menos um dispositivo aqui, só os da lista podem controlar — os demais
+              continuam podendo acompanhar a operação ao vivo, só não interagir.
+            </p>
+
+            <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
+
+            <div id="cfg-autorizados-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Autorizar Novo Dispositivo</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
+                  <label class="form-label">Nome (opcional)</label>
+                  <input class="form-input" id="cfg-autorizado-nome" placeholder="Ex: Sala de Controle">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:2;min-width:240px">
+                  <label class="form-label">Device ID</label>
+                  <input class="form-input" id="cfg-autorizado-deviceid"
+                    style="font-family:var(--font-mono);font-size:.78rem">
+                </div>
+                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarAutorizado()">+ Autorizar</button>
+              </div>
+              <p style="font-size:.74rem;color:var(--text-3);margin-top:10px;margin-bottom:0">
+                💡 Pra autorizar <strong>este</strong> computador, o Device ID dele já vem preenchido acima.
+              </p>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+

@@ -1,0 +1,72 @@
+    <!-- ============ PAGE: MENU ============ -->
+    <main class="main active" id="page-menu">
+      <div style="padding:40px 32px">
+        <div style="margin-bottom:40px">
+          <h1 style="font-size:2.6rem;margin-bottom:6px">Sistema de <span style="color:var(--accent)">Injeção</span>
+          </h1>
+          <p style="color:var(--text-3);font-size:.9rem;text-transform:uppercase;letter-spacing:.08em">Lightwall SC —
+            Controle de produção industrial</p>
+        </div>
+        <div class="menu-grid">
+          <div class="menu-card" data-hide-analista onclick="showPage('operacao')">
+            <div class="menu-card-icon">⏱</div>
+            <div class="menu-card-title">Registrar Operação</div>
+            <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e
+              controle de tempo.</div>
+          </div>
+          <div class="menu-card" onclick="showPage('turnos')">
+            <div class="menu-card-icon">🏭</div>
+            <div class="menu-card-title">Desempenho Turnos</div>
+            <div class="menu-card-desc">Comparativo de produtividade, atrasos e eficiência operacional por turno de
+              trabalho.</div>
+          </div>
+          <div class="menu-card" onclick="showPage('registro')">
+            <div class="menu-card-icon">📋</div>
+            <div class="menu-card-title">Relatorio de Baterias</div>
+            <div class="menu-card-desc">Histórico completo de todas as injeções registradas com filtros e exportação em
+              CSV.</div>
+          </div>
+          <div class="menu-card" onclick="showPage('relatorio')">
+            <div class="menu-card-icon">🧾</div>
+            <div class="menu-card-title">Relatório de Injeção</div>
+            <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações.
+            </div>
+          </div>
+          <div class="menu-card" onclick="showPage('analise-operacional')">
+            <div class="menu-card-icon">📊</div>
+            <div class="menu-card-title">Análise Operacional</div>
+            <div class="menu-card-desc">KPIs avançados, gargalos, correlações e insights automáticos sobre a produção.
+            </div>
+          </div>
+          <div class="menu-card" onclick="showPage('qualidade-tracos')">
+            <div class="menu-card-icon">📐</div>
+            <div class="menu-card-title">Qualidade dos Traços</div>
+            <div class="menu-card-desc">Controle estatístico de processo: estabilidade de receitas, frequência de
+              ajuste por insumo e alertas de qualidade.</div>
+          </div>
+          <div class="menu-card" onclick="showPage('oee')">
+            <div class="menu-card-icon">🎯</div>
+            <div class="menu-card-title">OEE</div>
+            <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
+            </div>
+          </div>
+          <div class="menu-card" onclick="showPage('paradas')">
+            <div class="menu-card-icon">🛑</div>
+            <div class="menu-card-title">Registro de Paradas</div>
+            <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
+          </div>
+          <div class="menu-card" data-admin-only onclick="abrirImportacao()">
+            <div class="menu-card-icon">📥</div>
+            <div class="menu-card-title">Importar Documento</div>
+            <div class="menu-card-desc">Importa dados de uma planilha Excel (.xlsx / .xls) para o histórico ou relatório
+              de injeção.</div>
+          </div>
+          <div class="menu-card" data-admin-only onclick="abrirBackupHub()">
+            <div class="menu-card-icon">💾</div>
+            <div class="menu-card-title">Backup e Restauração</div>
+            <div class="menu-card-desc">Fazer ou restaurar um backup — só dos dados, ou do programa inteiro.</div>
+          </div>
+        </div>
+      </div>
+    </main>
+

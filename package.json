@@ -4,8 +4,12 @@
   "description": "Lightwall SC — Sistema de Injeção",
   "main": "server.js",
   "scripts": {
+    "build": "node build-index.js",
+    "prestart": "node build-index.js",
     "start": "node server.js",
-    "dev": "node server.js"
+    "predev": "node build-index.js",
+    "dev": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18.0.0"

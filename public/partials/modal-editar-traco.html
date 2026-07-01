@@ -1,0 +1,174 @@
+  <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
+  <div id="editar-traco-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:760px;max-width:95vw;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);letter-spacing:.05em">✏️
+          EDITAR TRAÇO</h2>
+        <button onclick="fecharEdicaoTraco()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div id="et-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <!-- Capturados automaticamente -->
+      <div
+        style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:18px">
+        <div style="font-weight:700;color:var(--text);font-size:.8rem;margin-bottom:8px">📌 Capturados
+          automaticamente (não editáveis aqui)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;color:var(--text-2)">
+          <div>Data: <strong id="et-ro-data" class="mono">—</strong></div>
+          <div>Turno: <strong id="et-ro-turno" class="mono">—</strong></div>
+          <div>ID Traço: <strong id="et-ro-id-traco" class="mono">—</strong></div>
+          <div>ID Operação (este uso): <strong id="et-ro-id-operacao" class="mono">—</strong></div>
+        </div>
+      </div>
+
+      <!-- Identificação do Traço -->
+      <div class="card-title" style="margin-bottom:10px">Identificação do Traço</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:18px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Nº Traço</label>
+          <input class="form-input" type="number" id="et-num-traco">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Densidade EPS</label>
+          <input class="form-input" id="et-densidade-eps">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Silo</label>
+          <input class="form-input" id="et-silo">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Expansão</label>
+          <input class="form-input" id="et-expansao">
+        </div>
+      </div>
+
+      <!-- Dados desta Bateria/Uso -->
+      <div class="card-title" style="margin-bottom:10px">Dados desta Bateria <span
+          style="color:var(--text-3);font-weight:400;text-transform:none">(só este uso/reaproveitamento — não afeta outros usos deste mesmo traço)</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">ID Bateria</label>
+          <select class="form-select" id="et-id-bateria"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Berço Início</label>
+          <input class="form-input" id="et-berco-inicio">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Berço Fim</label>
+          <input class="form-input" id="et-berco-fim">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">Observações (deste uso)</label>
+        <textarea class="form-input" id="et-obs" rows="2" style="resize:vertical"></textarea>
+      </div>
+
+      <!-- Insumos e Tempo de Batida — valores ORIGINAIS (planejados) -->
+      <div class="card-title" style="margin-bottom:6px">Insumos e Tempo de Batida — Receita Original</div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:12px">Valor planejado antes de qualquer ajuste.
+        O total aplicado na injeção é este valor + a soma dos ajustes, abaixo.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Cimento (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-cimento">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Água (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-agua">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">EPS (kg)</label>
+          <input class="form-input" type="number" step="0.01" id="et-original-eps">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Superplastificante (kg)</label>
+          <input class="form-input" type="number" step="0.001" id="et-original-superplast">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Incorporador de Ar (kg)</label>
+          <input class="form-input" type="number" step="0.001" id="et-original-incorporador">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">⏱ Tempo de Batida</label>
+          <div class="duration-picker">
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('h',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="23" id="et-original-tempo-h" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('h',-1)">▼</button>
+              <span class="dur-label">h</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('m',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="et-original-tempo-m" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('m',-1)">▼</button>
+              <span class="dur-label">min</span>
+            </div>
+            <span class="dur-sep">:</span>
+            <div class="duration-col">
+              <button type="button" class="dur-btn dur-up" onclick="_etAjustarDuracaoOriginal('s',1)">▲</button>
+              <input class="dur-input" type="number" min="0" max="59" id="et-original-tempo-s" value="0"
+                oninput="_etOnDuracaoOriginalInput()">
+              <button type="button" class="dur-btn dur-dn" onclick="_etAjustarDuracaoOriginal('s',-1)">▼</button>
+              <span class="dur-label">seg</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lista de Ajustes (fonte de verdade: ajustes_tracos.json) -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px">
+        <div class="card-title" style="margin-bottom:0">Ajustes Aplicados</div>
+        <button class="btn btn-outline-accent btn-sm" onclick="_etAdicionarAjuste()">+ Adicionar Ajuste</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">Cada ajuste é uma ação só (tempo de batida
+        sempre obrigatório; insumos só se de fato foram adicionados nessa ação) — mesma regra do "+ Ajuste de
+        Receita" ao vivo, em Registrar Operação. Esta lista também regrava <code
+          style="color:var(--blue)">ajustes_tracos.json</code> pra este traço.</p>
+      <div id="et-lista-ajustes" style="margin-bottom:18px"></div>
+
+      <!-- Resultados Medidos (Densidade, Flow) — remedições simples -->
+      <div class="card-title" style="margin-bottom:6px">Resultados Medidos</div>
+      <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">Densidade e Flow não entram em
+        <code style="color:var(--blue)">ajustes_tracos.json</code> — são remedições (cada leitura nova substitui a
+        anterior), não ajuste de receita.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+        <div>
+          <div class="form-group">
+            <label class="form-label">Densidade — valor original</label>
+            <input class="form-input" type="number" step="0.01" id="et-original-densidade">
+          </div>
+          <label class="form-label">Leituras (remedições)</label>
+          <div id="et-leituras-densidade" style="margin-bottom:6px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="_etAdicionarLeitura('densidade')">+ Adicionar leitura</button>
+        </div>
+        <div>
+          <div class="form-group">
+            <label class="form-label">Flow — valor original</label>
+            <input class="form-input" type="number" step="0.01" id="et-original-flow">
+          </div>
+          <label class="form-label">Leituras (remedições)</label>
+          <div id="et-leituras-flow" style="margin-bottom:6px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="_etAdicionarLeitura('flow')">+ Adicionar leitura</button>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:12px">
+        <button class="btn btn-ghost" onclick="fecharEdicaoTraco()">Cancelar</button>
+        <button class="btn btn-danger" id="et-btn-salvar" onclick="salvarEdicaoTraco()">Salvar Alterações</button>
+      </div>
+
+    </div>
+  </div>
+

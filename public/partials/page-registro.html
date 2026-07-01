@@ -1,0 +1,95 @@
+    <!-- ============ PAGE: Relatorio de Baterias ============ -->
+    <main class="main" id="page-registro">
+      <div class="page-header" style="position:relative">
+        <h1 class="page-title">Registro de <span>Baterias</span></h1>
+        <p class="page-desc">Histórico completo de injeções &nbsp;·&nbsp; <span
+            style="color:var(--accent);font-size:.82rem">🔗 Clique em qualquer linha para ver os traços vinculados no
+            Relatório de Injeção</span></p>
+        <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
+          onclick="LWTour.iniciar('registro', { forcado: true })" title="Refazer o tour guiado desta página">❔
+          Tour</button>
+      </div>
+
+
+      <div class="page-body">
+
+        <div class="card mb-4" style="padding:16px 20px">
+          <!-- Período — separado conforme spec -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="form-input" type="date" id="reg-data-inicio" style="width:150px" title="Data início">
+            <span style="color:var(--text-3);font-size:.85rem">até</span>
+            <input class="form-input" type="date" id="reg-data-fim" style="width:150px" title="Data fim">
+            <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+              <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
+              <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
+                onclick="limparTodosFiltros('filtros-registro')">✕ Limpar Todos</button>
+              <button type="button" id="btn-col-toggle-registro" class="btn btn-ghost btn-sm"
+                title="Exibir/ocultar colunas" aria-haspopup="true" aria-expanded="false"
+                onclick="LWDash.toggleColMenu(event)">⚙ Colunas</button>
+              <div id="col-menu-registro" class="col-menu" style="display:none">
+                <div class="col-menu-item col-menu-group-toggle">
+                  <label>
+                    <input type="checkbox" id="col-toggle-tipos-placa" onchange="LWDash.toggleGrupoTiposPlaca(this.checked)">
+                    <span>Ocultar Tipos de Placas</span>
+                  </label>
+                </div>
+                <div class="col-menu-divider"></div>
+                <div id="col-menu-list"></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-exportar-registro" onclick="LWDash.abrirExportModal()">⬇ Exportar Excel (.xlsx)</button>
+              <button class="btn btn-ghost btn-sm" id="btn-editar-registro" data-admin-only
+                title="Corrigir dados de uma operação já registrada" onclick="LWDash.toggleModoEdicaoRegistro()">✏️
+                Editar</button>
+            </div>
+          </div>
+          <div id="registro-aviso-edicao"
+            style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(245,158,11,.1);border:1px solid var(--accent-dim);border-radius:var(--radius);color:var(--accent);font-size:.82rem">
+            ✏️ Modo de edição ativo — clique em uma linha da tabela para corrigir os dados daquela operação.
+          </div>
+          <!-- Filtros hierárquicos -->
+          <div id="filtros-registro" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+          <!-- Chips de filtros ativos -->
+          <div id="chips-filtros-registro"
+            style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center">
+            <span style="color:var(--text-3);font-size:.78rem">Nenhum filtro ativo</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="registro-table">
+            <thead>
+              <tr>
+                <th data-col="data">Data</th>
+                <th data-col="turno">Turno</th>
+                <th data-col="dimensao">Dimensão</th>
+                <th data-col="capacidade">Cap. Berços</th> <!-- Nova -->
+                <th data-col="id_bateria">ID Bateria</th>
+                <th data-col="inicio">Início</th>
+                <th data-col="fim">Fim</th>
+                <th data-col="desemplaque">Previsão Desemplaque</th>
+                <th data-col="duracao">Duração</th>
+                <th data-col="tracos">Traços</th>
+                <th data-col="atraso">Atraso</th>
+                <th data-col="motivo_atraso">Motivo Atraso</th> <!-- Nova -->
+                <th data-col="montagem">Montagem</th>
+                <th data-col="paineis_2p">Painéis 2/P</th> <!-- Coluna 2/P -->
+                <th data-col="paineis_sp">Painéis S/P</th> <!-- Coluna S/P -->
+                <th data-col="m2_2p">m² 2/P</th> <!-- Coluna m² 2/P -->
+                <th data-col="m2_sp">m² S/P</th> <!-- Coluna m² S/P -->
+                <th data-col="paineis_2psp">Painéis (Total)</th> <!-- Atualizada -->
+                <th data-col="m2_2psp">m² (Total)</th> <!-- Atualizada -->
+                <th data-col="bercos_reais">Berços Reais</th> <!-- Nova -->
+                <th data-col="placas_cimenticia">Placas Cimenticia</th>
+              </tr>
+            </thead>
+            <tbody id="registro-tbody">
+              <tr>
+                <td colspan="20" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+
+      </div>
+    </main>
