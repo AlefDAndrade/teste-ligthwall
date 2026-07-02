@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: Relatorio de Baterias ============ -->
+<!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
       <div class="page-header" style="position:relative">
         <h1 class="page-title">Registro de <span>Baterias</span></h1>
@@ -19,6 +19,8 @@
             <input class="form-input" type="date" id="reg-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="reg-data-fim" style="width:150px" title="Data fim">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-registro')"
+              title="Filtrar só as operações de hoje">📅 Hoje</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"

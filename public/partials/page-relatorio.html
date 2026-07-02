@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
+<!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
     <main class="main" id="page-relatorio">
       <div class="page-header" style="position:relative">
         <h1 class="page-title">Relatório de <span>Injeção</span></h1>
@@ -16,6 +16,8 @@
             <input class="form-input" type="date" id="rel-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="rel-data-fim" style="width:150px" title="Data fim">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-relatorio')"
+              title="Filtrar só os traços de hoje">📅 Hoje</button>
             <label for="rel-apenas-ajuste" id="rel-apenas-ajuste-label" style="
               display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-2);
               cursor:pointer;user-select:none;padding:6px 12px;border-radius:20px;
@@ -81,4 +83,3 @@
 
       </div>
     </main>
-

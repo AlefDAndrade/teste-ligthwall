@@ -76,7 +76,6 @@
         </button>
       </div>
     </header>
-
     <!-- ============ SIDEBAR ============ -->
     <nav class="sidebar">
       <div class="sidebar-label">Principal</div>
@@ -163,6 +162,16 @@
           <line x1="3" y1="15" x2="21" y2="15"/>
         </svg>
         <span class="nav-text">Registro de Paradas</span>
+      </button>
+
+      <button class="nav-item" data-page="setor-qualidade" onclick="showPage('setor-qualidade',this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 12l2 2 4-4"/>
+          <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.42 0 2.76.33 3.95.92"/>
+          <path d="M21 3l-6 6"/>
+          <path d="M15 3h6v6"/>
+        </svg>
+        <span class="nav-text">Setor de Qualidade</span>
       </button>
     </nav>
 
@@ -710,6 +719,8 @@
             <input class="form-input" type="date" id="reg-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="reg-data-fim" style="width:150px" title="Data fim">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-registro')"
+              title="Filtrar só as operações de hoje">📅 Hoje</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
@@ -802,6 +813,8 @@
             <input class="form-input" type="date" id="rel-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="rel-data-fim" style="width:150px" title="Data fim">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-relatorio')"
+              title="Filtrar só os traços de hoje">📅 Hoje</button>
             <label for="rel-apenas-ajuste" id="rel-apenas-ajuste-label" style="
               display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-2);
               cursor:pointer;user-select:none;padding:6px 12px;border-radius:20px;
@@ -944,7 +957,7 @@
             </div>
           </div>
           <!-- Total ajustes + Média -->
-          <div class="card" style="padding:16px">
+          <div class="card" id="qt-card-total-ajustes" style="padding:16px;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Total de Ajustes</div>
@@ -963,7 +976,7 @@
             <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ajustes por traço</div>
           </div>
           <!-- Receita mais estável -->
-          <div class="card" style="padding:16px;border-left:3px solid #10b981">
+          <div class="card" id="qt-card-receita-estavel" style="padding:16px;border-left:3px solid #10b981;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Receita Mais Estável</div>
@@ -972,7 +985,7 @@
             <div id="qt-receita-estavel-pct" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
           </div>
           <!-- Receita mais instável -->
-          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+          <div class="card" id="qt-card-receita-instavel" style="padding:16px;border-left:3px solid #ef4444;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Receita Mais Instável</div>
@@ -984,14 +997,14 @@
 
         <!-- ── KPIs LINHA 2: Insumo mais ajustado + maior desvio + Distribuição donut ── -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+          <div class="card" id="qt-card-insumo-mais-ajustado" style="padding:16px;border-left:3px solid #ef4444;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Insumo Mais Ajustado</div>
             <div id="qt-insumo-mais-ajustado" style="font-size:1.15rem;font-weight:700;color:#ef4444">—</div>
             <div id="qt-insumo-mais-ajustado-cnt" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
           </div>
-          <div class="card" style="padding:16px;border-left:3px solid #f59e0b">
+          <div class="card" id="qt-card-insumo-maior-desvio" style="padding:16px;border-left:3px solid #f59e0b;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Maior Desvio Percentual</div>
@@ -1629,6 +1642,22 @@
 
       </div><!-- .page-body -->
     </main><!-- #page-paradas -->
+    <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
+    <main class="main" id="page-setor-qualidade">
+      <div class="page-header">
+        <h1 class="page-title">Setor de <span>Qualidade</span></h1>
+        <p class="page-desc">Avaliação de Baterias · Classificação de Painéis · Dashboard de Refugo</p>
+      </div>
+      <div class="page-body" style="padding:0;height:calc(100vh - 130px);">
+        <iframe
+          id="setor-qualidade-frame"
+          src="setor-qualidade-app.html"
+          style="width:100%;height:100%;border:none;border-radius:0 0 var(--radius) var(--radius);"
+          allow="clipboard-write"
+          title="Setor de Qualidade — Avaliação de Baterias"
+        ></iframe>
+      </div>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -2713,4 +2742,4 @@
   <script src="js/tour.js"></script>
 </body>
 
-</html> 
+</html>
