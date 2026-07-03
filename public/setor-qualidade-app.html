@@ -4,6 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Setor de Qualidade — Avaliação de Baterias</title>
+  <!-- Sincronização de tema com a tela principal (app-core.js) — precisa
+       rodar ANTES do CSS pra não piscar no tema errado. Esta página roda
+       num <iframe> (documento HTML à parte), então o atributo data-theme
+       aplicado no <html> do app principal NÃO chega até aqui sozinho; lê
+       direto o mesmo localStorage['lw_tema'] usado lá. Como iframe e app
+       são a mesma origem, o evento nativo 'storage' dispara aqui sempre
+       que o tema é trocado na tela principal — sem precisar de
+       postMessage nem de recarregar o iframe. -->
+  <script>
+    (function () {
+      var TEMA_ATTR = { dark: null, light: 'light', lightwall: 'lightwall' };
+      function aplicarTema(id) {
+        var attr = TEMA_ATTR.hasOwnProperty(id) ? TEMA_ATTR[id] : TEMA_ATTR.lightwall;
+        if (attr) document.documentElement.setAttribute('data-theme', attr);
+        else document.documentElement.removeAttribute('data-theme');
+      }
+      aplicarTema(localStorage.getItem('lw_tema') || 'lightwall');
+      window.addEventListener('storage', function (e) {
+        if (e.key === 'lw_tema') aplicarTema(e.newValue || 'lightwall');
+      });
+    })();
+  </script>
   <!-- Reutiliza variáveis e componentes base do Lightwall -->
   <link rel="stylesheet" href="css/styles.css">
   <!-- CSS específico desta tela -->
@@ -155,10 +177,7 @@
         <div class="form-group" style="grid-column:span 2;">
           <label class="form-label">Tipo de Montagem</label>
           <select class="form-input form-select" id="sq-mountType" onchange="SQ.changeMountType()">
-            <option value="">Selecionar…</option>
-            <option value="SP+2P">SP + 2P</option><option value="SP">SP</option>
-            <option value="2P">2P</option><option value="3T">3T</option>
-            <option value="1T">1T</option><option value="Personalizada">Personalizada</option>
+            <option value="">Carregando…</option>
           </select>
         </div>
         <div class="form-group">
@@ -390,6 +409,33 @@
           </thead>
           <tbody id="sq-hist-tbody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       MODAL FILA DE BATERIAS NÃO AVALIADAS
+       Aberto por "Nova Avaliação" (ver SQ.startNew/abrirFilaNaoAvaliadas,
+       js/setor-qualidade.js) — lista as operações de Registro de Baterias
+       ainda sem avaliação (GET /operacoes-nao-avaliadas, server.js).
+  ══════════════════════════════════════════════════════════ -->
+  <div class="sq-modal-pallet-overlay" id="sq-modal-fila">
+    <div class="sq-modal-pallet-box" style="max-width:460px;">
+      <div class="sq-modal-pallet-header">
+        <h2><i class="fas fa-list-ol" style="color:var(--blue);"></i> Baterias Pendentes de Avaliação</h2>
+        <p>Selecione a bateria que vai avaliar agora.</p>
+      </div>
+      <div class="form-group" id="sq-fila-select-wrap">
+        <label class="form-label">Bateria · Tipo de Montagem · Fim da Operação</label>
+        <select class="form-input form-select" id="sq-fila-select"></select>
+      </div>
+      <div id="sq-fila-vazio" class="sq-empty" style="display:none;">
+        <i class="fas fa-check-circle"></i>Nenhuma bateria pendente de avaliação no momento.
+      </div>
+      <div class="sq-modal-pallet-footer">
+        <button class="btn btn-ghost btn-sm" onclick="SQ.fecharFilaNaoAvaliadas()">Cancelar</button>
+        <button class="btn btn-ghost btn-sm" onclick="SQ.iniciarAvaliacaoAvulsa()" title="Iniciar sem vincular a nenhuma operação registrada">Avaliação avulsa</button>
+        <button class="btn btn-primary btn-sm" id="sq-fila-btn-iniciar" onclick="SQ.iniciarAvaliacaoDaFila()"><i class="fas fa-play"></i> Iniciar</button>
       </div>
     </div>
   </div>

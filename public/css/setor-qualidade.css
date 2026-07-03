@@ -17,8 +17,18 @@
   --sq-cor-azul:    var(--blue);
   --sq-cor-amarelo: #f1c40f;
   --sq-cor-laranja: #f5821f;
-  --sq-placa-bg:    #23354a;
-  --sq-placa-borda: #2a4054;
+  /* Antes eram cores fixas (#23354a/#2a4054) — só faziam sentido no tema
+     escuro padrão. bg-3/border-2 já existem no sistema principal (ver
+     css/styles.css) e mudam com o tema selecionado, então a "placa" some
+     e reaparece do jeito certo em Claro/Lightwall também. */
+  --sq-placa-bg:    var(--bg-3);
+  --sq-placa-borda: var(--border-2);
+  /* Cores de tipo de montagem — usadas em 3 lugares (mini-slab, slab,
+     modal); centralizadas aqui pra não repetir o mesmo hex 3x. */
+  --sq-tipo-sp-text: #66bb6a;
+  --sq-tipo-p2-text: #42a5f5;
+  --sq-tipo-t3-text: #ab47bc;
+  --sq-tipo-t1-text: #ffa726;
   --sq-tipo-sp:     #2e7d32;
   --sq-tipo-2p:     #0d47a1;
   --sq-tipo-3t:     #4a148c;
@@ -221,10 +231,10 @@ body {
 .sq-mini-slab-number { font-size: .42rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
 .sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 1px; flex: 1; }
 .sq-mini-slab-type { font-size: .42rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
-.sq-mini-slab-type.sp { color: #66bb6a; }
-.sq-mini-slab-type.p2 { color: #42a5f5; }
-.sq-mini-slab-type.t3 { color: #ab47bc; }
-.sq-mini-slab-type.t1 { color: #ffa726; }
+.sq-mini-slab-type.sp { color: var(--sq-tipo-sp-text); }
+.sq-mini-slab-type.p2 { color: var(--sq-tipo-p2-text); }
+.sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
+.sq-mini-slab-type.t1 { color: var(--sq-tipo-t1-text); }
 .sq-mini-mark { display: inline-block; }
 
 .sq-mirror-legend {
@@ -389,10 +399,10 @@ body {
   font-size: .57rem; font-weight: 700; color: var(--text-3);
   font-family: var(--font-mono); pointer-events: none;
 }
-.sq-slab-type.sp { color: #66bb6a; }
-.sq-slab-type.p2 { color: #42a5f5; }
-.sq-slab-type.t3 { color: #ab47bc; }
-.sq-slab-type.t1 { color: #ffa726; }
+.sq-slab-type.sp { color: var(--sq-tipo-sp-text); }
+.sq-slab-type.p2 { color: var(--sq-tipo-p2-text); }
+.sq-slab-type.t3 { color: var(--sq-tipo-t3-text); }
+.sq-slab-type.t1 { color: var(--sq-tipo-t1-text); }
 .sq-slab-marks {
   display: flex; justify-content: center; align-items: center;
   gap: 2px; flex-wrap: wrap; pointer-events: none; max-width: 88%;
@@ -506,10 +516,10 @@ body {
 .sq-modal-slab:hover { border-color: var(--blue); }
 .sq-modal-slab .sq-m-num { font-size: .5rem; color: var(--text-3); font-family: var(--font-mono); }
 .sq-modal-slab .sq-m-tp { font-size: .5rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
-.sq-modal-slab .sq-m-tp.sp { color: #66bb6a; }
-.sq-modal-slab .sq-m-tp.p2 { color: #42a5f5; }
-.sq-modal-slab .sq-m-tp.t3 { color: #ab47bc; }
-.sq-modal-slab .sq-m-tp.t1 { color: #ffa726; }
+.sq-modal-slab .sq-m-tp.sp { color: var(--sq-tipo-sp-text); }
+.sq-modal-slab .sq-m-tp.p2 { color: var(--sq-tipo-p2-text); }
+.sq-modal-slab .sq-m-tp.t3 { color: var(--sq-tipo-t3-text); }
+.sq-modal-slab .sq-m-tp.t1 { color: var(--sq-tipo-t1-text); }
 .sq-modal-slab.sel { border-color: var(--text); box-shadow: 0 0 6px rgba(255,255,255,.2); }
 .sq-modal-pallet-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
 

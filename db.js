@@ -74,6 +74,11 @@ db.exec(`
     -- que vai responder a mesma pergunta via JOIN; até lá, mantido aqui
     -- pra não depender de uma fase que ainda não existe.
     tracos_json           TEXT,
+    -- Se esta operação já foi avaliada pelo Setor de Qualidade (ver
+    -- setor-qualidade-app.html) ou não. Sempre nasce como 0 (falso) — só
+    -- é marcada como avaliada por uma rota dedicada, nunca pelo formulário
+    -- geral de edição (ver CAMPOS_PROTEGIDOS em /editar-operacao, server.js).
+    avaliado              INTEGER NOT NULL DEFAULT 0,
     modo_teste            INTEGER DEFAULT 0,
     criado_em             TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -248,7 +253,145 @@ db.exec(`
     status            TEXT,
     data_encerramento TEXT
   );
+
+  -- ============================================================
+  --  Berços Visuais — snapshot de estado de cada LADO de cada berço
+  --  físico de uma operação (representação visual já existente hoje em
+  --  "Bateria Atual", ver bateria-atual.js — só que sem persistência
+  --  até esta mudança).
+  --
+  --  2 linhas por berço (B1..B<capacidade real> × esquerda/direita) —
+  --  cada berço tem 2 painéis, e cada um tem seu próprio estado
+  --  independente agora (decisão de produto: antes era 1 estado pro
+  --  berço inteiro; mudou pra bater com os 2 indicadores ●/• que já
+  --  existiam na UI, cada um clicável e marcado por conta própria).
+  --
+  --  id_traco NÃO é guardado aqui — os traços de uma operação já vivem em
+  --  traco_usos(id_operacao), então é sempre um JOIN dali, nunca duplicado
+  --  (mesmo princípio de "original + SUM(ajustes)" explicado acima: nunca
+  --  guardar de novo o que já existe em outra tabela).
+  --
+  --  "estado" só assume 'okay'/'baixou' por enquanto — outros estados
+  --  chegam numa fase futura (ver README, "Berços Visuais").
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS bercos_visuais (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_operacao   TEXT NOT NULL REFERENCES operacoes(id),
+    berco         TEXT NOT NULL,     -- rótulo exibido: 'B1', 'B2', ...
+    ordem         INTEGER NOT NULL,  -- posição numérica (1-based) — pra ordenar sem parsear "berco"
+    lado          TEXT NOT NULL CHECK(lado IN ('esquerda','direita')),
+    estado        TEXT NOT NULL DEFAULT 'okay',
+    atualizado_em TEXT NOT NULL,
+    UNIQUE(id_operacao, berco, lado)
+  );
+  CREATE INDEX IF NOT EXISTS idx_bercos_visuais_operacao ON bercos_visuais(id_operacao);
 `);
+
+// ------------------------------------------------------------
+//  Migração: coluna "lado" em bercos_visuais (1 estado por berço -> 1
+//  estado por LADO do berço)
+//
+//  Diferente da migração de "avaliado" (ADD COLUMN simples): aqui o
+//  UNIQUE(id_operacao, berco) precisa virar UNIQUE(id_operacao, berco,
+//  lado) — SQLite não permite alterar uma constraint UNIQUE existente via
+//  ALTER TABLE, só recriando a tabela. Detecta pela ausência da coluna
+//  "lado" (mesmo padrão de PRAGMA table_info da migração acima) e, se for
+//  o caso de uma instalação que já tinha a tabela no formato antigo,
+//  migra cada linha antiga em 2 linhas novas (esquerda E direita),
+//  herdando o mesmo estado que a linha antiga tinha — não perde o que já
+//  tinha sido marcado, só passa a rastrear os 2 lados separadamente a
+//  partir daqui (spoiler: como o estado antigo era só 'okay' por padrão
+//  em instalações que nunca chegaram a usar isso de verdade, isso na
+//  prática só recria a tabela vazia mesmo).
+// ------------------------------------------------------------
+const _colunasBercosVisuais = db.prepare("PRAGMA table_info(bercos_visuais)").all().map(c => c.name);
+if (!_colunasBercosVisuais.includes('lado')) {
+  const linhasAntigas = db.prepare("SELECT id_operacao, berco, ordem, estado, atualizado_em FROM bercos_visuais").all();
+  db.exec(`
+    ALTER TABLE bercos_visuais RENAME TO bercos_visuais_old_sem_lado;
+    CREATE TABLE bercos_visuais (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_operacao   TEXT NOT NULL REFERENCES operacoes(id),
+      berco         TEXT NOT NULL,
+      ordem         INTEGER NOT NULL,
+      lado          TEXT NOT NULL CHECK(lado IN ('esquerda','direita')),
+      estado        TEXT NOT NULL DEFAULT 'okay',
+      atualizado_em TEXT NOT NULL,
+      UNIQUE(id_operacao, berco, lado)
+    );
+    CREATE INDEX IF NOT EXISTS idx_bercos_visuais_operacao ON bercos_visuais(id_operacao);
+    DROP TABLE bercos_visuais_old_sem_lado;
+  `);
+  if (linhasAntigas.length) {
+    const inserirMigrado = db.prepare(`
+      INSERT INTO bercos_visuais (id_operacao, berco, ordem, lado, estado, atualizado_em)
+      VALUES (@id_operacao, @berco, @ordem, @lado, @estado, @atualizado_em)
+    `);
+    const transacaoMigracao = db.transaction((linhas) => {
+      for (const l of linhas) {
+        inserirMigrado.run({ ...l, lado: 'esquerda' });
+        inserirMigrado.run({ ...l, lado: 'direita' });
+      }
+    });
+    transacaoMigracao(linhasAntigas);
+  }
+  console.log(`[migração] Tabela "bercos_visuais" recriada com coluna "lado" (${linhasAntigas.length} berço(s) antigo(s) expandido(s) em esquerda+direita).`);
+}
+
+// ------------------------------------------------------------
+//  Migração leve: coluna "avaliado" em operacoes
+//
+//  CREATE TABLE IF NOT EXISTS (acima) só cria a tabela do zero — em
+//  instalações que já tinham "operacoes" antes desta mudança, a coluna
+//  nova nunca apareceria sozinha. Checa via PRAGMA table_info (idempotente,
+//  roda toda vez que o servidor sobe) e só faz ALTER TABLE na primeira
+//  vez. SQLite não tem "ADD COLUMN IF NOT EXISTS" nativo — por isso o
+//  check manual, em vez de tentar/capturar erro.
+// ------------------------------------------------------------
+const _colunasOperacoes = db.prepare("PRAGMA table_info(operacoes)").all().map(c => c.name);
+if (!_colunasOperacoes.includes('avaliado')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN avaliado INTEGER NOT NULL DEFAULT 0');
+  console.log('[migração] Coluna "avaliado" adicionada à tabela operacoes (default: não avaliado).');
+}
+
+/**
+ * Cria as linhas iniciais de bercos_visuais pra uma operação recém-
+ * registrada — 2 linhas por berço (B1..B<quantidade> × esquerda/direita).
+ * Chamada por POST /registrar-operacao (server.js), logo depois de
+ * inserir a operação em si.
+ *
+ * @param {string} idOperacao
+ * @param {number} quantidade
+ * @param {Object<string,{esquerda?:string,direita?:string}>} [estadosMarcados] -
+ *   mapa esparso vindo do snapshot ao vivo de "Bateria Atual" (ver
+ *   GET/POST /bercos-andamento, server.js) — lado ausente do mapa =
+ *   'okay'. Se quem estava acompanhando a operação marcou algum lado de
+ *   algum berço como 'baixou' ANTES do registro, esse estado entra aqui
+ *   já na criação, em vez de nascer 'okay' e precisar de uma segunda
+ *   chamada pra corrigir.
+ *
+ * INSERT OR IGNORE (via UNIQUE(id_operacao, berco, lado)): se por algum
+ * motivo já existirem linhas pra essa operação, não duplica nem
+ * sobrescreve estados que porventura já tenham mudado — idempotente.
+ */
+const SQL_INSERIR_BERCO_VISUAL = `
+  INSERT OR IGNORE INTO bercos_visuais (id_operacao, berco, ordem, lado, estado, atualizado_em)
+  VALUES (@id_operacao, @berco, @ordem, @lado, @estado, @atualizado_em)
+`;
+function criarBercosVisuaisIniciais(idOperacao, quantidade, estadosMarcados) {
+  const mapa = (estadosMarcados && typeof estadosMarcados === 'object') ? estadosMarcados : {};
+  const inserir = db.prepare(SQL_INSERIR_BERCO_VISUAL);
+  const agora = new Date().toISOString();
+  const transacao = db.transaction((n) => {
+    for (let i = 1; i <= n; i++) {
+      const berco = 'B' + i;
+      const marcadoBerco = mapa[berco] || {};
+      inserir.run({ id_operacao: idOperacao, berco, ordem: i, lado: 'esquerda', estado: marcadoBerco.esquerda || 'okay', atualizado_em: agora });
+      inserir.run({ id_operacao: idOperacao, berco, ordem: i, lado: 'direita', estado: marcadoBerco.direita || 'okay', atualizado_em: agora });
+    }
+  });
+  transacao(Math.max(0, parseInt(quantidade) || 0));
+}
 
 /**
  * Converte um registro no formato histórico (historico.json) pros
@@ -284,6 +427,10 @@ function operacaoParaRow(r) {
     m2_2p: r.m2_2p ?? 0,
     m2_sp: r.m2_sp ?? 0,
     tracos_json: r.tracos ? JSON.stringify(r.tracos) : null,
+    // !! só vira 1 quando explicitamente true (migração de registro já
+    // avaliado, por ex.) — nunca por acidente de um campo truthy qualquer
+    // vindo do JSON antigo.
+    avaliado: r.avaliado === true || r.avaliado === 1 ? 1 : 0,
   };
 }
 
@@ -316,6 +463,7 @@ function rowParaOperacao(row) {
     m2_2p: row.m2_2p,
     m2_sp: row.m2_sp,
     tracos: row.tracos_json ? JSON.parse(row.tracos_json) : [],
+    avaliado: !!row.avaliado,
   };
 }
 
@@ -325,13 +473,13 @@ const SQL_INSERIR_OPERACAO = `
     tempo_min, qtd_tracos, houve_atraso, motivo_atraso, tipo_montagem, bercos_reais,
     bercos_personalizados, total_paineis, m2_total, placas_cimenticia,
     paineis_por_tipo, m2_por_tipo, paineis_2p, paineis_sp, m2_2p, m2_sp,
-    tracos_json, modo_teste, criado_em
+    tracos_json, avaliado, modo_teste, criado_em
   ) VALUES (
     @id, @data, @turno, @dimensao, @capacidade, @id_bateria, @inicio, @fim, @desemplaque,
     @tempo_min, @qtd_tracos, @houve_atraso, @motivo_atraso, @tipo_montagem, @bercos_reais,
     @bercos_personalizados, @total_paineis, @m2_total, @placas_cimenticia,
     @paineis_por_tipo, @m2_por_tipo, @paineis_2p, @paineis_sp, @m2_2p, @m2_sp,
-    @tracos_json, @modo_teste, @criado_em
+    @tracos_json, @avaliado, @modo_teste, @criado_em
   )
 `;
 
@@ -339,6 +487,7 @@ module.exports = db;
 module.exports.operacaoParaRow = operacaoParaRow;
 module.exports.rowParaOperacao = rowParaOperacao;
 module.exports.SQL_INSERIR_OPERACAO = SQL_INSERIR_OPERACAO;
+module.exports.criarBercosVisuaisIniciais = criarBercosVisuaisIniciais;
 
 // ============================================================
 //  Migração automática (Fase 2): historico.json -> tabela operacoes

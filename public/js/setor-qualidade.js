@@ -37,6 +37,73 @@
   let dashboardEvals = [];
   let mirrorIndex    = 0;
 
+  // ── Fila de baterias não avaliadas (Registro de Baterias → Setor de
+  // Qualidade) — ver abrirFilaNaoAvaliadas()/_iniciarForm(), abaixo.
+  let filaOperacoes    = [];  // última lista carregada de GET /operacoes-nao-avaliadas
+  let linkedOperacaoId = null; // id_operacao da fila vinculado à avaliação em edição, ou null (avulsa)
+
+  // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
+  // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
+  // usado tanto pra montar o <select> quanto pra mapear tipo_montagem de
+  // uma operação real (que guarda o LABEL, ex: "S/P") de volta pro código
+  // usado internamente aqui (ex: "SP") — ver _codigoMontagemPorLabel.
+  let _montagemOpcoesCache = [];
+
+  /**
+   * Popula #sq-mountType a partir de config.json — mesma fonte de verdade
+   * que Registrar Operação usa (ver public/js/data.js, _aplicarTiposMontagem).
+   * "SP+2P" continua como atalho fixo (2 pallets de cada), mas só aparece
+   * se os tipos SP e 2P realmente existirem em config — não força nada
+   * que não esteja cadastrado. "Personalizada" continua sempre disponível
+   * por último (não é um item de tipos_montagem.opcoes — é um modo à
+   * parte, igual em Registrar Operação).
+   */
+  async function _carregarOpcoesMontagem() {
+    const sel = document.getElementById('sq-mountType');
+    if (!sel) return;
+    try {
+      const res = await fetch('/db/config.json');
+      if (!res.ok) throw new Error('Falha ao buscar config.json');
+      const cfg = await res.json();
+      const opcoes = Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : [];
+      _montagemOpcoesCache = opcoes;
+      const simples = opcoes.filter(o => o && o.modo === 'simples' && o.tipo && o.label);
+
+      const temSP = simples.some(o => o.tipo === 'sp');
+      const tem2P = simples.some(o => o.tipo === '2p');
+      let html = '<option value="">Selecionar…</option>';
+      if (temSP && tem2P) html += '<option value="SP+2P">SP + 2P</option>';
+      simples.forEach(o => {
+        html += `<option value="${String(o.tipo).toUpperCase()}">${o.label}</option>`;
+      });
+      html += '<option value="Personalizada">Personalizada</option>';
+      sel.innerHTML = html;
+    } catch (err) {
+      console.error('Falha ao carregar tipos de montagem de config.json — usando lista fixa de reserva:', err);
+      // Fallback só pra tela não ficar sem nenhuma opção se config.json
+      // não puder ser lido (rede fora etc.) — não é mais a fonte de
+      // verdade, é só uma rede de segurança.
+      _montagemOpcoesCache = [];
+      sel.innerHTML = `
+        <option value="">Selecionar…</option>
+        <option value="SP+2P">SP + 2P</option><option value="SP">SP</option>
+        <option value="2P">2P</option><option value="3T">3T</option>
+        <option value="Personalizada">Personalizada</option>`;
+    }
+  }
+
+  // Converte o tipo_montagem de uma operação real (LABEL — ex: "S/P",
+  // "2/P", "3T", vindo de config.json) pro código usado aqui dentro (ex:
+  // "SP", "2P", "3T" — ver #sq-mountType). Tipos hibridos (ex: "HÍBRIDA
+  // 2p/sp") não têm um preset correspondente aqui (não é a mesma coisa
+  // que "SP+2P": híbrida é 1+1 POR BERÇO, "SP+2P" é 2 pallets inteiros de
+  // cada) — devolve null de propósito, pra não mapear errado.
+  function _codigoMontagemPorLabel(label) {
+    if (!label) return null;
+    const opcao = _montagemOpcoesCache.find(o => o.modo === 'simples' && o.label === label);
+    return opcao ? String(opcao.tipo).toUpperCase() : null;
+  }
+
   /* Referências Chart.js */
   let charts = {};
 
@@ -86,8 +153,13 @@
     const val = document.getElementById('sq-mountType').value;
     if (val === 'Personalizada') { openPalletModal(); return; }
     slabConfig = {};
+    // Qualquer valor que não seja vazio nem "SP+2P" é um preset uniforme
+    // (os 4 pallets do mesmo tipo) — o próprio <select> só oferece os
+    // tipos que existem de verdade em config.json (ver
+    // _carregarOpcoesMontagem), então não precisa mais checar contra uma
+    // lista fixa aqui.
     palletTypes = val === 'SP+2P' ? ['SP','SP','2P','2P'] :
-                  ['SP','2P','3T','1T'].includes(val) ? [val,val,val,val] :
+                  val ? [val,val,val,val] :
                   ['','','',''];
     renderStacks();
     validateAllSlabs();
@@ -306,13 +378,200 @@
     if (section === 'dashboard') renderDashboard();
   }
   function goBack() { if (viewMode) exitViewMode(); navigateTo(viewSource); }
+
+  // "Nova Avaliação" agora abre a fila de baterias pendentes primeiro —
+  // quem realmente monta o formulário em branco é _iniciarForm(), chamada
+  // ou pela fila (iniciarAvaliacaoDaFila) ou pela avaliação avulsa
+  // (iniciarAvaliacaoAvulsa), abaixo.
   function startNew() {
+    abrirFilaNaoAvaliadas();
+  }
+
+  function _iniciarForm(operacaoVinculada) {
     if (viewMode) exitViewMode();
     clearForm();
     currentDraftId = null;
+    linkedOperacaoId = operacaoVinculada ? operacaoVinculada.id : null;
     navigateTo('form');
-    autoSetThickness();
+    if (operacaoVinculada) {
+      _prefillFromOperacao(operacaoVinculada);
+    } else {
+      autoSetThickness();
+    }
     setEditable(true);
+  }
+
+  // Pré-preenche ID da Bateria, Turno, Tipo de Montagem e — se a operação
+  // for Montagem Personalizada — a grade inteira, a partir dos dados reais
+  // da operação escolhida na fila (ver GET /operacoes-nao-avaliadas,
+  // server.js).
+  function _prefillFromOperacao(op) {
+    // ── ID da Bateria ──────────────────────────────────────────────────
+    if (op.id_bateria) {
+      const sel = document.getElementById('sq-batteryId');
+      const existe = Array.from(sel.options).some(o => o.value === op.id_bateria);
+      if (!existe) {
+        // Convenção de nome pode divergir entre os dois módulos (ex:
+        // "B5-7,5cm" em Registro de Baterias vs "B5-7.5" aqui) — em vez de
+        // deixar o campo errado ou vazio, injeta a opção real na hora.
+        const novaOpcao = document.createElement('option');
+        novaOpcao.value = op.id_bateria;
+        novaOpcao.textContent = op.id_bateria;
+        sel.appendChild(novaOpcao);
+      }
+      sel.value = op.id_bateria;
+    }
+
+    // ── Turno ────────────────────────────────────────────────────────
+    // Compara só o dígito inicial: Registro de Baterias usa "1º TURNO"
+    // (U+00BA, ordinal masculino) e aqui é "1° TURNO" (U+00B0, grau) —
+    // visualmente idênticos, mas caracteres diferentes; nunca batem
+    // com === direto.
+    if (op.turno) {
+      const digito = String(op.turno).match(/\d/)?.[0];
+      if (digito) {
+        const turnoSel = document.getElementById('sq-turno');
+        const opcaoTurno = Array.from(turnoSel.options).find(o => o.value.startsWith(digito));
+        if (opcaoTurno) turnoSel.value = opcaoTurno.value;
+      }
+    }
+
+    // ── Espessura/pallet (nº de placas por pallet) ──────────────────────
+    // autoSetThickness() adivinha isso a partir do ID da Bateria (só 3
+    // valores fixos: 11/10/8) — mas usa o MESMO id com risco de
+    // divergência de nome do passo acima, e nem sempre bate exatamente
+    // com o nº real de berços da operação (12cm, por ex., tem 18 berços
+    // reais mas o palpite fixo assume 8/pallet = 32 painéis, não 36).
+    // _definirThicknessReal (abaixo) corrige com o valor REAL depois.
+    autoSetThickness();
+    const capacidadeReal = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
+    if (capacidadeReal > 0) _definirThicknessReal(capacidadeReal);
+
+    // ── Tipo de Montagem (+ grade Personalizada) ────────────────────────
+    if (op.tipo_montagem === 'PERSONALIZADA') {
+      document.getElementById('sq-mountType').value = 'Personalizada';
+      slabConfig = _montarSlabConfigDeBercos(op.bercos_personalizados);
+      palletTypes = ['', '', '', ''];
+    } else {
+      const codigo = _codigoMontagemPorLabel(op.tipo_montagem);
+      if (codigo) {
+        document.getElementById('sq-mountType').value = codigo;
+        palletTypes = [codigo, codigo, codigo, codigo];
+        slabConfig = {};
+      }
+      // Não encontrado (ex: tipo híbrido — "HÍBRIDA 2p/sp" não tem preset
+      // equivalente aqui, já que aqui é 2 pallets inteiros de cada tipo,
+      // não 1+1 por berço; ou tipo desconhecido) — deixa em branco pra
+      // pessoa escolher manualmente, não arrisca mapear errado.
+    }
+    updateMountTypeDropdown();
+    renderStacks();
+    validateAllSlabs();
+  }
+
+  // Corrige #sq-thickness pro nº real de berços da operação (cada berço =
+  // 2 painéis — ver README/db.js, "Berços Visuais") em vez do palpite fixo
+  // de autoSetThickness() por ID de bateria. Injeta uma option nova se o
+  // valor calculado não for um dos 3 fixos (11/10/8) — mesmo raciocínio
+  // de injetar o ID da Bateria, acima: nunca deixar o campo errado.
+  function _definirThicknessReal(capacidadeReal) {
+    const n = Math.round(capacidadeReal / 2);
+    if (!n || n <= 0) return;
+    const sel = document.getElementById('sq-thickness');
+    const existe = Array.from(sel.options).some(o => o.value === String(n));
+    if (!existe) {
+      const opt = document.createElement('option');
+      opt.value = String(n);
+      opt.textContent = `${capacidadeReal} berços (${n}/pallet)`;
+      sel.appendChild(opt);
+    }
+    sel.value = String(n);
+  }
+
+  // Monta o slabConfig (mesmo formato usado pelo modal de Configuração
+  // Personalizada — ver confirmPalletModal) a partir de
+  // bercos_personalizados de uma operação real: 1 item por berço (tipo
+  // curto — 'sp'/'2p'/'3t' — ou null). Cada berço = 2 painéis
+  // CONSECUTIVOS (ver README/db.js, "Berços Visuais") — daí o
+  // paineis.push(cod, cod) — e os painéis são distribuídos sequencialmente
+  // pelos 4 pallets, #sq-thickness posições cada (a mesma conta que já
+  // bate pra 9cm/7,5cm — ver _definirThicknessReal pra quando não bate).
+  function _montarSlabConfigDeBercos(bercosPersonalizados) {
+    const bercos = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
+    const n = parseInt(document.getElementById('sq-thickness').value) || 10;
+    const paineis = [];
+    bercos.forEach(tipo => {
+      const cod = tipo ? String(tipo).toUpperCase() : ''; // 'sp' -> 'SP', '2p' -> '2P', '3t' -> '3T'
+      paineis.push(cod, cod);
+    });
+    const novo = {};
+    for (let p = 0; p < 4; p++) {
+      for (let i = 1; i <= n; i++) {
+        const idx = p * n + (i - 1);
+        const tipo = paineis[idx];
+        if (tipo) novo[`stack${p + 1}-${i}`] = tipo;
+      }
+    }
+    return novo;
+  }
+
+  // ── Modal da fila ─────────────────────────────────────
+  function abrirFilaNaoAvaliadas() {
+    const overlay     = document.getElementById('sq-modal-fila');
+    const sel         = document.getElementById('sq-fila-select');
+    const wrapEl      = document.getElementById('sq-fila-select-wrap');
+    const vazioEl     = document.getElementById('sq-fila-vazio');
+    const btnIniciar  = document.getElementById('sq-fila-btn-iniciar');
+
+    sel.innerHTML = '<option>Carregando…</option>';
+    wrapEl.style.display = '';
+    vazioEl.style.display = 'none';
+    btnIniciar.disabled = true;
+    overlay.classList.add('open');
+
+    fetch('/operacoes-nao-avaliadas')
+      .then(r => r.json())
+      .then(lista => {
+        filaOperacoes = Array.isArray(lista) ? lista : [];
+        if (!filaOperacoes.length) {
+          wrapEl.style.display = 'none';
+          vazioEl.innerHTML = '<i class="fas fa-check-circle"></i>Nenhuma bateria pendente de avaliação no momento.';
+          vazioEl.style.display = '';
+          btnIniciar.disabled = true;
+          return;
+        }
+        sel.innerHTML = filaOperacoes.map(op => {
+          const dt = op.fim
+            ? new Date(op.fim).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '--';
+          const tipo = op.tipo_montagem || '--';
+          return `<option value="${op.id}">${op.id_bateria || 'N/I'} · ${tipo} · ${dt}</option>`;
+        }).join('');
+        btnIniciar.disabled = false;
+      })
+      .catch(err => {
+        console.error('Falha ao carregar fila de baterias não avaliadas:', err);
+        wrapEl.style.display = 'none';
+        vazioEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i>Não foi possível carregar a fila agora. Tente novamente ou use "Avaliação avulsa".';
+        vazioEl.style.display = '';
+        btnIniciar.disabled = true;
+      });
+  }
+
+  function fecharFilaNaoAvaliadas() {
+    document.getElementById('sq-modal-fila').classList.remove('open');
+  }
+
+  function iniciarAvaliacaoDaFila() {
+    const sel = document.getElementById('sq-fila-select');
+    const op = filaOperacoes.find(o => o.id === sel.value);
+    fecharFilaNaoAvaliadas();
+    _iniciarForm(op || null);
+  }
+
+  function iniciarAvaliacaoAvulsa() {
+    fecharFilaNaoAvaliadas();
+    _iniciarForm(null);
   }
 
   /* ── Dados (avaliacoes / paineis) ─────────────────────── */
@@ -360,6 +619,7 @@
     const data = {
       id, lastModified: Date.now(),
       batteryId:    document.getElementById('sq-batteryId').value,
+      linkedOperacaoId,
       palletTypes, slabConfig,
       dailySeq:     document.getElementById('sq-dailySeq').value,
       turno:        document.getElementById('sq-turno').value,
@@ -415,6 +675,7 @@
       const evalObj = {
         id: evId, schemaVersion: 2,
         batteryId: document.getElementById('sq-batteryId').value,
+        linkedOperacaoId: linkedOperacaoId || null,
         montagem: { pallet1: palletTypes[0], pallet2: palletTypes[1], pallet3: palletTypes[2], pallet4: palletTypes[3] },
         turno:    document.getElementById('sq-turno').value,
         tempInput: parseFloat(document.getElementById('sq-temp').value) || 0,
@@ -436,10 +697,26 @@
       LS.set('avaliacoes', d.avaliacoes);
       LS.set('paineis', d.paineis);
       if (currentDraftId) LS.del('draft_' + currentDraftId);
+
+      // Captura ANTES do clearForm() (abaixo zera linkedOperacaoId) — a
+      // avaliação já está salva localmente nas linhas acima independente
+      // do resultado desta chamada; se ela falhar (rede fora etc.), só
+      // loga no console — a bateria continua na fila e dá pra marcar
+      // depois, o vínculo em si não se perde (já foi salvo em
+      // evalObj.linkedOperacaoId, no histórico local).
+      const opIdParaMarcar = linkedOperacaoId;
       clearForm();
       currentDraftId = null;
       showAlert('Concluído', 'Avaliação registrada com sucesso!');
       navigateTo('list');
+
+      if (opIdParaMarcar) {
+        fetch('/marcar-operacao-avaliada', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: opIdParaMarcar }),
+        }).catch(err => console.error('Não consegui marcar a operação como avaliada:', err));
+      }
     });
   }
 
@@ -756,6 +1033,7 @@
 
   function applyFormData(d) {
     document.getElementById('sq-batteryId').value    = d.batteryId || 'B1';
+    linkedOperacaoId = d.linkedOperacaoId || null;
     palletTypes = d.palletTypes  || ['','','',''];
     slabConfig  = d.slabConfig   || {};
     updateMountTypeDropdown();
@@ -790,6 +1068,7 @@
 
   function clearForm() {
     slabState = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
+    linkedOperacaoId = null;
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';
     document.getElementById('sq-dailySeq').value     = '1';
@@ -905,6 +1184,8 @@
   /* ── API pública ──────────────────────────────────────── */
   window.SQ = {
     navigateTo, goBack, startNew,
+    abrirFilaNaoAvaliadas, fecharFilaNaoAvaliadas,
+    iniciarAvaliacaoDaFila, iniciarAvaliacaoAvulsa,
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
     renderDashboard, renderHistory,
@@ -920,6 +1201,7 @@
     openPalletModal, closePalletModal, setModalTipo,
     clearModalPlates, confirmPalletModal,
     init() {
+      _carregarOpcoesMontagem();
       navigateTo('list');
       autoSetThickness();
     },
