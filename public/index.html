@@ -40,18 +40,6 @@
         </div>
       </div>
 
-      <div style="position:relative">
-        <button class="btn btn-ghost btn-sm" onclick="LWBateriaAtual.toggle(event)">
-          🔋 Bateria Atual
-        </button>
-        <div id="popover-bateria-atual" class="ao-popover bateria-atual-popover">
-          <div class="ba-header">
-            <span class="ba-header-label">🔋 Bateria Atual</span>
-          </div>
-          <div class="ba-content" id="bateria-atual-content">Carregando...</div>
-        </div>
-      </div>
-
       <div class="topbar-right">
         <span id="topbar-date"></span>
         <span class="topbar-clock" id="topbar-clock">--:--:--</span>
@@ -320,18 +308,19 @@
       </div>
     </div>
 
-    <!-- ============ PAGE: OPERAÇÃO ============ -->
+<!-- ============ PAGE: OPERAÇÃO ============ -->
     <main class="main" id="page-operacao">
       <div class="page-header" style="position:relative">
         <h1 class="page-title">Registro de <span>Operação</span></h1>
         <p class="page-desc" id="op-data">Carregando...</p>
+        <span id="op-indicador-modo-automatico" style="display:none;font-size:.78rem;color:var(--text-3)">🤖 Autônomo ativo</span>
         <button class="btn btn-ghost btn-sm" style="position:absolute;top:10px;right:32px"
           onclick="LWTour.iniciar('operacao', { forcado: true })" title="Refazer o tour guiado desta página">❔
           Tour</button>
       </div>
 
       <div class="page-body">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:20px;margin-bottom:12px;flex-wrap:wrap">
           <label for="op-toggle-teste" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.82rem;color:var(--text-2);user-select:none">
             🧪 Modo de Teste
             <span class="switch">
@@ -542,11 +531,19 @@
               + Adicionar Traço
             </button>
           </div>
+
+          <!-- Bateria Atual — sempre visível (antes era um popover no topbar,
+               ver bateria-atual.js), berços em fileira única. -->
+          <div class="card mt-4">
+            <div class="card-title" style="justify-content:space-between">
+              <span>🔋 Bateria Atual</span>
+            </div>
+            <div id="bateria-atual-content">Carregando...</div>
+          </div>
         </div>
         </fieldset>
       </div>
     </main>
-
     <!-- ============ PAGE: TURNOS ============ -->
     <main class="main" id="page-turnos">
       <div class="page-header">
@@ -718,8 +715,11 @@
             <input class="form-input" type="date" id="reg-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="reg-data-fim" style="width:150px" title="Data fim">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-registro')"
-              title="Filtrar só as operações de hoje">📅 Hoje</button>
+            <select class="form-input" id="reg-filtro-rapido" style="width:110px"
+              title="Filtrar por período" onchange="aplicarFiltroRapido('filtros-registro', this.value)">
+              <option value="hoje">📅 Hoje</option>
+              <option value="todos" selected>Todos</option>
+            </select>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
@@ -758,7 +758,7 @@
 
         <div class="table-wrap">
           <table id="registro-table">
-            <thead>
+            <thead id="registro-thead">
               <tr>
                 <th data-col="data">Data</th>
                 <th data-col="turno">Turno</th>
@@ -812,8 +812,11 @@
             <input class="form-input" type="date" id="rel-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="rel-data-fim" style="width:150px" title="Data fim">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="aplicarFiltroHoje('filtros-relatorio')"
-              title="Filtrar só os traços de hoje">📅 Hoje</button>
+            <select class="form-input" id="rel-filtro-rapido" style="width:110px"
+              title="Filtrar por período" onchange="aplicarFiltroRapido('filtros-relatorio', this.value)">
+              <option value="hoje">📅 Hoje</option>
+              <option value="todos" selected>Todos</option>
+            </select>
             <label for="rel-apenas-ajuste" id="rel-apenas-ajuste-label" style="
               display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-2);
               cursor:pointer;user-select:none;padding:6px 12px;border-radius:20px;
@@ -848,25 +851,25 @@
 
         <div class="table-wrap">
           <table id="relatorio-table">
-            <thead>
+            <thead id="relatorio-thead">
               <tr>
-                <th>Data</th>
-                <th>ID Bateria</th>
-                <th>Traços</th>
-                <th>Berços inicio</th> <!-- Nova -->
-                <th>Berços fim</th> <!-- Nova -->
-                <th>Densidade</th>
-                <th>Flow</th>
-                <th>Densidade EPS</th>
-                <th>Expansão</th>
-                <th>Silo EPS</th>
-                <th>Cimento</th>
-                <th>Água</th>
-                <th>eps_real</th>
-                <th>Superplástico</th>
-                <th>Incorporador</th>
-                <th>Tempo de Batida</th>
-                <th>Observações</th> <!-- Nova -->
+                <th data-col="data">Data</th>
+                <th data-col="id_bateria">ID Bateria</th>
+                <th data-col="num_traco">Traços</th>
+                <th data-col="berco_inicio">Berços inicio</th> <!-- Nova -->
+                <th data-col="berco_fim">Berços fim</th> <!-- Nova -->
+                <th data-col="densidade">Densidade</th>
+                <th data-col="flow">Flow</th>
+                <th data-col="densidade_eps">Densidade EPS</th>
+                <th data-col="expansao">Expansão</th>
+                <th data-col="silo">Silo EPS</th>
+                <th data-col="cimento_real">Cimento</th>
+                <th data-col="agua_real">Água</th>
+                <th data-col="eps_real">eps_real</th>
+                <th data-col="superplast_real">Superplástico</th>
+                <th data-col="incorporador_real">Incorporador</th>
+                <th data-col="tempo_batida">Tempo de Batida</th>
+                <th data-col="obs">Observações</th> <!-- Nova -->
               </tr>
             </thead>
             <tbody id="relatorio-tbody">
@@ -1115,7 +1118,7 @@
 
       </div>
     </main>
-    <!-- ============ PAGE: OEE ============ -->
+<!-- ============ PAGE: OEE ============ -->
     <main class="main" id="page-oee">
       <div class="page-header">
         <h1 class="page-title">Análise de <span>OEE</span></h1>
@@ -1164,22 +1167,22 @@
 
           <!-- KPIs principais -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Disponibilidade = tempo real produzindo ÷ 420 min (7h), por turno.&#10;As 7h vêm de: turno de 9h − 1h de descanso − 1h de lavagem programada (2× 30 min).">
               <div class="kpi-label">Disponibilidade</div>
               <div class="kpi-value" id="oee-kpi-disp" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">tempo produzindo ÷ 7h por turno</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Performance = (59 min × nº de operações) ÷ tempo real produzindo, limitado a 100%.&#10;59 min é o ciclo ideal por operação.">
               <div class="kpi-label">Performance</div>
               <div class="kpi-value" id="oee-kpi-perf" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ciclo ideal: 59 min/operação</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Qualidade = % de traços que não precisaram de nenhum ajuste de insumo (mesmo critério de Qualidade dos Traços).&#10;Sem traço registrado no turno = 'sem dado', não 0%.">
               <div class="kpi-label">Qualidade</div>
               <div class="kpi-value" id="oee-kpi-qual" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">traços sem nenhum ajuste</div>
             </div>
-            <div class="kpi-card" style="border-color:var(--accent)">
+            <div class="kpi-card" style="border-color:var(--accent)" data-tooltip="OEE = Disponibilidade × Performance × Qualidade.">
               <div class="kpi-label" style="color:var(--accent)">OEE Geral</div>
               <div class="kpi-value accent" id="oee-kpi-geral" style="font-size:2rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">disp. × performance × qualidade</div>
@@ -1281,9 +1284,7 @@
         </div>
       </div>
     </main>
-
-
-    <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
+<!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
         <h1 class="page-title">Análise <span>Operacional</span></h1>
@@ -1330,16 +1331,21 @@
                 <div class="kpi-value" id="ao-kpi-paineis" style="font-size:1.7rem">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">unidades no período</div>
               </div>
+              <div class="kpi-card" style="flex:1" data-tooltip="Total de operações no período filtrado — cada operação corresponde a 1 bateria produzida.">
+                <div class="kpi-label">Baterias Produzidas</div>
+                <div class="kpi-value" id="ao-kpi-baterias" style="font-size:1.7rem">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações no período</div>
+              </div>
             </div>
 
             <!-- Coluna 2: Ciclo -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Média do tempo de todas as operações do período. Referência ideal: 45 min.">
                 <div class="kpi-label">Tempo Médio de Ciclo</div>
                 <div class="kpi-value" id="ao-kpi-ciclo" style="font-size:1.5rem;font-family:var(--font-mono)">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">referência: 45 min</div>
               </div>
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Tempo médio de cada bateria individualmente — ver Ranking de Baterias, abaixo, para o detalhe por bateria.">
                 <div class="kpi-label">Tempo Médio / Bateria</div>
                 <div class="kpi-value" id="ao-kpi-tempo-bat" style="font-size:1.5rem;font-family:var(--font-mono)">—
                 </div>
@@ -1349,12 +1355,12 @@
 
             <!-- Coluna 3: Atrasos -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card red" style="flex:1">
+              <div class="kpi-card red" style="flex:1" data-tooltip="% de operações do período marcadas com atraso (houve_atraso = SIM).">
                 <div class="kpi-label">Taxa de Atrasos</div>
                 <div class="kpi-value red" id="ao-kpi-atraso-pct" style="font-size:1.7rem">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações com atraso</div>
               </div>
-              <div class="kpi-card" style="flex:1;border-left:3px solid var(--red)">
+              <div class="kpi-card" style="flex:1;border-left:3px solid var(--red)" data-tooltip="Soma do tempo excedente acima de 59 min em operações com atraso, convertida em horas.">
                 <div class="kpi-label">Horas Perdidas</div>
                 <div class="kpi-value" id="ao-kpi-horas-perd" style="font-size:1.7rem;color:var(--red)">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">excedente acima de 59 min</div>
@@ -1363,7 +1369,7 @@
 
             <!-- Coluna 4: Eficiência + Melhores/Piores -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Eficiência = (100% − Taxa de Atrasos) × 0,6 + Eficiência de Tempo × 0,4.&#10;Eficiência de Tempo = 45 min ÷ tempo médio de ciclo (limitado a 100%).">
                 <div class="kpi-label">Eficiência Operacional</div>
                 <div class="kpi-value green" id="ao-kpi-eficiencia" style="font-size:2.2rem">—</div>
                 <div style="background:var(--bg-3);border-radius:4px;height:6px;margin-top:8px;overflow:hidden">
@@ -1371,11 +1377,11 @@
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1">
-                <div class="kpi-card" style="border-top:3px solid var(--green)">
+                <div class="kpi-card" style="border-top:3px solid var(--green)" data-tooltip="Ranking por bateria: 100 − % de atrasos − (excedente sobre 45 min ÷ 45 min × 30). Fórmula diferente da Eficiência Operacional geral, ao lado.">
                   <div class="kpi-label">🥇 Melhor Bateria</div>
                   <div class="kpi-value green" id="ao-kpi-melhor-bat" style="font-size:1.5rem">—</div>
                 </div>
-                <div class="kpi-card" style="border-top:3px solid var(--red)">
+                <div class="kpi-card" style="border-top:3px solid var(--red)" data-tooltip="Ranking por bateria: 100 − % de atrasos − (excedente sobre 45 min ÷ 45 min × 30). Fórmula diferente da Eficiência Operacional geral, ao lado.">
                   <div class="kpi-label">⚠️ Pior Bateria</div>
                   <div class="kpi-value red" id="ao-kpi-pior-bat" style="font-size:1.5rem">—</div>
                 </div>
@@ -1483,7 +1489,6 @@
 
       </div><!-- .page-body -->
     </main>
-
     <!-- ============ PAGE: PARADAS ============ -->
     <main class="main" id="page-paradas">
       <div class="page-header">
@@ -1709,7 +1714,7 @@
     </div>
   </div>
 
-  <!-- ============ MODAL CONFIGURAÇÕES ============ -->
+<!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -1739,6 +1744,9 @@
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔒 Autorizados</button>
+          <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🤖 Automação</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -1941,17 +1949,44 @@
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
+          <!-- ========== SEÇÃO: Automação ========== -->
+          <div id="cfg-secao-automacao" style="display:none">
+            <div class="card-title">🤖 Modo Automático</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Quando ativado, os campos de insumo dos traços em <strong>Registrar Operação</strong> passam a ser
+              preenchidos automaticamente conforme leituras chegam de fora (balança/CLP, via Modbus TCP) — em vez
+              de digitados à mão. Ainda dá pra digitar manualmente enquanto nenhuma leitura chega.
+            </p>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div>
+                <div style="font-size:.85rem;color:var(--text);font-weight:600;margin-bottom:2px">Modo Automático</div>
+                <div style="font-size:.74rem;color:var(--text-3)">Exige a senha de Administrador pra ligar ou desligar.</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" id="cfg-toggle-automatico" onchange="cfgToggleModoAutomatico(this)">
+                <span class="switch-slider"></span>
+              </span>
+            </div>
+
+            <p style="font-size:.74rem;color:var(--text-3);margin-top:14px;margin-bottom:0">
+              💡 A coleta automática (leitura do CLP) ainda não está conectada — ver README, "Modo Automático",
+              pra status e o que falta.
+            </p>
+          </div>
+          <!-- ========== /SEÇÃO: Automação ========== -->
+
         </div>
       </div>
 
     </div>
   </div>
-
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/app-core.js"></script>

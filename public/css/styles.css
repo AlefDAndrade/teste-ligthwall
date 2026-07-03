@@ -832,6 +832,20 @@ th {
   border-bottom: 1px solid var(--border);
 }
 
+/* Cabeçalho clicável pra ordenar (Registro de Baterias e Relatório de
+   Injeção — ver _ligarOrdenacaoTabela em dashboard.js). A seta (▲/▼) é
+   texto simples, adicionada/removida em JS — aqui só o afordance visual
+   de "isto é clicável". */
+th.th-ordenavel {
+  cursor: pointer;
+  user-select: none;
+  transition: color .15s ease;
+}
+
+th.th-ordenavel:hover {
+  color: var(--accent);
+}
+
 td {
   padding: 10px 7px;
   border-bottom: 1px solid var(--border);
@@ -2408,94 +2422,98 @@ td.mono {
 }
 
 /* ============================================================
-   "BATERIA ATUAL" (popover da topbar, ao lado do Debriefing)
+   "BATERIA ATUAL" (card sempre visível em Registrar Operação, logo
+   abaixo de Traços de Injeção — antes era um popover no topbar)
    ============================================================ */
-/* Mesmo padrão visual do Debriefing (.ao-popover + cabeçalho próprio) —
-   só leitura: mostra os berços da operação em andamento agora, no
-   formato visual da grade de Montagem Personalizada (ver operacao.js),
-   mas aqui o berço em si não é clicável — só os 2 indicadores (●/•)
-   dentro de cada um, que por enquanto não têm função associada (ver
-   bateria-atual.js, _baCliqueIndicador). */
-.bateria-atual-popover {
-  width: 360px;
-  max-width: min(360px, calc(100vw - 48px));
-  max-height: 70vh;
-  padding: 0;
-  overflow: hidden;
-}
-
-.bateria-atual-popover.active {
-  display: flex;
-  flex-direction: column;
-}
-
-.ba-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.ba-header-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  white-space: nowrap;
-}
-
-.ba-content {
-  padding: 14px;
-  overflow-y: auto;
-  max-height: 70vh;
-}
-
+/* Só leitura quanto à identidade da bateria: mostra os berços da
+   operação em andamento agora, no formato visual da grade de Montagem
+   Personalizada (ver operacao.js). A célula do berço NÃO é clicável —
+   só os 2 indicadores (●/•, em cima/embaixo de cada célula) são, cada
+   um marcando/desmarcando "baixou/vazou" do SEU lado, independente do
+   outro (ver bateria-atual.js, _baCliqueDot). */
 .ba-resumo {
   font-size: .82rem;
   color: var(--text-2);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* Dica de uso — explica o que o clique nos indicadores faz (ver
+   .ba-dot, abaixo). Fica só quando há operação em andamento (mesmo
+   bloco de _renderBateriaAtual que monta o resumo + grade). */
+.ba-dica {
+  font-size: .72rem;
+  color: var(--text-3);
   margin-bottom: 12px;
   line-height: 1.4;
 }
 
+/* Fileira única — os berços ficam lado a lado (1 2 3 4 5 6 7 8 ...), não
+   mais em pares de 2 colunas. Baterias maiores (até 22 berços) passam da
+   largura da tela — scroll horizontal em vez de quebrar linha, pra manter
+   a leitura sequencial da bateria física da esquerda pra direita. */
 .ba-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px; /* respiro antes da barra de rolagem, quando aparece */
 }
 
+/* Célula "em pé": indicador em cima, número no meio, indicador embaixo —
+   só leitura quanto à cor por tipo de montagem (via style inline, ver
+   _renderBateriaAtual) — não é clicável, não reage a hover/clique (só os
+   indicadores dentro dela são — ver .ba-dot, abaixo). */
 .ba-celula {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 6px;
+  flex: 0 0 auto;
+  min-width: 40px;
+  padding: 6px 4px;
   border-radius: var(--radius);
-  font-size: .76rem;
+  font-size: .74rem;
   font-weight: 700;
 }
 
 .ba-numero {
-  flex: 1;
   text-align: center;
+  white-space: nowrap;
 }
 
-/* Os dois indicadores — só estes são clicáveis dentro da célula (o
-   berço em si é estático). Sem função definida ainda (ver
-   bateria-atual.js), mas já reagem visualmente ao hover pra deixar
-   claro que SÃO clicáveis, mesmo sem fazer nada ainda. */
+/* Os dois indicadores — em cima (topo) e embaixo (base) da célula — são
+   os ÚNICOS elementos clicáveis do berço (ver bateria-atual.js,
+   _baCliqueDot). Cada um marca/desmarca seu próprio lado
+   independentemente do outro. */
 .ba-dot {
   cursor: pointer;
-  font-size: .85rem;
+  font-size: .95rem;
   line-height: 1;
-  padding: 2px 3px;
+  padding: 3px 5px;
   opacity: .55;
-  transition: opacity .15s ease, transform .15s ease;
+  border-radius: 50%;
+  transition: opacity .15s ease, transform .15s ease, background .15s ease, color .15s ease;
 }
 
 .ba-dot:hover {
   opacity: 1;
   transform: scale(1.3);
+}
+
+.ba-dot:active {
+  transform: scale(1.05);
+}
+
+/* Indicador marcado como "baixou/vazou" — destaque É NO INDICADOR, não
+   na célula inteira (os 2 lados de um berço são independentes; só
+   colorir a célula toda esconderia qual dos dois foi marcado). */
+.ba-dot.ba-dot-marcado {
+  opacity: 1;
+  color: var(--red);
+  background: var(--red-dim);
+  text-shadow: 0 0 6px var(--red);
 }
 
 .ba-vazio {
@@ -2626,4 +2644,43 @@ td.mono {
   top: 0;
   z-index: 5;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+
+/* ============================================================
+   TOOLTIP COMPARTILHADO (ver js/tooltip.js)
+   Hover no desktop, toque no celular/tablet — usado por todos os
+   dashboards (Registro/Relatório, Análise Operacional, CEP, OEE,
+   Bateria Atual). Elemento único, reaproveitado, criado sob demanda.
+   ============================================================ */
+.lw-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 99999;
+  left: 0;
+  top: 0;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+  animation: lw-tooltip-in .12s ease-out;
+}
+
+@keyframes lw-tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Qualquer elemento com dica (data-tooltip) ganha esse cursor no
+   desktop — sinaliza "tem mais informação aqui" sem precisar de ícone.
+   No touch não existe cursor, então isso é inofensivo lá. */
+[data-tooltip] {
+  cursor: help;
 }

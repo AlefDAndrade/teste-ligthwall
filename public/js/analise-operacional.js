@@ -335,14 +335,18 @@
   }
 
   // Gráfico de barras coloridas
-  function drawBar(id, labels, values, colors, h = 180, showValues = true) {
+  // formatarTooltip(valor, label, idx) -> texto do hover/toque; se omitido,
+  // usa "label: valor" genérico. Ver LW.tooltip.ligarHoverCanvas (js/tooltip.js).
+  function drawBar(id, labels, values, colors, h = 180, showValues = true, formatarTooltip = null) {
     const c = setupCanvas(id, h);
     if (!c) return;
     const {ctx, w} = c;
+    const canvasEl = document.getElementById(id);
     const pad = {top:24, right:12, bottom:32, left:42};
     const cw = w - pad.left - pad.right;
     const ch = c.h - pad.top - pad.bottom;
     const max = Math.max(...values, 1);
+    const areas = []; // hover/toque — 1 retângulo de detecção por barra (coluna inteira, não só a parte preenchida)
 
     // grid
     ctx.strokeStyle = C.border; ctx.lineWidth = 1;
@@ -403,14 +407,34 @@
         ctx.textAlign = 'center';
         ctx.fillText(lbl, x+bw/2, c.h-8);
       }
+
+      // Área de detecção do hover/toque: a coluna inteira (topo do gráfico
+      // até a base), não só o retângulo preenchido — mais fácil de acertar
+      // em barras pequenas/valor baixo, e cobre também o texto do label que
+      // por vezes é omitido (step acima) — o hover sempre revela qual é.
+      areas.push({
+        x, w: bw, y: pad.top, yBase: pad.top + ch,
+        texto: formatarTooltip ? formatarTooltip(values[i], lbl, i) : `${lbl}: ${values[i] >= 100 ? Math.round(values[i]) : values[i].toFixed(1)}`,
+      });
+    });
+
+    canvasEl._areasHoverAO = areas;
+    LW.tooltip.ligarHoverCanvas(canvasEl, (x, y) => {
+      const a = (canvasEl._areasHoverAO || []).find(a => x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.yBase);
+      return a ? a.texto : null;
     });
   }
 
   // Gráfico de linha dupla
-  function drawDualLine(id, labels, data1, data2, col1, col2, label1, label2, h = 180) {
+  // montarTooltip(idx, label) -> texto do hover/toque; recebe o ÍNDICE (não
+  // o valor já escalado pra caber no mesmo gráfico — ver renderTendencias,
+  // que passa trendTempo/2 só pra desenho, mas quer mostrar o valor real
+  // no hover). Se omitido, usa os valores de data1/data2 direto.
+  function drawDualLine(id, labels, data1, data2, col1, col2, label1, label2, h = 180, montarTooltip = null) {
     const c = setupCanvas(id, h);
     if (!c) return;
     const {ctx, w} = c;
+    const canvasEl = document.getElementById(id);
     const pad = {top:30, right:12, bottom:32, left:42};
     const cw = w - pad.left - pad.right;
     const ch = c.h - pad.top - pad.bottom;
@@ -471,6 +495,24 @@
       ctx.fillStyle = C.text3; ctx.font = '9px Barlow,sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(lbl, x, c.h-6);
+    });
+
+    // Pontos de hover/toque — 1 por posição no eixo X (cobre os meses cujo
+    // label foi omitido acima por falta de espaço — o hover sempre revela
+    // qual é), texto com os 2 valores daquele mês.
+    const stepX = cw/(labels.length-1||1);
+    const pontos = labels.map((lbl, i) => ({
+      x: pad.left + i*stepX,
+      texto: montarTooltip ? montarTooltip(i, lbl) : `${lbl}\n${label1}: ${data1[i]}\n${label2}: ${data2[i]}`,
+    }));
+    canvasEl._pontosHoverAO = pontos;
+    LW.tooltip.ligarHoverCanvas(canvasEl, (x) => {
+      let melhor = null, melhorDist = 22; // raio de detecção em px, só no eixo X
+      (canvasEl._pontosHoverAO || []).forEach(p => {
+        const d = Math.abs(x - p.x);
+        if (d < melhorDist) { melhorDist = d; melhor = p; }
+      });
+      return melhor ? melhor.texto : null;
     });
   }
 
@@ -556,6 +598,7 @@
 
     set('ao-kpi-m2',         fmt(kpi.totalM2, 0) + '<span style="font-size:.9rem"> m²</span>');
     set('ao-kpi-paineis',    kpi.totalPaineis.toLocaleString('pt-BR'));
+    set('ao-kpi-baterias',   kpi.n.toLocaleString('pt-BR'));
     set('ao-kpi-ciclo',      fmtMin(kpi.tempoMedio));
     set('ao-kpi-atraso-pct', fmt(kpi.taxaAtraso, 1) + '<span style="font-size:.9rem">%</span>');
     set('ao-kpi-horas-perd', fmt(kpi.horasPerdidas, 1) + '<span style="font-size:.9rem"> h</span>');
@@ -663,7 +706,8 @@
     const labels = kpi.rankBaterias.map(b=>b.bat);
     const vals   = kpi.rankBaterias.map(b=>b.ops);
     const cols   = kpi.rankBaterias.map(b=> b.eficiencia >= 80 ? C.green : b.eficiencia >= 60 ? C.accent : C.red);
-    setTimeout(() => drawBar('ao-chart-bat-ops', labels, vals, cols), 50);
+    setTimeout(() => drawBar('ao-chart-bat-ops', labels, vals, cols, 180, true,
+      (valor, lbl) => `${lbl}: ${valor} operaç${valor === 1 ? 'ão' : 'ões'}`), 50);
   }
 
   // ── Ranking Motivos ───────────────────────────────────────
@@ -695,19 +739,22 @@
       const c = LW.corMontagemPorLabel(m);
       return c.hibrida ? { hibrida: true, cor1: c.cor1, cor2: c.cor2 } : c.cor;
     });
-    setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160), 50);
+    setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)}% de atraso`), 50);
 
     // Dimensão x Tempo
     const dimEntries = Object.entries(kpi.corDimensao);
     const dimLabels  = dimEntries.map(([d])=>d);
     const dimTempo   = dimEntries.map(([,v]) => v.tempos.length ? v.tempos.reduce((a,b)=>a+b,0)/v.tempos.length : 0);
-    setTimeout(() => drawBar('ao-cor-dimensao', dimLabels, dimTempo, C.blue, 160), 50);
+    setTimeout(() => drawBar('ao-cor-dimensao', dimLabels, dimTempo, C.blue, 160, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)} min em média`), 50);
 
     // Bateria x Tempo médio
     const batLabels = kpi.rankBaterias.map(b=>b.bat);
     const batTempo  = kpi.rankBaterias.map(b=>b.tempoMedio);
     const batCols   = kpi.rankBaterias.map(b => b.tempoMedio > 59 ? C.red : b.tempoMedio > 50 ? C.accent : C.green);
-    setTimeout(() => drawBar('ao-cor-bat-tempo', batLabels, batTempo, batCols, 180), 50);
+    setTimeout(() => drawBar('ao-cor-bat-tempo', batLabels, batTempo, batCols, 180, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)} min em média`), 50);
   }
 
   // ── Tendências ────────────────────────────────────────────
@@ -720,7 +767,8 @@
         kpi.trendTempo.map(t => t/2), // escalar tempo para sobrepor no mesmo gráfico
         C.red, C.blue,
         '% Atrasos', 'Tempo Médio (÷2)',
-        220
+        220,
+        (i, lbl) => `${lbl}\n% Atrasos: ${kpi.trendAtraso[i].toFixed(0)}%\nTempo Médio: ${kpi.trendTempo[i].toFixed(0)} min`
       );
     }, 50);
 
@@ -750,7 +798,8 @@
     const m2Labels = top8.map(b=>b.bat);
     const m2Vals   = top8.map(b=>b.m2);
     const m2Cols   = top8.map(() => C.cyan);
-    setTimeout(() => drawBar('ao-prod-m2', m2Labels, m2Vals, m2Cols, 160), 50);
+    setTimeout(() => drawBar('ao-prod-m2', m2Labels, m2Vals, m2Cols, 160, true,
+      (valor, lbl) => `${lbl}: ${fmt(valor, 1)} m²`), 50);
 
     // Produção por dimensão (donut textual)
     const el = document.getElementById('ao-prod-dimensao');

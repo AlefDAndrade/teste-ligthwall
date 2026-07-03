@@ -1450,21 +1450,84 @@
       const elDados = document.getElementById('cfg-secao-dados');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
+      const elAutomacao = document.getElementById('cfg-secao-automacao');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
+      if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
       const navDados = document.getElementById('cfg-nav-dados');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
+      const navAutomacao = document.getElementById('cfg-nav-automacao');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'autorizados') cfgRenderAutorizados();
+      if (secao === 'automacao') cfgRenderAutomacao();
+    }
+
+    // ---- Automação (Configurações → Automação) ────────────────────────
+    // Reflete o estado GLOBAL já carregado pelo data.js (LW.MODO_AUTOMATICO_ATIVO)
+    // no checkbox — chamado toda vez que a seção é mostrada (ver
+    // cfgMostrarSecao, acima), pra nunca ficar dessincronizado se alguém
+    // mais mudou isso enquanto o modal estava fechado.
+    function cfgRenderAutomacao() {
+      const chk = document.getElementById('cfg-toggle-automatico');
+      if (chk) chk.checked = !!LW.MODO_AUTOMATICO_ATIVO;
+    }
+
+    /**
+     * Liga/desliga "🤖 Modo Automático" — SEMPRE pede a senha de
+     * Administrador de novo antes de aplicar, nos dois sentidos (ligar E
+     * desligar), de propósito: evita que alguém desligue sem querer
+     * enquanto passa perto do computador, e evita ligar sem intenção
+     * clara (a leitura automática passa a sobrescrever campos de insumo
+     * sozinha — ver operacao.js, _aplicarLeituraAutomatica).
+     *
+     * Reverte o checkbox visualmente ANTES de pedir a senha (otimista ao
+     * contrário: assume que vai ser cancelado, só aplica de verdade no
+     * onSuccess) — se a pessoa cancelar o modal de senha, não sobra
+     * nenhum estado("meio aplicado") pra desfazer.
+     */
+    function cfgToggleModoAutomatico(checkboxEl) {
+      const novoValor = checkboxEl.checked;
+      checkboxEl.checked = !novoValor; // desfaz na hora — só aplica de verdade após a senha
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/config/modo-automatico', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: novoValor }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok) {
+            LW.mostrarAlerta(json?.erro || 'Não foi possível salvar. Tente novamente.', { tipo: 'erro' });
+            return;
+          }
+          LW.atualizarModoAutomatico(novoValor);
+          checkboxEl.checked = novoValor;
+          LW.mostrarAlerta(
+            novoValor ? 'Modo Automático ativado.' : 'Modo Automático desativado.',
+            { tipo: 'sucesso' }
+          );
+        } catch (_) {
+          LW.mostrarAlerta('Erro de conexão ao salvar. Verifique a rede e tente novamente.', { tipo: 'erro' });
+        }
+      });
+      // Se cancelar o modal de senha, o checkbox já foi revertido acima —
+      // nada mais precisa acontecer.
     }
 
     // ---- Atalhos de Teclado (Configurações → Atalhos) ----

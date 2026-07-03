@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: OEE ============ -->
+<!-- ============ PAGE: OEE ============ -->
     <main class="main" id="page-oee">
       <div class="page-header">
         <h1 class="page-title">Análise de <span>OEE</span></h1>
@@ -47,22 +47,22 @@
 
           <!-- KPIs principais -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Disponibilidade = tempo real produzindo ÷ 420 min (7h), por turno.&#10;As 7h vêm de: turno de 9h − 1h de descanso − 1h de lavagem programada (2× 30 min).">
               <div class="kpi-label">Disponibilidade</div>
               <div class="kpi-value" id="oee-kpi-disp" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">tempo produzindo ÷ 7h por turno</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Performance = (59 min × nº de operações) ÷ tempo real produzindo, limitado a 100%.&#10;59 min é o ciclo ideal por operação.">
               <div class="kpi-label">Performance</div>
               <div class="kpi-value" id="oee-kpi-perf" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ciclo ideal: 59 min/operação</div>
             </div>
-            <div class="kpi-card">
+            <div class="kpi-card" data-tooltip="Qualidade = % de traços que não precisaram de nenhum ajuste de insumo (mesmo critério de Qualidade dos Traços).&#10;Sem traço registrado no turno = 'sem dado', não 0%.">
               <div class="kpi-label">Qualidade</div>
               <div class="kpi-value" id="oee-kpi-qual" style="font-size:1.7rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">traços sem nenhum ajuste</div>
             </div>
-            <div class="kpi-card" style="border-color:var(--accent)">
+            <div class="kpi-card" style="border-color:var(--accent)" data-tooltip="OEE = Disponibilidade × Performance × Qualidade.">
               <div class="kpi-label" style="color:var(--accent)">OEE Geral</div>
               <div class="kpi-value accent" id="oee-kpi-geral" style="font-size:2rem">—</div>
               <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">disp. × performance × qualidade</div>
@@ -164,5 +164,3 @@
         </div>
       </div>
     </main>
-
-

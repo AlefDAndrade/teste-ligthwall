@@ -521,7 +521,7 @@
     elBar.innerHTML = segs.map(s => {
       const pct = (s.min / planejadoTotal) * 100;
       if (pct <= 0) return '';
-      return `<div style="height:100%;width:${pct}%;background:${s.cor}" title="${s.label}: ${_fmtMin(s.min)} (${_fmtPct(pct)})"></div>`;
+      return `<div style="height:100%;width:${pct}%;background:${s.cor}" data-tooltip="${s.label}: ${_fmtMin(s.min)} (${_fmtPct(pct)})"></div>`;
     }).join('');
 
     elLegenda.innerHTML = segs.map(s => {

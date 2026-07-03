@@ -370,9 +370,10 @@
     // de relance, sem precisar rolar a tela até lá).
     const cardTotalAjustes = document.getElementById('qt-card-total-ajustes');
     if (cardTotalAjustes) {
-      cardTotalAjustes.title = ind.rankingMateriais.length
+      const textoTip = ind.rankingMateriais.length
         ? ind.rankingMateriais.map(([label, cnt]) => `${label}: ${cnt} ajuste${cnt !== 1 ? 's' : ''}`).join('\n')
         : 'Nenhum ajuste registrado no período';
+      cardTotalAjustes.setAttribute('data-tooltip', textoTip);
     }
     setText('qt-media-ajustes',       ind.mediaAjustes.toFixed(2).replace('.', ','));
     setText('qt-donut-sem',           ind.tracosSemAjuste.toLocaleString('pt-BR'));
@@ -405,8 +406,8 @@
       const card = document.getElementById('qt-card-receita-estavel');
       if (card) {
         const porMes = _tooltipReceitaPorMes(r);
-        card.title = `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
-          + (porMes ? '\n\nPor mês:\n' + porMes : '');
+        card.setAttribute('data-tooltip', `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
+          + (porMes ? '\n\nPor mês:\n' + porMes : ''));
       }
     }
     // Receita mais instável
@@ -417,8 +418,8 @@
       const card = document.getElementById('qt-card-receita-instavel');
       if (card) {
         const porMes = _tooltipReceitaPorMes(r);
-        card.title = `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
-          + (porMes ? '\n\nPor mês:\n' + porMes : '');
+        card.setAttribute('data-tooltip', `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
+          + (porMes ? '\n\nPor mês:\n' + porMes : ''));
       }
     }
 
@@ -429,7 +430,7 @@
       setText('qt-insumo-mais-ajustado', label);
       setText('qt-insumo-mais-ajustado-cnt', `${cnt} ajuste${cnt !== 1 ? 's' : ''} (${pctTotal}% do total)`);
       const card = document.getElementById('qt-card-insumo-mais-ajustado');
-      if (card) card.title = `Evolução mensal — ${label}:\n` + _tooltipEvolucaoMensalInsumo(label, ind);
+      if (card) card.setAttribute('data-tooltip', `Evolução mensal — ${label}:\n` + _tooltipEvolucaoMensalInsumo(label, ind));
     }
 
     // Insumo maior desvio
@@ -440,66 +441,18 @@
       setText('qt-insumo-maior-desvio-val', `Desvio: ${sinal}${fmtN(ind.maiorDesvioPct)}% do planejado`);
       const card = document.getElementById('qt-card-insumo-maior-desvio');
       if (card) {
-        card.title = (v ? `Planejado: ${fmtN(v.planejado)} · Real: ${fmtN(v.real)}\n\n` : '')
-          + `Ajustes por mês — ${ind.maiorDesvioLabel}:\n` + _tooltipEvolucaoMensalInsumo(ind.maiorDesvioLabel, ind);
+        card.setAttribute('data-tooltip', (v ? `Planejado: ${fmtN(v.planejado)} · Real: ${fmtN(v.real)}\n\n` : '')
+          + `Ajustes por mês — ${ind.maiorDesvioLabel}:\n` + _tooltipEvolucaoMensalInsumo(ind.maiorDesvioLabel, ind));
       }
     }
   }
 
-  // ── TOOLTIP FLUTUANTE PARA GRÁFICOS DE CANVAS ────────────
-  // Canvas não tem DOM por ponto/barra — não dá pra usar o atributo title
-  // como nos cards/tabela acima. Um único elemento de tooltip flutuante,
-  // reaproveitado pelos 3 gráficos desta página (donut, evolução, barras),
-  // posicionado ao lado do cursor a cada movimento do mouse.
-  let _tooltipCanvasEl = null;
-  function _tooltipCanvas() {
-    if (_tooltipCanvasEl) return _tooltipCanvasEl;
-    const el = document.createElement('div');
-    el.id = 'qt-canvas-tooltip';
-    el.style.cssText = [
-      'position:fixed;z-index:999;display:none;pointer-events:none',
-      'background:var(--bg-card);border:1px solid var(--border-2);border-radius:8px',
-      'padding:8px 12px;font-size:.76rem;color:var(--text-2);white-space:pre-line',
-      'box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:220px;line-height:1.4',
-    ].join(';');
-    document.body.appendChild(el);
-    _tooltipCanvasEl = el;
-    return el;
-  }
-  function _mostrarTooltipCanvas(clientX, clientY, texto) {
-    const el = _tooltipCanvas();
-    el.textContent = texto;
-    el.style.display = 'block';
-    const margem = 14;
-    let left = clientX + margem;
-    if (left + 220 > window.innerWidth) left = clientX - margem - 220;
-    el.style.left = left + 'px';
-    el.style.top = (clientY + margem) + 'px';
-  }
-  function _esconderTooltipCanvas() {
-    if (_tooltipCanvasEl) _tooltipCanvasEl.style.display = 'none';
-  }
-
-  // Liga (uma única vez por canvas, controlado por canvas._hoverLigado) um
-  // listener genérico de hover. `acharTexto(x, y)` recebe a posição do
-  // mouse relativa ao canvas e decide se há um ponto/fatia/barra perto o
-  // bastante pra mostrar tooltip — cada gráfico implementa sua própria
-  // lógica de proximidade (consultando dados guardados no próprio canvas a
-  // cada render, ex: canvas._pontosEvolucao); esta função só cuida de
-  // exibir/posicionar/esconder o tooltip e o cursor.
-  function _ligarHoverCanvas(canvas, acharTexto) {
-    if (canvas._hoverLigado) return;
-    canvas._hoverLigado = true;
-    canvas.addEventListener('mousemove', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const texto = acharTexto(x, y);
-      if (texto) { canvas.style.cursor = 'pointer'; _mostrarTooltipCanvas(e.clientX, e.clientY, texto); }
-      else { canvas.style.cursor = 'default'; _esconderTooltipCanvas(); }
-    });
-    canvas.addEventListener('mouseleave', () => { _esconderTooltipCanvas(); canvas.style.cursor = 'default'; });
-  }
+  // ── TOOLTIP DE GRÁFICOS EM CANVAS ────────────────────────
+  // A implementação de hover/toque em canvas (mouse + touch, com toggle no
+  // toque) é compartilhada entre todos os dashboards — ver
+  // LW.tooltip.ligarHoverCanvas em js/tooltip.js. Alias local só pra não
+  // reescrever as ~10 chamadas já existentes abaixo (donut/evolução/barras).
+  const _ligarHoverCanvas = LW.tooltip.ligarHoverCanvas;
 
   // ── RENDER: DONUT ─────────────────────────────────────────
   function renderDonut(ind) {
@@ -634,7 +587,7 @@
       return;
     }
 
-    const th = (t, explicacao) => `<th style="padding:8px 12px;text-align:${isNaN(t[0]) ? 'left' : 'right'};font-size:.72rem;font-weight:600;color:var(--text-3);white-space:nowrap;border-bottom:1px solid var(--border)${explicacao ? ';cursor:help;border-bottom-style:dotted' : ''}"${explicacao ? ` title="${explicacao}"` : ''}>${t}</th>`;
+    const th = (t, explicacao) => `<th style="padding:8px 12px;text-align:${isNaN(t[0]) ? 'left' : 'right'};font-size:.72rem;font-weight:600;color:var(--text-3);white-space:nowrap;border-bottom:1px solid var(--border)${explicacao ? ';border-bottom-style:dotted' : ''}"${explicacao ? ` data-tooltip="${LW.escaparHtml(explicacao)}"` : ''}>${t}</th>`;
     const td = (v, color = '') => `<td style="padding:8px 12px;text-align:right;font-family:var(--font-mono);font-size:.78rem;color:${color || 'var(--text-2)'};white-space:nowrap">${v}</td>`;
     const tdL = (v) => `<td style="padding:8px 12px;font-size:.82rem;font-weight:600;color:var(--text)">${v}</td>`;
 
@@ -686,7 +639,7 @@
       const n = ind.cepPorInsumo[label]?.n || 0;
       const tooltip = `Planejado (exato): ${fmtN(v.planejado, 3)}\nReal (exato): ${fmtN(v.real, 3)}\nDiferença (exata): ${sinal}${fmtN(diff, 3)}\nAmostra: ${n} traço${n !== 1 ? 's' : ''} com valor real registrado`;
       return `
-        <div style="background:var(--bg-2);border-radius:10px;padding:14px;border:1px solid var(--border);cursor:help" title="${LW.escaparHtml(tooltip)}">
+        <div style="background:var(--bg-2);border-radius:10px;padding:14px;border:1px solid var(--border)" data-tooltip="${LW.escaparHtml(tooltip)}">
           <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);margin-bottom:8px">${label}</div>
           <div style="display:flex;flex-direction:column;gap:4px">
             <div style="display:flex;justify-content:space-between">
