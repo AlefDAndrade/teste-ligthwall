@@ -2242,6 +2242,12 @@
     updateStatusBanner();
     updatePendencias();
     _aplicarTravaDeAutorizacao();
+    // Cobre os casos que não passam por persist() — carga inicial da
+    // tela, reset ("🗑️ Limpar Tudo"), fim de operação e atualização
+    // vinda de OUTRO dispositivo (ver _aplicarEstadoExterno) — em todos
+    // eles o card precisa refletir o estado na hora, sem esperar o
+    // próximo sync periódico de marcações.
+    if (window.LWBateriaAtual) LWBateriaAtual.atualizarComEstado(state);
   }
 
   function persist() {
@@ -2257,6 +2263,10 @@
       // aparecer pra quem mais estiver com a tela aberta.
       LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
     }
+    // Card "Bateria Atual": sempre reflete o rascunho local na hora,
+    // mesmo antes de "Iniciar Injeção" e mesmo em modo teste (é só uma
+    // prévia visual nesta mesma tela — não depende de transmitir nada).
+    if (window.LWBateriaAtual) LWBateriaAtual.atualizarComEstado(state);
     updatePendencias();
   }
 

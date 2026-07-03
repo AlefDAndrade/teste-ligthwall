@@ -255,87 +255,168 @@ db.exec(`
   );
 
   -- ============================================================
-  --  Berços Visuais — snapshot de estado de cada LADO de cada berço
+  --  Berços Visuais — snapshot de estado dos 2 LADOS de cada berço
   --  físico de uma operação (representação visual já existente hoje em
   --  "Bateria Atual", ver bateria-atual.js — só que sem persistência
   --  até esta mudança).
   --
-  --  2 linhas por berço (B1..B<capacidade real> × esquerda/direita) —
-  --  cada berço tem 2 painéis, e cada um tem seu próprio estado
-  --  independente agora (decisão de produto: antes era 1 estado pro
-  --  berço inteiro; mudou pra bater com os 2 indicadores ●/• que já
-  --  existiam na UI, cada um clicável e marcado por conta própria).
+  --  1 linha por OPERAÇÃO (não por berço) — todos os berços da bateria
+  --  inteira, com os 2 estados de cada um (esquerda/direita), vivem
+  --  juntos na coluna "bercos", como uma lista em JSON:
+  --    [ {"berco":"B1","ordem":1,"estado_esquerda":"okay","estado_direita":"baixou"},
+  --      {"berco":"B2","ordem":2,"estado_esquerda":"okay","estado_direita":"okay"},
+  --      ... ]
+  --  A quantidade de berços varia de bateria pra bateria (8 a 22+), então
+  --  não dá pra ter 1 coluna fixa por berço — uma lista dentro de 1 coluna
+  --  só é o jeito de manter "1 bateria = 1 linha" sem SQLite reclamar de
+  --  esquema variável. Quem precisar ler/filtrar um berço específico faz
+  --  isso em JS depois do SELECT (json_extract também funciona direto no
+  --  SQLite, se precisar filtrar/agregar via SQL no futuro).
   --
   --  id_traco NÃO é guardado aqui — os traços de uma operação já vivem em
   --  traco_usos(id_operacao), então é sempre um JOIN dali, nunca duplicado
   --  (mesmo princípio de "original + SUM(ajustes)" explicado acima: nunca
   --  guardar de novo o que já existe em outra tabela).
   --
-  --  "estado" só assume 'okay'/'baixou' por enquanto — outros estados
-  --  chegam numa fase futura (ver README, "Berços Visuais").
+  --  "estado_esquerda"/"estado_direita" (dentro do JSON) só assumem
+  --  'okay'/'baixou' por enquanto — outros estados chegam numa fase
+  --  futura (ver README, "Berços Visuais").
   -- ============================================================
   CREATE TABLE IF NOT EXISTS bercos_visuais (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    id_operacao   TEXT NOT NULL REFERENCES operacoes(id),
-    berco         TEXT NOT NULL,     -- rótulo exibido: 'B1', 'B2', ...
-    ordem         INTEGER NOT NULL,  -- posição numérica (1-based) — pra ordenar sem parsear "berco"
-    lado          TEXT NOT NULL CHECK(lado IN ('esquerda','direita')),
-    estado        TEXT NOT NULL DEFAULT 'okay',
-    atualizado_em TEXT NOT NULL,
-    UNIQUE(id_operacao, berco, lado)
+    id_operacao   TEXT PRIMARY KEY REFERENCES operacoes(id),
+    bercos        TEXT NOT NULL,  -- JSON: [{berco, ordem, estado_esquerda, estado_direita}, ...]
+    atualizado_em TEXT NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS idx_bercos_visuais_operacao ON bercos_visuais(id_operacao);
 `);
 
 // ------------------------------------------------------------
-//  Migração: coluna "lado" em bercos_visuais (1 estado por berço -> 1
-//  estado por LADO do berço)
+//  Migração: bercos_visuais -> 1 LINHA POR OPERAÇÃO (berços em JSON)
 //
-//  Diferente da migração de "avaliado" (ADD COLUMN simples): aqui o
-//  UNIQUE(id_operacao, berco) precisa virar UNIQUE(id_operacao, berco,
-//  lado) — SQLite não permite alterar uma constraint UNIQUE existente via
-//  ALTER TABLE, só recriando a tabela. Detecta pela ausência da coluna
-//  "lado" (mesmo padrão de PRAGMA table_info da migração acima) e, se for
-//  o caso de uma instalação que já tinha a tabela no formato antigo,
-//  migra cada linha antiga em 2 linhas novas (esquerda E direita),
-//  herdando o mesmo estado que a linha antiga tinha — não perde o que já
-//  tinha sido marcado, só passa a rastrear os 2 lados separadamente a
-//  partir daqui (spoiler: como o estado antigo era só 'okay' por padrão
-//  em instalações que nunca chegaram a usar isso de verdade, isso na
-//  prática só recria a tabela vazia mesmo).
+//  Já existiram 3 formatos anteriores pra essa tabela, do mais antigo
+//  pro mais recente:
+//   a) 1 linha por berço, 1 coluna "estado" só (sem diferenciar lado);
+//   b) 2 linhas por berço (uma "lado esquerda", outra "lado direita");
+//   c) 1 linha por berço, com "estado_esquerda"/"estado_direita" em
+//      colunas separadas.
+//  O formato atual junta TODOS os berços de uma operação numa lista
+//  JSON dentro de 1 linha só (coluna "bercos") — ver comentário acima da
+//  CREATE TABLE.
+//
+//  2 migrações em cadeia, cada uma cuidando de 1 salto:
+//   1ª) formato (a) ou (b) -> formato (c) — já existia antes desta
+//       mudança, mantida como está.
+//   2ª) formato (c) -> formato atual (nova, abaixo) — agrupa as linhas
+//       (1 por berço) de cada operação numa lista JSON só.
+//  SQLite não deixa trocar chave primária/colunas existentes via ALTER
+//  TABLE — só recriando a tabela — por isso o recria-e-migra em cada
+//  passo, igual às outras migrações estruturais deste arquivo. Cada
+//  migração detecta se já é necessária pelas colunas presentes (PRAGMA
+//  table_info) e não faz nada se a tabela já estiver adiantada o
+//  suficiente.
 // ------------------------------------------------------------
-const _colunasBercosVisuais = db.prepare("PRAGMA table_info(bercos_visuais)").all().map(c => c.name);
-if (!_colunasBercosVisuais.includes('lado')) {
-  const linhasAntigas = db.prepare("SELECT id_operacao, berco, ordem, estado, atualizado_em FROM bercos_visuais").all();
+function _colunasDe(tabela) {
+  return db.prepare(`PRAGMA table_info(${tabela})`).all().map(c => c.name);
+}
+
+// 1ª migração (pré-existente): (a)/(b) -> (c) — "1 linha por berço, com
+// estado_esquerda/estado_direita em colunas". Não roda mais se a tabela
+// já pulou direto pro formato atual (coluna "bercos" já presente).
+if (!_colunasDe('bercos_visuais').includes('bercos') && !_colunasDe('bercos_visuais').includes('estado_esquerda')) {
+  const temColunaLado = _colunasDe('bercos_visuais').includes('lado');
+
+  let linhasMigradas;
+  if (temColunaLado) {
+    const linhasAntigas = db.prepare(
+      "SELECT id_operacao, berco, ordem, lado, estado, atualizado_em FROM bercos_visuais"
+    ).all();
+    const porBerco = new Map(); // chave: id_operacao + '\u0000' + berco
+    for (const l of linhasAntigas) {
+      const chave = l.id_operacao + '\u0000' + l.berco;
+      const atual = porBerco.get(chave) || {
+        id_operacao: l.id_operacao, berco: l.berco, ordem: l.ordem,
+        estado_esquerda: 'okay', estado_direita: 'okay', atualizado_em: l.atualizado_em,
+      };
+      if (l.lado === 'esquerda') atual.estado_esquerda = l.estado; else atual.estado_direita = l.estado;
+      if (l.atualizado_em > atual.atualizado_em) atual.atualizado_em = l.atualizado_em;
+      porBerco.set(chave, atual);
+    }
+    linhasMigradas = Array.from(porBerco.values());
+  } else {
+    const linhasAntigas = db.prepare(
+      "SELECT id_operacao, berco, ordem, estado, atualizado_em FROM bercos_visuais"
+    ).all();
+    linhasMigradas = linhasAntigas.map(l => ({
+      id_operacao: l.id_operacao, berco: l.berco, ordem: l.ordem,
+      estado_esquerda: l.estado, estado_direita: l.estado, atualizado_em: l.atualizado_em,
+    }));
+  }
+
   db.exec(`
-    ALTER TABLE bercos_visuais RENAME TO bercos_visuais_old_sem_lado;
+    ALTER TABLE bercos_visuais RENAME TO bercos_visuais_old;
     CREATE TABLE bercos_visuais (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      id_operacao   TEXT NOT NULL REFERENCES operacoes(id),
-      berco         TEXT NOT NULL,
-      ordem         INTEGER NOT NULL,
-      lado          TEXT NOT NULL CHECK(lado IN ('esquerda','direita')),
-      estado        TEXT NOT NULL DEFAULT 'okay',
-      atualizado_em TEXT NOT NULL,
-      UNIQUE(id_operacao, berco, lado)
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_operacao     TEXT NOT NULL REFERENCES operacoes(id),
+      berco           TEXT NOT NULL,
+      ordem           INTEGER NOT NULL,
+      estado_esquerda TEXT NOT NULL DEFAULT 'okay',
+      estado_direita  TEXT NOT NULL DEFAULT 'okay',
+      atualizado_em   TEXT NOT NULL,
+      UNIQUE(id_operacao, berco)
     );
-    CREATE INDEX IF NOT EXISTS idx_bercos_visuais_operacao ON bercos_visuais(id_operacao);
-    DROP TABLE bercos_visuais_old_sem_lado;
+    DROP TABLE bercos_visuais_old;
   `);
-  if (linhasAntigas.length) {
+
+  if (linhasMigradas.length) {
     const inserirMigrado = db.prepare(`
-      INSERT INTO bercos_visuais (id_operacao, berco, ordem, lado, estado, atualizado_em)
-      VALUES (@id_operacao, @berco, @ordem, @lado, @estado, @atualizado_em)
+      INSERT INTO bercos_visuais (id_operacao, berco, ordem, estado_esquerda, estado_direita, atualizado_em)
+      VALUES (@id_operacao, @berco, @ordem, @estado_esquerda, @estado_direita, @atualizado_em)
     `);
     const transacaoMigracao = db.transaction((linhas) => {
-      for (const l of linhas) {
-        inserirMigrado.run({ ...l, lado: 'esquerda' });
-        inserirMigrado.run({ ...l, lado: 'direita' });
-      }
+      for (const l of linhas) inserirMigrado.run(l);
     });
-    transacaoMigracao(linhasAntigas);
+    transacaoMigracao(linhasMigradas);
   }
-  console.log(`[migração] Tabela "bercos_visuais" recriada com coluna "lado" (${linhasAntigas.length} berço(s) antigo(s) expandido(s) em esquerda+direita).`);
+  console.log(`[migração] Tabela "bercos_visuais" consolidada em 1 linha por berço (${linhasMigradas.length} berço(s) migrado(s)).`);
+}
+
+// 2ª migração (nova): (c) -> formato atual — "1 linha por OPERAÇÃO",
+// todos os berços daquela operação juntos numa lista JSON. Reconsulta as
+// colunas (a 1ª migração, acima, pode ter acabado de recriar a tabela).
+if (!_colunasDe('bercos_visuais').includes('bercos')) {
+  const linhasAntigas = db.prepare(
+    "SELECT id_operacao, berco, ordem, estado_esquerda, estado_direita, atualizado_em FROM bercos_visuais ORDER BY id_operacao, ordem"
+  ).all();
+
+  const porOperacao = new Map();
+  for (const l of linhasAntigas) {
+    const atual = porOperacao.get(l.id_operacao) || { id_operacao: l.id_operacao, bercos: [], atualizado_em: l.atualizado_em };
+    atual.bercos.push({ berco: l.berco, ordem: l.ordem, estado_esquerda: l.estado_esquerda, estado_direita: l.estado_direita });
+    if (l.atualizado_em > atual.atualizado_em) atual.atualizado_em = l.atualizado_em;
+    porOperacao.set(l.id_operacao, atual);
+  }
+  const linhasMigradas = Array.from(porOperacao.values());
+
+  db.exec(`
+    ALTER TABLE bercos_visuais RENAME TO bercos_visuais_old;
+    CREATE TABLE bercos_visuais (
+      id_operacao   TEXT PRIMARY KEY REFERENCES operacoes(id),
+      bercos        TEXT NOT NULL,
+      atualizado_em TEXT NOT NULL
+    );
+    DROP TABLE bercos_visuais_old;
+  `);
+
+  if (linhasMigradas.length) {
+    const inserirMigrado = db.prepare(`
+      INSERT INTO bercos_visuais (id_operacao, bercos, atualizado_em)
+      VALUES (@id_operacao, @bercos, @atualizado_em)
+    `);
+    const transacaoMigracao = db.transaction((linhas) => {
+      for (const l of linhas) inserirMigrado.run({ ...l, bercos: JSON.stringify(l.bercos) });
+    });
+    transacaoMigracao(linhasMigradas);
+  }
+  console.log(`[migração] Tabela "bercos_visuais" consolidada em 1 linha por operação (${linhasMigradas.length} operação(ões) migrada(s)).`);
 }
 
 // ------------------------------------------------------------
@@ -355,10 +436,11 @@ if (!_colunasOperacoes.includes('avaliado')) {
 }
 
 /**
- * Cria as linhas iniciais de bercos_visuais pra uma operação recém-
- * registrada — 2 linhas por berço (B1..B<quantidade> × esquerda/direita).
- * Chamada por POST /registrar-operacao (server.js), logo depois de
- * inserir a operação em si.
+ * Cria a linha inicial de bercos_visuais pra uma operação recém-
+ * registrada — 1 linha pra bateria INTEIRA, com todos os berços
+ * (B1..B<quantidade>) e seus 2 estados dentro da lista JSON da coluna
+ * "bercos". Chamada por POST /registrar-operacao (server.js), logo
+ * depois de inserir a operação em si.
  *
  * @param {string} idOperacao
  * @param {number} quantidade
@@ -370,27 +452,32 @@ if (!_colunasOperacoes.includes('avaliado')) {
  *   já na criação, em vez de nascer 'okay' e precisar de uma segunda
  *   chamada pra corrigir.
  *
- * INSERT OR IGNORE (via UNIQUE(id_operacao, berco, lado)): se por algum
- * motivo já existirem linhas pra essa operação, não duplica nem
- * sobrescreve estados que porventura já tenham mudado — idempotente.
+ * INSERT OR IGNORE (via PRIMARY KEY id_operacao): se por algum motivo já
+ * existir uma linha pra essa operação, não duplica nem sobrescreve
+ * estados que porventura já tenham mudado — idempotente.
  */
-const SQL_INSERIR_BERCO_VISUAL = `
-  INSERT OR IGNORE INTO bercos_visuais (id_operacao, berco, ordem, lado, estado, atualizado_em)
-  VALUES (@id_operacao, @berco, @ordem, @lado, @estado, @atualizado_em)
+const SQL_INSERIR_BERCOS_VISUAIS = `
+  INSERT OR IGNORE INTO bercos_visuais (id_operacao, bercos, atualizado_em)
+  VALUES (@id_operacao, @bercos, @atualizado_em)
 `;
 function criarBercosVisuaisIniciais(idOperacao, quantidade, estadosMarcados) {
   const mapa = (estadosMarcados && typeof estadosMarcados === 'object') ? estadosMarcados : {};
-  const inserir = db.prepare(SQL_INSERIR_BERCO_VISUAL);
-  const agora = new Date().toISOString();
-  const transacao = db.transaction((n) => {
-    for (let i = 1; i <= n; i++) {
-      const berco = 'B' + i;
-      const marcadoBerco = mapa[berco] || {};
-      inserir.run({ id_operacao: idOperacao, berco, ordem: i, lado: 'esquerda', estado: marcadoBerco.esquerda || 'okay', atualizado_em: agora });
-      inserir.run({ id_operacao: idOperacao, berco, ordem: i, lado: 'direita', estado: marcadoBerco.direita || 'okay', atualizado_em: agora });
-    }
+  const n = Math.max(0, parseInt(quantidade) || 0);
+  const bercos = [];
+  for (let i = 1; i <= n; i++) {
+    const berco = 'B' + i;
+    const marcadoBerco = mapa[berco] || {};
+    bercos.push({
+      berco, ordem: i,
+      estado_esquerda: marcadoBerco.esquerda || 'okay',
+      estado_direita: marcadoBerco.direita || 'okay',
+    });
+  }
+  db.prepare(SQL_INSERIR_BERCOS_VISUAIS).run({
+    id_operacao: idOperacao,
+    bercos: JSON.stringify(bercos),
+    atualizado_em: new Date().toISOString(),
   });
-  transacao(Math.max(0, parseInt(quantidade) || 0));
 }
 
 /**

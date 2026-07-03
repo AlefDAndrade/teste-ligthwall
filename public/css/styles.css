@@ -429,6 +429,19 @@ h4 {
   align-items: start;
 }
 
+/* Sem isso, cada coluna (item de grid) usa como largura MÍNIMA o
+   min-content do que tem dentro dela — e a grade de berços da Bateria
+   Atual (.ba-grid, fileira única sem quebra de linha) pode ter um
+   min-content bem largo em baterias grandes. Resultado: a coluna da
+   direita ignorava o "1.1fr" e crescia pra caber a grade inteira,
+   espremendo a coluna esquerda (Informações Operacionais) no processo.
+   min-width:0 faz as colunas respeitarem o fr definido acima e deixa
+   .ba-grid rolar horizontalmente dentro do espaço que sobrar, como já
+   era a intenção (ver overflow-x:auto em .ba-grid). */
+.op-layout-grid > * {
+  min-width: 0;
+}
+
 .op-info-column {
   display: flex;
   flex-direction: column;
@@ -2449,30 +2462,37 @@ td.mono {
 }
 
 /* Fileira única — os berços ficam lado a lado (1 2 3 4 5 6 7 8 ...), não
-   mais em pares de 2 colunas. Baterias maiores (até 22 berços) passam da
-   largura da tela — scroll horizontal em vez de quebrar linha, pra manter
-   a leitura sequencial da bateria física da esquerda pra direita. */
+   mais em pares de 2 colunas. Em vez de rolar horizontalmente quando a
+   bateria é grande, cada célula DIVIDE a largura disponível igualmente
+   entre si (flex-basis:0 + grow/shrink:1 em .ba-celula) — ficando mais
+   fina com muitos berços ou mais grossa com poucos, mas sempre cabendo
+   inteira no card, sem scroll. */
 .ba-grid {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 6px; /* respiro antes da barra de rolagem, quando aparece */
+  gap: 4px;
 }
 
 /* Célula "em pé": indicador em cima, número no meio, indicador embaixo —
    só leitura quanto à cor por tipo de montagem (via style inline, ver
    _renderBateriaAtual) — não é clicável, não reage a hover/clique (só os
-   indicadores dentro dela são — ver .ba-dot, abaixo). */
+   indicadores dentro dela são — ver .ba-dot, abaixo).
+   flex-basis:0 + grow/shrink:1 faz todas as células dividirem a largura
+   disponível igualmente (ver .ba-grid, acima); min-width:0 permite
+   encolher além do tamanho natural do conteúdo quando há muitos berços,
+   e max-width evita que uma bateria com poucos berços gere células
+   enormes. */
 .ba-celula {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  flex: 0 0 auto;
-  min-width: 40px;
-  padding: 6px 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 56px;
+  overflow: hidden;
+  padding: 6px 2px;
   border-radius: var(--radius);
   font-size: .74rem;
   font-weight: 700;
