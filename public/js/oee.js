@@ -376,101 +376,91 @@
     `).join('');
   }
 
-  // ── Render: gráfico de barras (canvas) — OEE por turno-instância ────────
+  // ── Render: gráfico de barras (HTML/CSS) — OEE por turno-instância ──────
+  //
+  // Antes era desenhado num <canvas>, com o texto de cada legenda rotacionado
+  // "na mão" via ctx.translate/ctx.rotate. Isso se mostrou frágil: um canvas
+  // é só um bitmap com limites fixos, então qualquer erro de sinal no ângulo
+  // ou de posição do pivô jogava parte do texto pra fora da área desenhável
+  // e ele simplesmente sumia (sem erro, sem aviso) — foi o que causou o corte
+  // do início de cada data ("23/06" virando "?306"). Também exigia lidar
+  // manualmente com devicePixelRatio pra não borrar em tela retina, e
+  // recalcular tudo a cada resize.
+  //
+  // Trocado por barras e legendas em HTML/CSS puro: quem cuida do layout,
+  // da nitidez do texto e do comportamento em resize é o próprio navegador.
+  // A rotação da legenda usa um truque de CSS bem conhecido (transform-origin
+  // no canto + translateX(-100%)) que nunca corta texto, porque não há
+  // "bitmap" nenhum com bordas — o texto pode extrapolar visualmente a
+  // caixa sem ser cortado, já que o container não tem overflow:hidden.
 
-  // Altura "lógica" (CSS) do gráfico — mesmo valor do atributo height="160"
-  // do <canvas id="oee-chart-turnos"> (index.html/page-oee.html).
   const ALTURA_CHART_TURNOS_PX = 160;
+  const PAD_TOP_CHART_TURNOS_PX = 14;
+  const PAD_BOTTOM_CHART_TURNOS_PX = 40; // espaço reservado pra legenda rotacionada
 
-  /**
-   * Prepara o canvas pra desenho nítido em telas de alta resolução
-   * (devicePixelRatio > 1 — Retina, a maioria dos notebooks/celulares
-   * modernos): aumenta a resolução INTERNA do bitmap (canvas.width/height)
-   * proporcionalmente ao dpr, mas trava o tamanho VISÍVEL na página via
-   * canvas.style.width/height, em px CSS fixos.
-   *
-   * BUG CORRIGIDO: antes, canvas.style.width/height nunca eram fixados —
-   * como este canvas não tem nenhuma regra de CSS controlando seu tamanho,
-   * o próprio atributo width/height (interno, já multiplicado pelo dpr)
-   * também definia o tamanho exibido na tela. Pior: canvas.height = (canvas
-   * .height || 160) * dpr relia no valor ATUAL de canvas.height como base
-   * — que já vinha inflado pelo dpr da renderização anterior — então a
-   * cada re-render (filtro, resize, etc.) a altura (e a largura, pelo mesmo
-   * motivo com rect.width) dobrava de novo, sem limite. Resultado: o
-   * gráfico crescia a cada atualização, vazando pra fora do card, e as
-   * datas (desenhadas com coordenadas baseadas no tamanho lógico) ficavam
-   * cada vez mais desalinhadas com a caixa real na tela — daí o efeito de
-   * "torto". Agora a altura lógica é sempre a mesma constante fixa, e o
-   * tamanho visível fica travado por CSS, então getBoundingClientRect()
-   * sempre devolve a largura real do card — nunca um valor já inflado.
-   */
-  function _px(canvas) {
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const wCss = rect.width;
-    const hCss = ALTURA_CHART_TURNOS_PX;
-
-    canvas.width = wCss * dpr;
-    canvas.height = hCss * dpr;
-    canvas.style.width = wCss + 'px';
-    canvas.style.height = hCss + 'px';
-
-    ctx.scale(dpr, dpr);
-    return { ctx, w: wCss, h: hCss };
-  }
-
-  function _drawBarChart(id, labels, values, cor) {
-    const canvas = document.getElementById(id);
-    if (!canvas) return;
-    const { ctx, w, h } = _px(canvas);
-    ctx.clearRect(0, 0, w, h);
+  function _renderBarChartHTML(id, labels, values) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '';
     if (!labels.length) return;
 
-    const padTop = 14, padBottom = 28, padLeft = 6, padRight = 6;
-    const areaH = h - padTop - padBottom;
-    const barGap = 6;
-    const barW = Math.max(4, (w - padLeft - padRight) / labels.length - barGap);
+    const plotH = ALTURA_CHART_TURNOS_PX - PAD_TOP_CHART_TURNOS_PX - PAD_BOTTOM_CHART_TURNOS_PX;
+
+    el.style.cssText = `
+      position: relative; display: flex; align-items: flex-end; gap: 6px;
+      height: ${ALTURA_CHART_TURNOS_PX}px;
+      padding: ${PAD_TOP_CHART_TURNOS_PX}px 4px ${PAD_BOTTOM_CHART_TURNOS_PX}px;
+      box-sizing: border-box;
+    `;
+
+    // Linha de referência em 85% (meta comum de OEE "classe mundial" é ~85%)
+    const linhaRef = document.createElement('div');
+    linhaRef.style.cssText = `
+      position: absolute; left: 4px; right: 4px;
+      top: ${PAD_TOP_CHART_TURNOS_PX + plotH * (1 - 0.85)}px;
+      border-top: 1px dashed ${C.border};
+    `;
+    el.appendChild(linhaRef);
 
     labels.forEach((lab, i) => {
       const bruto = values[i];
-      const x = padLeft + i * (barW + barGap);
 
+      const col = document.createElement('div');
+      col.style.cssText = `
+        position: relative; flex: 1 1 0; min-width: 4px; height: 100%;
+        display: flex; align-items: flex-end;
+      `;
+
+      const bar = document.createElement('div');
       if (bruto === null || bruto === undefined) {
         // Sem dado (ex: turno sem traço registrado) — barra cinza fina, não
         // "0%" (que pareceria falha total em vez de ausência de dado).
-        ctx.fillStyle = C.border;
-        ctx.fillRect(x, padTop + areaH - 3, barW, 3);
+        bar.title = `${lab}: sem dado`;
+        bar.style.cssText = `width: 100%; height: 3px; background: ${C.border}; border-radius: 2px;`;
       } else {
         const v = Math.max(0, Math.min(100, bruto));
-        const barH = (v / 100) * areaH;
-        const y = padTop + (areaH - barH);
-        ctx.fillStyle = v >= 85 ? C.green : v >= 60 ? C.accent : C.red;
-        ctx.fillRect(x, y, barW, barH);
+        const cor = v >= 85 ? C.green : v >= 60 ? C.accent : C.red;
+        bar.title = `${lab}: ${_fmtPct(v)}`;
+        bar.style.cssText = `
+          width: 100%; height: ${(v / 100) * plotH}px; background: ${cor};
+          border-radius: 2px 2px 0 0; transition: height .25s ease;
+        `;
       }
+      col.appendChild(bar);
 
-      ctx.fillStyle = C.text3;
-      ctx.font = '9px sans-serif';
-      ctx.textAlign = 'center';
       if (labels.length <= 20) {
-        ctx.save();
-        ctx.translate(x + barW / 2, h - padBottom + 10);
-        ctx.rotate(-Math.PI / 5);
-        ctx.textAlign = 'right';
-        ctx.fillText(lab, 0, 0);
-        ctx.restore();
+        const label = document.createElement('div');
+        label.textContent = lab;
+        label.style.cssText = `
+          position: absolute; top: 100%; left: 50%; margin-top: 6px;
+          transform-origin: top right; transform: translateX(-100%) rotate(-40deg);
+          white-space: nowrap; font-size: .66rem; color: ${C.text3};
+        `;
+        col.appendChild(label);
       }
-    });
 
-    // Linha de referência em 85% (meta comum de OEE "classe mundial" é ~85%)
-    const yRef = padTop + (areaH - (85 / 100) * areaH);
-    ctx.strokeStyle = C.border;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(padLeft, yRef);
-    ctx.lineTo(w - padRight, yRef);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      el.appendChild(col);
+    });
   }
 
   // ── Render: tabelas ──────────────────────────────────────────────────────
@@ -600,8 +590,8 @@
     _renderParadasBreakdown(disp, _resumoParadas(paradas));
 
     const porTurno = calcularPorTurnoInstancia(historico, tracos, paradas);
-    const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'ºT').replace('º TURNO', 'ºT')}`);
-    requestAnimationFrame(() => _drawBarChart('oee-chart-turnos', labels, porTurno.map(t => t.oeePct), C.accent));
+    const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'T')}`);
+    _renderBarChartHTML('oee-chart-turnos', labels, porTurno.map(t => t.oeePct));
     _renderTabelaTurnos(porTurno);
 
     _renderTabelaGrupo('oee-tabela-bateria', calcularPorGrupo(historico, tracos, 'id_bateria'), 'Bateria');

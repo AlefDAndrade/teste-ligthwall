@@ -483,6 +483,82 @@
     selectedShape = shape;
   }
 
+  // ── Atalhos de teclado: nº = cor, Ctrl+nº = forma ───────────────────
+  // Numeração segue a ORDEM que os botões aparecem na tela (mesma ordem
+  // do DOM — ver querySelectorAll abaixo), não uma lista fixa aqui: hoje
+  // são 5 cores e 2 formas, mas adicionar uma 6ª cor ou uma 3ª forma no
+  // HTML (public/setor-qualidade-app.html) já funciona sozinho, sem
+  // tocar neste código — a tecla "6" ou "Ctrl+3" simplesmente passam a
+  // existir. Os badges numerados nos próprios botões (ver CSS,
+  // counter-increment em .sq-btn-color/.sq-btn-shape) seguem a MESMA
+  // ordem, então o que a pessoa vê no botão é sempre a tecla certa.
+  // "Ctrl+nº" no Windows/Linux e "Cmd+nº" no Mac (metaKey) fazem a mesma
+  // coisa — nenhum dos dois tem atalho de navegador conflitante na
+  // maioria dos casos, mas se um dia conflitar, dá pra trocar aqui.
+  function _sqAtalhoTeclado(e) {
+    // Só dispara na tela de Avaliação (é onde os botões de cor/forma
+    // existem) e nunca em modo só-leitura (visualizando um registro).
+    if (viewMode) return;
+    const secForm = document.getElementById('sq-form');
+    if (!secForm || !secForm.classList.contains('active')) return;
+    // Nunca captura enquanto a pessoa está digitando em algum campo
+    // (data, temperatura, observações etc.) — "1", "2"... aí são só
+    // números normais sendo digitados, não um atalho.
+    const alvo = e.target;
+    const tag = (alvo.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || alvo.isContentEditable) return;
+    // Só dígitos 1-9 (nunca "0" — não existe "0ª cor/forma").
+    if (!/^[1-9]$/.test(e.key)) return;
+
+    const idx = parseInt(e.key, 10) - 1; // '1' -> índice 0 (1º botão na tela)
+    const grupo = (e.ctrlKey || e.metaKey)
+      ? document.querySelectorAll('.sq-btn-shape')
+      : document.querySelectorAll('.sq-btn-color');
+    const btn = grupo[idx];
+    if (!btn) return; // nº maior do que a quantidade de cores/formas hoje — ignora
+    e.preventDefault();
+    btn.click(); // dispara o onclick já existente (SQ.selectColor/selectShape) — nenhuma lógica duplicada aqui
+  }
+  document.addEventListener('keydown', _sqAtalhoTeclado);
+
+  // ── Repassa atalhos de NAVEGAÇÃO ENTRE PÁGINAS (Alt+dígito, Alt+P,
+  //    Alt+Q, Alt+seta) pro documento PAI ─────────────────────────────
+  // Setor de Qualidade roda dentro de um <iframe> (ver public/index.html,
+  // #setor-qualidade-frame) — um documento à parte, com foco próprio.
+  // Os atalhos de "viagem entre páginas" (Alt+1..0, Alt+P/Q, Alt+←/→)
+  // são tratados só no documento PAI (ver keyboard-shortcuts.js, que só
+  // é carregado no index.html, nunca aqui dentro) — e evento de teclado
+  // NUNCA atravessa a fronteira de um iframe sozinho. Resultado: assim
+  // que a pessoa clica em QUALQUER coisa aqui dentro (o que move o foco
+  // do navegador pra dentro do iframe), o documento pai para de receber
+  // esses eventos e os atalhos de navegação somem — exatamente o
+  // comportamento reportado. Como o iframe é da MESMA origem (mesmo
+  // servidor), dá pra repassar o evento manualmente pro `document` do
+  // pai, onde o listener de verdade mora, e ele reage normalmente.
+  // Só repassa combos com Alt — são os ÚNICOS usados pra navegação entre
+  // páginas; nunca colide com os atalhos de cor/forma daqui em cima
+  // (_sqAtalhoTeclado, dígito puro ou Ctrl+dígito, nunca Alt).
+  document.addEventListener('keydown', function (e) {
+    if (!e.altKey) return; // só o que é atalho de navegação
+    if (window.parent === window) return; // aberto direto, fora de um iframe — nada a repassar
+    // Mesma cautela do keyboard-shortcuts.js no pai: não repassa
+    // enquanto a pessoa está digitando em algum campo AQUI dentro.
+    const alvo = document.activeElement;
+    const tag = (alvo?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || alvo?.isContentEditable) return;
+    try {
+      window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {
+        key: e.key, code: e.code, keyCode: e.keyCode, which: e.which,
+        ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
+        bubbles: true, cancelable: true,
+      }));
+    } catch (err) {
+      // Mesma origem devia sempre permitir isto — se por algum motivo
+      // falhar, só ignora; um atalho de navegação que não repassou não
+      // pode quebrar o resto da página.
+    }
+  });
+
   /* ── Ações em lote (pallet inteiro) ──────────────────── */
   function applyMarksToPallet(stackId, color, shape) {
     if (viewMode) return;
@@ -814,26 +890,38 @@
   function _filaClasseAtiva(op) {
     return op.id === linkedOperacaoId ? ' sq-fila-item-ativa' : '';
   }
+  // Botão "X" de excluir — presente em TODO elemento da fila (cartão
+  // compacto, cartão principal e também no <select> da 4ª posição em
+  // diante, ver _filaOutrasExcluirBtn). event.stopPropagation() é
+  // essencial aqui: o cartão inteiro também é clicável (inicia a
+  // avaliação — ver iniciarAvaliacaoDaFila), sem isso o clique no "X"
+  // "vazaria" pro cartão por baixo e abriria o formulário junto com a
+  // exclusão.
+  function _filaExcluirBtn(op) {
+    return `<button type="button" class="sq-fila-item-excluir" onclick="event.stopPropagation(); SQ.excluirDaFila('${op.id}')" title="Excluir da fila (marca todos os painéis como &quot;Não avaliado no sistema&quot;)"><i class="fas fa-times"></i></button>`;
+  }
   function _filaCartaoCompacto(op, posicao) {
     return `
-      <button type="button" class="sq-fila-item${_filaClasseAtiva(op)}" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
+      <div class="sq-fila-item${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
           <strong>${op.id_bateria || 'N/I'}</strong>
           <span>${_filaData(op.fim)} · ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
-      </button>`;
+        ${_filaExcluirBtn(op)}
+      </div>`;
   }
   function _filaCartaoPrincipal(op, posicao) {
     return `
-      <button type="button" class="sq-fila-item sq-fila-item-principal${_filaClasseAtiva(op)}" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
+      <div class="sq-fila-item sq-fila-item-principal${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
           <strong>${op.id_bateria || 'N/I'}</strong>
           <span>${_filaData(op.fim)} · ${_filaHora(op.fim)} (fim da operação) · Montagem: ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
         <i class="fas fa-play"></i>
-      </button>`;
+        ${_filaExcluirBtn(op)}
+      </div>`;
   }
 
   function carregarFilaNaoAvaliadas() {
@@ -881,6 +969,10 @@
             return `<option value="${op.id}">${_filaOrdinal(posicao)} · ${op.id_bateria || 'N/I'} · ${_filaTipoLabel(op.tipo_montagem)} · ${dt}</option>`;
           }).join('');
           outrasWrap.style.display = 'flex';
+          // "X" aplicado ao item ATUALMENTE selecionado no <select> — não
+          // dá pra ter um "X" por <option> (HTML não permite botão dentro
+          // de option), então este único botão excluir sempre a escolha
+          // corrente do dropdown (ver excluirDaFila/iniciarAvaliacaoDoSelect).
         } else {
           sel.innerHTML = '';
           outrasWrap.style.display = 'none';
@@ -910,6 +1002,128 @@
   function iniciarAvaliacaoDoSelect() {
     const sel = document.getElementById('sq-fila-select');
     if (sel && sel.value) iniciarAvaliacaoDaFila(sel.value);
+  }
+
+  // ── Excluir bateria da fila (botão "X" em cada elemento — cartão
+  //    compacto, cartão principal e select da 4ª posição em diante) ──────
+  // Não é "avaliar" a bateria de verdade: é uma saída de emergência pra
+  // quando ela nunca vai passar pelo Setor de Qualidade (perdida,
+  // descartada, erro de registro, etc.) e por isso não pode continuar
+  // ocupando posição na fila indefinidamente. Ainda assim precisa deixar
+  // rastro — por isso grava uma avaliação "de verdade" (mesmo formato de
+  // sempre, ver registerEvaluation), só que com TODOS os painéis com
+  // resultado = 'nao_avaliado_no_sistema' em vez de aprovado/reprovado,
+  // e reaproveita as MESMAS 2 rotas que o registro normal já usa:
+  // /registrar-avaliacao-qualidade (grava a avaliação) e
+  // /marcar-operacao-avaliada (tira a bateria da fila). Isso já garante
+  // que ela sai do Dashboard/Histórico como "avaliada", só que sinalizada
+  // como nunca avaliada de verdade (ver 'nao_avaliado_no_sistema' nos
+  // painéis) em vez de aprovada/reprovada.
+  const SQ_RESULTADO_NAO_AVALIADO = 'nao_avaliado_no_sistema';
+
+  // Nº de painéis da operação — mesma conta usada em qualquer lugar do
+  // sistema pra berços->painéis (1 berço = 2 painéis, ver
+  // _definirThicknessReal/README/db.js): total_paineis se já veio pronto
+  // da operação, senão bercos_reais/capacidade * 2 como aproximação.
+  function _filaTotalPaineis(op) {
+    const direto = parseInt(op.total_paineis);
+    if (direto > 0) return direto;
+    const bercos = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
+    return bercos * 2;
+  }
+
+  function _excluirOperacaoDaFila(op) {
+    const evId = 'ev_' + Date.now();
+    const totalPaineis = _filaTotalPaineis(op);
+    // IMPORTANTE: quem lê "paineis" depois (Análise Focada, Espelho
+    // Visual, Dashboard) sempre procura por par (pallet 1-4, posicao
+    // 1..totalSlabs/4) — NUNCA por um índice corrido — porque é assim
+    // que uma avaliação normal é montada (ver registerEvaluation:
+    // stack1-1, stack1-2... stack4-N). Gerar os painéis numa sequência
+    // corrida (0,1,2...) sem respeitar essa grade faz a maioria das
+    // combinações pallet/posicao não bater com nenhum painel gravado —
+    // aí quem procura por ela não acha nada e mostra "Sem marcação" em
+    // vez de "Não avaliado no sistema", mesmo a bateria inteira tendo
+    // sido excluída. Por isso aqui SEMPRE preenche as 4 pilhas inteiras
+    // (pallet 1 a 4, posição 1 a N), igual a uma avaliação de verdade.
+    const porPallet = Math.max(1, Math.ceil(totalPaineis / 4));
+    const paineis = [];
+    for (let pallet = 1; pallet <= 4; pallet++) {
+      for (let posicao = 1; posicao <= porPallet; posicao++) {
+        paineis.push({
+          avaliacaoId: evId,
+          pallet,
+          posicao,
+          tipoEsperado: null,
+          tipoObtido: null,
+          resultado: SQ_RESULTADO_NAO_AVALIADO,
+          linha: null,
+          marcas: [],
+        });
+      }
+    }
+    const evalObj = {
+      id: evId, schemaVersion: 2,
+      batteryId: op.id_bateria || null,
+      linkedOperacaoId: op.id,
+      turno: op.turno || null,
+      registeredAt: new Date().toISOString(),
+      // totalSlabs é usado por quem monta a grade (ex: Análise Focada,
+      // totalPorPallet = totalSlabs/4) pra saber até que posição
+      // percorrer em cada pallet — tem que bater com porPallet*4 acima,
+      // senão a mesma inconsistência do comentário anterior se repete.
+      totalSlabs: porPallet * 4,
+      excluidaDaFila: true,
+      observations: 'Excluída da fila do Setor de Qualidade — todos os painéis marcados automaticamente como "Não avaliado no sistema".',
+      paineis,
+    };
+
+    return fetch('/registrar-avaliacao-qualidade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(evalObj),
+    })
+      .then(res => {
+        if (!res.ok) return res.json().catch(() => null).then(j => { throw new Error(j?.erro || 'O servidor recusou excluir esta bateria da fila.'); });
+        return fetch('/marcar-operacao-avaliada', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: op.id }),
+        });
+      })
+      .then(() => {
+        // Se a bateria excluída era a que estava carregada no formulário
+        // agora mesmo, limpa — ela não existe mais na fila pra continuar
+        // vinculada a nada.
+        if (linkedOperacaoId === op.id) {
+          clearForm();
+          currentDraftId = null;
+          linkedOperacaoId = null;
+          navigateTo('form');
+        }
+        carregarFilaNaoAvaliadas();
+        carregarAvaliacoesQualidade();
+        showAlert('Excluída', 'Bateria excluída da fila. Todos os painéis foram marcados como "Não avaliado no sistema".');
+      })
+      .catch(err => {
+        console.error('Falha ao excluir bateria da fila:', err);
+        showAlert('Erro', 'Não consegui excluir esta bateria da fila agora (' + err.message + ').');
+      });
+  }
+
+  function excluirDaFila(idOperacao) {
+    const op = filaOperacoes.find(o => o.id === idOperacao);
+    if (!op) return;
+    showConfirm(
+      'Excluir da fila',
+      `Excluir "${op.id_bateria || 'esta bateria'}" da fila de avaliação? Todos os painéis dela serão marcados como "Não avaliado no sistema" e ela não poderá mais ser avaliada normalmente. Esta ação não pode ser desfeita.`,
+      () => _excluirOperacaoDaFila(op)
+    );
+  }
+
+  function excluirDoSelect() {
+    const sel = document.getElementById('sq-fila-select');
+    if (sel && sel.value) excluirDaFila(sel.value);
   }
 
   /* ── Dados (avaliacoes / paineis) — vêm do servidor (SQL), não mais do
@@ -1225,8 +1439,23 @@
   function getSlabCount(bid) { return bid==='B5-7.5'?11:bid==='B6-12'?8:10; }
 
   function getMirrorMark(panel) {
+    // "Não avaliado no sistema" (ver excluirDaFila) — painel que nunca
+    // passou pelo Setor de Qualidade de verdade; precisa ficar visualmente
+    // diferente tanto de uma marca real quanto do "sem marcação" comum
+    // (abaixo), senão vira exatamente a mesma confusão que motivou este
+    // ajuste: um "x" cinza, sem forma de traço nem de círculo.
+    if (panel?.resultado === SQ_RESULTADO_NAO_AVALIADO) {
+      return `<span class="sq-mini-mark sq-mini-mark-nao-avaliado" title="Não avaliado no sistema">×</span>`;
+    }
+    // Sem marcação (a imensa maioria das placas — só quem tem defeito é
+    // marcado, ver classifyMarks) — ANTES usava uma barrinha sólida do
+    // MESMO tamanho/forma do traço de verdade (marca de SP), o que fazia
+    // parecer que a placa tinha sido marcada quando na verdade não tinha
+    // marcação nenhuma. Agora é um círculo vazado (sem preenchimento),
+    // visualmente distinto de qualquer marca real (círculo ou traço,
+    // sempre preenchidos), com tooltip explícito.
     if (!panel?.marcas?.length)
-      return `<span class="sq-mini-mark" style="background:var(--sq-placa-borda);width:10px;height:2px;border-radius:2px;display:inline-block;"></span>`;
+      return `<span class="sq-mini-mark sq-mini-mark-vazia" title="Sem marcação"></span>`;
     return panel.marcas.map(m => {
       const w = m.shape==='dash' ? '12px' : '6px', h = m.shape==='dash' ? '2px' : '6px';
       const r = m.shape==='circle' ? '50%' : '2px';
@@ -1615,6 +1844,7 @@
   window.SQ = {
     navigateTo, goBack, startNew,
     iniciarAvaliacaoDaFila, iniciarAvaliacaoDoSelect,
+    excluirDaFila, excluirDoSelect,
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
     renderDashboard, renderHistory,

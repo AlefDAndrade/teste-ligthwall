@@ -72,11 +72,22 @@
     `;
   }
 
+  // Cor por tipo de montagem de UM berço — mesma regra de bateria-atual.js
+  // (_baCorPorTipo): Montagem Personalizada guarda o CÓDIGO do tipo por
+  // berço (resolvido por corPorTipoSimples); qualquer outro tipo (simples
+  // ou híbrido) é uniforme — todo berço usa o mesmo LABEL da operação
+  // (resolvido por corMontagemPorLabel, que também monta o gradiente 50/50
+  // de tipos híbridos).
+  function _corPorTipoBerco(ehPersonalizada, tipo) {
+    if (!tipo) return null;
+    return ehPersonalizada ? LW.corPorTipoSimples(tipo) : LW.corMontagemPorLabel(tipo);
+  }
+
   // ── Desenho da bateria (berços visuais) ──────────────────────
   // Mesma grade visual usada no popover de hover do Relatório de Berços
   // e no card "Bateria Atual" (.ba-grid/.ba-celula/.ba-dot, ver
   // css/styles.css) — aqui só leitura, sem clique nenhum.
-  function _renderBercos(bercosVisuais) {
+  function _renderBercos(bercosVisuais, op) {
     const el = document.getElementById('af-bercos');
     if (!el) return;
     if (!bercosVisuais || !bercosVisuais.length) {
@@ -84,13 +95,28 @@
       return;
     }
     const ordenados = bercosVisuais.slice().sort((a, b) => a.ordem - b.ordem);
+
+    const ehPersonalizada = !!op && op.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
+    // O endpoint de detalhe da operação devolve a linha crua da tabela —
+    // bercos_personalizados chega como STRING JSON, não como array (ao
+    // contrário de outras telas, que já usam a linha pré-formatada com o
+    // JSON.parse feito). Precisa normalizar aqui antes de indexar por berço.
+    let gradePersonalizada = [];
+    if (ehPersonalizada && op.bercos_personalizados) {
+      gradePersonalizada = typeof op.bercos_personalizados === 'string'
+        ? (() => { try { return JSON.parse(op.bercos_personalizados); } catch (_) { return []; } })()
+        : op.bercos_personalizados;
+    }
+
     el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
       const dirMarcado = b.estado_direita === 'baixou';
       const esqMarcado = b.estado_esquerda === 'baixou';
       const algumMarcado = dirMarcado || esqMarcado;
       const numero = String(b.ordem).padStart(2, '0');
+      const tipoBerco = ehPersonalizada ? (gradePersonalizada[b.ordem - 1] || null) : (op ? op.tipo_montagem : null);
+      const cor = _corPorTipoBerco(ehPersonalizada, tipoBerco);
       return `
-        <div class="ba-celula" style="background:var(--bg-2);color:var(--text-2);border:1px solid var(--border)">
+        <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
           <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
           <span class="ba-numero">B${numero}${algumMarcado ? ' ⚠️' : ''}</span>
           <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
@@ -156,12 +182,19 @@
     if (!p) return '— Sem marcação';
     if (p.resultado === 'aprovado') return p.linha === '2ª' ? 'Aprovado / 2ª linha' : 'Aprovado / 1ª linha';
     if (p.resultado === 'reprovado') return 'Reprovado';
+    // Bateria excluída da fila do Setor de Qualidade antes de ser avaliada
+    // de verdade (ver SQ.excluirDaFila, setor-qualidade.js) — TODOS os
+    // painéis dela nascem com este resultado, tipoObtido sempre null.
+    // Sem este caso, caía no "— Sem marcação"/"—" abaixo, indistinguível
+    // de uma placa que nunca teve marca nenhuma numa avaliação normal.
+    if (p.resultado === 'nao_avaliado_no_sistema') return 'Não avaliado no sistema';
     return p.tipoObtido || '—'; // caso raro: 'Outros'/'Múltiplas' (ver classifyMarks, setor-qualidade.js)
   }
   function _corPainel(p) {
     if (!p) return 'var(--border-2)';
     if (p.resultado === 'aprovado') return p.linha === '2ª' ? 'var(--blue)' : 'var(--green)';
     if (p.resultado === 'reprovado') return 'var(--red)';
+    if (p.resultado === 'nao_avaliado_no_sistema') return 'var(--text-3)';
     return 'var(--text-3)';
   }
 
@@ -224,7 +257,7 @@
 
     if (content) content.style.display = '';
     _renderCabecalho(detalhe.operacao);
-    _renderBercos(detalhe.bercosVisuais);
+    _renderBercos(detalhe.bercosVisuais, detalhe.operacao);
     _renderReceita(detalhe.tracos);
     _renderAvaliacao(detalhe.avaliacao);
   }

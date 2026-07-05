@@ -18,7 +18,7 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
-const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
+const PORT = process.env.PORT || 3000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")

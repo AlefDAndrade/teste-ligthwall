@@ -195,6 +195,7 @@
           <div class="sq-fila-outras" id="sq-fila-outras-wrap" style="display:none;">
             <select class="form-input form-select" id="sq-fila-select"></select>
             <button class="btn btn-primary btn-sm" onclick="SQ.iniciarAvaliacaoDoSelect()"><i class="fas fa-play"></i> Iniciar</button>
+            <button type="button" class="sq-fila-item-excluir" onclick="SQ.excluirDoSelect()" title="Excluir da fila o item selecionado (marca todos os painéis como &quot;Não avaliado no sistema&quot;)"><i class="fas fa-times"></i></button>
           </div>
 
           <div id="sq-fila-list">
@@ -284,6 +285,8 @@
         <div class="sq-tools-sep"></div>
         <button class="btn btn-ghost btn-sm"         onclick="SQ.undoLastAction()"><i class="fas fa-undo-alt"></i> Desfazer</button>
         <button class="btn btn-danger btn-sm"        onclick="SQ.clearAllMarks()"><i class="fas fa-trash-alt"></i> Limpar</button>
+        <div class="sq-tools-sep"></div>
+        <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
         <div class="sq-tools-sep"></div>
 
         <!-- Referência visual dos marcadores — mesmo padrão do botão

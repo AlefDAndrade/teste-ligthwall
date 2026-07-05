@@ -1066,6 +1066,18 @@
 
     document.getElementById('btn-qt-filtrar')?.addEventListener('click', render);
 
+    const periodo = document.getElementById('qt-periodo');
+    if (periodo) {
+      periodo.addEventListener('change', () => {
+        const { ini: pIni, fim: pFim } = calcularPeriodoPreset(periodo.value);
+        const iniEl = document.getElementById('qt-data-inicio');
+        const fimEl = document.getElementById('qt-data-fim');
+        if (iniEl) iniEl.value = pIni;
+        if (fimEl) fimEl.value = pFim;
+        render();
+      });
+    }
+
     popularFiltros().then(() => render());
   }
 

@@ -845,6 +845,52 @@ function todayBrasilia() {
   return nowBrasilia().toISOString().split('T')[0];
 }
 
+// ---- Presets de período para filtros de dashboard (Todos / Hoje / Essa
+// semana / Esse mês / Mês passado) — usado em Análise Operacional e CEP.
+// Retorna { ini, fim } no formato YYYY-MM-DD; 'todos' retorna '' em ambos
+// (sem restrição de data).
+function calcularPeriodoPreset(preset) {
+  const pad = n => String(n).padStart(2, '0');
+  const toStr = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const hoje = nowBrasilia();
+  const todayStr = todayBrasilia();
+  const y = hoje.getUTCFullYear();
+  const m = hoje.getUTCMonth();
+  const d = hoje.getUTCDate();
+
+  switch (preset) {
+    case 'hoje':
+      return { ini: todayStr, fim: todayStr };
+
+    case 'semana': {
+      // Semana começando na segunda-feira, até hoje.
+      const diaSemana = hoje.getUTCDay(); // 0=domingo ... 6=sábado
+      const offsetSegunda = diaSemana === 0 ? 6 : diaSemana - 1;
+      const inicioSemana = new Date(hoje.getTime() - offsetSegunda * 86400000);
+      return {
+        ini: toStr(inicioSemana.getUTCFullYear(), inicioSemana.getUTCMonth(), inicioSemana.getUTCDate()),
+        fim: todayStr,
+      };
+    }
+
+    case 'mes':
+      return { ini: toStr(y, m, 1), fim: todayStr };
+
+    case 'mes_passado': {
+      const mesAnterior = m === 0 ? 11 : m - 1;
+      const anoAnterior = m === 0 ? y - 1 : y;
+      const ultimoDia = new Date(Date.UTC(anoAnterior, mesAnterior + 1, 0)).getUTCDate();
+      return {
+        ini: toStr(anoAnterior, mesAnterior, 1),
+        fim: toStr(anoAnterior, mesAnterior, ultimoDia),
+      };
+    }
+
+    default: // 'todos'
+      return { ini: '', fim: '' };
+  }
+}
+
 function formatTime(date) {
   if (!date) return '';
   const d = new Date(date);

@@ -627,14 +627,15 @@
       const tituloMontagem = b.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
         ? LW.resumoBercosPersonalizados(b.bercos_personalizados).replace(/"/g, '&quot;')
         : '';
-      const tituloLinha = _modoEdicaoRegistro
+      const tituloLinha = (_modoEdicaoRegistro
         ? 'Clique para editar esta operação'
         : _modoFocoRegistro
         ? 'Clique para ver todos os dados desta operação (berços, receita e avaliação)'
-        : 'Clique para ver os traços desta bateria no Relatório de Injeção';
+        : 'Clique para ver os traços desta bateria no Relatório de Injeção')
+        + ' · Ctrl+clique: abrir Análise Focada';
       return `
       <tr style="cursor:pointer" data-tooltip="${tituloLinha}"
-        onclick="LWDash.onClickLinhaRegistro(window._lwRegistroMapTemp[${idx}])">
+        onclick="LWDash.onClickLinhaRegistro(window._lwRegistroMapTemp[${idx}], event)">
         <td data-col="data" class="mono">${b.data ? b.data.split('-').reverse().join('/') : '—'}</td>
         <td data-col="turno"><span class="badge badge-gray">${b.turno || '—'}</span></td>
         <td data-col="dimensao">${b.dimensao || '—'}</td>
@@ -1747,7 +1748,14 @@
     renderRegistro();
   }
 
-  function onClickLinhaRegistro(bateria) {
+  function onClickLinhaRegistro(bateria, event) {
+    // Atalho: Ctrl (ou ⌘ no Mac) + clique numa linha sempre abre a Análise
+    // Focada daquela operação, independente do modo ativo (foco/edição) —
+    // não precisa desligar o modo atual pra dar uma olhada rápida.
+    if (event && (event.ctrlKey || event.metaKey)) {
+      if (window.LWFocada) LWFocada.abrir(bateria.id);
+      return;
+    }
     if (_modoEdicaoRegistro) {
       if (typeof window.abrirEdicaoOperacao === 'function') window.abrirEdicaoOperacao(bateria);
       return;

@@ -184,6 +184,41 @@ body {
 .sq-fila-item-info strong { color: var(--text); font-size: .8rem; }
 .sq-fila-item-info span { color: var(--text-3); font-size: .68rem; }
 
+/* Botão "X" de excluir — em cada elemento da fila (cartão compacto,
+   cartão principal e select da 4ª posição em diante, ver
+   _filaExcluirBtn/excluirDoSelect em setor-qualidade.js). Fica por
+   último no cartão (margin-left:auto empurra pro canto direito) e usa
+   stopPropagation no clique pra não disparar o "iniciar avaliação" do
+   cartão por baixo. */
+.sq-fila-item-excluir {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: .7rem;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.sq-fila-item-excluir:hover {
+  color: #fff;
+  background: var(--red, #ef4444);
+  border-color: var(--red, #ef4444);
+}
+/* No cartão principal, o ícone de "play" já tem margin-left:auto (ver
+   regra mais abaixo) — o "X" só precisa de um respiro à esquerda dele. */
+.sq-fila-item-principal .sq-fila-item-excluir { margin-left: 8px; }
+/* Dentro de .sq-fila-outras (select + Iniciar + X), sem auto-margin —
+   ele já vem depois dos outros dois na ordem natural do flex. */
+.sq-fila-outras .sq-fila-item-excluir { margin-left: 0; }
+
 /* Item vinculado à avaliação em edição AGORA (ver linkedOperacaoId,
    setor-qualidade.js) — destaque verde bem visível, pra identificar de
    relance qual bateria está sendo avaliada, mesmo com várias pendentes
@@ -411,6 +446,26 @@ body {
 .sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
 .sq-mini-slab-type.t1 { color: var(--sq-tipo-t1-text); }
 .sq-mini-mark { display: inline-block; }
+/* "Sem marcação" (a imensa maioria das placas) — círculo VAZADO (sem
+   preenchimento), pra nunca ser confundido com uma marca real (círculo
+   ou traço real são sempre preenchidos/sólidos — ver getMirrorMark,
+   setor-qualidade.js). Antes era uma barrinha sólida do mesmo tamanho
+   do traço de SP, o que fazia parecer marcação onde não havia nenhuma. */
+.sq-mini-mark-vazia {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--sq-placa-borda);
+}
+/* "Não avaliado no sistema" (ver SQ.excluirDaFila) — nunca passou pelo
+   Setor de Qualidade de verdade; precisa ser óbvio que é OUTRA coisa,
+   não "sem marcação" nem uma marca real. */
+.sq-mini-mark-nao-avaliado {
+  font-size: .6rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text-3);
+}
 
 .sq-mirror-legend {
   display: flex; justify-content: center; gap: 16px;
@@ -442,6 +497,16 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--sq-shadow);
   margin-bottom: 16px;
+  /* 2 contadores independentes — um pra cor, um pra forma — pra numerar
+     os atalhos de teclado (1..N = cor da tela; Ctrl+1..N = forma da
+     tela, ver keydown em setor-qualidade.js) automaticamente, na ordem
+     em que os botões aparecem. Cada grupo conta só os elementos da SUA
+     própria classe (.sq-btn-color / .sq-btn-shape, abaixo) — os outros
+     botões do meio (Desfazer, Limpar etc.) não entram na conta. Isso é
+     o que torna flexível: adicionar uma 6ª cor ou uma 3ª forma no HTML
+     não precisa de nenhuma mudança aqui nem no JS — o número novo
+     aparece sozinho. */
+  counter-reset: sq-color-num sq-shape-num;
 }
 .sq-tools-label { font-size: .67rem; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: .06em; }
 
@@ -451,6 +516,8 @@ body {
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform .15s;
+  position: relative; /* âncora do badge de nº do atalho, ::after abaixo */
+  counter-increment: sq-color-num;
 }
 .sq-btn-color:hover { transform: scale(1.12); }
 .sq-btn-color.active { border-color: var(--text); box-shadow: 0 0 0 2px rgba(255,255,255,.2); }
@@ -468,13 +535,54 @@ body {
   background: var(--bg-3);
   transition: background .15s, transform .15s;
   display: flex; align-items: center; justify-content: center;
+  position: relative; /* âncora do badge de nº do atalho, ::after abaixo */
+  counter-increment: sq-shape-num;
 }
 .sq-btn-shape:hover { background: var(--border); }
 .sq-btn-shape.active { border-color: var(--text); background: var(--border); }
 .sq-shape-circle { width: 13px; height: 13px; border-radius: 50%; background: var(--text); }
 .sq-shape-dash   { width: 17px; height: 3px; border-radius: 2px; background: var(--text); }
 
+/* Badge com o número do atalho de teclado — canto inferior direito de
+   cada botão. Cor sozinha = número (tecla "1", "2"...); forma usa o
+   mesmo número só que precedido de um "^" pra lembrar que é Ctrl+nº
+   (ver sq-tools-hint, mais abaixo, pra legenda completa). */
+.sq-btn-color::after {
+  content: counter(sq-color-num);
+  position: absolute;
+  bottom: -4px; right: -4px;
+  min-width: 13px; height: 13px; padding: 0 2px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: .55rem;
+  line-height: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+.sq-btn-shape::after {
+  content: '^' counter(sq-shape-num);
+  position: absolute;
+  bottom: -4px; right: -4px;
+  min-width: 16px; height: 13px; padding: 0 2px;
+  border-radius: 7px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: .5rem;
+  line-height: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+
 .sq-tools-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+/* Legenda curta dos atalhos — mesmo estilo discreto de .sq-tools-label. */
+.sq-tools-hint { font-size: .64rem; color: var(--text-3); font-style: italic; }
 
 /* ── Stacks / Pallets ─────────────────────────────────────── */
 .sq-stacks {

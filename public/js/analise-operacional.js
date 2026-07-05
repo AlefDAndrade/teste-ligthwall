@@ -61,14 +61,17 @@
   // ── Motor principal de KPIs ───────────────────────────────
   function calcularKPIs(dados) {
     const n = dados.length;
-    if (!n) return null;
+    // Sem early-return em dataset vazio: mesmo padrão do CEP, que sempre
+    // renderiza o dashboard (zerado) em vez de escondê-lo quando o período
+    // selecionado não tem registros. Todas as contas abaixo já são seguras
+    // com arrays vazios — só a divisão por `n` precisa de guarda explícita.
 
     const totalM2     = dados.reduce((s,r) => s + (r.m2_total||0), 0);
     // total_paineis já soma TODOS os tipos de placa (2p, sp, 3t, 4t, ...) — não
     // usar paineis_2p+paineis_sp aqui, ou tipos novos ficam de fora da conta.
     const totalPaineis= dados.reduce((s,r) => s + (r.total_paineis||0), 0);
     const comAtraso   = dados.filter(r => r.houve_atraso === 'SIM');
-    const taxaAtraso  = (comAtraso.length / n) * 100;
+    const taxaAtraso  = n ? (comAtraso.length / n) * 100 : 0;
 
     // Tempo médio geral
     const tempos = dados.map(tempoMin).filter(t => t > 0);
@@ -202,6 +205,11 @@
            melhorBateria, piorBateria, tendenciaAtraso,
            bateriasPiora, eficienciaGeral, horasPerdidas,
            corMontagem, corDimensao, n} = kpi;
+
+    // Sem registros no período: não há base para nenhum insight (evita, por
+    // exemplo, acusar "excelente eficiência" de um período sem nenhuma
+    // operação). A UI já mostra a mensagem padrão de "nenhum insight" nesse caso.
+    if (!n) return insights;
 
     const mediaAtraso = taxaAtraso;
 
@@ -565,16 +573,13 @@
     const fim = document.getElementById('ao-data-fim')?.value || '';
     const filtrado = filtrar(dados, ini, fim);
 
-    if (!filtrado.length) {
-      document.getElementById('ao-empty').style.display = 'block';
-      document.getElementById('ao-content').style.display = 'none';
-      return;
-    }
+    // Mesmo padrão do CEP: sempre mostra o dashboard, mesmo sem nenhum
+    // registro no período selecionado (nesse caso, tudo aparece zerado em
+    // vez do dashboard inteiro ser escondido).
     document.getElementById('ao-empty').style.display = 'none';
     document.getElementById('ao-content').style.display = 'block';
 
     const kpi = calcularKPIs(filtrado);
-    if (!kpi) return;
 
     renderKPIs(kpi, filtrado);
     renderInsights(kpi, filtrado);
@@ -859,6 +864,18 @@
 
     const btn = document.getElementById('btn-ao-filtrar');
     if (btn) btn.addEventListener('click', render);
+
+    const periodo = document.getElementById('ao-periodo');
+    if (periodo) {
+      periodo.addEventListener('change', () => {
+        const { ini, fim } = calcularPeriodoPreset(periodo.value);
+        const iniEl = document.getElementById('ao-data-inicio');
+        const fimEl = document.getElementById('ao-data-fim');
+        if (iniEl) iniEl.value = ini;
+        if (fimEl) fimEl.value = fim;
+        render();
+      });
+    }
 
     await render();
   }

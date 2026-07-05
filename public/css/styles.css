@@ -2555,9 +2555,9 @@ td.mono {
    DEBRIEFING DO DIA — relatório operacional somente leitura
    ============================================================ */
 .debriefing-popover {
-  width: 480px;
-  max-width: min(480px, calc(100vw - 48px));
-  max-height: 70vh;
+  width: 560px;
+  max-width: min(560px, calc(100vw - 48px));
+  max-height: 76vh;
   padding: 0;
   overflow: hidden;
 }
@@ -2603,36 +2603,252 @@ td.mono {
 }
 
 .debriefing-paper {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  line-height: 1.55;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  line-height: 1.5;
   color: var(--text-2);
   background: var(--bg-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-  padding: 16px 18px;
+  padding: 14px;
   overflow-y: auto;
-  max-height: 70vh;
+  max-height: 76vh;
   user-select: text;
 }
 
-.debriefing-paper .dbf-titulo {
-  color: var(--text);
-  font-weight: 700;
+/* ---- KPIs de resumo do dia ---- */
+.dbf-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
-.debriefing-paper .dbf-secao {
+.dbf-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.dbf-stat-icon {
+  font-size: .95rem;
+  margin-bottom: 2px;
+}
+
+.dbf-stat-val {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--accent);
-  font-weight: 700;
 }
 
-.debriefing-paper .dbf-sep {
-  color: var(--border-2);
+.dbf-stat-label {
+  font-size: .64rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
 }
 
-.debriefing-paper .dbf-vazio {
+/* ---- Estados vazios / erro ---- */
+.dbf-empty-state {
+  text-align: center;
   color: var(--text-3);
   font-style: italic;
+  padding: 30px 10px;
+}
+
+.dbf-vazio-mini {
+  color: var(--text-3);
+  font-style: italic;
+  font-size: .78rem;
+  padding: 4px 0;
+}
+
+/* ---- Cards de bateria ---- */
+.dbf-baterias {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dbf-bateria-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+}
+
+.dbf-bateria-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dbf-bateria-id {
+  font-weight: 700;
+  color: var(--text);
+  font-size: .86rem;
+}
+
+.dbf-bateria-horario {
+  font-family: var(--font-mono);
+  font-size: .74rem;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.dbf-bateria-meta {
+  font-size: .74rem;
+  color: var(--text-3);
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+.dbf-bateria-meta strong {
+  color: var(--text-2);
+}
+
+/* ---- Traços dentro da bateria ---- */
+.dbf-tracos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dbf-traco {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+}
+
+.dbf-traco.is-reaproveitado {
+  border-color: var(--accent-dim, var(--accent));
+}
+
+.dbf-traco-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dbf-traco-num {
+  font-weight: 700;
+  font-size: .78rem;
+  color: var(--text);
+}
+
+.dbf-badge {
+  font-size: .66rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.dbf-badge-reap {
+  background: rgba(41, 104, 255, .15);
+  color: var(--accent);
+}
+
+.dbf-traco-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: .76rem;
+  color: var(--text-2);
+}
+
+.dbf-traco-label {
+  color: var(--text-3);
+  text-transform: uppercase;
+  font-size: .62rem;
+  letter-spacing: .04em;
+  margin-right: 4px;
+}
+
+.dbf-traco-origem {
+  margin-top: 4px;
+  font-size: .72rem;
+  color: var(--accent);
+}
+
+.dbf-obs {
+  margin-top: 6px;
+  font-size: .76rem;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border-left: 2px solid var(--border-2);
+  padding: 4px 8px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* ---- Seções finais (ocorrências / reaproveitados) ---- */
+.dbf-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.dbf-section-title {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+}
+
+.dbf-ocorrencias {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dbf-ocorrencias li {
+  font-size: .78rem;
+  color: var(--text-2);
+  padding-left: 14px;
+  position: relative;
+}
+
+.dbf-ocorrencias li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.dbf-reap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dbf-chip {
+  font-size: .72rem;
+  color: var(--text-2);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+
+.dbf-chip small {
+  color: var(--text-3);
 }
 
 /* ============================================================
@@ -2672,7 +2888,12 @@ td.mono {
   display: flex;
   flex-direction: row-reverse; /* berço 1 à direita, berço N à esquerda */
   flex-wrap: nowrap;
+  justify-content: center; /* centraliza quando as células atingem max-width e não preenchem toda a largura disponível — sem isso, sobravam vazias do lado esquerdo (flex-start de um row-reverse empurra tudo pro lado direito) */
   gap: 4px;
+}
+
+.table-header-oee th{
+  text-align: center;
 }
 
 /* Célula "em pé": indicador em cima, número no meio, indicador embaixo —
