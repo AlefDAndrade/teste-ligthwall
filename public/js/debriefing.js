@@ -138,71 +138,97 @@
     const cab = calcularCabecalho(estrutura);
     const [y, m, d] = data.split('-');
     const dataFmt = `${d}/${m}/${y}`;
-    const linhas = [];
-    const sep = () => linhas.push(`<span class="dbf-sep">────────────────────────────</span>`);
     const ocorrencias = [];
     const reaproveitados = [];
 
-    linhas.push(`<span class="dbf-titulo">RELATÓRIO DE PRODUÇÃO - ${dataFmt}</span>`);
-    linhas.push('');
-    linhas.push(`EPS: ${cab.epsPredominante !== null ? fmtNum(cab.epsPredominante, 0) + ' kg/m³' : '—'}`);
-    linhas.push(`Baterias injetadas: ${cab.qtdBaterias}`);
-    linhas.push(`Total de traços: ${cab.qtdTracos}`);
-    linhas.push(`Média de traços por bateria: ${cab.qtdBaterias ? fmtNum(cab.mediaTracos, 1) : '—'}`);
+    let html = '';
+
+    html += `<div class="dbf-stats">
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${cab.epsPredominante !== null ? fmtNum(cab.epsPredominante, 0) : '—'}</span>
+        <span class="dbf-stat-label">EPS kg/m³</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${cab.qtdBaterias}</span>
+        <span class="dbf-stat-label">Baterias</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${cab.qtdTracos}</span>
+        <span class="dbf-stat-label">Traços</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${cab.qtdBaterias ? fmtNum(cab.mediaTracos, 1) : '—'}</span>
+        <span class="dbf-stat-label">Média/bateria</span>
+      </div>
+    </div>`;
 
     if (!estrutura.length) {
-      sep();
-      linhas.push('<span class="dbf-vazio">Nenhuma operação registrada para esta data.</span>');
+      html += `<div class="dbf-empty-state">🗒️ Nenhuma operação registrada para ${dataFmt}.</div>`;
+      return html;
     }
 
+    html += `<div class="dbf-baterias">`;
     estrutura.forEach(({ bateria, tracos }) => {
-      sep();
-      linhas.push(`<span class="dbf-secao">BATERIA ${escapeHtml(bateria.id_bateria || '—')}</span>`);
-      linhas.push(`Início: ${horaBrasilia(bateria.inicio)}`);
-      linhas.push(`Fim: ${horaBrasilia(bateria.fim)}`);
-      linhas.push(`Previsão Desemplaque: ${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}`);
+      html += `<div class="dbf-bateria-card">`;
+      const corMont = LW.corMontagemPorLabel(bateria.tipo_montagem);
+      const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
+      html += `<div class="dbf-bateria-head">
+        <span class="dbf-bateria-id"> Bateria ${escapeHtml(bateria.id_bateria || '—')}</span>
+        <span class="dbf-badge dbf-badge-montagem" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}">${escapeHtml(bateria.tipo_montagem || '—')}</span>
+        <span class="dbf-bateria-horario">${horaBrasilia(bateria.inicio)} → ${horaBrasilia(bateria.fim)}</span>
+      </div>`;
+      html += `<div class="dbf-bateria-meta">Previsão desemplaque: <strong>${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}</strong></div>`;
 
       if (!tracos.length) {
-        linhas.push('<span class="dbf-vazio">Sem traços registrados.</span>');
+        html += `<div class="dbf-vazio-mini">Sem traços registrados.</div>`;
+      } else {
+        html += `<div class="dbf-tracos">`;
+        tracos.forEach((t, idx) => {
+          const num = escapeHtml(String(t.num_traco ?? (idx + 1)));
+          html += `<div class="dbf-traco${t.reaproveitado ? ' is-reaproveitado' : ''}">`;
+          html += `<div class="dbf-traco-head">
+            <span class="dbf-traco-num">Traço ${num}</span>
+            ${t.reaproveitado ? `<span class="dbf-badge dbf-badge-reap">♻ Reaproveitado</span>` : ''}
+          </div>`;
+          html += `<div class="dbf-traco-grid">
+            <span><span class="dbf-traco-label">Flow</span>${t.flow !== null ? fmtNum(t.flow, 0) : '—'}</span>
+            <span><span class="dbf-traco-label">Densidade</span>${t.densidade !== null ? fmtNum(t.densidade, 0) : '—'}</span>
+            <span><span class="dbf-traco-label">Berços</span>${escapeHtml(t.berco_inicio || '—')} ao ${escapeHtml(t.berco_fim || '—')}</span>
+          </div>`;
+          if (t.reaproveitado) {
+            html += `<div class="dbf-traco-origem">↳ Origem: Operação ${escapeHtml(t.origem_bateria || t.origem_operacao || '—')} · Traço ${num}</div>`;
+            reaproveitados.push(t);
+          }
+          if (t.obs) {
+            html += `<div class="dbf-obs">💬 ${escapeHtml(t.obs)}</div>`;
+            ocorrencias.push(t.obs);
+          }
+          html += `</div>`;
+        });
+        html += `</div>`;
       }
-
-      tracos.forEach((t, idx) => {
-        const num = t.num_traco ?? (idx + 1);
-        linhas.push('');
-        linhas.push(`Traço ${num}`);
-        linhas.push(`Flow/Densidade: ${t.flow !== null ? fmtNum(t.flow, 0) : '—'} / ${t.densidade !== null ? fmtNum(t.densidade, 0) : '—'}`);
-        linhas.push(`Berços: ${escapeHtml(t.berco_inicio || '—')} ao ${escapeHtml(t.berco_fim || '—')}`);
-        if (t.obs) {
-          linhas.push(`Observações:`);
-          linhas.push(`• ${escapeHtml(t.obs)}`);
-          ocorrencias.push(t.obs);
-        }
-        if (t.reaproveitado) {
-          linhas.push(`♻ Traço reaproveitado`);
-          linhas.push(`Origem: Operação ${escapeHtml(t.origem_bateria || t.origem_operacao || '—')} Traço ${num}`);
-          reaproveitados.push(t);
-        }
-      });
+      html += `</div>`;
     });
+    html += `</div>`;
 
-    sep();
-    linhas.push(`<span class="dbf-secao">PRINCIPAIS OCORRÊNCIAS</span>`);
-    if (ocorrencias.length) {
-      ocorrencias.forEach(o => linhas.push(`• ${escapeHtml(o)}`));
-    } else {
-      linhas.push('<span class="dbf-vazio">Nenhuma ocorrência registrada nesta data.</span>');
-    }
+    html += `<div class="dbf-section">
+      <div class="dbf-section-title">⚠️ Principais Ocorrências</div>`;
+    html += ocorrencias.length
+      ? `<ul class="dbf-ocorrencias">${ocorrencias.map(o => `<li>${escapeHtml(o)}</li>`).join('')}</ul>`
+      : `<div class="dbf-vazio-mini">Nenhuma ocorrência registrada nesta data.</div>`;
+    html += `</div>`;
 
     if (reaproveitados.length) {
-      sep();
-      linhas.push(`<span class="dbf-secao">TRAÇOS REAPROVEITADOS</span>`);
-      reaproveitados.forEach(t => {
-        const num = t.num_traco ?? '—';
-        linhas.push(`♻ Traço ${num} — Origem: Operação ${escapeHtml(t.origem_bateria || t.origem_operacao || '—')}`);
-      });
+      html += `<div class="dbf-section">
+        <div class="dbf-section-title">♻ Traços Reaproveitados</div>
+        <div class="dbf-reap-chips">${reaproveitados.map(t => {
+          const num = escapeHtml(String(t.num_traco ?? '—'));
+          return `<span class="dbf-chip">Traço ${num} <small>· Operação ${escapeHtml(t.origem_bateria || t.origem_operacao || '—')}</small></span>`;
+        }).join('')}</div>
+      </div>`;
     }
 
-    return linhas.join('\n');
+    return html;
   }
 
   async function atualizarConteudo(data) {
@@ -214,7 +240,7 @@
       const estrutura = montarEstrutura(historico, relatorio, data);
       el.innerHTML = renderRelatorio(estrutura, data);
     } catch (_) {
-      el.innerHTML = '<span class="dbf-vazio">Não foi possível carregar o debriefing.</span>';
+      el.innerHTML = '<div class="dbf-empty-state">⚠️ Não foi possível carregar o debriefing.</div>';
     }
   }
 
