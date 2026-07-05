@@ -189,6 +189,12 @@ const VALIDADORES_BACKUP_DADOS = {
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
   'ajustes_tracos.json':    v => Array.isArray(v),
+  // ─── Adicionados: Berços Visuais e Avaliações do Setor de Qualidade —
+  // antes ficavam de fora do Backup de Dados/automático, só entravam no
+  // Backup Geral (que zipa o .sqlite inteiro). Ambos são tabelas SQL (ver
+  // GET /db/<nome> mais abaixo, que reconstrói o JSON a partir do banco).
+  'bercos_visuais.json':       v => Array.isArray(v),
+  'avaliacoes_qualidade.json': v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -206,6 +212,8 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'sobra.json': {},
   'paradas.json': [],
   'ajustes_tracos.json': [],
+  'bercos_visuais.json': [],
+  'avaliacoes_qualidade.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -267,6 +275,10 @@ async function gerarZipDadosServidor() {
         // sem avisar ninguém — exatamente o bug visto na hora de restaurar.
         const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
         zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
+      } else if (nome === 'bercos_visuais.json') {
+        zip.file(nome, JSON.stringify(db.todosOsBercosVisuais(), null, 2));
+      } else if (nome === 'avaliacoes_qualidade.json') {
+        zip.file(nome, JSON.stringify(db.listarAvaliacoesQualidade(), null, 2));
       } else {
         zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
@@ -907,6 +919,101 @@ const server = http.createServer((req, res) => {
     try {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(db.todosOsAjustesTracosJSON()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/bercos_visuais.json: mesma estratégia das outras tabelas —
+  // não existe mais como arquivo, reconstrói a partir da tabela SQL
+  // "bercos_visuais". Usado por gerarBackupDados() (data.js), que faz
+  // fetch('db/'+nome) genérico pra cada arquivo da lista (Backup de Dados).
+  if (req.method === 'GET' && urlPath === '/db/bercos_visuais.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsBercosVisuais()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/avaliacoes_qualidade.json: idem, reconstrói a partir da
+  // tabela "avaliacoes_qualidade" (avaliações já registradas do Setor de
+  // Qualidade) — usado pelo Backup de Dados.
+  if (req.method === 'GET' && urlPath === '/db/avaliacoes_qualidade.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.listarAvaliacoesQualidade()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/detalhe_operacao.json?id=...: tudo que se liga por
+  // id_operacao — operação, berços visuais, receita de cada traço usado
+  // (com ajustes) e a avaliação de qualidade vinculada. Usado pela
+  // "Análise Focada" (ver public/js/analise-focada.js). Não é arquivo de
+  // backup — view derivada, sempre recalculada do banco.
+  if (req.method === 'GET' && urlPath === '/db/detalhe_operacao.json') {
+    try {
+      const idOperacao = queryParams.get('id') || '';
+      const detalhe = idOperacao ? db.detalheOperacao(idOperacao) : null;
+      res.writeHead(detalhe ? 200 : 404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(detalhe || { ok: false, erro: 'Operação não encontrada.' }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/avaliacao_paineis.json: painéis da Avaliação de Qualidade
+  // já normalizados numa tabela própria (avaliacao_paineis) — pronta pra
+  // cruzar em SQL com bercos_visuais/tracos/operacoes no futuro (mesmo
+  // padrão de relatorio_bercos.json/correlacao_traco_berco.json). Não é
+  // arquivo de backup — view derivada, sempre reconstruída do banco.
+  if (req.method === 'GET' && urlPath === '/db/avaliacao_paineis.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.listarPaineisAvaliacao()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/correlacao_traco_berco.json: 1 linha por USO de traço, já
+  // com nº de ajustes (instabilidade) e taxa de vazamento dos berços que
+  // aquele traço encheu — usado pelo gráfico de dispersão "Traço Instável
+  // × Vazamento" na Análise de Berços (ver public/js/analise-bercos.js).
+  // Não é arquivo de backup — view derivada, sempre recalculada do banco.
+  if (req.method === 'GET' && urlPath === '/db/correlacao_traco_berco.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.correlacaoTracoBerco()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/relatorio_bercos.json: junta bercos_visuais + operacoes
+  // (ID da bateria, tipo de montagem) — usado pela página "Relatório de
+  // Berços" (ver public/js/relatorio-bercos.js). Não é um arquivo de
+  // backup (não está em VALIDADORES_BACKUP_DADOS) — é só uma view
+  // derivada, sempre reconstruída na hora a partir do banco.
+  if (req.method === 'GET' && urlPath === '/db/relatorio_bercos.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.relatorioBercos()));
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, erro: e.message }));
@@ -2323,6 +2430,10 @@ const server = http.createServer((req, res) => {
             } else if (nome === 'relatorio_edicoes.json') {
               const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
+            } else if (nome === 'bercos_visuais.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsBercosVisuais(), null, 2), 'utf8');
+            } else if (nome === 'avaliacoes_qualidade.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.listarAvaliacoesQualidade(), null, 2), 'utf8');
             } else {
               fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
@@ -2342,7 +2453,8 @@ const server = http.createServer((req, res) => {
         // garantia de "tudo ou nada").
         const nomesArquivo = esperados.filter(n =>
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
-            'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json'].includes(n));
+            'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json',
+            'bercos_visuais.json', 'avaliacoes_qualidade.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
           tmp: caminhoArquivoDb(nome) + '.tmp',
           destino: caminhoArquivoDb(nome),
@@ -2422,6 +2534,14 @@ const server = http.createServer((req, res) => {
           const novoRelatorioAtual = db.todosOsTracos();
           const novosAjustes = JSON.parse(textosValidados['ajustes_tracos.json']);
           db.transaction(() => db.substituirTracosEAjustes(novoRelatorioAtual, novosAjustes))();
+        }
+        if (esperados.includes('bercos_visuais.json')) {
+          const novosBercosVisuais = JSON.parse(textosValidados['bercos_visuais.json']);
+          db.transaction(() => db.substituirBercosVisuais(novosBercosVisuais))();
+        }
+        if (esperados.includes('avaliacoes_qualidade.json')) {
+          const novasAvaliacoes = JSON.parse(textosValidados['avaliacoes_qualidade.json']);
+          db.transaction(() => db.substituirAvaliacoesQualidade(novasAvaliacoes))();
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });

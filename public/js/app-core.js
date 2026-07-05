@@ -146,6 +146,25 @@
         window._relatorioInit = true;
         LWDash.initRelatorio();
       }
+      if (pageId === 'relatorio-bercos' && !window._relatorioBercosInit) {
+        window._relatorioBercosInit = true;
+        LWBercos.init();
+      } else if (pageId === 'relatorio-bercos') {
+        LWBercos.render();
+      }
+      if (pageId === 'analise-bercos' && !window._analiseBercosInit) {
+        window._analiseBercosInit = true;
+        ABercos.init();
+      } else if (pageId === 'analise-bercos') {
+        ABercos.render();
+      }
+      // Análise Focada sempre re-renderiza (não só na 1ª vez) — cada
+      // entrada é uma operação DIFERENTE (ver LWFocada.abrir, chamado
+      // pelo modo de foco no Registro de Baterias), diferente das outras
+      // páginas aqui que mostram sempre a mesma visão geral.
+      if (pageId === 'analise-focada') {
+        LWFocada.init();
+      }
 
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
       // não faz nada se essa página não tem tour, ou se já foi visto antes
@@ -519,6 +538,11 @@
       'sobra.json':              v => v && typeof v === 'object',
       'paradas.json':            v => Array.isArray(v),
       'ajustes_tracos.json':    v => Array.isArray(v),
+      // Adicionados junto com Berços Visuais e Avaliações do Setor de
+      // Qualidade no Backup de Dados — mesma lista do servidor
+      // (VALIDADORES_BACKUP_DADOS, em server.js).
+      'bercos_visuais.json':       v => Array.isArray(v),
+      'avaliacoes_qualidade.json': v => Array.isArray(v),
     };
 
     // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -533,6 +557,8 @@
       'sobra.json': {},
       'paradas.json': [],
       'ajustes_tracos.json': [],
+      'bercos_visuais.json': [],
+      'avaliacoes_qualidade.json': [],
     };
 
     function parseArquivoRestaurar(nome, texto) {

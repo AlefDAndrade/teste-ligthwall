@@ -317,6 +317,43 @@ db.exec(`
     dados         TEXT NOT NULL  -- JSON: avaliação inteira, incluindo a lista de painéis
   );
   CREATE INDEX IF NOT EXISTS idx_avaliacoes_qualidade_operacao ON avaliacoes_qualidade(id_operacao);
+
+  -- ============================================================
+  --  Painéis da Avaliação de Qualidade — MESMOS dados que já vivem
+  --  dentro de avaliacoes_qualidade.dados (JSON), só que extraídos numa
+  --  tabela própria pra dar pra fazer JOIN/consulta em SQL direto (ver
+  --  db.relatorioBercos()/correlacaoTracoBerco(), que fazem o mesmo com
+  --  bercos_visuais/tracos) — sem essa tabela, qualquer cruzamento
+  --  precisaria carregar TODAS as avaliações inteiras (dados completo,
+  --  JSON) pra dentro do JS só pra olhar os painéis de uma vez.
+  --
+  --  1 linha por avaliação (mesmo espírito de bercos_visuais, acima): os
+  --  painéis daquela avaliação inteira vão dentro de 1 coluna JSON —
+  --  NÃO 1 coluna por painel (ex: painel1..painel44). Isso foi decisão
+  --  deliberada, não só preguiça: painel não é uma sequência plana de
+  --  1 a 44 — é (pallet 1-4) × (posição 1 a 8/10/11, conforme a dimensão
+  --  da bateria — ver getSlabCount(), setor-qualidade.js), e a imensa
+  --  maioria fica SEM marca nenhuma (só quem tem defeito, ou aprovação
+  --  explícita, é marcado — ver classifyMarks()). Um esquema de 44
+  --  colunas fixas teria quase tudo NULL quase sempre, não converteria
+  --  painel<->coluna de um jeito natural (pallet+posição não é um índice
+  --  1-44 direto), e travaria o sistema em 44 pra sempre (mudar a
+  --  quantidade de painéis por bateria exigiria ALTER TABLE). O array
+  --  JSON não tem esse teto.
+  --
+  --  linha (dentro do JSON de cada painel): '1ª'/'2ª'/null — Verde
+  --  marca 1ª linha, Azul marca 2ª linha (ambos "aprovado" pra
+  --  resultado, mas linhas diferentes — ver getClassifiedInfo/
+  --  _linhaDoAprovado, setor-qualidade.js).
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS avaliacao_paineis (
+    id_avaliacao  TEXT PRIMARY KEY REFERENCES avaliacoes_qualidade(id),
+    id_operacao   TEXT REFERENCES operacoes(id),
+    id_bateria    TEXT,
+    registrado_em TEXT NOT NULL,
+    paineis       TEXT NOT NULL  -- JSON: [{pallet, posicao, tipoEsperado, tipoObtido, resultado, linha, marcas}, ...]
+  );
+  CREATE INDEX IF NOT EXISTS idx_avaliacao_paineis_operacao ON avaliacao_paineis(id_operacao);
 `);
 
 // ------------------------------------------------------------
@@ -600,11 +637,232 @@ const SQL_INSERIR_OPERACAO = `
   )
 `;
 
+/**
+ * Lista todas as linhas de bercos_visuais (1 por operação), com "bercos"
+ * já desserializado — usado pelo Backup de Dados (manual/automático), que
+ * antes desta mudança não cobria esta tabela (berços visuais e avaliações
+ * de qualidade ficavam de fora dos dois backups baseados em public/db/,
+ * só entravam no Backup Geral por este zipar o .sqlite inteiro).
+ */
+function todosOsBercosVisuais() {
+  const rows = db.prepare('SELECT id_operacao, bercos, atualizado_em FROM bercos_visuais ORDER BY id_operacao ASC').all();
+  return rows.map(r => ({ id_operacao: r.id_operacao, bercos: JSON.parse(r.bercos), atualizado_em: r.atualizado_em }));
+}
+
+/**
+ * Substitui TODO o conteúdo de bercos_visuais pelo array informado (mesmo
+ * formato de todosOsBercosVisuais) — usado por /restaurar-backup-dados,
+ * mesmo padrão "apaga tudo e reinsere dentro de 1 transação" já usado por
+ * operações/paradas. Quem chama é responsável por envolver numa
+ * db.transaction(), igual às outras rotas de restore.
+ */
+const SQL_INSERIR_BERCO_VISUAL_BACKUP = `
+  INSERT INTO bercos_visuais (id_operacao, bercos, atualizado_em)
+  VALUES (@id_operacao, @bercos, @atualizado_em)
+`;
+function substituirBercosVisuais(lista) {
+  db.prepare('DELETE FROM bercos_visuais').run();
+  const inserir = db.prepare(SQL_INSERIR_BERCO_VISUAL_BACKUP);
+  for (const item of (lista || [])) {
+    inserir.run({
+      id_operacao: item.id_operacao,
+      bercos: JSON.stringify(item.bercos || []),
+      atualizado_em: item.atualizado_em || new Date().toISOString(),
+    });
+  }
+}
+
 module.exports = db;
 module.exports.operacaoParaRow = operacaoParaRow;
 module.exports.rowParaOperacao = rowParaOperacao;
 module.exports.SQL_INSERIR_OPERACAO = SQL_INSERIR_OPERACAO;
+/**
+ * Relatório de Berços — 1 linha por operação, juntando bercos_visuais com
+ * os dados da bateria (operacoes) que a tela precisa pra identificar cada
+ * linha (ID da bateria, tipo de montagem) — usado pela página "Relatório
+ * de Berços" (ver public/js/relatorio-bercos.js). Cada berço mantém seu
+ * "ordem" (1-based); a página usa isso pra montar as colunas B1..B22,
+ * deixando em branco os berços que aquela bateria específica não teve
+ * (nem toda bateria usa as 22 posições).
+ */
+function relatorioBercos() {
+  const rows = db.prepare(`
+    SELECT o.id AS id_operacao, o.data, o.turno, o.id_bateria, o.tipo_montagem,
+           o.capacidade, o.bercos_reais, o.houve_atraso, o.motivo_atraso, bv.bercos
+    FROM bercos_visuais bv
+    JOIN operacoes o ON o.id = bv.id_operacao
+    ORDER BY o.data ASC, o.turno ASC, o.criado_em ASC
+  `).all();
+  return rows.map(r => ({
+    id_operacao: r.id_operacao,
+    data: r.data,
+    turno: r.turno,
+    id_bateria: r.id_bateria,
+    tipo_montagem: r.tipo_montagem,
+    capacidade: r.capacidade,
+    bercos_reais: r.bercos_reais,
+    // Adicionados pra cruzar com a tabela de Pontos de Atenção (Análise
+    // de Berços): confirma se o vazamento marcado no berço bate com um
+    // atraso já registrado com esse motivo (ver _mapaAtrasoVazamento, em
+    // analise-bercos.js, e normalizarMotivo em analise-operacional.js —
+    // mesmos termos de busca, "vazamento/vasamento/reinjeção").
+    houve_atraso: r.houve_atraso,
+    motivo_atraso: r.motivo_atraso,
+    bercos: JSON.parse(r.bercos), // [{berco, ordem, estado_esquerda, estado_direita}, ...]
+  }));
+}
+
 module.exports.criarBercosVisuaisIniciais = criarBercosVisuaisIniciais;
+module.exports.todosOsBercosVisuais = todosOsBercosVisuais;
+module.exports.substituirBercosVisuais = substituirBercosVisuais;
+/**
+ * Correlação Traço × Berço — para cada USO de traço com berço_inicio/fim
+ * preenchidos (ver traco_usos: berco_inicio/berco_finalizacao — o range
+ * de berços que aquele traço específico encheu), calcula a taxa de
+ * vazamento (bercos_visuais) SÓ dos berços daquele range, e junta com o
+ * nº de ajustes de receita daquele traço (indicador de instabilidade) e
+ * a densidade/flow FINAIS dele (mesma regra de "original + última
+ * remedição" usada em rowParaTraco/todosOsTracos — ver acima). Usado
+ * pelo gráfico de dispersão e pela tabela "Traço × Berço" (piores casos
+ * + receita, pra comparar com os traços sem vazamento) na Análise de
+ * Berços (ver public/js/analise-bercos.js).
+ *
+ * Cada linha devolvida é 1 USO (traço + operação específicos), não 1
+ * traço só — o mesmo traço pode ser reaproveitado em baterias diferentes
+ * (ver traco_usos), e cada reaproveitamento encheu berços diferentes,
+ * com resultado de vazamento diferente. INNER JOIN com operacoes e
+ * bercos_visuais already exclui usos de traços importados em lote (id_
+ * operacao sintético, sem operação/berços visuais reais por trás — ver
+ * comentário em CREATE TABLE traco_usos, acima).
+ */
+function correlacaoTracoBerco() {
+  const rows = db.prepare(`
+    SELECT tu.id_traco, tu.id_operacao, tu.berco_inicio, tu.berco_finalizacao,
+           o.data, o.turno, o.id_bateria, o.tipo_montagem, bv.bercos,
+           t.densidade_original, t.flow_original,
+           (SELECT COUNT(*) FROM ajustes a WHERE a.id_traco = tu.id_traco) AS num_ajustes,
+           (SELECT valor FROM leituras_resultado lr WHERE lr.id_traco = tu.id_traco
+              AND lr.campo = 'densidade' ORDER BY lr.ordem DESC LIMIT 1) AS densidade_remedida,
+           (SELECT valor FROM leituras_resultado lr WHERE lr.id_traco = tu.id_traco
+              AND lr.campo = 'flow' ORDER BY lr.ordem DESC LIMIT 1) AS flow_remedido
+    FROM traco_usos tu
+    JOIN operacoes o ON o.id = tu.id_operacao
+    JOIN bercos_visuais bv ON bv.id_operacao = tu.id_operacao
+    JOIN tracos t ON t.id_traco = tu.id_traco
+    WHERE tu.berco_inicio IS NOT NULL AND tu.berco_inicio != ''
+      AND tu.berco_finalizacao IS NOT NULL AND tu.berco_finalizacao != ''
+    ORDER BY o.data ASC
+  `).all();
+
+  return rows.map(r => {
+    // Math.min/max: cobre o caso raro de alguém digitar início > fim.
+    const ini = Math.min(parseInt(r.berco_inicio, 10), parseInt(r.berco_finalizacao, 10));
+    const fim = Math.max(parseInt(r.berco_inicio, 10), parseInt(r.berco_finalizacao, 10));
+    const todos = JSON.parse(r.bercos);
+    // ini/fim viram NaN se berco_inicio/fim não for numérico (digitação
+    // inválida) — b.ordem >= NaN é sempre false, então "doTraco" fica
+    // vazio e a linha é descartada no .filter() abaixo, sem lançar erro.
+    const doTraco = todos.filter(b => b.ordem >= ini && b.ordem <= fim);
+    let total = 0, vazamentos = 0;
+    doTraco.forEach(b => {
+      total += 2; // 2 lados por berço (esquerda + direita)
+      if (b.estado_esquerda === 'baixou') vazamentos++;
+      if (b.estado_direita === 'baixou') vazamentos++;
+    });
+    return {
+      id_traco: r.id_traco, id_operacao: r.id_operacao,
+      data: r.data, turno: r.turno, id_bateria: r.id_bateria, tipo_montagem: r.tipo_montagem,
+      berco_inicio: ini, berco_finalizacao: fim,
+      num_ajustes: r.num_ajustes,
+      // Final = última remedição (leituras_resultado), se houve alguma;
+      // senão o valor original do traço. Mesma regra de "original +
+      // ajustes/leituras" usada no resto do sistema (ver rowParaTraco).
+      densidade: r.densidade_remedida ?? r.densidade_original ?? null,
+      flow: r.flow_remedido ?? r.flow_original ?? null,
+      bercos_avaliados: doTraco.length,
+      total_lados: total, vazamentos,
+      taxa_vazamento: total ? (vazamentos / total) * 100 : null,
+    };
+  }).filter(r => r.bercos_avaliados > 0);
+}
+
+module.exports.relatorioBercos = relatorioBercos;
+module.exports.correlacaoTracoBerco = correlacaoTracoBerco;
+
+/**
+ * Detalhe completo de UMA operação — junta tudo que se liga por
+ * id_operacao (o elo comum entre histórico, relatório de injeção e
+ * berços visuais): a operação em si, os berços visuais (se já tiverem
+ * sido registrados), a receita de cada traço usado (com os ajustes que
+ * teve, se algum) e a avaliação de qualidade vinculada (se já tiver
+ * sido feita). Usado pela "Análise Focada" (ver public/js/
+ * analise-focada.js), acessada clicando numa linha do Registro de
+ * Baterias com o modo de foco ligado.
+ *
+ * Devolve null se a operação não existir.
+ */
+function detalheOperacao(idOperacao) {
+  const operacao = db.prepare('SELECT * FROM operacoes WHERE id = ?').get(idOperacao);
+  if (!operacao) return null;
+
+  const bvRow = db.prepare('SELECT bercos FROM bercos_visuais WHERE id_operacao = ?').get(idOperacao);
+  const bercosVisuais = bvRow ? JSON.parse(bvRow.bercos) : null;
+
+  // Traços usados nesta operação, cada um com a receita ORIGINAL, os
+  // ajustes (se algum) e a densidade/flow FINAIS (última remedição, ou
+  // o original se nunca foi remedido — mesma regra usada em
+  // rowParaTraco/correlacaoTracoBerco). Ordenado pelo berço inicial —
+  // mesma ordem em que os traços foram usados na bateria.
+  const usos = db.prepare(`
+    SELECT tu.id_traco, tu.berco_inicio, tu.berco_finalizacao, tu.obs,
+           t.num_traco, t.cimento_original, t.agua_original, t.eps_original,
+           t.superplast_original, t.incorporador_original, t.tempo_batida_original,
+           t.densidade_original, t.flow_original, t.silo, t.expansao, t.densidade_eps
+    FROM traco_usos tu
+    JOIN tracos t ON t.id_traco = tu.id_traco
+    WHERE tu.id_operacao = ?
+  `).all(idOperacao).sort((a, b) => parseInt(a.berco_inicio, 10) - parseInt(b.berco_inicio, 10));
+
+  const tracos = usos.map(u => {
+    const ajustes = db.prepare(
+      'SELECT ordem, tempo_batida, cimento, agua, eps, superplast, incorporador, registrado_em FROM ajustes WHERE id_traco = ? ORDER BY ordem ASC'
+    ).all(u.id_traco);
+    const densidadeRemedida = db.prepare(
+      "SELECT valor FROM leituras_resultado WHERE id_traco=? AND campo='densidade' ORDER BY ordem DESC LIMIT 1"
+    ).get(u.id_traco);
+    const flowRemedido = db.prepare(
+      "SELECT valor FROM leituras_resultado WHERE id_traco=? AND campo='flow' ORDER BY ordem DESC LIMIT 1"
+    ).get(u.id_traco);
+    return {
+      id_traco: u.id_traco,
+      num_traco: u.num_traco,
+      berco_inicio: u.berco_inicio,
+      berco_finalizacao: u.berco_finalizacao,
+      obs: u.obs,
+      original: {
+        cimento: u.cimento_original, agua: u.agua_original, eps: u.eps_original,
+        superplast: u.superplast_original, incorporador: u.incorporador_original,
+        tempo_batida: u.tempo_batida_original,
+      },
+      densidade: densidadeRemedida ? densidadeRemedida.valor : u.densidade_original,
+      flow: flowRemedido ? flowRemedido.valor : u.flow_original,
+      silo: u.silo, expansao: u.expansao, densidade_eps: u.densidade_eps,
+      ajustes,
+      num_ajustes: ajustes.length,
+    };
+  });
+
+  // Avaliação de qualidade vinculada — se uma bateria (raro, mas
+  // possível) tiver mais de uma avaliação registrada pra mesma operação,
+  // pega a mais recente. "dados" já traz os painéis embutidos.
+  const avRow = db.prepare(
+    'SELECT dados FROM avaliacoes_qualidade WHERE id_operacao = ? ORDER BY registrado_em DESC LIMIT 1'
+  ).get(idOperacao);
+  const avaliacao = avRow ? JSON.parse(avRow.dados) : null;
+
+  return { operacao, bercosVisuais, tracos, avaliacao };
+}
+module.exports.detalheOperacao = detalheOperacao;
 
 /**
  * Grava uma avaliação de qualidade JÁ REGISTRADA (definitiva, não
@@ -614,22 +872,113 @@ module.exports.criarBercosVisuaisIniciais = criarBercosVisuaisIniciais;
  * uma falha de rede, por exemplo), sobrescreve em vez de duplicar ou
  * rejeitar — idempotente, mesmo espírito das outras rotas de baixa
  * fricção do sistema.
+ *
+ * Grava TAMBÉM em avaliacao_paineis, na mesma transação — mesmos dados,
+ * só que extraídos numa tabela própria pra dar pra consultar em SQL
+ * direto (ver comentário na CREATE TABLE, acima). "dados" continua
+ * sendo a fonte de verdade (é o que o front lê de volta); avaliacao_
+ * paineis é só uma cópia derivada, pra consulta — se um dia os dois
+ * ficarem inconsistentes por qualquer motivo, dados é quem manda.
  * @param {object} avaliacao - objeto inteiro vindo do front (evalObj + paineis)
  */
 const SQL_SALVAR_AVALIACAO_QUALIDADE = `
   INSERT OR REPLACE INTO avaliacoes_qualidade (id, id_operacao, id_bateria, turno, registrado_em, dados)
   VALUES (@id, @id_operacao, @id_bateria, @turno, @registrado_em, @dados)
 `;
+const SQL_SALVAR_PAINEIS_AVALIACAO = `
+  INSERT OR REPLACE INTO avaliacao_paineis (id_avaliacao, id_operacao, id_bateria, registrado_em, paineis)
+  VALUES (@id_avaliacao, @id_operacao, @id_bateria, @registrado_em, @paineis)
+`;
+// Deixa cada painel só com os campos que interessam pra consulta — evita
+// carregar "avaliacaoId" repetido em cada item (já é a chave da linha
+// toda, ver id_avaliacao) e qualquer campo extra que apareça no futuro
+// sem que aqui saiba o que fazer com ele.
+function _normalizarPaineisParaSql(paineis) {
+  return (paineis || []).map(p => ({
+    pallet: p.pallet, posicao: p.posicao,
+    tipoEsperado: p.tipoEsperado || null, tipoObtido: p.tipoObtido || null,
+    resultado: p.resultado || null, linha: p.linha || null,
+    marcas: p.marcas || [],
+  }));
+}
 function salvarAvaliacaoQualidade(avaliacao) {
-  db.prepare(SQL_SALVAR_AVALIACAO_QUALIDADE).run({
+  const params = {
     id: avaliacao.id,
     id_operacao: avaliacao.linkedOperacaoId || null,
     id_bateria: avaliacao.batteryId || null,
     turno: avaliacao.turno || null,
     registrado_em: avaliacao.registeredAt || new Date().toISOString(),
     dados: JSON.stringify(avaliacao),
+  };
+  const gravarTudo = db.transaction(() => {
+    db.prepare(SQL_SALVAR_AVALIACAO_QUALIDADE).run(params);
+    db.prepare(SQL_SALVAR_PAINEIS_AVALIACAO).run({
+      id_avaliacao: params.id,
+      id_operacao: params.id_operacao,
+      id_bateria: params.id_bateria,
+      registrado_em: params.registrado_em,
+      paineis: JSON.stringify(_normalizarPaineisParaSql(avaliacao.paineis)),
+    });
   });
+  gravarTudo();
 }
+
+/**
+ * Lista os painéis já normalizados (avaliacao_paineis), 1 item por
+ * avaliação — usado por futuras telas de análise/cruzamento (mesmo
+ * padrão de relatorioBercos()/correlacaoTracoBerco()), sem precisar
+ * carregar avaliacoes_qualidade.dados inteiro (que tem também
+ * observações, datas de montagem/enchimento/desmoldagem etc. — dados
+ * que quem só quer os painéis não precisa processar).
+ */
+function listarPaineisAvaliacao() {
+  const rows = db.prepare(
+    'SELECT id_avaliacao, id_operacao, id_bateria, registrado_em, paineis FROM avaliacao_paineis ORDER BY registrado_em DESC'
+  ).all();
+  return rows.map(r => ({
+    id_avaliacao: r.id_avaliacao,
+    id_operacao: r.id_operacao,
+    id_bateria: r.id_bateria,
+    registrado_em: r.registrado_em,
+    paineis: JSON.parse(r.paineis),
+  }));
+}
+
+/**
+ * Migração única: preenche avaliacao_paineis a partir de avaliações que
+ * já estavam em avaliacoes_qualidade ANTES desta tabela existir — sem
+ * isso, só avaliações registradas DAQUI PRA FRENTE apareceriam nela; as
+ * já registradas ficariam de fora até alguém reabrir/regravar cada uma
+ * manualmente. Roda 1 vez (INSERT OR IGNORE — não sobrescreve linhas que
+ * já existirem, então rodar de novo em outra subida do servidor não faz
+ * nada além de reconferir).
+ */
+function _migrarPaineisAvaliacaoExistentes() {
+  const jaExistem = new Set(
+    db.prepare('SELECT id_avaliacao FROM avaliacao_paineis').all().map(r => r.id_avaliacao)
+  );
+  const pendentes = db.prepare('SELECT id, id_operacao, id_bateria, registrado_em, dados FROM avaliacoes_qualidade').all()
+    .filter(r => !jaExistem.has(r.id));
+  if (!pendentes.length) return;
+
+  const migrarTudo = db.transaction((linhas) => {
+    const inserir = db.prepare(SQL_SALVAR_PAINEIS_AVALIACAO);
+    for (const r of linhas) {
+      let avaliacao;
+      try { avaliacao = JSON.parse(r.dados); } catch (e) { continue; } // linha corrompida — pula, não trava a migração inteira
+      inserir.run({
+        id_avaliacao: r.id,
+        id_operacao: r.id_operacao,
+        id_bateria: r.id_bateria,
+        registrado_em: r.registrado_em,
+        paineis: JSON.stringify(_normalizarPaineisParaSql(avaliacao.paineis)),
+      });
+    }
+  });
+  migrarTudo(pendentes);
+  console.log(`[avaliacao_paineis] Migração: ${pendentes.length} avaliação(ões) já registrada(s) antes desta tabela existir foram preenchidas agora.`);
+}
+_migrarPaineisAvaliacaoExistentes();
 
 /**
  * Lista todas as avaliações de qualidade já registradas, mais recentes
@@ -643,8 +992,30 @@ function listarAvaliacoesQualidade() {
   ).all();
   return rows.map(r => JSON.parse(r.dados));
 }
+/**
+ * Substitui TODO o conteúdo de avaliacoes_qualidade pelo array informado
+ * (mesmo formato de listarAvaliacoesQualidade — cada item é a avaliação
+ * inteira, painéis inclusos) — usado por /restaurar-backup-dados, mesmo
+ * padrão "apaga tudo e reinsere" das outras tabelas. Quem chama é
+ * responsável por envolver numa db.transaction().
+ */
+function substituirAvaliacoesQualidade(lista) {
+  db.prepare('DELETE FROM avaliacoes_qualidade').run();
+  // avaliacao_paineis não é apagada em cascata automaticamente (SQLite
+  // só reforça FK se PRAGMA foreign_keys estiver ligado, e mesmo assim
+  // isso é REFERENCES, não "ON DELETE CASCADE") — sem esta linha, uma
+  // restauração com MENOS avaliações do que existia antes deixaria
+  // painéis órfãos de avaliações que não voltaram no backup.
+  db.prepare('DELETE FROM avaliacao_paineis').run();
+  for (const avaliacao of (lista || [])) {
+    salvarAvaliacaoQualidade(avaliacao); // já grava nas 2 tabelas, ver acima
+  }
+}
+
 module.exports.salvarAvaliacaoQualidade = salvarAvaliacaoQualidade;
 module.exports.listarAvaliacoesQualidade = listarAvaliacoesQualidade;
+module.exports.listarPaineisAvaliacao = listarPaineisAvaliacao;
+module.exports.substituirAvaliacoesQualidade = substituirAvaliacoesQualidade;
 
 // ============================================================
 //  Migração automática (Fase 2): historico.json -> tabela operacoes
