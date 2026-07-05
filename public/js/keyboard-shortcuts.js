@@ -101,6 +101,51 @@
     },
   ];
 
+  /**
+   * Atalhos que EXISTEM no sistema mas não fazem parte deste módulo —
+   * cada um é tratado localmente por outra tela (Setor de Qualidade,
+   * Registro de Baterias, Registro de Operação, Relatório de Berços...),
+   * então não são remapeáveis nem disparados por aqui. Ficam catalogados
+   * SÓ como referência/guia — pra quem consulta Configurações → Atalhos
+   * de Teclado (ou o modal de ajuda, F1) enxergar TODOS os atalhos do
+   * sistema num único lugar, editáveis ou não. Pra registrar um atalho
+   * não-editável novo no futuro, basta uma entrada aqui — nenhuma outra
+   * mudança neste arquivo é necessária (ver cfgRenderAtalhos, app-core.js,
+   * e _buildHelpModal, mais abaixo, que já leem esta lista).
+   */
+  const REFERENCIA_CONFIG = [
+    {
+      icon: '🔎',
+      combo: 'Ctrl + clique',
+      contexto: 'Registro de Baterias',
+      descricao: 'Abre a Análise Focada da operação clicada — funciona em qualquer modo (normal, foco ou edição).',
+    },
+    {
+      icon: '🖱',
+      combo: 'Segurar Ctrl',
+      contexto: 'Relatório de Berços',
+      descricao: 'Com o mouse sobre uma linha, mostra o popover de detalhes daquela operação (só em dispositivos com mouse/ponteiro fino).',
+    },
+    {
+      icon: '🎨',
+      combo: '1, 2, 3...',
+      contexto: 'Setor de Qualidade → Avaliação',
+      descricao: 'Seleciona a cor de marcação, na ordem em que as cores aparecem na tela.',
+    },
+    {
+      icon: '◆',
+      combo: 'Ctrl + 1, 2, 3...',
+      contexto: 'Setor de Qualidade → Avaliação',
+      descricao: 'Seleciona a forma de marcação (círculo, traço...), na ordem em que aparecem na tela.',
+    },
+    {
+      icon: '🔲',
+      combo: '1-9, 0, Ctrl+1-9, Ctrl+0',
+      contexto: 'Registro de Operação → Grade de Montagem Personalizada',
+      descricao: 'Seleciona o tipo de montagem simples cadastrado (até 20 tipos), na ordem em que aparecem nas abas.',
+    },
+  ];
+
   /* ──────────────────────────────────────────────────────────
    * 2. ESTADO INTERNO
    * ────────────────────────────────────────────────────────── */
@@ -509,6 +554,15 @@
       </tr>`;
     }).join('');
 
+    // Atalhos não-editáveis (ver REFERENCIA_CONFIG) — cada linha aqui é só
+    // documentação; quem trata a tecla de verdade é a tela indicada em
+    // "contexto", não este módulo.
+    const refRows = REFERENCIA_CONFIG.map(r => `
+      <tr>
+        <td><kbd>${r.combo}</kbd></td>
+        <td class="kb-help-desc"><strong>${r.icon} ${r.contexto}</strong><br>${r.descricao}</td>
+      </tr>`).join('');
+
     const modal = document.createElement('div');
     modal.id = 'kb-help-modal';
     modal.setAttribute('aria-modal', 'true');
@@ -546,6 +600,12 @@
               </tbody>
             </table>
           </div>
+        </div>
+        <div class="kb-help-referencia-wrap">
+          <div class="kb-help-section-label">Outros atalhos do sistema (referência — não editáveis por aqui)</div>
+          <table class="kb-help-table">
+            <tbody>${refRows}</tbody>
+          </table>
         </div>
         <div class="kb-help-footer">
           Atalhos não disparam quando você está digitando em campos de texto.
@@ -762,6 +822,17 @@
       display: flex;
       justify-content: space-around;
     }
+    /* Bloco de referência (atalhos não-editáveis) — largura total, abaixo
+       das 2 colunas de kb-help-body, mesmo respiro horizontal delas. */
+    .kb-help-referencia-wrap {
+      padding: 0 24px 4px;
+      border-top: 1px solid var(--border, #2a2f3a);
+      padding-top: 16px;
+    }
+    .kb-help-referencia-wrap .kb-help-table td:first-child {
+      width: 30%;
+      white-space: normal;
+    }
     .kb-help-section-label {
       font-size: .68rem;
       text-transform: uppercase;
@@ -849,6 +920,10 @@
 
     /** Lista todos os atalhos remapeáveis, já com o combo efetivo calculado. */
     listarAtalhos: _todosAtalhos,
+    /** Lista os atalhos NÃO-editáveis catalogados só como referência/guia
+     * (ver REFERENCIA_CONFIG, acima) — cada um vive de verdade em outra
+     * tela; aqui é só a documentação central deles. */
+    listarReferencia: () => REFERENCIA_CONFIG.slice(),
     /** Define um novo combo pra um atalho (por id). Se houver conflito,
      * devolve { ok:false, conflito } em vez de aplicar — passe
      * { substituirConflito: true } pra confirmar e liberar o atalho antigo. */

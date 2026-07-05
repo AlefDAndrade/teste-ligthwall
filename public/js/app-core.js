@@ -1565,8 +1565,25 @@
       const todos = LWKeyboard.listarAtalhos();
       const elNav = document.getElementById('cfg-atalhos-navegacao');
       const elAcoes = document.getElementById('cfg-atalhos-acoes');
+      const elRef = document.getElementById('cfg-atalhos-referencia');
       if (elNav) elNav.innerHTML = todos.filter(a => a.grupo === 'navegacao').map(_cfgLinhaAtalho).join('');
       if (elAcoes) elAcoes.innerHTML = todos.filter(a => a.grupo === 'acao').map(_cfgLinhaAtalho).join('');
+      // Atalhos NÃO-editáveis (ver REFERENCIA_CONFIG, keyboard-shortcuts.js)
+      // — cada um vive de verdade em outra tela (Setor de Qualidade,
+      // Registro de Baterias etc.); aqui é só a documentação central
+      // deles, por isso sem botão "Alterar" (ver _cfgLinhaReferencia).
+      if (elRef && typeof LWKeyboard.listarReferencia === 'function') {
+        elRef.innerHTML = LWKeyboard.listarReferencia().map(_cfgLinhaReferencia).join('');
+      }
+    }
+
+    function _cfgLinhaReferencia(r) {
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px;flex-wrap:wrap">
+          <span style="font-size:.84rem;color:var(--text-2)">${r.icon} <strong>${r.contexto}</strong><br><span style="font-size:.76rem;color:var(--text-3)">${r.descricao}</span></span>
+          <kbd style="display:inline-block;padding:2px 9px;font-family:var(--font-mono);font-size:.74rem;color:var(--text);background:var(--bg-2);border:1px solid var(--border-2);border-radius:4px;white-space:nowrap">${r.combo}</kbd>
+        </div>
+      `;
     }
 
     function _cfgLinhaAtalho(a) {
