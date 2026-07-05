@@ -600,7 +600,7 @@
     _renderParadasBreakdown(disp, _resumoParadas(paradas));
 
     const porTurno = calcularPorTurnoInstancia(historico, tracos, paradas);
-    const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'ºT').replace('º TURNO', 'ºT')}`);
+    const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'T')}`);
     requestAnimationFrame(() => _drawBarChart('oee-chart-turnos', labels, porTurno.map(t => t.oeePct), C.accent));
     _renderTabelaTurnos(porTurno);
 
