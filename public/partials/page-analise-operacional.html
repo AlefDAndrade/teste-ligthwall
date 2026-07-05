@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
+<!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
         <h1 class="page-title">Análise <span>Operacional</span></h1>
@@ -6,6 +6,11 @@
       </div>
 
       <div class="page-body">
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('registro')" title="Voltar para a tabela de Registro de Baterias">
+            📋 Ver Tabela</button>
+        </div>
 
         <!-- Loading / Empty states -->
         <div id="ao-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando dados...
@@ -34,7 +39,7 @@
           <div style="display:grid;grid-template-columns:repeat(3,1fr) 2fr;gap:16px;margin-bottom:20px">
 
             <!-- Coluna 1: Produção -->
-            <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;flex-direction:column-reverse;gap:12px">
               <div class="kpi-card" style="flex:1">
                 <div class="kpi-label">Produção Total</div>
                 <div class="kpi-value accent" id="ao-kpi-m2" style="font-size:1.7rem">—</div>
@@ -45,16 +50,21 @@
                 <div class="kpi-value" id="ao-kpi-paineis" style="font-size:1.7rem">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">unidades no período</div>
               </div>
+              <div class="kpi-card" style="flex:1" data-tooltip="Total de operações no período filtrado — cada operação corresponde a 1 bateria produzida.">
+                <div class="kpi-label">Baterias Produzidas</div>
+                <div class="kpi-value" id="ao-kpi-baterias" style="font-size:1.7rem">—</div>
+                <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações no período</div>
+              </div>
             </div>
 
             <!-- Coluna 2: Ciclo -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Média do tempo de todas as operações do período. Referência ideal: 45 min.">
                 <div class="kpi-label">Tempo Médio de Ciclo</div>
                 <div class="kpi-value" id="ao-kpi-ciclo" style="font-size:1.5rem;font-family:var(--font-mono)">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">referência: 45 min</div>
               </div>
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Tempo médio de cada bateria individualmente — ver Ranking de Baterias, abaixo, para o detalhe por bateria.">
                 <div class="kpi-label">Tempo Médio / Bateria</div>
                 <div class="kpi-value" id="ao-kpi-tempo-bat" style="font-size:1.5rem;font-family:var(--font-mono)">—
                 </div>
@@ -64,12 +74,12 @@
 
             <!-- Coluna 3: Atrasos -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card red" style="flex:1">
+              <div class="kpi-card red" style="flex:1" data-tooltip="% de operações do período marcadas com atraso (houve_atraso = SIM).">
                 <div class="kpi-label">Taxa de Atrasos</div>
                 <div class="kpi-value red" id="ao-kpi-atraso-pct" style="font-size:1.7rem">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações com atraso</div>
               </div>
-              <div class="kpi-card" style="flex:1;border-left:3px solid var(--red)">
+              <div class="kpi-card" style="flex:1;border-left:3px solid var(--red)" data-tooltip="Soma do tempo excedente acima de 59 min em operações com atraso, convertida em horas.">
                 <div class="kpi-label">Horas Perdidas</div>
                 <div class="kpi-value" id="ao-kpi-horas-perd" style="font-size:1.7rem;color:var(--red)">—</div>
                 <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">excedente acima de 59 min</div>
@@ -78,7 +88,7 @@
 
             <!-- Coluna 4: Eficiência + Melhores/Piores -->
             <div style="display:flex;flex-direction:column;gap:12px">
-              <div class="kpi-card" style="flex:1">
+              <div class="kpi-card" style="flex:1" data-tooltip="Eficiência = (100% − Taxa de Atrasos) × 0,6 + Eficiência de Tempo × 0,4.&#10;Eficiência de Tempo = 45 min ÷ tempo médio de ciclo (limitado a 100%).">
                 <div class="kpi-label">Eficiência Operacional</div>
                 <div class="kpi-value green" id="ao-kpi-eficiencia" style="font-size:2.2rem">—</div>
                 <div style="background:var(--bg-3);border-radius:4px;height:6px;margin-top:8px;overflow:hidden">
@@ -86,11 +96,11 @@
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1">
-                <div class="kpi-card" style="border-top:3px solid var(--green)">
+                <div class="kpi-card" style="border-top:3px solid var(--green)" data-tooltip="Ranking por bateria: 100 − % de atrasos − (excedente sobre 45 min ÷ 45 min × 30). Fórmula diferente da Eficiência Operacional geral, ao lado.">
                   <div class="kpi-label">🥇 Melhor Bateria</div>
                   <div class="kpi-value green" id="ao-kpi-melhor-bat" style="font-size:1.5rem">—</div>
                 </div>
-                <div class="kpi-card" style="border-top:3px solid var(--red)">
+                <div class="kpi-card" style="border-top:3px solid var(--red)" data-tooltip="Ranking por bateria: 100 − % de atrasos − (excedente sobre 45 min ÷ 45 min × 30). Fórmula diferente da Eficiência Operacional geral, ao lado.">
                   <div class="kpi-label">⚠️ Pior Bateria</div>
                   <div class="kpi-value red" id="ao-kpi-pior-bat" style="font-size:1.5rem">—</div>
                 </div>
@@ -198,4 +208,3 @@
 
       </div><!-- .page-body -->
     </main>
-

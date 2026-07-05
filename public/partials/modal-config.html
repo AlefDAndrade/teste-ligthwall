@@ -1,4 +1,4 @@
-  <!-- ============ MODAL CONFIGURAÇÕES ============ -->
+<!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -28,6 +28,9 @@
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔒 Autorizados</button>
+          <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🤖 Automação</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -230,9 +233,35 @@
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
+          <!-- ========== SEÇÃO: Automação ========== -->
+          <div id="cfg-secao-automacao" style="display:block">
+            <div class="card-title">🤖 Modo Automático</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Quando ativado, os campos de insumo dos traços em <strong>Registrar Operação</strong> passam a ser
+              preenchidos automaticamente conforme leituras chegam de fora (balança/CLP, via Modbus TCP) — em vez
+              de digitados à mão. Ainda dá pra digitar manualmente enquanto nenhuma leitura chega.
+            </p>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div>
+                <div style="font-size:.85rem;color:var(--text);font-weight:600;margin-bottom:2px">Modo Automático</div>
+                <div style="font-size:.74rem;color:var(--text-3)">Exige a senha de Administrador pra ligar ou desligar.</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" id="cfg-toggle-automatico" onchange="cfgToggleModoAutomatico(this)">
+                <span class="switch-slider"></span>
+              </span>
+            </div>
+
+            <p style="font-size:.74rem;color:var(--text-3);margin-top:14px;margin-bottom:0">
+              💡 A coleta automática (leitura do CLP) ainda não está conectada — ver README, "Modo Automático",
+              pra status e o que falta.
+            </p>
+          </div>
+          <!-- ========== /SEÇÃO: Automação ========== -->
+
         </div>
       </div>
 
     </div>
   </div>
-

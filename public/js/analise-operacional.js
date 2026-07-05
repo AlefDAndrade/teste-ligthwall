@@ -58,15 +58,6 @@
     });
   }
 
-  // ── Cálculo de semana ISO ─────────────────────────────────
-  function semanaISO(ds) {
-    const d = new Date(ds);
-    d.setHours(0,0,0,0);
-    d.setDate(d.getDate() + 4 - (d.getDay()||7));
-    const y = new Date(d.getFullYear(),0,1);
-    return Math.ceil((((d-y)/86400000)+1)/7);
-  }
-
   // ── Motor principal de KPIs ───────────────────────────────
   function calcularKPIs(dados) {
     const n = dados.length;
@@ -220,7 +211,7 @@
       insights.push({
         tipo: 'danger',
         icon: '🔴',
-        texto: `A bateria <strong>${b.bat}</strong> tem ${mult}× mais atrasos que a média (${b.pctAtraso.toFixed(0)}% vs ${mediaAtraso.toFixed(0)}% geral).`
+        texto: `A bateria <strong>${LW.escaparHtml(b.bat)}</strong> tem ${mult}× mais atrasos que a média (${b.pctAtraso.toFixed(0)}% vs ${mediaAtraso.toFixed(0)}% geral).`
       });
     });
 
@@ -230,7 +221,7 @@
       insights.push({
         tipo: top.pct > 40 ? 'danger' : 'warning',
         icon: '⚠️',
-        texto: `O motivo <strong>${top.motivo}</strong> representa <strong>${top.pct.toFixed(0)}%</strong> de todos os atrasos (${top.qtd} ocorrências).`
+        texto: `O motivo <strong>${LW.escaparHtml(top.motivo)}</strong> representa <strong>${top.pct.toFixed(0)}%</strong> de todos os atrasos (${top.qtd} ocorrências).`
       });
     }
 
@@ -254,7 +245,7 @@
       insights.push({
         tipo: 'warning',
         icon: '⚡',
-        texto: `Bateria <strong>${b.bat}</strong> apresenta tendência de piora — atrasos crescendo nas operações mais recentes.`
+        texto: `Bateria <strong>${LW.escaparHtml(b.bat)}</strong> apresenta tendência de piora — atrasos crescendo nas operações mais recentes.`
       });
     });
 
@@ -293,7 +284,7 @@
         insights.push({
           tipo: 'info',
           icon: '🔩',
-          texto: `Montagem <strong>${worst.m}</strong> tem ${worst.pct.toFixed(0)}% de atrasos vs ${best.pct.toFixed(0)}% em <strong>${best.m}</strong> — diferença expressiva.`
+          texto: `Montagem <strong>${LW.escaparHtml(worst.m)}</strong> tem ${worst.pct.toFixed(0)}% de atrasos vs ${best.pct.toFixed(0)}% em <strong>${LW.escaparHtml(best.m)}</strong> — diferença expressiva.`
         });
       }
     }
@@ -309,7 +300,7 @@
       insights.push({
         tipo: 'info',
         icon: '📐',
-        texto: `Painéis de <strong>${td.d}</strong> têm o maior tempo médio de ciclo: <strong>${td.tm.toFixed(0)} min</strong> por operação.`
+        texto: `Painéis de <strong>${LW.escaparHtml(td.d)}</strong> têm o maior tempo médio de ciclo: <strong>${td.tm.toFixed(0)} min</strong> por operação.`
       });
     }
 
@@ -318,7 +309,7 @@
       insights.push({
         tipo: 'success',
         icon: '🥇',
-        texto: `<strong>${melhorBateria.bat}</strong> é a bateria mais eficiente do período (${melhorBateria.eficiencia.toFixed(0)}% eficiência, ${melhorBateria.pctAtraso.toFixed(0)}% atrasos).`
+        texto: `<strong>${LW.escaparHtml(melhorBateria.bat)}</strong> é a bateria mais eficiente do período (${melhorBateria.eficiencia.toFixed(0)}% eficiência, ${melhorBateria.pctAtraso.toFixed(0)}% atrasos).`
       });
     }
 
@@ -344,14 +335,18 @@
   }
 
   // Gráfico de barras coloridas
-  function drawBar(id, labels, values, colors, h = 180, showValues = true) {
+  // formatarTooltip(valor, label, idx) -> texto do hover/toque; se omitido,
+  // usa "label: valor" genérico. Ver LW.tooltip.ligarHoverCanvas (js/tooltip.js).
+  function drawBar(id, labels, values, colors, h = 180, showValues = true, formatarTooltip = null) {
     const c = setupCanvas(id, h);
     if (!c) return;
     const {ctx, w} = c;
+    const canvasEl = document.getElementById(id);
     const pad = {top:24, right:12, bottom:32, left:42};
     const cw = w - pad.left - pad.right;
     const ch = c.h - pad.top - pad.bottom;
     const max = Math.max(...values, 1);
+    const areas = []; // hover/toque — 1 retângulo de detecção por barra (coluna inteira, não só a parte preenchida)
 
     // grid
     ctx.strokeStyle = C.border; ctx.lineWidth = 1;
@@ -412,14 +407,34 @@
         ctx.textAlign = 'center';
         ctx.fillText(lbl, x+bw/2, c.h-8);
       }
+
+      // Área de detecção do hover/toque: a coluna inteira (topo do gráfico
+      // até a base), não só o retângulo preenchido — mais fácil de acertar
+      // em barras pequenas/valor baixo, e cobre também o texto do label que
+      // por vezes é omitido (step acima) — o hover sempre revela qual é.
+      areas.push({
+        x, w: bw, y: pad.top, yBase: pad.top + ch,
+        texto: formatarTooltip ? formatarTooltip(values[i], lbl, i) : `${lbl}: ${values[i] >= 100 ? Math.round(values[i]) : values[i].toFixed(1)}`,
+      });
+    });
+
+    canvasEl._areasHoverAO = areas;
+    LW.tooltip.ligarHoverCanvas(canvasEl, (x, y) => {
+      const a = (canvasEl._areasHoverAO || []).find(a => x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.yBase);
+      return a ? a.texto : null;
     });
   }
 
   // Gráfico de linha dupla
-  function drawDualLine(id, labels, data1, data2, col1, col2, label1, label2, h = 180) {
+  // montarTooltip(idx, label) -> texto do hover/toque; recebe o ÍNDICE (não
+  // o valor já escalado pra caber no mesmo gráfico — ver renderTendencias,
+  // que passa trendTempo/2 só pra desenho, mas quer mostrar o valor real
+  // no hover). Se omitido, usa os valores de data1/data2 direto.
+  function drawDualLine(id, labels, data1, data2, col1, col2, label1, label2, h = 180, montarTooltip = null) {
     const c = setupCanvas(id, h);
     if (!c) return;
     const {ctx, w} = c;
+    const canvasEl = document.getElementById(id);
     const pad = {top:30, right:12, bottom:32, left:42};
     const cw = w - pad.left - pad.right;
     const ch = c.h - pad.top - pad.bottom;
@@ -481,6 +496,24 @@
       ctx.textAlign = 'center';
       ctx.fillText(lbl, x, c.h-6);
     });
+
+    // Pontos de hover/toque — 1 por posição no eixo X (cobre os meses cujo
+    // label foi omitido acima por falta de espaço — o hover sempre revela
+    // qual é), texto com os 2 valores daquele mês.
+    const stepX = cw/(labels.length-1||1);
+    const pontos = labels.map((lbl, i) => ({
+      x: pad.left + i*stepX,
+      texto: montarTooltip ? montarTooltip(i, lbl) : `${lbl}\n${label1}: ${data1[i]}\n${label2}: ${data2[i]}`,
+    }));
+    canvasEl._pontosHoverAO = pontos;
+    LW.tooltip.ligarHoverCanvas(canvasEl, (x) => {
+      let melhor = null, melhorDist = 22; // raio de detecção em px, só no eixo X
+      (canvasEl._pontosHoverAO || []).forEach(p => {
+        const d = Math.abs(x - p.x);
+        if (d < melhorDist) { melhorDist = d; melhor = p; }
+      });
+      return melhor ? melhor.texto : null;
+    });
   }
 
   // Gráfico de barras horizontais
@@ -493,30 +526,35 @@
       return `
         <div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span style="font-size:.82rem;color:${C.text};font-weight:600">${item.label}</span>
+            <span style="font-size:.82rem;color:${C.text};font-weight:600">${LW.escaparHtml(item.label)}</span>
             <span style="font-size:.82rem;color:${barColor};font-family:'JetBrains Mono',monospace;font-weight:700">${item.display}</span>
           </div>
           <div style="background:${C.bg3};border-radius:4px;height:8px;overflow:hidden">
             <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1)"></div>
           </div>
-          ${item.sub ? `<div style="font-size:.74rem;color:${C.text3};margin-top:2px">${item.sub}</div>` : ''}
+          ${item.sub ? `<div style="font-size:.74rem;color:${C.text3};margin-top:2px">${LW.escaparHtml(item.sub)}</div>` : ''}
         </div>`;
     }).join('');
   }
 
   // ── Renderização principal ─────────────────────────────────
   async function render() {
-    // Busca os dados do historico.json se ainda não estiverem carregados
-    if (!LW.historico) {
-      try {
-        const res = await fetch('db/historico.json');
-        if (res.ok) LW.historico = await res.json();
-      } catch (err) {
-        console.error("Erro ao carregar historico.json:", err);
-      }
+    // Busca historico.json sempre fresco — diferente de uma versão anterior
+    // deste código, que guardava o resultado em LW.historico e nunca
+    // buscava de novo na mesma sessão (mesmo trocando os filtros de data ou
+    // saindo/voltando pra esta tela). Isso fazia a página continuar
+    // mostrando dados desatualizados depois de qualquer operação registrada
+    // ou editada após a primeira visita. Todas as outras telas (Registro de
+    // Baterias, Relatório de Injeção, CEP) já buscavam fresco a cada visita
+    // — este módulo só foi alinhado ao mesmo padrão.
+    let dados = [];
+    try {
+      const res = await fetch('db/historico.json');
+      if (res.ok) dados = await res.json();
+    } catch (err) {
+      console.error("Erro ao carregar historico.json:", err);
     }
 
-    const dados = LW.historico || [];
     if (!dados.length) {
       document.getElementById('ao-loading').style.display = 'block';
       return;
@@ -560,6 +598,7 @@
 
     set('ao-kpi-m2',         fmt(kpi.totalM2, 0) + '<span style="font-size:.9rem"> m²</span>');
     set('ao-kpi-paineis',    kpi.totalPaineis.toLocaleString('pt-BR'));
+    set('ao-kpi-baterias',   kpi.n.toLocaleString('pt-BR'));
     set('ao-kpi-ciclo',      fmtMin(kpi.tempoMedio));
     set('ao-kpi-atraso-pct', fmt(kpi.taxaAtraso, 1) + '<span style="font-size:.9rem">%</span>');
     set('ao-kpi-horas-perd', fmt(kpi.horasPerdidas, 1) + '<span style="font-size:.9rem"> h</span>');
@@ -637,7 +676,7 @@
             return `
               <tr style="border-bottom:1px solid ${C.border};${isFirst?'background:rgba(16,185,129,.04)':''}${isLast?'background:rgba(239,68,68,.04)':''}">
                 <td style="padding:10px 10px;font-weight:700;color:${C.text}">
-                  ${isFirst ? '🥇 ' : isLast ? '⚠️ ' : ''}${b.bat}
+                  ${isFirst ? '🥇 ' : isLast ? '⚠️ ' : ''}${LW.escaparHtml(b.bat)}
                 </td>
                 <td style="text-align:center;padding:10px;color:${C.text2};font-family:'JetBrains Mono',monospace">${b.ops}</td>
                 <td style="text-align:center;padding:10px;color:${C.text2};font-family:'JetBrains Mono',monospace">${fmtMin(b.tempoMedio)}</td>
@@ -667,7 +706,8 @@
     const labels = kpi.rankBaterias.map(b=>b.bat);
     const vals   = kpi.rankBaterias.map(b=>b.ops);
     const cols   = kpi.rankBaterias.map(b=> b.eficiencia >= 80 ? C.green : b.eficiencia >= 60 ? C.accent : C.red);
-    setTimeout(() => drawBar('ao-chart-bat-ops', labels, vals, cols), 50);
+    setTimeout(() => drawBar('ao-chart-bat-ops', labels, vals, cols, 180, true,
+      (valor, lbl) => `${lbl}: ${valor} operaç${valor === 1 ? 'ão' : 'ões'}`), 50);
   }
 
   // ── Ranking Motivos ───────────────────────────────────────
@@ -699,19 +739,22 @@
       const c = LW.corMontagemPorLabel(m);
       return c.hibrida ? { hibrida: true, cor1: c.cor1, cor2: c.cor2 } : c.cor;
     });
-    setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160), 50);
+    setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)}% de atraso`), 50);
 
     // Dimensão x Tempo
     const dimEntries = Object.entries(kpi.corDimensao);
     const dimLabels  = dimEntries.map(([d])=>d);
     const dimTempo   = dimEntries.map(([,v]) => v.tempos.length ? v.tempos.reduce((a,b)=>a+b,0)/v.tempos.length : 0);
-    setTimeout(() => drawBar('ao-cor-dimensao', dimLabels, dimTempo, C.blue, 160), 50);
+    setTimeout(() => drawBar('ao-cor-dimensao', dimLabels, dimTempo, C.blue, 160, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)} min em média`), 50);
 
     // Bateria x Tempo médio
     const batLabels = kpi.rankBaterias.map(b=>b.bat);
     const batTempo  = kpi.rankBaterias.map(b=>b.tempoMedio);
     const batCols   = kpi.rankBaterias.map(b => b.tempoMedio > 59 ? C.red : b.tempoMedio > 50 ? C.accent : C.green);
-    setTimeout(() => drawBar('ao-cor-bat-tempo', batLabels, batTempo, batCols, 180), 50);
+    setTimeout(() => drawBar('ao-cor-bat-tempo', batLabels, batTempo, batCols, 180, true,
+      (valor, lbl) => `${lbl}: ${valor.toFixed(0)} min em média`), 50);
   }
 
   // ── Tendências ────────────────────────────────────────────
@@ -724,7 +767,8 @@
         kpi.trendTempo.map(t => t/2), // escalar tempo para sobrepor no mesmo gráfico
         C.red, C.blue,
         '% Atrasos', 'Tempo Médio (÷2)',
-        220
+        220,
+        (i, lbl) => `${lbl}\n% Atrasos: ${kpi.trendAtraso[i].toFixed(0)}%\nTempo Médio: ${kpi.trendTempo[i].toFixed(0)} min`
       );
     }, 50);
 
@@ -741,7 +785,7 @@
           border-radius:20px;padding:5px 14px;margin:4px;
         ">
           <span style="font-size:.75rem">⚠️</span>
-          <span style="font-weight:700;color:${C.red};font-size:.84rem">${b.bat}</span>
+          <span style="font-weight:700;color:${C.red};font-size:.84rem">${LW.escaparHtml(b.bat)}</span>
           <span style="color:${C.text3};font-size:.78rem">${b.pctAtraso.toFixed(0)}% atrasos</span>
         </div>`).join('');
     }
@@ -754,7 +798,8 @@
     const m2Labels = top8.map(b=>b.bat);
     const m2Vals   = top8.map(b=>b.m2);
     const m2Cols   = top8.map(() => C.cyan);
-    setTimeout(() => drawBar('ao-prod-m2', m2Labels, m2Vals, m2Cols, 160), 50);
+    setTimeout(() => drawBar('ao-prod-m2', m2Labels, m2Vals, m2Cols, 160, true,
+      (valor, lbl) => `${lbl}: ${fmt(valor, 1)} m²`), 50);
 
     // Produção por dimensão (donut textual)
     const el = document.getElementById('ao-prod-dimensao');
@@ -773,7 +818,7 @@
       return `
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-weight:700;color:${C.text};font-size:.85rem">${d}</span>
+            <span style="font-weight:700;color:${C.text};font-size:.85rem">${LW.escaparHtml(d)}</span>
             <span style="color:${dimCols[i%dimCols.length]};font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:700">${fmt(v.m2,0)} m²</span>
           </div>
           <div style="background:${C.bg3};border-radius:4px;height:10px;overflow:hidden;margin-bottom:3px">
@@ -792,16 +837,18 @@
     // Ativa o estado de carregamento visual
     document.getElementById('ao-loading').style.display = 'block';
 
-    // Tenta carregar os dados iniciais para preencher os filtros de data
-    if (!LW.historico) {
-      try {
-        const res = await fetch('db/historico.json');
-        if (res.ok) LW.historico = await res.json();
-      } catch (e) {}
-    }
+    // Busca só pra pré-preencher os filtros de data com o intervalo real
+    // dos dados (1º registro → mais recente) — render(), chamado no final,
+    // busca os dados de novo (sempre fresco, ver comentário lá); não dá pra
+    // reaproveitar esta busca porque render() já filtra pelo que for
+    // digitado nos campos de data, que ainda não existe neste ponto.
+    let all = [];
+    try {
+      const res = await fetch('db/historico.json');
+      if (res.ok) all = await res.json();
+    } catch (e) { /* render(), abaixo, trata a falha de novo e mostra o estado vazio */ }
 
     // Prefill datas
-    const all = LW.historico || [];
     if (all.length) {
       const dates = all.map(r=>r.data).filter(Boolean).sort();
       const ini = document.getElementById('ao-data-inicio');

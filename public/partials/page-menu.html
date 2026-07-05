@@ -1,11 +1,10 @@
-    <!-- ============ PAGE: MENU ============ -->
+<!-- ============ PAGE: MENU ============ -->
     <main class="main active" id="page-menu">
       <div style="padding:40px 32px">
         <div style="margin-bottom:40px">
           <h1 style="font-size:2.6rem;margin-bottom:6px">Sistema de <span style="color:var(--accent)">Injeção</span>
           </h1>
-          <p style="color:var(--text-3);font-size:.9rem;text-transform:uppercase;letter-spacing:.08em">Lightwall SC —
-            Controle de produção industrial</p>
+          <p style="color:var(--text-3);font-size:.9rem;text-transform:uppercase;letter-spacing:.08em">teste </p>
         </div>
         <div class="menu-grid">
           <div class="menu-card" data-hide-analista onclick="showPage('operacao')">
@@ -22,27 +21,21 @@
           </div>
           <div class="menu-card" onclick="showPage('registro')">
             <div class="menu-card-icon">📋</div>
-            <div class="menu-card-title">Relatorio de Baterias</div>
-            <div class="menu-card-desc">Histórico completo de todas as injeções registradas com filtros e exportação em
-              CSV.</div>
+            <div class="menu-card-title">Operação</div>
+            <div class="menu-card-desc">Histórico completo de todas as injeções registradas, com filtros, exportação em
+              CSV e acesso à Análise Operacional.</div>
           </div>
           <div class="menu-card" onclick="showPage('relatorio')">
             <div class="menu-card-icon">🧾</div>
-            <div class="menu-card-title">Relatório de Injeção</div>
-            <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações.
-            </div>
+            <div class="menu-card-title">Traços</div>
+            <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações —
+              com acesso à Qualidade dos Traços.</div>
           </div>
-          <div class="menu-card" onclick="showPage('analise-operacional')">
-            <div class="menu-card-icon">📊</div>
-            <div class="menu-card-title">Análise Operacional</div>
-            <div class="menu-card-desc">KPIs avançados, gargalos, correlações e insights automáticos sobre a produção.
-            </div>
-          </div>
-          <div class="menu-card" onclick="showPage('qualidade-tracos')">
-            <div class="menu-card-icon">📐</div>
-            <div class="menu-card-title">Qualidade dos Traços</div>
-            <div class="menu-card-desc">Controle estatístico de processo: estabilidade de receitas, frequência de
-              ajuste por insumo e alertas de qualidade.</div>
+          <div class="menu-card" onclick="showPage('relatorio-bercos')">
+            <div class="menu-card-icon">📑</div>
+            <div class="menu-card-title">Berços</div>
+            <div class="menu-card-desc">Resultado visual (Okay/Vazou) de cada berço por bateria registrada — com acesso
+              à Análise de Berços.</div>
           </div>
           <div class="menu-card" onclick="showPage('oee')">
             <div class="menu-card-icon">🎯</div>
@@ -69,4 +62,3 @@
         </div>
       </div>
     </main>
-

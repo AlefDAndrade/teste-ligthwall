@@ -1,0 +1,200 @@
+<!-- ============ PAGE: ANÁLISE DE BERÇOS ============ -->
+    <main class="main" id="page-analise-bercos">
+      <div class="page-header">
+        <h1 class="page-title">Análise de <span>Berços</span></h1>
+        <p class="page-desc">Vazamentos por berço, montagem e bateria · Pontos recorrentes · Insights automáticos</p>
+      </div>
+
+      <div class="page-body">
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('relatorio-bercos')" title="Voltar para a tabela do Relatório de Berços">
+            📑 Ver Tabela</button>
+        </div>
+
+        <!-- Loading / Empty states -->
+        <div id="ab-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando dados...</div>
+        <div id="ab-empty" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Nenhum registro no período selecionado.</div>
+
+        <!-- Filtros -->
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">De</label>
+              <input class="form-input" type="date" id="ab-data-inicio" style="width:150px">
+            </div>
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px">
+              <label class="form-label" style="white-space:nowrap">Até</label>
+              <input class="form-input" type="date" id="ab-data-fim" style="width:150px">
+            </div>
+            <button class="btn btn-outline-accent" id="btn-ab-filtrar">Filtrar</button>
+          </div>
+        </div>
+
+        <div id="ab-content">
+
+          <!-- ═══ KPIs PRINCIPAIS ═══ -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px">
+            <div class="kpi-card red" data-tooltip="Soma de todos os lados de berço (Esquerda + Direita) marcados como 'baixou' (Vazou) no período filtrado.">
+              <div class="kpi-label">Total de Vazamentos</div>
+              <div class="kpi-value red" id="ab-kpi-total" style="font-size:1.9rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">registrados no período</div>
+            </div>
+            <div class="kpi-card" data-tooltip="Quantidade de baterias (operações) com berços visuais registrados no período.">
+              <div class="kpi-label">Baterias Analisadas</div>
+              <div class="kpi-value" id="ab-kpi-baterias" style="font-size:1.9rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">operações no período</div>
+            </div>
+            <div class="kpi-card" data-tooltip="% de todos os lados de berço avaliados (Esquerda + Direita, de todas as baterias) que vazaram.">
+              <div class="kpi-label">Taxa de Vazamento</div>
+              <div class="kpi-value accent" id="ab-kpi-taxa" style="font-size:1.9rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">sobre todos os lados avaliados</div>
+            </div>
+            <div class="kpi-card" style="border-left:3px solid var(--red)" data-tooltip="Berço (posição B1..B22) com mais ocorrências de vazamento, somando todas as baterias do período.">
+              <div class="kpi-label">Berço Mais Recorrente</div>
+              <div class="kpi-value" id="ab-kpi-berco-top" style="font-size:1.5rem">—</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">posição com mais vazamentos</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+            <div class="kpi-card" data-tooltip="Bateria (equipamento) com mais ocorrências de vazamento no período.">
+              <div class="kpi-label">🔋 Bateria Mais Problemática</div>
+              <div class="kpi-value" id="ab-kpi-bateria-top" style="font-size:1.3rem">—</div>
+            </div>
+            <div class="kpi-card" data-tooltip="Tipo de montagem (2P/SP/3T/Personalizada) com mais ocorrências de vazamento no período.">
+              <div class="kpi-label">🔩 Montagem Mais Problemática</div>
+              <div class="kpi-value" id="ab-kpi-montagem-top" style="font-size:1.3rem">—</div>
+            </div>
+            <div class="kpi-card" data-tooltip="Distribuição dos vazamentos entre o lado Esquerdo e o lado Direito dos berços.">
+              <div class="kpi-label">↔️ Vazamentos por Lado</div>
+              <div class="kpi-value" id="ab-kpi-lado" style="font-size:1.3rem">—</div>
+            </div>
+          </div>
+
+          <!-- ═══ INSIGHTS AUTOMÁTICOS ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:12px">
+              <span>💡 Insights Automáticos</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Gerados automaticamente com base nos dados do período</span>
+            </div>
+            <div id="ab-insights"></div>
+          </div>
+
+          <!-- ═══ PONTOS RECORRENTES (>3 vazamentos, mesmo berço+bateria, mesmo mês) ═══ -->
+          <div class="card" style="margin-bottom:20px;display:none;border-color:var(--red)" id="ab-hotspots-card">
+            <div class="card-title" style="margin-bottom:12px">
+              <span>🚨 Pontos de Atenção</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Mais de 3 vazamentos no mesmo berço, na mesma bateria, no mesmo mês</span>
+            </div>
+            <div class="table-wrap" style="max-height:320px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Bateria</th>
+                    <th>Berço</th>
+                    <th>Mês</th>
+                    <th>Nº de Vazamentos</th>
+                    <th title="Essa bateria teve, no mesmo mês, algum atraso já registrado com motivo Vazamento/Reinjeção?">Atraso p/ Vazamento?</th>
+                  </tr>
+                </thead>
+                <tbody id="ab-hotspots-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ═══ VAZAMENTO POR BERÇO ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:12px">
+              <span>📍 Vazamento por Berço</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">B1 a B22 — soma dos 2 lados</span>
+            </div>
+            <canvas id="ab-chart-berco" style="width:100%;height:180px;display:block"></canvas>
+          </div>
+
+          <!-- ═══ MONTAGEM + BATERIA ═══ -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+            <div class="card">
+              <div class="card-title" style="margin-bottom:12px">🔩 Vazamento por Tipo de Montagem</div>
+              <canvas id="ab-chart-montagem" style="width:100%;height:170px;display:block"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-title" style="margin-bottom:12px">
+                <span>🔋 Vazamento por Bateria</span>
+                <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Top 15</span>
+              </div>
+              <canvas id="ab-chart-bateria" style="width:100%;height:170px;display:block"></canvas>
+            </div>
+          </div>
+
+          <!-- ═══ TRAÇO INSTÁVEL × VAZAMENTO ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:4px">
+              <span>🧪 Traço Instável × Vazamento</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Cada ponto é 1 uso de traço</span>
+            </div>
+            <div style="font-size:.76rem;color:var(--text-3);margin-bottom:10px">
+              Eixo X: nº de ajustes de receita feitos naquele traço (instabilidade) · Eixo Y: % de vazamento nos
+              berços que aquele traço encheu (não da bateria inteira) · tamanho do ponto: quantos berços entraram na conta
+            </div>
+            <canvas id="ab-chart-traco-scatter" style="width:100%;height:220px;display:block"></canvas>
+          </div>
+
+          <!-- ═══ TRAÇO × BERÇO: PIORES CASOS + REFERÊNCIA ═══ -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+            <div class="card">
+              <div class="card-title" style="margin-bottom:4px;color:var(--red)">🔴 Piores Casos</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-bottom:10px">Traços com mais vazamento nos berços que encheram</div>
+              <div class="table-wrap" style="max-height:340px">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Traço</th><th>Data</th><th>Bateria</th><th>Berços</th>
+                      <th style="text-align:right">Ajustes</th><th style="text-align:right">Densid.</th>
+                      <th style="text-align:right">Flow</th><th style="text-align:right">Vazam.</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ab-traco-piores-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title" style="margin-bottom:4px;color:var(--green)">🟢 Referência — Sem Vazamento</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-bottom:10px">Traços mais estáveis (menos ajustes) sem nenhum vazamento — pra comparar a receita</div>
+              <div class="table-wrap" style="max-height:340px">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Traço</th><th>Data</th><th>Bateria</th><th>Berços</th>
+                      <th style="text-align:right">Ajustes</th><th style="text-align:right">Densid.</th>
+                      <th style="text-align:right">Flow</th><th style="text-align:right">Vazam.</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ab-traco-melhores-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ 1º TRAÇO × ÚLTIMO TRAÇO DA BATERIA ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:4px">
+              <span>🔄 1º Traço × Último Traço da Bateria</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Testa fadiga/aquecimento do molde ao longo da bateria</span>
+            </div>
+            <div id="ab-comparativo-traco" style="padding:16px 0"></div>
+          </div>
+
+          <!-- ═══ TENDÊNCIA MENSAL ═══ -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-title" style="margin-bottom:12px">
+              <span>📈 Tendência Mensal</span>
+              <span style="font-size:.74rem;color:var(--text-3);margin-left:8px">Total de vazamentos por mês</span>
+            </div>
+            <canvas id="ab-chart-mes" style="width:100%;height:180px;display:block"></canvas>
+          </div>
+
+        </div><!-- #ab-content -->
+
+      </div><!-- .page-body -->
+    </main>

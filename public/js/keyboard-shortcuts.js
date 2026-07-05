@@ -25,6 +25,14 @@
     { id: 'nav_turnos', comboPadrao: 'Alt+6', page: 'turnos', label: 'Turnos', icon: '⏳' },
     { id: 'nav_menu', comboPadrao: 'Alt+7', page: 'menu', label: 'Menu Principal', icon: '⬡' },
     { id: 'nav_oee', comboPadrao: 'Alt+8', page: 'oee', label: 'OEE', icon: '🎯' },
+    // ─── Adicionados: estas 4 páginas existiam no menu (nav-sidebar.html)
+    // mas ainda não tinham atalho de navegação. Dígitos 1-8 já estavam
+    // todos ocupados; 9 e 0 fecham a sequência numérica, e as 2 últimas
+    // (letras já sem dígito livre) usam mnemônico da inicial da página.
+    { id: 'nav_relatorio_bercos', comboPadrao: 'Alt+9', page: 'relatorio-bercos', label: 'Relatório de Berços', icon: '📑' },
+    { id: 'nav_analise_bercos', comboPadrao: 'Alt+0', page: 'analise-bercos', label: 'Análise de Berços', icon: '💧' },
+    { id: 'nav_paradas', comboPadrao: 'Alt+P', page: 'paradas', label: 'Registro de Paradas', icon: '⏸' },
+    { id: 'nav_setor_qualidade', comboPadrao: 'Alt+Q', page: 'setor-qualidade', label: 'Setor de Qualidade', icon: '🛡' },
   ];
 
   /**

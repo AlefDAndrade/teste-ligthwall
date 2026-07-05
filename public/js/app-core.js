@@ -146,6 +146,25 @@
         window._relatorioInit = true;
         LWDash.initRelatorio();
       }
+      if (pageId === 'relatorio-bercos' && !window._relatorioBercosInit) {
+        window._relatorioBercosInit = true;
+        LWBercos.init();
+      } else if (pageId === 'relatorio-bercos') {
+        LWBercos.render();
+      }
+      if (pageId === 'analise-bercos' && !window._analiseBercosInit) {
+        window._analiseBercosInit = true;
+        ABercos.init();
+      } else if (pageId === 'analise-bercos') {
+        ABercos.render();
+      }
+      // Análise Focada sempre re-renderiza (não só na 1ª vez) — cada
+      // entrada é uma operação DIFERENTE (ver LWFocada.abrir, chamado
+      // pelo modo de foco no Registro de Baterias), diferente das outras
+      // páginas aqui que mostram sempre a mesma visão geral.
+      if (pageId === 'analise-focada') {
+        LWFocada.init();
+      }
 
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
       // não faz nada se essa página não tem tour, ou se já foi visto antes
@@ -519,6 +538,11 @@
       'sobra.json':              v => v && typeof v === 'object',
       'paradas.json':            v => Array.isArray(v),
       'ajustes_tracos.json':    v => Array.isArray(v),
+      // Adicionados junto com Berços Visuais e Avaliações do Setor de
+      // Qualidade no Backup de Dados — mesma lista do servidor
+      // (VALIDADORES_BACKUP_DADOS, em server.js).
+      'bercos_visuais.json':       v => Array.isArray(v),
+      'avaliacoes_qualidade.json': v => Array.isArray(v),
     };
 
     // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -533,6 +557,8 @@
       'sobra.json': {},
       'paradas.json': [],
       'ajustes_tracos.json': [],
+      'bercos_visuais.json': [],
+      'avaliacoes_qualidade.json': [],
     };
 
     function parseArquivoRestaurar(nome, texto) {
@@ -1450,21 +1476,84 @@
       const elDados = document.getElementById('cfg-secao-dados');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
+      const elAutomacao = document.getElementById('cfg-secao-automacao');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
+      if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
       const navDados = document.getElementById('cfg-nav-dados');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
+      const navAutomacao = document.getElementById('cfg-nav-automacao');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'autorizados') cfgRenderAutorizados();
+      if (secao === 'automacao') cfgRenderAutomacao();
+    }
+
+    // ---- Automação (Configurações → Automação) ────────────────────────
+    // Reflete o estado GLOBAL já carregado pelo data.js (LW.MODO_AUTOMATICO_ATIVO)
+    // no checkbox — chamado toda vez que a seção é mostrada (ver
+    // cfgMostrarSecao, acima), pra nunca ficar dessincronizado se alguém
+    // mais mudou isso enquanto o modal estava fechado.
+    function cfgRenderAutomacao() {
+      const chk = document.getElementById('cfg-toggle-automatico');
+      if (chk) chk.checked = !!LW.MODO_AUTOMATICO_ATIVO;
+    }
+
+    /**
+     * Liga/desliga "🤖 Modo Automático" — SEMPRE pede a senha de
+     * Administrador de novo antes de aplicar, nos dois sentidos (ligar E
+     * desligar), de propósito: evita que alguém desligue sem querer
+     * enquanto passa perto do computador, e evita ligar sem intenção
+     * clara (a leitura automática passa a sobrescrever campos de insumo
+     * sozinha — ver operacao.js, _aplicarLeituraAutomatica).
+     *
+     * Reverte o checkbox visualmente ANTES de pedir a senha (otimista ao
+     * contrário: assume que vai ser cancelado, só aplica de verdade no
+     * onSuccess) — se a pessoa cancelar o modal de senha, não sobra
+     * nenhum estado("meio aplicado") pra desfazer.
+     */
+    function cfgToggleModoAutomatico(checkboxEl) {
+      const novoValor = checkboxEl.checked;
+      checkboxEl.checked = !novoValor; // desfaz na hora — só aplica de verdade após a senha
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/config/modo-automatico', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: novoValor }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok) {
+            LW.mostrarAlerta(json?.erro || 'Não foi possível salvar. Tente novamente.', { tipo: 'erro' });
+            return;
+          }
+          LW.atualizarModoAutomatico(novoValor);
+          checkboxEl.checked = novoValor;
+          LW.mostrarAlerta(
+            novoValor ? 'Modo Automático ativado.' : 'Modo Automático desativado.',
+            { tipo: 'sucesso' }
+          );
+        } catch (_) {
+          LW.mostrarAlerta('Erro de conexão ao salvar. Verifique a rede e tente novamente.', { tipo: 'erro' });
+        }
+      });
+      // Se cancelar o modal de senha, o checkbox já foi revertido acima —
+      // nada mais precisa acontecer.
     }
 
     // ---- Atalhos de Teclado (Configurações → Atalhos) ----
@@ -1883,9 +1972,23 @@
       LW.atualizarDispositivosAutorizados(novaLista);
     }
 
-    function cfgRenderAutorizados() {
+    async function cfgRenderAutorizados() {
       const meuId = LW.getDeviceId();
       const lista = LW.DISPOSITIVOS_AUTORIZADOS;
+
+      // Dono atual da operação em andamento (se houver uma rodando agora) —
+      // usado só pra marcar, na lista de autorizados, qual deles está com o
+      // controle nesse momento. Falha de rede aqui não deve travar a tela
+      // de Configurações; nesse caso, simplesmente ninguém é marcado.
+      let donoDeviceId = null;
+      try {
+        const operacaoAtual = await LW.getOperacaoAndamento();
+        if (operacaoAtual && operacaoAtual.status && operacaoAtual.status !== 'idle') {
+          donoDeviceId = operacaoAtual.donoDeviceId || null;
+        }
+      } catch (_) {
+        // sem conexão ou erro ao consultar — segue sem indicar dono
+      }
 
       // Status de "este computador" — feedback imediato de se quem está
       // olhando essa tela agora consegue (ou não) controlar a operação.
@@ -1908,6 +2011,7 @@
       <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${d.nome ? _escaparHtmlLocal(d.nome) : '(sem nome)'}</span>
       <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-2)">${_escaparHtmlLocal(d.deviceId)}</span>
       ${d.deviceId === meuId ? '<span style="font-size:.7rem;color:var(--green)">← este computador</span>' : ''}
+      ${d.deviceId === donoDeviceId ? `<span class="badge badge-green" style="font-size:.7rem;cursor:pointer;text-decoration:underline" onclick="cfgCancelarOperacaoDono('${_escaparHtmlLocal(d.deviceId)}')" title="Clique para cancelar a operação em andamento">🟢 Operando agora${d.nome ? '' : ' — ' + _escaparHtmlLocal(d.deviceId)}</span>` : ''}
       <button onclick="cfgRemoverAutorizado('${_escaparHtmlLocal(d.deviceId)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
     </div>
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum dispositivo autorizado ainda.</span>';
@@ -1918,7 +2022,56 @@
       if (inputDeviceId && !inputDeviceId.value) inputDeviceId.value = meuId;
     }
 
-    // Escape simples — esta tela não tem acesso a uma função de escape já
+    /**
+     * Clique no badge "🟢 Operando agora" (Configurações → Autorizados):
+     * cancela a operação em andamento — equivalente ao "🗑️ Limpar Tudo" de
+     * Registrar Operação, só que disparado daqui, pelo Administrador, sem
+     * precisar estar com aquela tela aberta. Nada do que foi preenchido na
+     * operação é salvo; ela simplesmente é descartada.
+     *
+     * Dupla confirmação, de propósito: primeiro a pergunta "tem certeza?"
+     * (LW.mostrarConfirmacao, mesmo padrão usado em todo o resto do app),
+     * depois a senha do Administrador (AdminAuth.abrirModal — mesmo modal
+     * usado no login, sempre pede a senha de novo, mesmo já autenticado).
+     * Só depois das duas a operação é de fato cancelada.
+     */
+    async function cfgCancelarOperacaoDono(deviceId) {
+      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
+      const identificacao = dispositivo?.nome || deviceId;
+
+      const confirmou = await LW.mostrarConfirmacao(
+        `A operação em andamento foi iniciada por "${identificacao}". Cancelar agora descarta tudo o que já foi preenchido nela — turno, traços, horários — sem salvar nada. A operação ficará liberada para qualquer dispositivo autorizado iniciar uma nova.`,
+        { titulo: 'Cancelar a operação em andamento?', textoConfirmar: 'Cancelar Operação', tipo: 'perigo', icon: '🛑' }
+      );
+      if (!confirmou) return;
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/admin/resetar-operacao', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // corpo vazio — a sessão já está no cookie (HttpOnly, SameSite=Strict),
+            // o servidor lê direto do request sem precisar de nada no body
+            body: JSON.stringify({}),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok) {
+            LW.mostrarAlerta(json?.erro || 'Não foi possível cancelar a operação. Tente novamente.', { tipo: 'erro' });
+            return;
+          }
+          LW.mostrarAlerta('Operação cancelada. A operação está liberada para ser iniciada por qualquer dispositivo autorizado.', { tipo: 'sucesso' });
+          cfgRenderAutorizados();
+        } catch (_) {
+          LW.mostrarAlerta('Erro de conexão ao cancelar a operação. Verifique a rede e tente novamente.', { tipo: 'erro' });
+        }
+      });
+    }
+
     // existente no escopo global, então replica a mesma lógica usada em
     // data.js (_escaparHtml) só pra estes dois campos de texto livre.
     function _escaparHtmlLocal(texto) {
@@ -2536,4 +2689,3 @@
         btn.textContent = textoOriginal;
       }
     }
-

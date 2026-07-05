@@ -76,10 +76,65 @@
     return den !== 0 ? num / den : 0;
   }
 
+  // ── BATERIA(S) E TIPO DE MONTAGEM DE UM TRAÇO ────────────
+  // Nenhum dos dois é um campo direto do traço em relatorio_injecao.json:
+  // - id_bateria fica dentro de cada uso (l.ultilizado.operacao[].id_bateria),
+  //   porque um traço pode ter sido reaproveitado em baterias diferentes ao
+  //   longo do tempo (mesmo problema, e mesma correção, já aplicada ao
+  //   filtro de bateria do Relatório de Injeção — ver dashboard.js).
+  // - tipo_montagem nunca existiu em relatorio_injecao.json: é um campo da
+  //   OPERAÇÃO (historico.json), não do traço/receita. Pra saber o tipo de
+  //   montagem "do" traço, é preciso olhar a operação onde ele foi
+  //   originalmente registrado — ver carregarMapaTipoMontagem(), abaixo.
+  //   Antes desta correção, t.tipo_montagem era sempre undefined, então
+  //   TODO traço caía no fallback "Desconhecido" (ver calcularIndicadores) —
+  //   por isso "Receita Mais Estável/Instável" só mostrava "Desconhecido".
+
+  function _bateriasDoTraco(t) {
+    return [...new Set((t.ultilizado?.operacao || []).map(u => u.id_bateria).filter(Boolean))];
+  }
+
+  // Cache em memória do mapa id_operacao → tipo_montagem — historico.json
+  // não muda durante a sessão de uso desta tela, então não precisa
+  // rebuscar a cada filtro aplicado (diferente de relatorio_injecao.json,
+  // que é a fonte principal e já é refeita a cada render() mesmo).
+  let _mapaTipoMontagemCache = null;
+  async function carregarMapaTipoMontagem() {
+    if (_mapaTipoMontagemCache) return _mapaTipoMontagemCache;
+    try {
+      const operacoes = await fetch('db/historico.json').then(r => r.json());
+      const mapa = new Map();
+      operacoes.forEach(op => { if (op.id) mapa.set(op.id, op.tipo_montagem || null); });
+      _mapaTipoMontagemCache = mapa;
+    } catch (_) {
+      _mapaTipoMontagemCache = new Map();
+    }
+    return _mapaTipoMontagemCache;
+  }
+
+  // Resolve o tipo de montagem "do" traço a partir da operação onde ele foi
+  // originalmente registrado (primeiro uso em ultilizado.operacao[]) — mesmo
+  // critério já usado pelos campos `data`/`turno` do traço, que também
+  // representam o registro original, não cada reaproveitamento. Se a
+  // operação original não for encontrada (ex: dado legado importado sem
+  // id_operacao real), tenta qualquer outro uso antes de cair em
+  // "Desconhecido".
+  function _resolverTipoMontagem(t, mapaTipoPorOperacao) {
+    const usos = t.ultilizado?.operacao || [];
+    for (const uso of usos) {
+      const tipo = mapaTipoPorOperacao.get(uso.id_operacao);
+      if (tipo) return tipo;
+    }
+    return 'Desconhecido';
+  }
+
   // ── BUSCA TRAÇOS COM FILTROS ─────────────────────────────
   // Usa relatorio_injecao.json como fonte primária de dados de traços
   async function getTracosComFiltros(filtros) {
-    const registros = await fetch('db/relatorio_injecao.json').then(r => r.json());
+    const [registros, mapaTipo] = await Promise.all([
+      fetch('db/relatorio_injecao.json').then(r => r.json()),
+      carregarMapaTipoMontagem(),
+    ]);
 
     const dataInicio   = filtros.dataInicio   || '';
     const dataFim      = filtros.dataFim      || '';
@@ -87,12 +142,20 @@
     const turno        = filtros.turno        || '';
     const tipoMontagem = filtros.tipoMontagem || '';
 
+    // Resolve uma vez por traço — usado tanto pelo filtro abaixo quanto por
+    // calcularIndicadores() depois (ver _tipoMontagem/_baterias, campos
+    // adicionados aqui, não persistidos em lugar nenhum, só em memória).
+    registros.forEach(t => {
+      t._tipoMontagem = _resolverTipoMontagem(t, mapaTipo);
+      t._baterias = _bateriasDoTraco(t);
+    });
+
     return registros.filter(t => {
       if (dataInicio && t.data < dataInicio) return false;
       if (dataFim    && t.data > dataFim)    return false;
-      if (bateria    && t.id_bateria !== bateria) return false;
+      if (bateria    && !t._baterias.includes(bateria)) return false;
       if (turno      && t.turno !== turno)        return false;
-      if (tipoMontagem && t.tipo_montagem !== tipoMontagem) return false;
+      if (tipoMontagem && t._tipoMontagem !== tipoMontagem) return false;
       return true;
     });
   }
@@ -145,8 +208,10 @@
 
       if (tracoTemAjuste) tracosComAjuste++;
 
-      // Agrega por tipo de montagem
-      const tipo = t.tipo_montagem || 'Desconhecido';
+      // Agrega por tipo de montagem — resolvido em getTracosComFiltros()
+      // via _resolverTipoMontagem (ver comentário lá: tipo_montagem não é
+      // um campo do traço, é da operação onde ele foi registrado).
+      const tipo = t._tipoMontagem || 'Desconhecido';
       if (!porTipo[tipo]) porTipo[tipo] = { total: 0, ajustados: 0, porMes: {} };
       porTipo[tipo].total++;
       if (tracoTemAjuste) porTipo[tipo].ajustados++;
@@ -267,6 +332,31 @@
     return nomes[parseInt(m) - 1] + (y !== nowBrasilia().toISOString().slice(0,4) ? `/${y.slice(2)}` : '');
   }
 
+  // Texto de hover com a evolução mensal de ajustes de um insumo — mesma
+  // fonte (ind.ajustesPorInsumoMes) já usada pela setinha de tendência do
+  // ranking de materiais, só formatada como lista linha-a-linha.
+  function _tooltipEvolucaoMensalInsumo(label, ind) {
+    const porMes = ind.ajustesPorInsumoMes[label] || {};
+    const meses = Object.keys(porMes).sort();
+    if (!meses.length) return 'Sem ajustes registrados no período';
+    return meses.map(m => `${nomeMes(m)}: ${porMes[m]} ajuste${porMes[m] !== 1 ? 's' : ''}`).join('\n');
+  }
+
+  // Texto de hover com o detalhamento mês a mês de uma "receita" (entrada
+  // de ind.rankingReceitas — total de traços × ajustados, por tipo de
+  // montagem) — mesma fonte usada pela seta de tendência em
+  // renderRankingReceitas, abaixo.
+  function _tooltipReceitaPorMes(receita) {
+    if (!receita || !receita.porMes) return '';
+    const meses = Object.keys(receita.porMes).sort();
+    if (!meses.length) return '';
+    return meses.map(m => {
+      const v = receita.porMes[m];
+      const pct = v.total > 0 ? Math.round((v.ajustados / v.total) * 100) : 0;
+      return `${nomeMes(m)}: ${v.ajustados}/${v.total} ajustados (${pct}%)`;
+    }).join('\n');
+  }
+
   // ── RENDER: KPIs PRINCIPAIS ──────────────────────────────
   function renderKPIs(ind) {
     setText('qt-total-tracos',        ind.totalTracos.toLocaleString('pt-BR'));
@@ -274,6 +364,17 @@
     setText('qt-com-ajuste',          ind.tracosComAjuste.toLocaleString('pt-BR'));
     setText('qt-taxa-acerto',         ind.taxaAcerto + '%');
     setText('qt-total-ajustes-num',   ind.totalAjustesGeral.toLocaleString('pt-BR'));
+
+    // Hover no card "Total de Ajustes" — detalha quais insumos compõem o
+    // total (mesma contagem do ranking de materiais, abaixo, só que aqui
+    // de relance, sem precisar rolar a tela até lá).
+    const cardTotalAjustes = document.getElementById('qt-card-total-ajustes');
+    if (cardTotalAjustes) {
+      const textoTip = ind.rankingMateriais.length
+        ? ind.rankingMateriais.map(([label, cnt]) => `${label}: ${cnt} ajuste${cnt !== 1 ? 's' : ''}`).join('\n')
+        : 'Nenhum ajuste registrado no período';
+      cardTotalAjustes.setAttribute('data-tooltip', textoTip);
+    }
     setText('qt-media-ajustes',       ind.mediaAjustes.toFixed(2).replace('.', ','));
     setText('qt-donut-sem',           ind.tracosSemAjuste.toLocaleString('pt-BR'));
     setText('qt-donut-com',           ind.tracosComAjuste.toLocaleString('pt-BR'));
@@ -299,13 +400,27 @@
 
     // Receita mais estável
     if (ind.receitaMaisEstavel) {
-      setText('qt-receita-estavel', ind.receitaMaisEstavel.tipo);
-      setText('qt-receita-estavel-pct', `${ind.receitaMaisEstavel.pct}% ajustados · ${ind.receitaMaisEstavel.total} traços`);
+      const r = ind.receitaMaisEstavel;
+      setText('qt-receita-estavel', r.tipo);
+      setText('qt-receita-estavel-pct', `${r.pct}% ajustados · ${r.total} traços`);
+      const card = document.getElementById('qt-card-receita-estavel');
+      if (card) {
+        const porMes = _tooltipReceitaPorMes(r);
+        card.setAttribute('data-tooltip', `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
+          + (porMes ? '\n\nPor mês:\n' + porMes : ''));
+      }
     }
     // Receita mais instável
     if (ind.receitaMaisInstavel && ind.receitaMaisInstavel !== ind.receitaMaisEstavel) {
-      setText('qt-receita-instavel', ind.receitaMaisInstavel.tipo);
-      setText('qt-receita-instavel-pct', `${ind.receitaMaisInstavel.pct}% ajustados · ${ind.receitaMaisInstavel.total} traços`);
+      const r = ind.receitaMaisInstavel;
+      setText('qt-receita-instavel', r.tipo);
+      setText('qt-receita-instavel-pct', `${r.pct}% ajustados · ${r.total} traços`);
+      const card = document.getElementById('qt-card-receita-instavel');
+      if (card) {
+        const porMes = _tooltipReceitaPorMes(r);
+        card.setAttribute('data-tooltip', `${r.ajustados} de ${r.total} traços ajustados (${r.pct}%)`
+          + (porMes ? '\n\nPor mês:\n' + porMes : ''));
+      }
     }
 
     // Insumo mais ajustado
@@ -314,6 +429,8 @@
       const pctTotal = ind.totalAjustesGeral > 0 ? Math.round((cnt / ind.totalAjustesGeral) * 100) : 0;
       setText('qt-insumo-mais-ajustado', label);
       setText('qt-insumo-mais-ajustado-cnt', `${cnt} ajuste${cnt !== 1 ? 's' : ''} (${pctTotal}% do total)`);
+      const card = document.getElementById('qt-card-insumo-mais-ajustado');
+      if (card) card.setAttribute('data-tooltip', `Evolução mensal — ${label}:\n` + _tooltipEvolucaoMensalInsumo(label, ind));
     }
 
     // Insumo maior desvio
@@ -322,8 +439,20 @@
       const sinal = v && v.real > v.planejado ? '+' : '';
       setText('qt-insumo-maior-desvio', ind.maiorDesvioLabel);
       setText('qt-insumo-maior-desvio-val', `Desvio: ${sinal}${fmtN(ind.maiorDesvioPct)}% do planejado`);
+      const card = document.getElementById('qt-card-insumo-maior-desvio');
+      if (card) {
+        card.setAttribute('data-tooltip', (v ? `Planejado: ${fmtN(v.planejado)} · Real: ${fmtN(v.real)}\n\n` : '')
+          + `Ajustes por mês — ${ind.maiorDesvioLabel}:\n` + _tooltipEvolucaoMensalInsumo(ind.maiorDesvioLabel, ind));
+      }
     }
   }
+
+  // ── TOOLTIP DE GRÁFICOS EM CANVAS ────────────────────────
+  // A implementação de hover/toque em canvas (mouse + touch, com toggle no
+  // toque) é compartilhada entre todos os dashboards — ver
+  // LW.tooltip.ligarHoverCanvas em js/tooltip.js. Alias local só pra não
+  // reescrever as ~10 chamadas já existentes abaixo (donut/evolução/barras).
+  const _ligarHoverCanvas = LW.tooltip.ligarHoverCanvas;
 
   // ── RENDER: DONUT ─────────────────────────────────────────
   function renderDonut(ind) {
@@ -333,8 +462,22 @@
     const size = 90; canvas.width = size; canvas.height = size;
     const cx = size / 2, cy = size / 2, r = 36, inner = 22;
     const segs   = [ind.tracosSemAjuste, ind.tracosComAjuste];
+    const labels = ['Sem ajuste', 'Com ajuste'];
     const colors = ['#10b981', '#f59e0b'];
     const total  = segs.reduce((s, v) => s + v, 0);
+    canvas._fatiasDonut = []; // limpa antes de cada render — evita tooltip de filtro anterior
+    _ligarHoverCanvas(canvas, (x, y) => {
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist < inner || dist > r) return null;
+      let ang = Math.atan2(dy, dx);
+      const fatia = (canvas._fatiasDonut || []).find(f => {
+        let a = ang; // normaliza pro mesmo range usado ao desenhar (começa em -90°)
+        while (a < f.inicio) a += Math.PI * 2;
+        return a >= f.inicio && a < f.fim;
+      });
+      return fatia ? fatia.texto : null;
+    });
     if (!total) {
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = '#2a2f3a'; ctx.fill();
@@ -346,7 +489,10 @@
       const slice = (v / total) * Math.PI * 2;
       ctx.beginPath(); ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, r, angle, angle + slice); ctx.closePath();
-      ctx.fillStyle = colors[i]; ctx.fill(); angle += slice;
+      ctx.fillStyle = colors[i]; ctx.fill();
+      const pct = Math.round((v / total) * 100);
+      canvas._fatiasDonut.push({ inicio: angle, fim: angle + slice, texto: `${labels[i]}: ${v} (${pct}%)` });
+      angle += slice;
     });
     ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
     ctx.fillStyle = '#1e2229'; ctx.fill();
@@ -441,7 +587,16 @@
       return;
     }
 
-    const th = (t) => `<th style="padding:8px 12px;text-align:${isNaN(t[0]) ? 'left' : 'right'};font-size:.72rem;font-weight:600;color:var(--text-3);white-space:nowrap;border-bottom:1px solid var(--border)">${t}</th>`;
+    // ANTES: alinhava com base em isNaN(t[0]) — o primeiro CARACTERE do
+    // texto do cabeçalho (ex: "N"[0]='N', "Média"[0]='M'). Como todo
+    // rótulo de cabeçalho começa com letra, isNaN(letra) é sempre `true`
+    // — ou seja, TODO cabeçalho saía alinhado à esquerda, inclusive os de
+    // coluna numérica (N, Média, Mediana, Desvio Padrão, CV %, Mín, Máx),
+    // enquanto os valores dessas colunas (td, abaixo) sempre foram
+    // alinhados à direita — cabeçalho e dado nunca bateam. Agora o
+    // alinhamento vem de um parâmetro explícito por coluna, igual ao que
+    // já era feito em td()/tdL() logo abaixo.
+    const th = (t, explicacao, numerico = true) => `<th style="padding:8px 12px;text-align:${numerico ? 'right' : 'left'};font-size:.72rem;font-weight:600;color:var(--text-3);white-space:nowrap;border-bottom:1px solid var(--border)${explicacao ? ';border-bottom-style:dotted' : ''}"${explicacao ? ` data-tooltip="${LW.escaparHtml(explicacao)}"` : ''}>${t}</th>`;
     const td = (v, color = '') => `<td style="padding:8px 12px;text-align:right;font-family:var(--font-mono);font-size:.78rem;color:${color || 'var(--text-2)'};white-space:nowrap">${v}</td>`;
     const tdL = (v) => `<td style="padding:8px 12px;font-size:.82rem;font-weight:600;color:var(--text)">${v}</td>`;
 
@@ -463,7 +618,7 @@
     el.innerHTML = `
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:var(--bg-3)">
-          ${th('Insumo')}${th('N')}${th('Média')}${th('Mediana')}${th('Desvio Padrão')}${th('CV %')}${th('Mín')}${th('Máx')}
+          ${th('Insumo', null, false)}${th('N', 'Quantidade de traços com valor real registrado para este insumo no período')}${th('Média', 'Soma de todos os valores dividida pela quantidade (N) — o valor "típico" do insumo no período')}${th('Mediana', 'Valor do meio quando todos os registros são ordenados — menos sensível a valores extremos (outliers) do que a Média')}${th('Desvio Padrão', 'O quanto os valores variam em torno da Média, na mesma unidade do insumo — quanto maior, mais inconsistente a receita')}${th('CV %', 'Coeficiente de Variação = Desvio Padrão ÷ Média, em %. Compara a variabilidade entre insumos de unidades diferentes. Verde <15% (estável) · Amarelo 15-25% (atenção) · Vermelho >25% (instável)')}${th('Mín', 'Menor valor registrado no período')}${th('Máx', 'Maior valor registrado no período')}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -486,8 +641,14 @@
       const sinal = diff > 0 ? '+' : '';
       const alerta = pct !== null && Math.abs(parseFloat(pct)) > LIMITE_DESVIO_PCT
         ? `<div style="font-size:.68rem;color:#ef4444;margin-top:4px">⚠ Desvio acima do limite (${LIMITE_DESVIO_PCT}%)</div>` : '';
+      // Hover com precisão maior (3 casas) e tamanho da amostra — os
+      // números exibidos no card são arredondados a 1 casa; o hover mostra
+      // o valor exato somado, mais quantos traços entraram nessa soma
+      // (vem da mesma estatística CEP, ind.cepPorInsumo[label].n).
+      const n = ind.cepPorInsumo[label]?.n || 0;
+      const tooltip = `Planejado (exato): ${fmtN(v.planejado, 3)}\nReal (exato): ${fmtN(v.real, 3)}\nDiferença (exata): ${sinal}${fmtN(diff, 3)}\nAmostra: ${n} traço${n !== 1 ? 's' : ''} com valor real registrado`;
       return `
-        <div style="background:var(--bg-2);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="background:var(--bg-2);border-radius:10px;padding:14px;border:1px solid var(--border)" data-tooltip="${LW.escaparHtml(tooltip)}">
           <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);margin-bottom:8px">${label}</div>
           <div style="display:flex;flex-direction:column;gap:4px">
             <div style="display:flex;justify-content:space-between">
@@ -518,6 +679,18 @@
     ctx.clearRect(0, 0, W, H);
     const meses = ind.mesesOrdenados;
     const valores = ind.taxasMensais; // Taxa de ACERTO (100 - % ajustados)
+
+    canvas._pontosEvolucao = []; // limpa antes de cada render
+    _ligarHoverCanvas(canvas, (x, y) => {
+      const pontos = canvas._pontosEvolucao || [];
+      let melhor = null, melhorDist = 16; // raio de detecção em px
+      pontos.forEach(p => {
+        const d = Math.hypot(x - p.x, y - p.y);
+        if (d < melhorDist) { melhorDist = d; melhor = p; }
+      });
+      return melhor ? melhor.texto : null;
+    });
+
     if (!meses.length) {
       ctx.fillStyle = 'var(--text-3)'; ctx.font = '12px Barlow,sans-serif';
       ctx.textAlign = 'center'; ctx.fillText('Sem dados para exibir', W / 2, H / 2); return;
@@ -526,6 +699,15 @@
     const cW   = W - pad.left - pad.right;
     const cH   = H - pad.top - pad.bottom;
     const maxV = 100;
+
+    // Texto de tooltip de um mês — taxa de acerto + contagem sem/com ajuste
+    // (ind.evolucao já traz total/ajustados por mês, calculado uma vez em
+    // calcularIndicadores).
+    const textoMes = (mes, taxa) => {
+      const v = ind.evolucao[mes] || { total: 0, ajustados: 0 };
+      const semAjuste = v.total - v.ajustados;
+      return `${nomeMes(mes)}\nTaxa de acerto: ${taxa}%\n${semAjuste} sem ajuste / ${v.total} total`;
+    };
 
     // Grid
     ctx.strokeStyle = '#2a2f3a'; ctx.lineWidth = 1;
@@ -541,7 +723,12 @@
       ctx.fillStyle = valores[0] >= 80 ? '#10b981' : valores[0] >= 50 ? '#f59e0b' : '#ef4444';
       ctx.fillRect(pad.left + cW / 2 - 18, pad.top + cH - bH, 36, bH);
       ctx.fillStyle = '#5c6475'; ctx.font = '9px Barlow,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(nomeMes(meses[0]), pad.left + cW / 2, H - 4); return;
+      ctx.fillText(nomeMes(meses[0]), pad.left + cW / 2, H - 4);
+      canvas._pontosEvolucao.push({
+        x: pad.left + cW / 2, y: pad.top + cH - bH,
+        texto: textoMes(meses[0], valores[0]),
+      });
+      return;
     }
 
     const pts = meses.map((_, i) => ({
@@ -572,6 +759,7 @@
       ctx.fillStyle = '#5c6475'; ctx.font = '9px Barlow,sans-serif';
       const step = Math.max(1, Math.floor(meses.length / 8));
       if (i % step === 0) ctx.fillText(nomeMes(meses[i]), p.x, H - 4);
+      canvas._pontosEvolucao.push({ x: p.x, y: p.y, texto: textoMes(meses[i], valores[i]) });
     });
   }
 
@@ -585,6 +773,12 @@
     ctx.clearRect(0, 0, W, H);
 
     const dados = ind.rankingMateriais;
+    canvas._barrasInsumos = []; // limpa antes de cada render
+    _ligarHoverCanvas(canvas, (x, y) => {
+      const barra = (canvas._barrasInsumos || []).find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.yBase);
+      return barra ? barra.texto : null;
+    });
+
     if (!dados.length) {
       ctx.fillStyle = 'var(--text-3)'; ctx.font = '12px Barlow,sans-serif';
       ctx.textAlign = 'center'; ctx.fillText('Nenhum ajuste no período', W / 2, H / 2); return;
@@ -616,6 +810,16 @@
       // 2ª linha label
       const resto = label.split(' ').slice(1).join(' ');
       if (resto) ctx.fillText(resto, x + bW / 2, H - pad.bottom + 24);
+
+      // Área de detecção do hover: a coluna inteira da barra, do topo até a
+      // base do gráfico — mais fácil de acertar do que só o retângulo
+      // preenchido (barras pequenas teriam quase nada pra apontar o mouse).
+      const pctTotal = ind.totalAjustesGeral > 0 ? Math.round((cnt / ind.totalAjustesGeral) * 100) : 0;
+      const evolucao = _tooltipEvolucaoMensalInsumo(label, ind);
+      canvas._barrasInsumos.push({
+        x, w: bW, y: pad.top, yBase: pad.top + cH,
+        texto: `${label}\n${cnt} ajuste${cnt !== 1 ? 's' : ''} (${pctTotal}% do total)\n\nPor mês:\n${evolucao}`,
+      });
     });
   }
 
@@ -781,9 +985,21 @@
   // ── POPULA FILTROS ────────────────────────────────────────
   async function popularFiltros() {
     try {
-      const registros = await fetch('db/relatorio_injecao.json').then(r => r.json());
-      const ids   = [...new Set(registros.map(r => r.id_bateria).filter(Boolean))].sort();
-      const tipos = [...new Set(registros.map(r => r.tipo_montagem).filter(Boolean))].sort();
+      const [registros, mapaTipo] = await Promise.all([
+        fetch('db/relatorio_injecao.json').then(r => r.json()),
+        carregarMapaTipoMontagem(),
+      ]);
+
+      const idsSet = new Set();
+      registros.forEach(t => _bateriasDoTraco(t).forEach(id => idsSet.add(id)));
+      const ids = [...idsSet].sort();
+
+      const tiposSet = new Set();
+      registros.forEach(t => {
+        const tipo = _resolverTipoMontagem(t, mapaTipo);
+        if (tipo && tipo !== 'Desconhecido') tiposSet.add(tipo);
+      });
+      const tipos = [...tiposSet].sort();
 
       const selBat = document.getElementById('qt-bateria');
       if (selBat) {

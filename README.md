@@ -346,6 +346,43 @@ Com o toggle ativo, a operação funciona normalmente (turno, traços, Iniciar/F
 
 O que fazer com os dados gerados em `public/db/teste/` (limpar, conferir, descartar) é decisão de uso — o sistema só garante que eles nunca se misturam com os reais.
 
+## Modo Automático (Configurações → Automação)
+
+Estrutura pronta pra integrar com a automação da fábrica (balança/CLP), mas **ainda sem a coleta de verdade conectada** — ver *Status da integração*, abaixo, pra saber exatamente o que falta.
+
+Diferente do Modo de Teste (que é local a uma operação, num navegador), o Modo Automático é uma **configuração global** — liga/desliga pra fábrica inteira, não por operação:
+
+- Fica em **Menu → Configurações → Automação**, não mais como toggle em Registrar Operação.
+- Guardado em `config.json` (`modoAutomatico: true|false`), carregado uma vez por página (`LW.MODO_AUTOMATICO_ATIVO`) e atualizado em memória na hora que alguém muda (sem precisar recarregar — ver `atualizarModoAutomatico` em `data.js`).
+- **Exige a senha de Administrador pra ligar E pra desligar** (`AdminAuth.abrirModal`, sempre pede de novo mesmo já autenticado) — tanto no front quanto reforçado no servidor: `POST /config/modo-automatico` exige sessão de admin válida (HTTP 403 sem ela), diferente de `/salvar-config` (que não exige).
+- **Sem tema visual** de propósito (diferente do Modo de Teste, que pinta a tela inteira de roxo) — só um texto simples, "🤖 Autônomo ativo", ao lado do título de Registrar Operação quando ligado. Fica confuso ter 2 temas de cor concorrendo na mesma tela.
+
+### Como os dados chegam (estrutura já pronta)
+
+```
+[Balança/CLP] → (coletor Modbus TCP — ainda não existe) → POST /leitura-automatica → WebSocket → Registrar Operação
+```
+
+- `POST /leitura-automatica`: rota genérica que recebe **uma leitura por vez**, valida e retransmite via WebSocket (mesmo canal de `/ws/operacao-andamento`) pra quem estiver com a tela de Registrar Operação aberta. Rejeita (HTTP 400) se o Modo Automático estiver desligado — confere `config.json` a cada chamada, não só na hora de ligar.
+  - Insumo (balança): `{ tipo: 'insumo', campo: 'cimento_real', valor: 512.3, traco: 1 }` — `campo` é um dos 5 insumos reais do traço (`cimento_real`, `agua_real`, `eps_real`, `superplast_real`, `incorporador_real`); `traco` (número, opcional) indica qual traço — se omitido, aplica no traço selecionado no momento em Registrar Operação.
+  - Berço (injetora): `{ tipo: 'berco', berco: 'B7' }` — chega e é logada, mas **ainda sem ação definida** do lado da tela (ver item 7 em *Status da integração*, abaixo).
+- `operacao.js` (`_aplicarLeituraAutomatica`) recebe a leitura via WebSocket e, se o Modo Automático estiver ligado, aplica com `LWOp.updateInsumoOriginal` — o **mesmo caminho** que a digitação manual usa, então total calculado, indicador de traço completo/pendente e persistência funcionam automaticamente, sem lógica duplicada.
+- Sem dispositivo autorizado nem sessão de admin nessa rota especificamente (`/leitura-automatica`) — é uma leitura de sensor, não um controle da operação; a proteção por senha é só pra **ligar/desligar** o modo, não pra cada leitura individual.
+
+### Status da integração (CLP identificado, coleta ainda não conectada)
+
+O CLP da linha é um **WAGO 750-8212**, linha **PFC200** — Linux embarcado com runtime CODESYS. Suporta nativamente **Modbus TCP** e **OPC-UA**; MQTT dá pra configurar (pode depender da versão do firmware). Tem uma interface de administração via navegador (WBM), acessível digitando o IP dele.
+
+**O que falta pra sair da estrutura e virar integração de verdade:**
+
+1. **Conexão física** — o computador que roda o Lightwall ainda não está na mesma rede do CLP (nem por cabo direto, nem por switch compartilhado).
+2. **IP do CLP** na rede, depois de conectado.
+3. **Confirmação do integrador**: liberar leitura Modbus TCP (ou MQTT) **só de leitura**, num IP/porta específico, pra consulta externa.
+4. **Mapa de registradores/tags**: qual registrador Modbus (ou tag OPC-UA/tópico MQTT) corresponde a cada insumo (cimento, água, EPS, superplastificante, incorporador de ar) e a cada berço preenchido pela injetora.
+5. **Confirmar o que o CLP atualiza**: se o registrador reflete o **valor pretendido/digitado** (na hora que a pessoa digita na máquina) ou o **peso real medido** (só muda conforme a balança pesa de verdade) — pro caso de uso deste sistema (preencher `*_real`), o peso real medido é o que faz sentido.
+6. **O coletor em si**: um script Node.js (candidato: lib `modbus-serial`) que fica lendo o CLP periodicamente (polling, Modbus) ou assinando um tópico (MQTT) e chama `POST /leitura-automatica` a cada leitura nova — ainda não escrito, é o próximo passo assim que os itens 1–5 estiverem resolvidos.
+7. **Decidir a ação de "berço preenchido"** — o que uma leitura `{tipo:'berco', berco}` deve mudar na tela: marcar em `bercos_visuais`? avançar `bercos_reais`? outra coisa? Ainda em aberto (ver `TODO` em `_aplicarLeituraAutomatica`, `operacao.js`).
+
 ## Log de Acesso
 
 Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', ...)`), o sistema registra em `logs/acessos.json`:
@@ -398,6 +435,8 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/total-tracos-hoje` | GET | Contador diário de traços 🧪 |
 | `/confirmar-tracos-hoje` | POST | Incrementa o contador diário 🔒🧪 |
 | `/salvar-config` | POST | Salva `config.json` |
+| `/config/modo-automatico` | POST | Liga/desliga o Modo Automático em `config.json` 🔐 (ver *Modo Automático*) |
+| `/leitura-automatica` | POST | Recebe 1 leitura externa (balança/CLP) e retransmite via WebSocket — rejeita se o Modo Automático estiver desligado (ver *Modo Automático*) |
 | `/salvar-security` | POST | Salva `security.json` (troca de senha) 🔐 |
 | `/db/security.json` | GET | Lê `security.json` (ver *Autenticação e Sessão*) 🔐 |
 | `/logout-admin` | POST | Destrói a sessão de administrador atual |

@@ -189,6 +189,12 @@ const VALIDADORES_BACKUP_DADOS = {
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
   'ajustes_tracos.json':    v => Array.isArray(v),
+  // ─── Adicionados: Berços Visuais e Avaliações do Setor de Qualidade —
+  // antes ficavam de fora do Backup de Dados/automático, só entravam no
+  // Backup Geral (que zipa o .sqlite inteiro). Ambos são tabelas SQL (ver
+  // GET /db/<nome> mais abaixo, que reconstrói o JSON a partir do banco).
+  'bercos_visuais.json':       v => Array.isArray(v),
+  'avaliacoes_qualidade.json': v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -206,6 +212,8 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'sobra.json': {},
   'paradas.json': [],
   'ajustes_tracos.json': [],
+  'bercos_visuais.json': [],
+  'avaliacoes_qualidade.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -267,6 +275,10 @@ async function gerarZipDadosServidor() {
         // sem avisar ninguém — exatamente o bug visto na hora de restaurar.
         const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
         zip.file(nome, JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2));
+      } else if (nome === 'bercos_visuais.json') {
+        zip.file(nome, JSON.stringify(db.todosOsBercosVisuais(), null, 2));
+      } else if (nome === 'avaliacoes_qualidade.json') {
+        zip.file(nome, JSON.stringify(db.listarAvaliacoesQualidade(), null, 2));
       } else {
         zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
@@ -439,6 +451,46 @@ function salvarOperacaoAndamentoNoDisco(dados) {
   fs.renameSync(tmp, OPERACAO_ANDAMENTO_PATH);
 }
 
+// ─── BERÇOS DA OPERAÇÃO EM ANDAMENTO: "baixou/vazou" marcado ao vivo ──────
+// Snapshot separado de operacao_andamento.json de propósito: aquele arquivo
+// é sobrescrito por INTEIRO a cada mudança que a tela Registrar Operação
+// manda (ver POST /salvar-operacao-andamento) — se os estados de berço
+// vivessem dentro dele, o próximo campo que o operador editasse sobrescreveria
+// as marcações feitas por quem estiver olhando "Bateria Atual" (potencialmente
+// em outro computador, sem relação com "o dono" da operação). Aqui é um
+// arquivo à parte, só mexido pelas 2 rotas de berço (GET /bercos-andamento,
+// POST /marcar-berco-andamento) — ninguém mais escreve nele.
+//
+// Mapa ESPARSO em 2 níveis: { 'B1': { esquerda: 'baixou' } } — só guarda
+// berço/lado que NÃO estão 'okay'; lado ausente (ou berço ausente por
+// inteiro) é 'okay' implicitamente. Os 2 lados de um mesmo berço são
+// independentes — marcar um não mexe no outro. Reversível por natureza
+// (marcar de novo remove a entrada daquele lado — ver POST
+// /marcar-berco-andamento).
+//
+// Resetado (vira {} de novo) em 2 pontos: quando a operação em andamento é
+// limpa (POST /salvar-operacao-andamento com dados=null — fim normal, ou
+// "🗑️ Limpar Tudo") e quando a operação é registrada de verdade (POST
+// /registrar-operacao — nesse ponto, o conteúdo já foi transferido pra
+// bercos_visuais antes de resetar, ver essa rota).
+const BERCOS_ANDAMENTO_PATH = path.join(DB_DIR, 'bercos_andamento.json');
+
+function lerBercosAndamento() {
+  try {
+    const texto = fs.readFileSync(BERCOS_ANDAMENTO_PATH, 'utf8').trim();
+    const obj = texto ? JSON.parse(texto) : {};
+    return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+  } catch (_) {
+    return {}; // arquivo ainda não existe / corrompido — trata como "nenhum berço marcado"
+  }
+}
+
+function salvarBercosAndamentoNoDisco(mapa) {
+  const tmp = BERCOS_ANDAMENTO_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(mapa, null, 2), 'utf8');
+  fs.renameSync(tmp, BERCOS_ANDAMENTO_PATH);
+}
+
 // ─── LOG DE ACESSO ──────────────────────────────────────────────────────────
 // Registra cada acesso a rotas "sensíveis" do app (por enquanto, só
 // "Registrar Operação" — ver POST /registrar-acesso, mais abaixo) com
@@ -497,6 +549,32 @@ const server = http.createServer((req, res) => {
   const queryParams = new URLSearchParams(queryString || '');
   const deviceId = queryParams.get('deviceId') || '';
   const modoTeste = queryParams.get('modoTeste') === 'true';
+
+  // ─── Limite de tamanho de corpo (POST) ─────────────────────────────────
+  // Nenhuma rota abaixo tinha limite nenhum — cada uma só acumula
+  // `req.on('data', chunk => body += chunk)` até o 'end', sem nenhum teto.
+  // Um POST com um corpo gigante (intencional ou não) ficaria inteiro em
+  // memória, sem nenhuma defesa. 50MB é generoso o bastante pro Backup
+  // Geral/Restaurar Geral (a rota que de longe manda o maior payload —
+  // projeto inteiro em JSON), mas ainda assim finito. Não substitui a
+  // leitura de cada rota — só corta a conexão mais cedo se ela passar do
+  // limite, antes de o corpo inteiro acumular em memória.
+  const MAX_BODY_BYTES = 50 * 1024 * 1024;
+  if (req.method === 'POST') {
+    let _bytesRecebidos = 0;
+    let _corpoAbortado = false;
+    req.on('data', (chunk) => {
+      _bytesRecebidos += chunk.length;
+      if (!_corpoAbortado && _bytesRecebidos > MAX_BODY_BYTES) {
+        _corpoAbortado = true;
+        try {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erro: 'Corpo da requisição excede o limite permitido (50MB).' }));
+        } catch (_) { /* resposta pode já ter sido enviada por outra checagem — ignora */ }
+        req.destroy();
+      }
+    });
+  }
 
   // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
   // POST /verificar-senha  { senha: "texto plano" }
@@ -662,6 +740,41 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── POST /config/modo-automatico: liga/desliga "🤖 Modo Automático"
+  // (Configurações → Automação). DIFERENTE de /salvar-config (acima, que
+  // não exige sessão): esta rota exige sessão de admin válida — a senha
+  // é pedida de novo no front (ver app-core.js, cfgToggleModoAutomatico,
+  // que sempre chama AdminAuth.abrirModal antes, tanto pra ligar quanto
+  // pra desligar), e o servidor confirma que essa sessão existe de
+  // verdade antes de aceitar a troca — proteção de verdade, não só de UI.
+  if (req.method === 'POST' && urlPath === '/config/modo-automatico') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { ativo } = JSON.parse(body);
+        if (typeof ativo !== 'boolean') throw new Error('Campo "ativo" precisa ser true ou false.');
+
+        const configPath = path.join(DB_DIR, 'config.json');
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        cfg.modoAutomatico = ativo;
+        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, ativo }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
   // Salvar security.json via POST
   // ── IMPORTANTE: antes desta mudança, esta rota não exigia senha NEM
   // sessão — bastava mandar um hash no formato certo pra sobrescrever a
@@ -813,6 +926,101 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── GET /db/bercos_visuais.json: mesma estratégia das outras tabelas —
+  // não existe mais como arquivo, reconstrói a partir da tabela SQL
+  // "bercos_visuais". Usado por gerarBackupDados() (data.js), que faz
+  // fetch('db/'+nome) genérico pra cada arquivo da lista (Backup de Dados).
+  if (req.method === 'GET' && urlPath === '/db/bercos_visuais.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsBercosVisuais()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/avaliacoes_qualidade.json: idem, reconstrói a partir da
+  // tabela "avaliacoes_qualidade" (avaliações já registradas do Setor de
+  // Qualidade) — usado pelo Backup de Dados.
+  if (req.method === 'GET' && urlPath === '/db/avaliacoes_qualidade.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.listarAvaliacoesQualidade()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/detalhe_operacao.json?id=...: tudo que se liga por
+  // id_operacao — operação, berços visuais, receita de cada traço usado
+  // (com ajustes) e a avaliação de qualidade vinculada. Usado pela
+  // "Análise Focada" (ver public/js/analise-focada.js). Não é arquivo de
+  // backup — view derivada, sempre recalculada do banco.
+  if (req.method === 'GET' && urlPath === '/db/detalhe_operacao.json') {
+    try {
+      const idOperacao = queryParams.get('id') || '';
+      const detalhe = idOperacao ? db.detalheOperacao(idOperacao) : null;
+      res.writeHead(detalhe ? 200 : 404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(detalhe || { ok: false, erro: 'Operação não encontrada.' }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/avaliacao_paineis.json: painéis da Avaliação de Qualidade
+  // já normalizados numa tabela própria (avaliacao_paineis) — pronta pra
+  // cruzar em SQL com bercos_visuais/tracos/operacoes no futuro (mesmo
+  // padrão de relatorio_bercos.json/correlacao_traco_berco.json). Não é
+  // arquivo de backup — view derivada, sempre reconstruída do banco.
+  if (req.method === 'GET' && urlPath === '/db/avaliacao_paineis.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.listarPaineisAvaliacao()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/correlacao_traco_berco.json: 1 linha por USO de traço, já
+  // com nº de ajustes (instabilidade) e taxa de vazamento dos berços que
+  // aquele traço encheu — usado pelo gráfico de dispersão "Traço Instável
+  // × Vazamento" na Análise de Berços (ver public/js/analise-bercos.js).
+  // Não é arquivo de backup — view derivada, sempre recalculada do banco.
+  if (req.method === 'GET' && urlPath === '/db/correlacao_traco_berco.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.correlacaoTracoBerco()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /db/relatorio_bercos.json: junta bercos_visuais + operacoes
+  // (ID da bateria, tipo de montagem) — usado pela página "Relatório de
+  // Berços" (ver public/js/relatorio-bercos.js). Não é um arquivo de
+  // backup (não está em VALIDADORES_BACKUP_DADOS) — é só uma view
+  // derivada, sempre reconstruída na hora a partir do banco.
+  if (req.method === 'GET' && urlPath === '/db/relatorio_bercos.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.relatorioBercos()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
   // ── GET /db/historico.json: intercepta ANTES do fallback de arquivo
   // estático (mais abaixo) — desde a Fase 2, historico.json não existe
   // mais como arquivo de verdade; isso reconstrói o mesmo formato/conteúdo
@@ -833,6 +1041,40 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── FILA DE BATERIAS NÃO AVALIADAS (Setor de Qualidade): lista enxuta
+  // (só os campos necessários pra identificar a bateria na fila E
+  // preencher automaticamente a tela de avaliação — ver "Nova Avaliação"
+  // em setor-qualidade.js) das operações com avaliado=0.
+  // Nunca inclui operações de Modo de Teste (modo_teste=0) — o Setor de
+  // Qualidade ainda não tem noção de Modo de Teste, então misturar geraria
+  // uma bateria "fantasma" na fila de uma instalação de testes.
+  // Ordenada da mais antiga pra mais nova (fim ASC) — fila FIFO: quem
+  // esperou mais tempo por avaliação aparece primeiro.
+  if (req.method === 'GET' && urlPath === '/operacoes-nao-avaliadas') {
+    try {
+      const rows = db.prepare(`
+        SELECT id, id_bateria, tipo_montagem, data, fim, turno, capacidade,
+               bercos_reais, bercos_personalizados
+        FROM operacoes
+        WHERE avaliado = 0 AND modo_teste = 0
+        ORDER BY data ASC, fim ASC
+      `).all();
+      // bercos_personalizados vem serializado (TEXT) — desserializa aqui
+      // pra já entregar um array pronto (ou null) pro front, em vez de
+      // cada consumidor ter que fazer o próprio JSON.parse.
+      const lista = rows.map(r => ({
+        ...r,
+        bercos_personalizados: r.bercos_personalizados ? JSON.parse(r.bercos_personalizados) : null,
+      }));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(lista));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
   // Registrar operação — grava na tabela operacoes (SQL); em Modo de
   // Teste, continua indo pro JSON isolado de sempre (ver dirParaModoTeste).
   if (req.method === 'POST' && urlPath === '/registrar-operacao') {
@@ -842,6 +1084,11 @@ const server = http.createServer((req, res) => {
       if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
+        // Toda operação nasce não avaliada — ignora qualquer valor vindo do
+        // front pra este campo (não é algo que o operador preenche; só
+        // muda depois, pelo Setor de Qualidade). Vale pros dois caminhos
+        // abaixo (Modo de Teste em JSON e SQLite).
+        record.avaliado = false;
 
         if (modoTeste) {
           const historicoPath = path.join(dirParaModoTeste(modoTeste), 'historico.json');
@@ -855,6 +1102,19 @@ const server = http.createServer((req, res) => {
             modo_teste: 0,
             criado_em: new Date().toISOString(),
           });
+
+          // Berços Visuais — 1 linha por berço desta operação. Usa berços
+          // REAIS se informado (pode ser menor que a capacidade nominal da
+          // bateria — operação parcial), senão a capacidade nominal mesmo
+          // (mesma prioridade já usada pelo popover "Bateria Atual" — ver
+          // bateria-atual.js, _baCapacidade). Estados: parte do que já foi
+          // marcado ao vivo (baixou/vazou — ver GET/POST /bercos-andamento)
+          // em vez de nascer tudo 'okay' à toa; e reseta o snapshot ao vivo
+          // logo em seguida — essa operação virou histórico agora, o
+          // snapshot é só pra enquanto ela está em andamento.
+          const qtdBercos = parseInt(record.bercos_reais) || parseInt(record.capacidade) || 0;
+          db.criarBercosVisuaisIniciais(record.id, qtdBercos, lerBercosAndamento());
+          salvarBercosAndamentoNoDisco({});
 
           // Avisa todo mundo conectado agora (exceto quem registrou) —
           // dinâmica de "dono" da operação chegou ao fim. Nunca em modo de
@@ -884,6 +1144,18 @@ const server = http.createServer((req, res) => {
   // edicoes_operacao — base pra futuro controle de eficiência de
   // preenchimento das operações ───────────────────────────────────────────
   if (req.method === 'POST' && urlPath === '/editar-operacao') {
+    // Antes, a trava de "só Administrador" era só visual (tela) — qualquer
+    // um que soubesse a URL podia editar uma operação sem senha nenhuma
+    // (ver README, "Limitações conhecidas"). Agora exige a MESMA sessão
+    // emitida por POST /verificar-senha (ver lib/sessao.js) — como o
+    // perfil Administrador sempre pede senha no login (README, "Perfis de
+    // usuário"), a sessão já existe nesse ponto pra quem entrou como
+    // Administrador; não é fricção nova pro fluxo normal.
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada. Volte ao login e entre novamente como Administrador.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -905,7 +1177,9 @@ const server = http.createServer((req, res) => {
         // só na validação do navegador.
         // houve_atraso é calculado (tempo_min > limite de injeção), não uma
         // escolha manual do operador — nunca editável diretamente.
-        const CAMPOS_PROTEGIDOS = new Set(['id', 'data', 'inicio', 'fim', 'tempo_min', 'qtd_tracos', 'tracos', 'houve_atraso']);
+        // avaliado é controlado pelo Setor de Qualidade, não pelo
+        // formulário de edição de operação — mesma lógica.
+        const CAMPOS_PROTEGIDOS = new Set(['id', 'data', 'inicio', 'fim', 'tempo_min', 'qtd_tracos', 'tracos', 'houve_atraso', 'avaliado']);
         const tentouAlterarProtegido = Object.keys(novosValores).filter(c => CAMPOS_PROTEGIDOS.has(c));
         if (tentouAlterarProtegido.length) {
           throw new Error('Campo(s) não editável(eis): ' + tentouAlterarProtegido.join(', '));
@@ -949,6 +1223,75 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── MARCAR OPERAÇÃO COMO AVALIADA (Setor de Qualidade): chamada pelo
+  // front assim que uma avaliação iniciada a partir da fila (ver GET
+  // /operacoes-nao-avaliadas, acima) é registrada — tira a bateria da
+  // fila. Ação do Setor de Qualidade, não do Administrador: de propósito
+  // sem exigir sessão de admin (diferente de /editar-operacao), mesmo
+  // nível de fricção das outras rotas internas do dia a dia.
+  if (req.method === 'POST' && urlPath === '/marcar-operacao-avaliada') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { id } = JSON.parse(body);
+        if (!id || typeof id !== 'string') throw new Error('ID da operação ausente.');
+
+        const info = db.prepare('UPDATE operacoes SET avaliado = 1 WHERE id = ?').run(id);
+        if (info.changes === 0) throw new Error('Operação não encontrada (id: ' + id + ').');
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── REGISTRAR AVALIAÇÃO DE QUALIDADE (Setor de Qualidade): grava a
+  // avaliação DEFINITIVA (não rascunho — rascunhos continuam só no
+  // localStorage do navegador, ver setor-qualidade.js) — 1 linha em
+  // avaliacoes_qualidade, painéis inclusos como JSON (ver
+  // db.salvarAvaliacaoQualidade). Sem exigir sessão de admin nem
+  // dispositivo autorizado, de propósito — mesmo nível de fricção baixa
+  // de /marcar-berco-andamento e outras rotas internas do dia a dia.
+  if (req.method === 'POST' && urlPath === '/registrar-avaliacao-qualidade') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const avaliacao = JSON.parse(body);
+        if (!avaliacao || typeof avaliacao !== 'object' || !avaliacao.id) {
+          throw new Error('Avaliação inválida — falta o id.');
+        }
+        db.salvarAvaliacaoQualidade(avaliacao);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── LISTAR AVALIAÇÕES DE QUALIDADE: alimenta o Dashboard e os
+  // Registros do Setor de Qualidade — cada item já vem com os painéis
+  // embutidos (ver db.listarAvaliacoesQualidade), mais recente primeiro.
+  if (req.method === 'GET' && urlPath === '/avaliacoes-qualidade') {
+    try {
+      const lista = db.listarAvaliacoesQualidade();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(lista));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
   // ── EDITAR TRAÇO (Relatório de Injeção): corrige um traço já registrado
   // em relatorio_injecao.json (id_bateria/berços/obs do USO específico
   // clicado, dados de identificação do traço, e os 5 insumos + tempo de
@@ -963,6 +1306,12 @@ const server = http.createServer((req, res) => {
   // Auditoria em relatorio_edicoes.json (mesmo padrão de
   // historico_edicoes.json, indexado por id_traco).
   if (req.method === 'POST' && urlPath === '/editar-traco-relatorio') {
+    // Mesma checagem aplicada a /editar-operacao, acima — ver comentário lá.
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada. Volte ao login e entre novamente como Administrador.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -1464,11 +1813,40 @@ const server = http.createServer((req, res) => {
   // do arquivo). "dados" é sempre o objeto inteiro do estado atual, ou
   // null — quando a operação termina, é cancelada/resetada, ou ainda não
   // foi iniciada (ver regra equivalente em persist(), no operacao.js).
+  if (req.method === 'POST' && urlPath === '/admin/resetar-operacao') {
+    // Rota exclusiva para o Administrador cancelar/resetar a operação em
+    // andamento pela tela de Configurações → Autorizados, sem depender do
+    // deviceId de quem está clicando ser um dispositivo autorizado.
+    // Diferença em relação a POST /salvar-operacao-andamento com forcar=true:
+    // - Aquela rota exige que o deviceId da requisição esteja na lista de
+    //   autorizados (ver dispositivoAutorizado(), linha 1515 acima), então
+    //   falha quando o Administrador está em um computador não autorizado.
+    // - Esta rota ignora a lista de autorizados e exige apenas uma SESSÃO
+    //   válida do Administrador (lib/sessao.js), criada em /verificar-senha.
+    // Produz exatamente o mesmo efeito: null no disco + broadcast para todos
+    // os clientes WebSocket conectados, que atualizam a tela em tempo real.
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de Administrador necessária. Faça login como Administrador antes de cancelar a operação.' }));
+      return;
+    }
+    try {
+      salvarOperacaoAndamentoNoDisco(null);
+      broadcastOperacaoAndamento(null, null);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+
   if (req.method === 'POST' && urlPath === '/salvar-operacao-andamento') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const payload = JSON.parse(body);
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -1486,6 +1864,26 @@ const server = http.createServer((req, res) => {
         // ficou offline, ou simplesmente esqueceu de encerrar.
         const forcar = payload.forcar === true && ehLimpeza;
 
+        const atual = lerOperacaoAndamento();
+
+        // Não-operação: já não tinha nada em andamento e o pedido é só pra
+        // "limpar" — não muda NADA no servidor. Acontece, por exemplo, ao
+        // desativar o Modo de Teste com a tela ociosa: persist() manda
+        // null pro servidor mesmo sem nunca ter existido uma operação real
+        // pra esse dispositivo controlar (o Modo de Teste nunca chega a
+        // avisar o servidor enquanto ligado — ver persist(), operacao.js).
+        // Responde OK sem checar autorização nem gravar nada: não tem o
+        // que proteger quando nada muda — checar autorização aqui só
+        // produziria um "não autorizado" confuso por uma ação que nunca
+        // tentou controlar operação real nenhuma.
+        if (ehLimpeza && !atual) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+
         // ── Dono da operação ──────────────────────────────────────────────
         // Só existe UMA operação em andamento por vez (ver seção dedicada no
         // README), mas a lista de Autorizados pode ter mais de um
@@ -1494,7 +1892,6 @@ const server = http.createServer((req, res) => {
         // mudanças, até a operação ser limpa (registrada, resetada, ou
         // "forçada" por outro autorizado). Isso evita dois computadores
         // autorizados brigando pela mesma operação ao mesmo tempo.
-        const atual = lerOperacaoAndamento();
         const donoAtual = (atual && typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
         const souODono = !donoAtual || donoAtual === deviceId;
 
@@ -1520,6 +1917,139 @@ const server = http.createServer((req, res) => {
 
         salvarOperacaoAndamentoNoDisco(dadosFinal);
         broadcastOperacaoAndamento(dadosFinal, clientId);
+
+        // Berços marcados (baixou/vazou) só fazem sentido enquanto ESSA
+        // operação existe — ao limpar (fim normal, "🗑️ Limpar Tudo", ou
+        // reset), reseta junto pra próxima operação começar sem marcação
+        // nenhuma. Quando a limpeza é porque a operação foi REGISTRADA de
+        // verdade, o conteúdo já foi transferido pra bercos_visuais antes
+        // (ver POST /registrar-operacao, que já reseta por conta própria —
+        // resetar de novo aqui é inofensivo, só redundante).
+        if (ehLimpeza) salvarBercosAndamentoNoDisco({});
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── GET /bercos-andamento: mapa esparso aninhado por lado —
+  // { 'B1': { esquerda: 'baixou' }, 'B7': { direita: 'baixou' } } — dos
+  // berços marcados na operação em andamento agora (ver "Bateria Atual",
+  // bateria-atual.js). Lado ausente do mapa = 'okay' implicitamente.
+  if (req.method === 'GET' && urlPath === '/bercos-andamento') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(lerBercosAndamento()));
+    return;
+  }
+
+  // ── POST /marcar-berco-andamento: alterna (toggle) o estado de UM LADO
+  // de UM berço da operação em andamento — 'okay' -> 'baixou' -> 'okay'
+  // de novo a cada clique naquele indicador específico (● ou •, ver
+  // "Bateria Atual", bateria-atual.js). Os 2 lados de um mesmo berço são
+  // independentes — marcar um não afeta o outro. Sem exigir dispositivo
+  // autorizado nem "dono" da operação de propósito: é uma marcação de
+  // observação (quem estiver olhando "Bateria Atual" em qualquer tela),
+  // não um controle da operação em si — mesmo espírito de baixa fricção
+  // de outras rotas internas do dia a dia.
+  if (req.method === 'POST' && urlPath === '/marcar-berco-andamento') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const berco = payload && payload.berco;
+        const lado = payload && payload.lado;
+        if (!berco || typeof berco !== 'string' || !/^B\d+$/.test(berco)) {
+          throw new Error('Berço inválido.');
+        }
+        if (lado !== 'esquerda' && lado !== 'direita') {
+          throw new Error('Lado inválido — precisa ser "esquerda" ou "direita".');
+        }
+        if (!lerOperacaoAndamento()) {
+          throw new Error('Nenhuma operação em andamento agora.');
+        }
+
+        const mapa = lerBercosAndamento();
+        const doBerco = mapa[berco] || {};
+        if (doBerco[lado] === 'baixou') {
+          delete doBerco[lado]; // reversível: clicar de novo volta pra 'okay' (ausência do lado no mapa)
+        } else {
+          doBerco[lado] = 'baixou';
+        }
+        if (Object.keys(doBerco).length) mapa[berco] = doBerco;
+        else delete mapa[berco]; // nenhum lado marcado -> nem precisa a chave do berço
+        salvarBercosAndamentoNoDisco(mapa);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, estado: doBerco[lado] || 'okay' }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── POST /leitura-automatica: recebe UMA leitura vinda de fora (hoje só
+  // via teste manual — a fonte real seria um coletor Modbus TCP lendo o
+  // CLP da linha de produção, que ainda não está conectado, ver README,
+  // "Modo Automático") e transmite via WebSocket pra quem estiver com
+  // "🤖 Modo Automático" ativo em Registrar Operação (ver operacao.js,
+  // _aplicarLeituraAutomatica) — essa tela decide o que fazer com a
+  // leitura; esta rota só valida o formato mínimo e repassa.
+  //
+  // 2 formatos aceitos:
+  //   Insumo (balança):  { tipo:'insumo', campo:'cimento_real', valor:512.3, traco:1 }
+  //     - campo: um dos 5 insumos reais do traço (ver CAMPOS_INSUMO_VALIDOS)
+  //     - traco: número do traço (t.num) a que se refere — opcional, se
+  //       omitido a tela aplica no traço selecionado no momento
+  //   Berço (injetora):  { tipo:'berco', berco:'B7' }
+  //     - ainda SEM AÇÃO definida do lado da tela (só chega e é logada) —
+  //       falta decidir o que uma leitura de berço da injetora deve mudar
+  //       (ver operacao.js)
+  //
+  // Sem exigir dispositivo autorizado nem sessão de admin de propósito:
+  // mesmo espírito de baixa fricção de /marcar-berco-andamento — é uma
+  // leitura de sensor, não um controle da operação em si.
+  const CAMPOS_INSUMO_VALIDOS = new Set(['cimento_real', 'agua_real', 'eps_real', 'superplast_real', 'incorporador_real']);
+  if (req.method === 'POST' && urlPath === '/leitura-automatica') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const leitura = JSON.parse(body);
+        if (!leitura || (leitura.tipo !== 'insumo' && leitura.tipo !== 'berco')) {
+          throw new Error('Campo "tipo" precisa ser "insumo" ou "berco".');
+        }
+
+        // Confere o flag GLOBAL (Configurações → Automação), não mais um
+        // estado por operação — rejeita cedo se ninguém ligou o Modo
+        // Automático, pra um coletor mal configurado não ficar mandando
+        // leituras que nunca serão aplicadas (e pra deixar claro pra quem
+        // está testando a integração que precisa ligar o modo primeiro).
+        const cfgAtual = JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
+        if (cfgAtual.modoAutomatico !== true) {
+          throw new Error('Modo Automático está desligado (Configurações → Automação).');
+        }
+        if (leitura.tipo === 'insumo') {
+          if (!CAMPOS_INSUMO_VALIDOS.has(leitura.campo)) {
+            throw new Error('Campo de insumo inválido: ' + leitura.campo);
+          }
+          if (typeof leitura.valor !== 'number' || !isFinite(leitura.valor)) {
+            throw new Error('"valor" precisa ser um número.');
+          }
+        } else if (leitura.tipo === 'berco') {
+          if (!leitura.berco || typeof leitura.berco !== 'string' || !/^B\d+$/.test(leitura.berco)) {
+            throw new Error('Berço inválido.');
+          }
+        }
+
+        broadcastLeituraAutomatica(leitura);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1900,6 +2430,10 @@ const server = http.createServer((req, res) => {
             } else if (nome === 'relatorio_edicoes.json') {
               const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) })), null, 2), 'utf8');
+            } else if (nome === 'bercos_visuais.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsBercosVisuais(), null, 2), 'utf8');
+            } else if (nome === 'avaliacoes_qualidade.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.listarAvaliacoesQualidade(), null, 2), 'utf8');
             } else {
               fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
@@ -1919,7 +2453,8 @@ const server = http.createServer((req, res) => {
         // garantia de "tudo ou nada").
         const nomesArquivo = esperados.filter(n =>
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
-            'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json'].includes(n));
+            'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json',
+            'bercos_visuais.json', 'avaliacoes_qualidade.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
           tmp: caminhoArquivoDb(nome) + '.tmp',
           destino: caminhoArquivoDb(nome),
@@ -1999,6 +2534,14 @@ const server = http.createServer((req, res) => {
           const novoRelatorioAtual = db.todosOsTracos();
           const novosAjustes = JSON.parse(textosValidados['ajustes_tracos.json']);
           db.transaction(() => db.substituirTracosEAjustes(novoRelatorioAtual, novosAjustes))();
+        }
+        if (esperados.includes('bercos_visuais.json')) {
+          const novosBercosVisuais = JSON.parse(textosValidados['bercos_visuais.json']);
+          db.transaction(() => db.substituirBercosVisuais(novosBercosVisuais))();
+        }
+        if (esperados.includes('avaliacoes_qualidade.json')) {
+          const novasAvaliacoes = JSON.parse(textosValidados['avaliacoes_qualidade.json']);
+          db.transaction(() => db.substituirAvaliacoesQualidade(novasAvaliacoes))();
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2149,9 +2692,22 @@ const server = http.createServer((req, res) => {
   const ext = path.extname(filePath);
   if (!MIME[ext] && !ext) filePath += '.html';
 
-  fs.readFile(filePath, (err, data) => {
+  // ─── Path traversal ─────────────────────────────────────────────────────
+  // path.join() acima NÃO impede que urlPath contenha "..", "%2e%2e" (já
+  // decodificado), ou um caminho absoluto — ex: GET /../server.js ou
+  // GET /../../private/security.json escapariam de DIR (public/) e
+  // exporiam qualquer arquivo do disco que o processo Node consiga ler.
+  // Resolve o caminho final e recusa qualquer um que não fique estritamente
+  // dentro de DIR (mesma técnica já usada em caminhoSeguroDentroDoProjeto(),
+  // acima, pra Restauração Geral).
+  const caminhoResolvido = path.resolve(filePath);
+  if (caminhoResolvido !== DIR && !caminhoResolvido.startsWith(DIR + path.sep)) {
+    res.writeHead(403); res.end('Forbidden'); return;
+  }
+
+  fs.readFile(caminhoResolvido, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'text/plain' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(caminhoResolvido)] || 'text/plain' });
     res.end(data);
   });
 
@@ -2198,6 +2754,15 @@ function broadcastOperacaoAndamento(dados, origemClientId) {
 // (operacao.js) já usa pra exibir o modal de sucesso.
 function broadcastOperacaoFinalizada(resumo, origemClientId) {
   _enviarWsParaTodos({ tipo: 'operacao_finalizada', resumo, origemClientId });
+}
+
+// Avisa quem estiver com "Modo Automático" ativo (ver operacao.js,
+// _aplicarLeituraAutomatica) que uma leitura chegou de fora — hoje
+// disparado só por POST /leitura-automatica (ver mais acima), que por
+// enquanto é chamado manualmente/por teste; a fonte real (coletor Modbus
+// TCP lendo o CLP WAGO) ainda não existe — ver README, "Modo Automático".
+function broadcastLeituraAutomatica(leitura) {
+  _enviarWsParaTodos({ tipo: 'leitura_automatica', leitura });
 }
 
 server.listen(PORT, () => {

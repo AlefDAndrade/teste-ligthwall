@@ -53,7 +53,7 @@
 
       // A partir daqui, qualquer mudança feita em OUTRA aba/computador
       // nesta mesma operação chega aqui ao vivo (cronômetro incluso).
-      LW.conectarOperacaoAndamento(_aplicarEstadoExterno, _notificarOperacaoFinalizadaPorOutro);
+      LW.conectarOperacaoAndamento(_aplicarEstadoExterno, _notificarOperacaoFinalizadaPorOutro, _aplicarLeituraAutomatica);
 
       // Fecha popovers ao clicar fora
       document.addEventListener('click', (e) => {
@@ -166,12 +166,47 @@
       recalcPaineis();
       persist();
     });
-    $('op-id-bateria').addEventListener('change', e => {
-      state.id_bateria = e.target.value;
-      // Mudou de bateria — a grade (se já tinha alguma) não vale mais
-      // (capacidade pode ser diferente); melhor recomeçar do zero do que
-      // arriscar um tamanho errado.
-      if (state.bercos_personalizados) state.bercos_personalizados = null;
+    $('op-id-bateria').addEventListener('change', async e => {
+      const novoId = e.target.value;
+      const idAntigo = state.id_bateria;
+      const bateriaNova = LW.BATERIA_IDS.find(b => b.id === novoId);
+      const novaCapacidade = bateriaNova?.bercos || 0;
+
+      // Se a Montagem é Personalizada e a bateria nova tem capacidade
+      // MENOR, berços já configurados que não cabem mais seriam
+      // descartados no redimensionamento abaixo — avisa antes de aplicar,
+      // com chance de cancelar e manter a bateria (e a personalização)
+      // como estavam.
+      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA && Array.isArray(state.bercos_personalizados)) {
+        const descartados = state.bercos_personalizados.slice(novaCapacidade).filter(Boolean).length;
+        if (descartados > 0) {
+          const confirmou = await LW.mostrarConfirmacao(
+            `A bateria ${novoId} tem menos berços que a personalização atual — ${descartados} berço(s) já configurado(s) vão ser perdidos. Continuar mesmo assim?`,
+            { titulo: 'Trocar de bateria?', textoConfirmar: 'Trocar e Perder', icon: '⚠️' }
+          );
+          if (!confirmou) {
+            e.target.value = idAntigo; // desfaz a troca visualmente no <select>
+            return;
+          }
+        }
+      }
+
+      state.id_bateria = novoId;
+      // Preserva o que já foi configurado berço a berço, redimensionando
+      // pra capacidade da bateria nova (pode ser maior ou menor) em vez de
+      // jogar tudo fora — mesma lógica de redimensionamento já usada ao
+      // reabrir a grade pra revisão (ver abrirGradeMontagemPersonalizada,
+      // mais abaixo). Berços que sobrarem do tamanho antigo são
+      // descartados (já avisado acima, se algum tinha tipo definido);
+      // berços novos (se a capacidade aumentou) nascem vazios (null),
+      // como sempre. Fora do modo Personalizado, bercos_personalizados já
+      // era sempre null mesmo — nada muda nesse caso.
+      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA && Array.isArray(state.bercos_personalizados)) {
+        const atual = state.bercos_personalizados;
+        state.bercos_personalizados = Array.from({ length: novaCapacidade }, (_, i) => atual[i] || null);
+      } else if (state.bercos_personalizados) {
+        state.bercos_personalizados = null;
+      }
       updateCapacidade();
       recalcPaineis();
       persist();
@@ -331,6 +366,13 @@
     const fieldset = $('op-fieldset-trava');
     const aviso = $('op-aviso-nao-autorizado');
     const avisoTeste = $('op-aviso-modo-teste');
+    const indicadorAutomatico = $('op-indicador-modo-automatico');
+
+    // Sem tema/cor de propósito (diferente do Modo de Teste, abaixo) —
+    // configuração GLOBAL agora (Configurações → Automação, não mais um
+    // toggle nesta tela), então só um texto simples confirma que está
+    // ligado, sem chamar tanta atenção quanto um banner colorido faria.
+    if (indicadorAutomatico) indicadorAutomatico.style.display = LW.MODO_AUTOMATICO_ATIVO ? 'inline' : 'none';
 
     // "Tema de teste" na página inteira (não só o banner do topo) — ver
     // CSS de #page-operacao.modo-teste-ativo (styles.css): retinta os
@@ -1766,7 +1808,7 @@
             ${renderCampoInsumo(t, i, 'flow_insumo', 'Flow (mm)', '1', 0, 'mm', t._reaproveitado)}
             <div class="form-group traco-obs-field">
               <label class="form-label">Observações</label>
-                <input class="form-input" type="text" value="${t.obs}"
+                <input class="form-input" type="text" value="${LW.escaparHtml(t.obs || '')}"
                 oninput="LWOp.updateTraco(${i},\'obs\',this.value)" placeholder="Ajustes, correções, falhas...">
             </div>
           </div>
@@ -2035,6 +2077,60 @@
     showSuccessModal(resumo, { remoto: true });
   }
 
+  // Campos de insumo válidos pra uma leitura automática de balança — os
+  // mesmos 5 insumos reais do traço (ver CAMPOS_INSUMO_AJUSTE, acima).
+  // Mantido separado dali porque este é só a lista de nomes de campo
+  // (pra validar), não a estrutura completa {campo,nome,label,step}.
+  const CAMPOS_INSUMO_AUTOMATICO_VALIDOS = new Set([
+    'cimento_real', 'agua_real', 'eps_real', 'superplast_real', 'incorporador_real',
+  ]);
+
+  /**
+   * Chamada quando chega uma leitura via POST /leitura-automatica
+   * (server.js) — hoje só a ESTRUTURA: a fonte real (coletor Modbus TCP
+   * lendo o CLP WAGO da balança/injetora) ainda não existe, ver README,
+   * "Modo Automático". Só faz alguma coisa se "🤖 Modo Automático"
+   * estiver ligado em Configurações → Automação (LW.MODO_AUTOMATICO_ATIVO,
+   * config GLOBAL — não mais um toggle desta tela) — senão ignora
+   * silenciosamente (a leitura pode ter sido mandada por engano, ou este
+   * navegador pode nem ser o que está registrando a operação agora).
+   *
+   * leitura = {tipo:'insumo', campo, valor, traco} — preenche o campo do
+   *   insumo indicado. `traco` (número, t.num) é opcional: se informado,
+   *   aplica nesse traço específico; senão, aplica no traço selecionado
+   *   no momento (aba ativa em "Traços de Injeção"). Reaproveita
+   *   LWOp.updateInsumoOriginal — o MESMO caminho que o campo digitado à
+   *   mão usa — então tudo que já funciona pra digitação manual (total
+   *   calculado, indicador de traço completo/pendente, persistência)
+   *   funciona igual aqui, sem duplicar lógica nenhuma.
+   *
+   * leitura = {tipo:'berco', berco} — chega, mas AINDA SEM AÇÃO definida
+   *   nesta tela (só loga) — falta decidir o que uma leitura de berço da
+   *   injetora deve mudar aqui (marcar em bercos_visuais? avançar
+   *   bercos_reais? outra coisa?) — próxima etapa.
+   */
+  function _aplicarLeituraAutomatica(leitura) {
+    if (!LW.MODO_AUTOMATICO_ATIVO || !leitura) return;
+
+    if (leitura.tipo === 'insumo') {
+      if (!CAMPOS_INSUMO_AUTOMATICO_VALIDOS.has(leitura.campo)) return;
+      if (typeof leitura.valor !== 'number' || !isFinite(leitura.valor)) return;
+
+      const idxPorNum = typeof leitura.traco === 'number'
+        ? state.tracos.findIndex(t => t.num === leitura.traco)
+        : -1;
+      const i = idxPorNum >= 0 ? idxPorNum : expandedTracoIndex;
+      if (!state.tracos[i]) return; // nenhum traço pra aplicar — ignora
+
+      LWOp.updateInsumoOriginal(i, leitura.campo, leitura.valor);
+      renderTracos();
+    } else if (leitura.tipo === 'berco') {
+      // TODO: decidir a ação (ver comentário acima) — por enquanto só
+      // confirma que a leitura chegou, sem mudar nada na tela.
+      console.log('[Modo Automático] Leitura de berço recebida (ainda sem ação definida):', leitura);
+    }
+  }
+
   async function resetarOperacao() {
     if (_bloqueadoPorAutorizacao({ ignorarDono: true })) return false;
     const confirmou = await LW.mostrarConfirmacao(
@@ -2146,6 +2242,12 @@
     updateStatusBanner();
     updatePendencias();
     _aplicarTravaDeAutorizacao();
+    // Cobre os casos que não passam por persist() — carga inicial da
+    // tela, reset ("🗑️ Limpar Tudo"), fim de operação e atualização
+    // vinda de OUTRO dispositivo (ver _aplicarEstadoExterno) — em todos
+    // eles o card precisa refletir o estado na hora, sem esperar o
+    // próximo sync periódico de marcações.
+    if (window.LWBateriaAtual) LWBateriaAtual.atualizarComEstado(state);
   }
 
   function persist() {
@@ -2161,6 +2263,10 @@
       // aparecer pra quem mais estiver com a tela aberta.
       LW.enviarOperacaoAndamento(state.status === 'idle' ? null : state);
     }
+    // Card "Bateria Atual": sempre reflete o rascunho local na hora,
+    // mesmo antes de "Iniciar Injeção" e mesmo em modo teste (é só uma
+    // prévia visual nesta mesma tela — não depende de transmitir nada).
+    if (window.LWBateriaAtual) LWBateriaAtual.atualizarComEstado(state);
     updatePendencias();
   }
 

@@ -1,0 +1,45 @@
+<!-- ============ PAGE: RELATÓRIO DE BERÇOS ============ -->
+    <main class="main" id="page-relatorio-bercos">
+      <div class="page-header" style="position:relative">
+        <h1 class="page-title">Relatório de <span>Berços</span></h1>
+        <p class="page-desc">Resultado visual (Okay/Vazou) de cada berço, por bateria já registrada</p>
+      </div>
+
+      <div class="page-body">
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('analise-bercos')" title="Ver totais de vazamento, pontos recorrentes e insights automáticos">
+            💧 Ver em Dashboard</button>
+        </div>
+
+        <div class="card mb-4" style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <input class="form-input" type="date" id="rb-data-inicio" style="width:150px" title="Data início">
+            <span style="color:var(--text-3);font-size:.85rem">até</span>
+            <input class="form-input" type="date" id="rb-data-fim" style="width:150px" title="Data fim">
+            <button class="btn btn-ghost btn-sm" id="btn-rb-filtrar">Filtrar</button>
+            <button class="btn btn-ghost btn-sm" id="btn-rb-limpar">✕ Limpar</button>
+            <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+              <span style="font-size:.78rem;color:var(--text-3)" id="rb-count"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cabeçalho montado em JS (relatorio-bercos.js) — B1..B22, cada um
+             com 2 sub-colunas (Esquerda/Direita) — ver _construirThead(). -->
+        <div class="table-wrap">
+          <table id="relatorio-bercos-table">
+            <thead>
+              <tr id="relatorio-bercos-thead-topo"></tr>
+              <tr id="relatorio-bercos-thead-sub"></tr>
+            </thead>
+            <tbody id="relatorio-bercos-tbody">
+              <tr>
+                <td colspan="46" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </main>

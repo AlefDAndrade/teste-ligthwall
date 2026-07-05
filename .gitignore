@@ -7,3 +7,5 @@ public/db/teste/
 data/
 private/
 .test-tmp/
+public/db/security.json
+public/db/security.json.migrado-*

@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: Relatorio de Baterias ============ -->
+<!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
       <div class="page-header" style="position:relative">
         <h1 class="page-title">Registro de <span>Baterias</span></h1>
@@ -13,12 +13,22 @@
 
       <div class="page-body">
 
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('analise-operacional')" title="Ver KPIs, gargalos e insights automáticos desta mesma base de dados">
+            📊 Ver em Dashboard</button>
+        </div>
+
         <div class="card mb-4" style="padding:16px 20px">
           <!-- Período — separado conforme spec -->
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
             <input class="form-input" type="date" id="reg-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="reg-data-fim" style="width:150px" title="Data fim">
+            <select class="form-input" id="reg-filtro-rapido" style="width:110px"
+              title="Filtrar por período" onchange="aplicarFiltroRapido('filtros-registro', this.value)">
+              <option value="hoje">📅 Hoje</option>
+              <option value="todos" selected>Todos</option>
+            </select>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
@@ -40,11 +50,18 @@
               <button class="btn btn-ghost btn-sm" id="btn-editar-registro" data-admin-only
                 title="Corrigir dados de uma operação já registrada" onclick="LWDash.toggleModoEdicaoRegistro()">✏️
                 Editar</button>
+              <button class="btn btn-ghost btn-sm" id="btn-foco-registro"
+                title="Clique numa linha da tabela para ver todos os dados daquela operação (berços, receita e avaliação)"
+                onclick="LWDash.toggleModoFocoRegistro()">🔎 Análise Focada</button>
             </div>
           </div>
           <div id="registro-aviso-edicao"
             style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(245,158,11,.1);border:1px solid var(--accent-dim);border-radius:var(--radius);color:var(--accent);font-size:.82rem">
             ✏️ Modo de edição ativo — clique em uma linha da tabela para corrigir os dados daquela operação.
+          </div>
+          <div id="registro-aviso-foco"
+            style="display:none;align-items:center;gap:8px;margin-top:10px;padding:9px 14px;background:rgba(59,130,246,.1);border:1px solid var(--blue);border-radius:var(--radius);color:var(--blue);font-size:.82rem">
+            🔎 Modo de foco ativo — clique em uma linha da tabela para ver todos os dados daquela operação (berços, receita e avaliação).
           </div>
           <!-- Filtros hierárquicos -->
           <div id="filtros-registro" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
@@ -57,7 +74,7 @@
 
         <div class="table-wrap">
           <table id="registro-table">
-            <thead>
+            <thead id="registro-thead">
               <tr>
                 <th data-col="data">Data</th>
                 <th data-col="turno">Turno</th>

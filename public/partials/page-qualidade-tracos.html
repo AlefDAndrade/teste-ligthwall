@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: QUALIDADE DOS TRAÇOS ============ -->
+<!-- ============ PAGE: QUALIDADE DOS TRAÇOS ============ -->
     <main class="main" id="page-qualidade-tracos">
       <div class="page-header">
         <h1 class="page-title">CEP — Controle <span>Estatístico de Processo</span></h1>
@@ -6,6 +6,11 @@
         </p>
       </div>
       <div class="page-body">
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('relatorio')" title="Voltar para a tabela do Relatório de Injeção">
+            🧾 Ver Tabela</button>
+        </div>
 
         <!-- ── FILTROS (inalterados) ── -->
         <div class="card mb-4" style="padding:16px 20px">
@@ -74,7 +79,7 @@
             </div>
           </div>
           <!-- Total ajustes + Média -->
-          <div class="card" style="padding:16px">
+          <div class="card" id="qt-card-total-ajustes" style="padding:16px;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Total de Ajustes</div>
@@ -93,7 +98,7 @@
             <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">ajustes por traço</div>
           </div>
           <!-- Receita mais estável -->
-          <div class="card" style="padding:16px;border-left:3px solid #10b981">
+          <div class="card" id="qt-card-receita-estavel" style="padding:16px;border-left:3px solid #10b981;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Receita Mais Estável</div>
@@ -102,7 +107,7 @@
             <div id="qt-receita-estavel-pct" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
           </div>
           <!-- Receita mais instável -->
-          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+          <div class="card" id="qt-card-receita-instavel" style="padding:16px;border-left:3px solid #ef4444;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Receita Mais Instável</div>
@@ -114,14 +119,14 @@
 
         <!-- ── KPIs LINHA 2: Insumo mais ajustado + maior desvio + Distribuição donut ── -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div class="card" style="padding:16px;border-left:3px solid #ef4444">
+          <div class="card" id="qt-card-insumo-mais-ajustado" style="padding:16px;border-left:3px solid #ef4444;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Insumo Mais Ajustado</div>
             <div id="qt-insumo-mais-ajustado" style="font-size:1.15rem;font-weight:700;color:#ef4444">—</div>
             <div id="qt-insumo-mais-ajustado-cnt" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
           </div>
-          <div class="card" style="padding:16px;border-left:3px solid #f59e0b">
+          <div class="card" id="qt-card-insumo-maior-desvio" style="padding:16px;border-left:3px solid #f59e0b;cursor:help">
             <div
               style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
               Maior Desvio Percentual</div>
@@ -234,5 +239,3 @@
 
       </div>
     </main>
-
-

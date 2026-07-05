@@ -293,8 +293,8 @@
         <td style="white-space:nowrap">${formatarDataHora(p.inicio)}</td>
         <td style="white-space:nowrap">${formatarDataHora(p.fim)}</td>
         <td>${formatarDuracao(p.duracao_min)}</td>
-        <td>${p.motivo || '—'}</td>
-        <td>${p.equipamento || '—'}</td>
+        <td>${p.motivo ? LW.escaparHtml(p.motivo) : '—'}</td>
+        <td>${p.equipamento ? LW.escaparHtml(p.equipamento) : '—'}</td>
         <td>${badge}</td>
         <td style="white-space:nowrap">${btns}</td>
       </tr>`;

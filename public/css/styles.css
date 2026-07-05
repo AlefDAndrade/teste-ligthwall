@@ -429,6 +429,19 @@ h4 {
   align-items: start;
 }
 
+/* Sem isso, cada coluna (item de grid) usa como largura MÍNIMA o
+   min-content do que tem dentro dela — e a grade de berços da Bateria
+   Atual (.ba-grid, fileira única sem quebra de linha) pode ter um
+   min-content bem largo em baterias grandes. Resultado: a coluna da
+   direita ignorava o "1.1fr" e crescia pra caber a grade inteira,
+   espremendo a coluna esquerda (Informações Operacionais) no processo.
+   min-width:0 faz as colunas respeitarem o fr definido acima e deixa
+   .ba-grid rolar horizontalmente dentro do espaço que sobrar, como já
+   era a intenção (ver overflow-x:auto em .ba-grid). */
+.op-layout-grid > * {
+  min-width: 0;
+}
+
 .op-info-column {
   display: flex;
   flex-direction: column;
@@ -802,9 +815,12 @@ h4 {
   position: sticky;
   top: 0;
   z-index: 10;
-  /* Garante que o cabeçalho fique sobre as linhas */
-  background-color: #1e2229;
-  /* Use a cor de fundo exata da sua tabela para não ficar transparente */
+  /* Garante que o cabeçalho fique sobre as linhas — var(--bg-card), não
+     mais uma cor fixa (#1e2229): aquele valor só bate com o tema escuro
+     padrão; no tema Claro (--bg-card:#fff) ou Lightwall (--bg-card:
+     #122236) o cabeçalho ficava sempre com aquele azul-marinho fixo,
+     destoando do resto da tabela (que already troca de cor com o tema). */
+  background-color: var(--bg-card);
   box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
   /* Adiciona uma leve sombra para separar do conteúdo */
 }
@@ -830,6 +846,20 @@ th {
   text-align: left;
   white-space: nowrap;
   border-bottom: 1px solid var(--border);
+}
+
+/* Cabeçalho clicável pra ordenar (Registro de Baterias e Relatório de
+   Injeção — ver _ligarOrdenacaoTabela em dashboard.js). A seta (▲/▼) é
+   texto simples, adicionada/removida em JS — aqui só o afordance visual
+   de "isto é clicável". */
+th.th-ordenavel {
+  cursor: pointer;
+  user-select: none;
+  transition: color .15s ease;
+}
+
+th.th-ordenavel:hover {
+  color: var(--accent);
 }
 
 td {
@@ -859,6 +889,204 @@ tbody tr:hover td {
 td.mono {
   font-family: var(--font-mono);
   font-size: .8rem;
+}
+
+/* Relatório de Berços — tabela com 22 berços × 2 colunas (Esquerda/
+   Direita) = 44 colunas de dado, então célula bem mais estreita que o
+   padrão (11px 33px ficaria enorme). O cabeçalho aqui tem 2 <tr> (Bx em
+   cima, E/D embaixo) — desligamos o "sticky" padrão de .table-wrap
+   thead th pra essa tabela: a 2ª linha ficaria sobreposta à 1ª (as duas
+   herdariam top:0), e não vale a pena calcular a altura exata da 1ª
+   linha só pra "empilhar" as duas sticky corretamente. */
+#relatorio-bercos-table th,
+#relatorio-bercos-table td {
+  padding: 8px 10px;
+}
+#relatorio-bercos-table th.rb-sub {
+  padding: 5px 10px;
+  font-size: .62rem;
+}
+#relatorio-bercos-table thead th {
+  position: static;
+}
+#relatorio-bercos-table td.rb-vazio {
+  color: var(--text-3);
+}
+
+/* Popover de hover/toque do Relatório de Berços — mostra a grade completa
+   do berço daquela linha (mesmo visual de "Bateria Atual", ver .ba-grid/
+   .ba-celula/.ba-dot acima). position:fixed + anexado direto no <body>
+   (ver relatorio-bercos.js, _garantirPopover) pra escapar do overflow:auto
+   de .table-wrap — dentro da tabela ele ficaria cortado pelo scroll. */
+#relatorio-bercos-table tr[data-id-operacao] {
+  cursor: help;
+}
+.rb-popover {
+  display: none;
+  position: fixed;
+  z-index: 500;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .4);
+  padding: 12px 16px;
+  min-width: 460px;
+  max-width: min(90vw, 720px);
+}
+.rb-popover .ba-grid {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+/* ============================================================
+   Análise Focada — página de detalhe de 1 operação (ver
+   analise-focada.js), acessada pelo "modo de foco" no Registro de
+   Baterias. Reaproveita .ba-grid/.ba-celula/.ba-dot (definidas acima,
+   junto do popover do Relatório de Berços) pro desenho da bateria.
+   ============================================================ */
+.af-cabecalho-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+.af-label {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.af-valor {
+  font-size: .95rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sq-empty-af {
+  text-align: center;
+  padding: 30px 10px;
+  color: var(--text-3);
+  font-size: .85rem;
+}
+.sq-empty-af i {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+  display: block;
+  opacity: .5;
+}
+
+/* Receita utilizada — 1 card por traço usado na operação */
+.af-traco-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.af-traco-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.af-traco-bercos {
+  font-size: .78rem;
+  color: var(--text-3);
+}
+.af-receita-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  font-size: .82rem;
+}
+.af-traco-obs {
+  margin-top: 10px;
+  font-size: .8rem;
+  color: var(--text-2);
+}
+.af-sem-ajuste {
+  margin-top: 10px;
+  font-size: .8rem;
+  color: var(--text-3);
+  font-style: italic;
+}
+.af-ajustes-wrap {
+  margin-top: 12px;
+}
+.af-ajustes-titulo {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.af-ajuste-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: .8rem;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+}
+
+/* Avaliação de qualidade — 4 pallets, cada painel em TEXTO (Aprovado /
+   1ª linha, Aprovado / 2ª linha, Reprovado), sem marca/forma nenhuma —
+   pedido explícito, diferente de como aparece no Setor de Qualidade. */
+.af-paineis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.af-pallet {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  background: var(--bg-2);
+}
+.af-pallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: .85rem;
+  margin-bottom: 8px;
+}
+/* "Tipo de montagem no cantinho" — badge discreto no canto do card do
+   pallet, não em cada painel individual. */
+.af-pallet-tipo {
+  font-size: .66rem;
+  font-weight: 600;
+  background: var(--bg-3);
+  color: var(--text-3);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.af-pallet-slabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-slab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 4px;
+  font-size: .78rem;
+  background: var(--bg-card);
+}
+.af-slab-num {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.af-slab-resultado {
+  font-weight: 700;
+  text-align: right;
 }
 
 /* Linha visual extra de um traço reaproveitado, no Relatório de Injeção —
@@ -2408,94 +2636,105 @@ td.mono {
 }
 
 /* ============================================================
-   "BATERIA ATUAL" (popover da topbar, ao lado do Debriefing)
+   "BATERIA ATUAL" (card sempre visível em Registrar Operação, logo
+   abaixo de Traços de Injeção — antes era um popover no topbar)
    ============================================================ */
-/* Mesmo padrão visual do Debriefing (.ao-popover + cabeçalho próprio) —
-   só leitura: mostra os berços da operação em andamento agora, no
-   formato visual da grade de Montagem Personalizada (ver operacao.js),
-   mas aqui o berço em si não é clicável — só os 2 indicadores (●/•)
-   dentro de cada um, que por enquanto não têm função associada (ver
-   bateria-atual.js, _baCliqueIndicador). */
-.bateria-atual-popover {
-  width: 360px;
-  max-width: min(360px, calc(100vw - 48px));
-  max-height: 70vh;
-  padding: 0;
-  overflow: hidden;
-}
-
-.bateria-atual-popover.active {
-  display: flex;
-  flex-direction: column;
-}
-
-.ba-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.ba-header-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  white-space: nowrap;
-}
-
-.ba-content {
-  padding: 14px;
-  overflow-y: auto;
-  max-height: 70vh;
-}
-
+/* Só leitura quanto à identidade da bateria: mostra os berços da
+   operação em andamento agora, no formato visual da grade de Montagem
+   Personalizada (ver operacao.js). A célula do berço NÃO é clicável —
+   só os 2 indicadores (●/•, em cima/embaixo de cada célula) são, cada
+   um marcando/desmarcando "baixou/vazou" do SEU lado, independente do
+   outro (ver bateria-atual.js, _baCliqueDot). */
 .ba-resumo {
   font-size: .82rem;
   color: var(--text-2);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* Dica de uso — explica o que o clique nos indicadores faz (ver
+   .ba-dot, abaixo). Fica só quando há operação em andamento (mesmo
+   bloco de _renderBateriaAtual que monta o resumo + grade). */
+.ba-dica {
+  font-size: .72rem;
+  color: var(--text-3);
   margin-bottom: 12px;
   line-height: 1.4;
 }
 
+/* Fileira única — os berços ficam lado a lado (1 2 3 4 5 6 7 8 ...), não
+   mais em pares de 2 colunas. Em vez de rolar horizontalmente quando a
+   bateria é grande, cada célula DIVIDE a largura disponível igualmente
+   entre si (flex-basis:0 + grow/shrink:1 em .ba-celula) — ficando mais
+   fina com muitos berços ou mais grossa com poucos, mas sempre cabendo
+   inteira no card, sem scroll. */
 .ba-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-direction: row-reverse; /* berço 1 à direita, berço N à esquerda */
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
+/* Célula "em pé": indicador em cima, número no meio, indicador embaixo —
+   só leitura quanto à cor por tipo de montagem (via style inline, ver
+   _renderBateriaAtual) — não é clicável, não reage a hover/clique (só os
+   indicadores dentro dela são — ver .ba-dot, abaixo).
+   flex-basis:0 + grow/shrink:1 faz todas as células dividirem a largura
+   disponível igualmente (ver .ba-grid, acima); min-width:0 permite
+   encolher além do tamanho natural do conteúdo quando há muitos berços,
+   e max-width evita que uma bateria com poucos berços gere células
+   enormes. */
 .ba-celula {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 56px;
+  overflow: hidden;
+  padding: 6px 2px;
   border-radius: var(--radius);
-  font-size: .76rem;
+  font-size: .74rem;
   font-weight: 700;
 }
 
 .ba-numero {
-  flex: 1;
   text-align: center;
+  white-space: nowrap;
 }
 
-/* Os dois indicadores — só estes são clicáveis dentro da célula (o
-   berço em si é estático). Sem função definida ainda (ver
-   bateria-atual.js), mas já reagem visualmente ao hover pra deixar
-   claro que SÃO clicáveis, mesmo sem fazer nada ainda. */
+/* Os dois indicadores — em cima (topo) e embaixo (base) da célula — são
+   os ÚNICOS elementos clicáveis do berço (ver bateria-atual.js,
+   _baCliqueDot). Cada um marca/desmarca seu próprio lado
+   independentemente do outro. */
 .ba-dot {
   cursor: pointer;
-  font-size: .85rem;
+  font-size: .95rem;
   line-height: 1;
-  padding: 2px 3px;
+  padding: 3px 5px;
   opacity: .55;
-  transition: opacity .15s ease, transform .15s ease;
+  border-radius: 50%;
+  transition: opacity .15s ease, transform .15s ease, background .15s ease, color .15s ease;
 }
 
 .ba-dot:hover {
   opacity: 1;
   transform: scale(1.3);
+}
+
+.ba-dot:active {
+  transform: scale(1.05);
+}
+
+/* Indicador marcado como "baixou/vazou" — destaque É NO INDICADOR, não
+   na célula inteira (os 2 lados de um berço são independentes; só
+   colorir a célula toda esconderia qual dos dois foi marcado). */
+.ba-dot.ba-dot-marcado {
+  opacity: 1;
+  color: var(--red);
+  background: var(--red-dim);
+  text-shadow: 0 0 6px var(--red);
 }
 
 .ba-vazio {
@@ -2626,4 +2865,43 @@ td.mono {
   top: 0;
   z-index: 5;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+
+/* ============================================================
+   TOOLTIP COMPARTILHADO (ver js/tooltip.js)
+   Hover no desktop, toque no celular/tablet — usado por todos os
+   dashboards (Registro/Relatório, Análise Operacional, CEP, OEE,
+   Bateria Atual). Elemento único, reaproveitado, criado sob demanda.
+   ============================================================ */
+.lw-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 99999;
+  left: 0;
+  top: 0;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+  animation: lw-tooltip-in .12s ease-out;
+}
+
+@keyframes lw-tooltip-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Qualquer elemento com dica (data-tooltip) ganha esse cursor no
+   desktop — sinaliza "tem mais informação aqui" sem precisar de ícone.
+   No touch não existe cursor, então isso é inofensivo lá. */
+[data-tooltip] {
+  cursor: help;
 }

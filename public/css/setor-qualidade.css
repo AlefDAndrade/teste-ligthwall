@@ -1,0 +1,738 @@
+/* ============================================================
+   SETOR DE QUALIDADE — CSS
+   Usa as variáveis do Lightwall (--bg-card, --border, --text,
+   --green, --red, --blue, --accent, --font-mono, --radius, …)
+   definidas em css/styles.css. Só declara o que é específico
+   desta tela e não existe no sistema principal.
+   ============================================================ */
+
+/* Variáveis específicas desta tela — nomes distintos dos do
+   Lightwall para não colidir, mesmo dentro do iframe */
+:root {
+  --sq-orange:      #f5821f;
+  --sq-yellow:      #f1c40f;
+  --sq-purple:      #8b5cf6;
+  --sq-cor-verde:   var(--green);
+  --sq-cor-vermelho:var(--red);
+  --sq-cor-azul:    var(--blue);
+  --sq-cor-amarelo: #f1c40f;
+  --sq-cor-laranja: #f5821f;
+  /* Antes eram cores fixas (#23354a/#2a4054) — só faziam sentido no tema
+     escuro padrão. bg-3/border-2 já existem no sistema principal (ver
+     css/styles.css) e mudam com o tema selecionado, então a "placa" some
+     e reaparece do jeito certo em Claro/Lightwall também. */
+  --sq-placa-bg:    var(--bg-3);
+  --sq-placa-borda: var(--border-2);
+  /* Cores de tipo de montagem — usadas em 3 lugares (mini-slab, slab,
+     modal); centralizadas aqui pra não repetir o mesmo hex 3x. */
+  --sq-tipo-sp-text: #66bb6a;
+  --sq-tipo-p2-text: #42a5f5;
+  --sq-tipo-t3-text: #ab47bc;
+  --sq-tipo-t1-text: #ffa726;
+  --sq-tipo-sp:     #2e7d32;
+  --sq-tipo-2p:     #0d47a1;
+  --sq-tipo-3t:     #4a148c;
+  --sq-tipo-1t:     #e65100;
+  --sq-shadow:      var(--shadow);
+}
+
+/* Reset mínimo — o Lightwall já faz o global */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  padding: 20px 28px;
+  display: flex;
+  justify-content: center;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+.sq-container { max-width: 1280px; width: 100%; }
+
+/* ── "Em Andamento" e Fila de baterias pendentes de avaliação — vivem
+     dentro da aba "🧪 Avaliação" (#sq-form), logo ACIMA do "Cabeçalho do
+     registro" (ver setor-qualidade-app.html / setor-qualidade.js,
+     renderDrafts / carregarFilaNaoAvaliadas). Os dois ficam RETRAÍDOS por
+     padrão — só um botão com a contagem — e abrem um popover ao clicar
+     (ver .open, abaixo, e SQ.toggleCollapsible no JS). ── */
+.sq-collapsible-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.sq-collapsible-row.sq-hide-view { display: flex; } /* .sq-hide-view por padrão é inline-flex — aqui precisa ser coluna */
+
+.sq-collapsible { position: relative; }
+
+.sq-collapsible-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 16px;
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: var(--sq-shadow);
+  transition: background .15s ease, border-color .15s ease;
+}
+.sq-collapsible-btn:hover { background: var(--bg-2); border-color: var(--accent); }
+.sq-collapsible.open .sq-collapsible-btn { border-color: var(--accent); }
+
+.sq-collapsible-badge {
+  background: var(--bg-3);
+  color: var(--text-3);
+  font-size: .72rem;
+  font-weight: 800;
+  padding: 1px 9px;
+  border-radius: 999px;
+  min-width: 20px;
+  text-align: center;
+}
+/* Contagem > 0 — aplicada via JS (renderDrafts/carregarFilaNaoAvaliadas,
+   ver setor-qualidade.js), pra chamar atenção quando há algo pra ver. */
+.sq-collapsible-badge.sq-badge-ativo {
+  background: var(--accent);
+  color: #1a1e25;
+}
+
+.sq-collapsible-chevron {
+  margin-left: auto;
+  font-size: .7rem;
+  color: var(--text-3);
+  transition: transform .15s ease;
+}
+.sq-collapsible.open .sq-collapsible-chevron { transform: rotate(180deg); }
+
+.sq-collapsible-panel {
+  display: none;
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  max-height: 360px;
+  overflow-y: auto;
+}
+.sq-collapsible.open .sq-collapsible-panel { display: block; }
+
+.sq-fila-pendentes-vazio { font-size: .78rem; color: var(--text-3); }
+
+/* 4ª posição em diante — só aparece se a fila tiver mais de 3 baterias
+   pendentes; sem cartão próprio, só um <select> + "Iniciar" mesmo. */
+.sq-fila-outras {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.sq-fila-outras select { flex: 1; }
+
+/* 3ª e 2ª posições — lado a lado, compactas, ACIMA da 1ª (ver
+   .sq-fila-item-principal, abaixo). */
+.sq-fila-secundarias {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+}
+.sq-fila-secundarias .sq-fila-item { flex: 1 1 160px; }
+
+/* Cada bateria pendente é um <button> — clicar em qualquer parte do item
+   já inicia a avaliação (ver iniciarAvaliacaoDaFila, setor-qualidade.js);
+   reset dos estilos padrão de botão do navegador (fonte, cor, borda,
+   etc.). IMPORTANTE: `font: inherit` reseta fonte/tamanho/peso, mas NÃO
+   cor — <button> tem cor de texto própria por padrão do navegador (não
+   herda `color` da página como um <div>/<span> normal herdaria), então
+   sem o `color` explícito abaixo o texto de dentro (inclusive o ID da
+   bateria, o dado mais importante do cartão) saía preto sobre fundo
+   escuro — quase invisível. */
+.sq-fila-item {
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px 4px 8px;
+  transition: border-color .15s ease, background .15s ease;
+}
+.sq-fila-item:hover { border-color: var(--accent); background: var(--bg-3, var(--bg-2)); }
+.sq-fila-item-info { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
+.sq-fila-item-info strong { color: var(--text); font-size: .8rem; }
+.sq-fila-item-info span { color: var(--text-3); font-size: .68rem; }
+
+/* Item vinculado à avaliação em edição AGORA (ver linkedOperacaoId,
+   setor-qualidade.js) — destaque verde bem visível, pra identificar de
+   relance qual bateria está sendo avaliada, mesmo com várias pendentes
+   na fila ao mesmo tempo. */
+.sq-fila-item-ativa {
+  border-color: var(--green);
+  background: rgba(16, 185, 129, .12);
+  box-shadow: 0 0 0 1px var(--green);
+}
+.sq-fila-item-ativa .sq-fila-ordinal { color: var(--green); }
+.sq-fila-item-principal.sq-fila-item-ativa::after {
+  content: '✓ Em avaliação';
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--green);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.sq-fila-item-ativa.sq-fila-item-principal i.fa-play { display: none; }
+
+/* 1ª posição — a próxima a ser avaliada — ocupa a linha inteira sozinha,
+   ABAIXO da 3ª/2ª (ver .sq-fila-secundarias, acima), com mais destaque e
+   informação (data, hora do fim, tipo por extenso) do que as demais
+   posições da fila. */
+.sq-fila-item-principal {
+  width: 100%;
+  padding: 10px 16px;
+  border-color: var(--accent);
+  gap: 12px;
+}
+.sq-fila-item-principal .sq-fila-item-info strong { font-size: .92rem; }
+.sq-fila-item-principal .sq-fila-item-info span { font-size: .74rem; }
+.sq-fila-item-principal i.fa-play { color: var(--accent); margin-left: auto; }
+
+/* Número da posição na fila (1ª, 2ª, 3ª...) — vem da ORDEM da lista, não
+   é guardado em lugar nenhum: ao recarregar a fila depois de uma
+   avaliação ser registrada, quem era 2ª passa a ser 1ª automaticamente. */
+.sq-fila-ordinal {
+  font-weight: 800;
+  font-size: .74rem;
+  color: var(--accent);
+  min-width: 20px;
+  text-align: center;
+}
+.sq-fila-item-principal .sq-fila-ordinal { font-size: .95rem; }
+
+/* ── Topbar ───────────────────────────────────────────────── */
+.sq-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-card);
+  padding: 10px 18px;
+  border-radius: var(--radius-lg);
+  border-bottom: 2px solid var(--blue);
+  margin-bottom: 18px;
+  box-shadow: var(--sq-shadow);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sq-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.sq-brand .sq-bar {
+  width: 4px;
+  height: 22px;
+  background: var(--blue);
+  border-radius: 2px;
+}
+
+/* ── Navegação interna ────────────────────────────────────── */
+.sq-nav { display: flex; gap: 12px; }
+
+.sq-nav-btn {
+  background: transparent;
+  color: var(--text-3);
+  border: none;
+  font-size: .85rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  font-family: var(--font-body);
+}
+.sq-nav-btn:hover { color: var(--text-2); }
+.sq-nav-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+/* ── Seções (pages internas) ──────────────────────────────── */
+.sq-section { display: none; animation: sq-fadeIn .25s ease; }
+.sq-section.active { display: block; }
+@keyframes sq-fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Cards de rascunho (lista EM ANDAMENTO) ───────────────── */
+.sq-list-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sq-list-card-info { display: flex; flex-direction: column; gap: 3px; }
+.sq-list-card-info .sq-id { font-weight: 700; font-size: .9rem; }
+.sq-list-card-info .sq-meta { font-size: .75rem; color: var(--text-3); }
+.sq-list-card-actions { display: flex; gap: 8px; }
+
+/* ── Estado vazio ─────────────────────────────────────────── */
+.sq-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-3);
+}
+.sq-empty i { font-size: 2.2rem; margin-bottom: 12px; display: block; opacity: .5; }
+
+/* ── Filtros do Dashboard ─────────────────────────────────── */
+.sq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--sq-shadow);
+  align-items: flex-end;
+}
+
+/* ── KPI grid ─────────────────────────────────────────────── */
+/* Reutiliza .kpi-card, .kpi-label, .kpi-value do Lightwall   */
+.sq-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Variante de cor para os KPIs do Setor de Qualidade */
+.sq-kpi-card-verde .kpi-card::after,
+.kpi-card.sq-verde::after { background: var(--green); }
+.sq-kpi-card-laranja .kpi-card::after,
+.kpi-card.sq-laranja::after { background: var(--sq-orange); }
+.sq-kpi-card-vermelho .kpi-card::after,
+.kpi-card.sq-vermelho::after { background: var(--red); }
+
+/* ── Charts grid ──────────────────────────────────────────── */
+.sq-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+/* Reutiliza .card do Lightwall para as caixas */
+.sq-chart-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--sq-shadow); }
+.sq-chart-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.sq-chart-box canvas { max-height: 200px; max-width: 100%; }
+
+/* ── Resumo executivo ─────────────────────────────────────── */
+.sq-summary-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 24px;
+  margin-top: 12px;
+  box-shadow: var(--sq-shadow);
+}
+.sq-summary-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.sq-summary-box p { font-size: .88rem; color: var(--text-2); line-height: 1.6; }
+
+/* ── Espelho Visual ───────────────────────────────────────── */
+.sq-mirror-wrapper {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--sq-shadow);
+}
+.sq-mirror-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px; flex-wrap: wrap; gap: 10px;
+  border-bottom: 1px solid var(--border); padding-bottom: 10px;
+}
+.sq-mirror-title { font-weight: 700; font-size: .88rem; display: flex; align-items: center; gap: 6px; color: var(--text); }
+.sq-mirror-info { display: flex; gap: 16px; font-size: .82rem; color: var(--text-2); flex-wrap: wrap; }
+.sq-mirror-info strong { color: var(--text); }
+.sq-mirror-nav { display: flex; gap: 8px; align-items: center; }
+.sq-mirror-nav button {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background .15s;
+  font-size: .8rem;
+}
+.sq-mirror-nav button:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
+.sq-mirror-nav button:disabled { opacity: .35; cursor: not-allowed; }
+
+.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
+.sq-mini-pallet-header { font-size: .52rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 4px; border-bottom: 1px solid var(--border); padding-bottom: 2px; text-transform: uppercase; }
+.sq-mini-slab { height: 16px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 2px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.sq-mini-slab-number { font-size: .42rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
+.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 1px; flex: 1; }
+.sq-mini-slab-type { font-size: .42rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
+.sq-mini-slab-type.sp { color: var(--sq-tipo-sp-text); }
+.sq-mini-slab-type.p2 { color: var(--sq-tipo-p2-text); }
+.sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
+.sq-mini-slab-type.t1 { color: var(--sq-tipo-t1-text); }
+.sq-mini-mark { display: inline-block; }
+
+.sq-mirror-legend {
+  display: flex; justify-content: center; gap: 16px;
+  font-size: .72rem; color: var(--text-2);
+  margin-top: 10px; border-top: 1px solid var(--border);
+  padding-top: 10px; flex-wrap: wrap;
+}
+.sq-mirror-legend .sq-legend-item { display: flex; align-items: center; gap: 5px; }
+
+/* ── Header do formulário ─────────────────────────────────── */
+.sq-header-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--sq-shadow);
+  margin-bottom: 16px;
+}
+
+/* ── Ferramentas (cor / forma / ações) ────────────────────── */
+.sq-tools {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px; padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--sq-shadow);
+  margin-bottom: 16px;
+}
+.sq-tools-label { font-size: .67rem; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: .06em; }
+
+.sq-btn-color {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform .15s;
+}
+.sq-btn-color:hover { transform: scale(1.12); }
+.sq-btn-color.active { border-color: var(--text); box-shadow: 0 0 0 2px rgba(255,255,255,.2); }
+.sq-btn-color.verde   { background: var(--sq-cor-verde); }
+.sq-btn-color.vermelho { background: var(--sq-cor-vermelho); }
+.sq-btn-color.azul    { background: var(--sq-cor-azul); }
+.sq-btn-color.amarelo { background: var(--sq-cor-amarelo); }
+.sq-btn-color.laranja { background: var(--sq-cor-laranja); }
+
+.sq-btn-shape {
+  padding: 4px 6px;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--bg-3);
+  transition: background .15s, transform .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.sq-btn-shape:hover { background: var(--border); }
+.sq-btn-shape.active { border-color: var(--text); background: var(--border); }
+.sq-shape-circle { width: 13px; height: 13px; border-radius: 50%; background: var(--text); }
+.sq-shape-dash   { width: 17px; height: 3px; border-radius: 2px; background: var(--text); }
+
+.sq-tools-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+/* ── Stacks / Pallets ─────────────────────────────────────── */
+.sq-stacks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.sq-pallet-col { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.sq-pallet-header {
+  position: relative;
+  display: flex; justify-content: center; align-items: center;
+  flex-wrap: wrap; gap: 4px; width: 100%; margin-bottom: 4px;
+}
+.sq-pallet-label {
+  font-weight: 700; color: var(--text-2); font-size: .67rem;
+  text-transform: uppercase;
+  background: var(--bg-3);
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.sq-pallet-actions { display: flex; align-items: center; gap: 3px; }
+
+.sq-btn-select-all {
+  background: rgba(59, 130, 246, .12);
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  padding: 2px 7px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: .6rem;
+  font-weight: 700;
+  transition: background .15s;
+}
+.sq-btn-select-all:hover { background: var(--blue); color: #fff; }
+
+.sq-btn-dropdown {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: .65rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s;
+}
+.sq-btn-dropdown:hover { border-color: var(--blue); color: var(--text); }
+
+.sq-color-dropdown {
+  position: absolute; top: 110%; right: 0; z-index: 999;
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  display: none;
+  box-shadow: var(--sq-shadow);
+  flex-wrap: wrap; gap: 4px; justify-content: center;
+  min-width: 104px;
+}
+.sq-color-dropdown.open { display: flex; }
+.sq-dropdown-color {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform .15s;
+}
+.sq-dropdown-color:hover { transform: scale(1.2); border-color: var(--text); }
+.sq-dropdown-color.verde   { background: var(--sq-cor-verde); }
+.sq-dropdown-color.vermelho { background: var(--sq-cor-vermelho); }
+.sq-dropdown-color.azul    { background: var(--sq-cor-azul); }
+.sq-dropdown-color.amarelo { background: var(--sq-cor-amarelo); }
+.sq-dropdown-color.laranja { background: var(--sq-cor-laranja); }
+
+/* Placa individual */
+.sq-slab-stack { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 8px; }
+.sq-slab {
+  position: relative;
+  width: 100%; height: 30px;
+  background: var(--sq-placa-bg);
+  border: 1px solid var(--sq-placa-borda);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .1s;
+}
+.sq-slab:hover { border-color: var(--blue); }
+.sq-slab-number {
+  position: absolute; top: 2px; left: 4px;
+  font-size: .5rem; font-weight: 700; color: var(--text-3);
+  user-select: none; pointer-events: none; font-family: var(--font-mono);
+}
+.sq-slab-type {
+  position: absolute; bottom: 2px; right: 4px;
+  font-size: .57rem; font-weight: 700; color: var(--text-3);
+  font-family: var(--font-mono); pointer-events: none;
+}
+.sq-slab-type.sp { color: var(--sq-tipo-sp-text); }
+.sq-slab-type.p2 { color: var(--sq-tipo-p2-text); }
+.sq-slab-type.t3 { color: var(--sq-tipo-t3-text); }
+.sq-slab-type.t1 { color: var(--sq-tipo-t1-text); }
+.sq-slab-marks {
+  display: flex; justify-content: center; align-items: center;
+  gap: 2px; flex-wrap: wrap; pointer-events: none; max-width: 88%;
+}
+.sq-mark-circle { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+.sq-mark-dash   { width: 12px; height: 3px; border-radius: 2px; }
+
+.sq-slab.invalid {
+  border: 2px solid var(--red) !important;
+  box-shadow: inset 0 0 0 1px var(--red), 0 0 6px rgba(239,68,68,.3);
+  background: rgba(239, 68, 68, .08) !important;
+}
+.sq-slab.invalid .sq-slab-type { color: var(--red); }
+
+/* ── Legenda ──────────────────────────────────────────────── */
+.sq-legend {
+  display: flex; justify-content: center; gap: 16px;
+  font-size: .75rem; color: var(--text-2); flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.sq-legend-item { display: flex; align-items: center; gap: 5px; }
+
+/* ── Seção de medição ─────────────────────────────────────── */
+.sq-medicao-title-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+.sq-medicao-title {
+  font-size: .78rem; font-weight: 700; color: var(--text); text-transform: uppercase;
+  letter-spacing: .1em; background: var(--bg-3);
+  padding: 4px 20px; border-radius: 16px; border: 1px solid var(--border);
+}
+
+.sq-pallet-info-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 12px; }
+.sq-info-col { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.sq-info-col-header {
+  background: var(--bg-3); color: var(--text-2);
+  padding: 4px 8px; font-weight: 700; font-size: .63rem;
+  text-align: center; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); letter-spacing: .06em;
+}
+.sq-info-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 4px;
+  align-items: center; padding: 4px 8px;
+  border-bottom: 1px solid var(--border); font-size: .72rem;
+}
+.sq-info-row:last-child { border-bottom: none; }
+.sq-info-row:nth-child(even) { background: var(--bg-2); }
+.sq-info-key { color: var(--text-3); }
+.sq-info-val { font-weight: 600; color: var(--text); text-align: right; min-width: 22px; }
+.sq-info-edit { cursor: pointer; color: var(--text-3); font-size: .7rem; transition: color .15s; }
+.sq-info-edit:hover { color: var(--blue); }
+
+/* ── Observações ──────────────────────────────────────────── */
+.sq-obs-area {
+  margin-top: 12px; padding: 16px 18px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--sq-shadow);
+}
+.sq-obs-label {
+  font-size: .67rem; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; display: block;
+}
+
+/* ── Modal personalizado de pallet ───────────────────────── */
+.sq-modal-pallet-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,.85); backdrop-filter: blur(4px);
+  z-index: 99999; display: none; justify-content: center; align-items: center;
+}
+.sq-modal-pallet-overlay.open { display: flex; }
+.sq-modal-pallet-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 24px; max-width: 800px; width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.8);
+  display: flex; flex-direction: column; gap: 16px;
+  animation: sq-fadeIn .2s ease;
+  max-height: 90vh; overflow-y: auto;
+}
+.sq-modal-pallet-header { text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.sq-modal-pallet-header h2 { font-family: var(--font-display); font-size: 1.1rem; letter-spacing: .05em; text-transform: uppercase; }
+.sq-modal-pallet-header p { font-size: .78rem; color: var(--text-3); margin-top: 4px; }
+.sq-modal-tipo-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.sq-btn-tipo {
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-size: .75rem; font-weight: 700;
+  cursor: pointer; font-family: var(--font-mono); color: #fff;
+  transition: transform .15s;
+}
+.sq-btn-tipo:hover { transform: scale(1.05); }
+.sq-btn-tipo.sp { background: var(--sq-tipo-sp); }
+.sq-btn-tipo.p2 { background: var(--sq-tipo-2p); }
+.sq-btn-tipo.t3 { background: var(--sq-tipo-3t); }
+.sq-btn-tipo.t1 { background: var(--sq-tipo-1t); }
+.sq-btn-tipo.active { border-color: var(--text); box-shadow: 0 0 6px rgba(255,255,255,.25); }
+
+.sq-modal-slabs-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 8px 0; }
+.sq-modal-pallet-col { display: flex; flex-direction: column; gap: 2px; }
+.sq-modal-pallet-col .sq-modal-col-label {
+  font-size: .6rem; text-transform: uppercase; font-weight: 700;
+  color: var(--text-3); text-align: center; margin-bottom: 4px;
+}
+.sq-modal-slab {
+  width: 100%; height: 24px;
+  background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda);
+  border-radius: 3px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px; transition: border-color .1s;
+}
+.sq-modal-slab:hover { border-color: var(--blue); }
+.sq-modal-slab .sq-m-num { font-size: .5rem; color: var(--text-3); font-family: var(--font-mono); }
+.sq-modal-slab .sq-m-tp { font-size: .5rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
+.sq-modal-slab .sq-m-tp.sp { color: var(--sq-tipo-sp-text); }
+.sq-modal-slab .sq-m-tp.p2 { color: var(--sq-tipo-p2-text); }
+.sq-modal-slab .sq-m-tp.t3 { color: var(--sq-tipo-t3-text); }
+.sq-modal-slab .sq-m-tp.t1 { color: var(--sq-tipo-t1-text); }
+.sq-modal-slab.sel { border-color: var(--text); box-shadow: 0 0 6px rgba(255,255,255,.2); }
+.sq-modal-pallet-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+/* ── View overlay ─────────────────────────────────────────── */
+.sq-view-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 9999; background: transparent; pointer-events: auto; cursor: default;
+}
+.sq-hide-view { display: inline-flex; }
+.sq-hide-view.is-view { display: none !important; }
+.sq-show-view { display: none; }
+.sq-show-view.is-view { display: inline-flex !important; }
+/* .sq-collapsible-row.sq-hide-view (definida lá em cima, junto do resto
+   dos colapsáveis) usa o mesmo mecanismo de esconder em modo só-leitura
+   (ver setEditable, setor-qualidade.js) — só precisa do próprio "flex"
+   em vez do "inline-flex" que .sq-hide-view assume por padrão, por ser
+   um bloco full-width com 2 colapsáveis empilhados, não um botão inline. */
+
+/* "📖 Referência" → tipos simples (Configurações → Montagem) que ainda
+   não têm combinação de marcação definida — ver
+   _renderAvisoCombinacoesFaltando(), setor-qualidade.js. */
+.sq-ref-tipo-pendente {
+  background: rgba(245, 158, 11, .08);
+  border: 1px solid var(--accent-dim, var(--border));
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+/* ── Responsivo ───────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  body { padding: 14px 18px; }
+  .sq-charts-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 700px) {
+  body { padding: 8px 10px; }
+  .sq-charts-grid { grid-template-columns: 1fr; }
+  .sq-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .sq-topbar, .sq-nav { flex-wrap: wrap; justify-content: center; }
+  .sq-stacks, .sq-pallet-info-grid, .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }
+}

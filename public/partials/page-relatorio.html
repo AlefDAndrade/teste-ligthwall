@@ -1,4 +1,4 @@
-    <!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
+<!-- ============ PAGE: RELATÓRIO DE INJEÇÃO ============ -->
     <main class="main" id="page-relatorio">
       <div class="page-header" style="position:relative">
         <h1 class="page-title">Relatório de <span>Injeção</span></h1>
@@ -10,12 +10,22 @@
 
       <div class="page-body">
 
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('qualidade-tracos')" title="Ver estabilidade de receitas, frequência de ajuste e alertas de qualidade">
+            📐 Ver em Dashboard</button>
+        </div>
+
         <div class="card mb-4" style="padding:16px 20px">
           <!-- Período — separado conforme spec -->
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
             <input class="form-input" type="date" id="rel-data-inicio" style="width:150px" title="Data início">
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="rel-data-fim" style="width:150px" title="Data fim">
+            <select class="form-input" id="rel-filtro-rapido" style="width:110px"
+              title="Filtrar por período" onchange="aplicarFiltroRapido('filtros-relatorio', this.value)">
+              <option value="hoje">📅 Hoje</option>
+              <option value="todos" selected>Todos</option>
+            </select>
             <label for="rel-apenas-ajuste" id="rel-apenas-ajuste-label" style="
               display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-2);
               cursor:pointer;user-select:none;padding:6px 12px;border-radius:20px;
@@ -50,25 +60,25 @@
 
         <div class="table-wrap">
           <table id="relatorio-table">
-            <thead>
+            <thead id="relatorio-thead">
               <tr>
-                <th>Data</th>
-                <th>ID Bateria</th>
-                <th>Traços</th>
-                <th>Berços inicio</th> <!-- Nova -->
-                <th>Berços fim</th> <!-- Nova -->
-                <th>Densidade</th>
-                <th>Flow</th>
-                <th>Densidade EPS</th>
-                <th>Expansão</th>
-                <th>Silo EPS</th>
-                <th>Cimento</th>
-                <th>Água</th>
-                <th>eps_real</th>
-                <th>Superplástico</th>
-                <th>Incorporador</th>
-                <th>Tempo de Batida</th>
-                <th>Observações</th> <!-- Nova -->
+                <th data-col="data">Data</th>
+                <th data-col="id_bateria">ID Bateria</th>
+                <th data-col="num_traco">Traços</th>
+                <th data-col="berco_inicio">Berços inicio</th> <!-- Nova -->
+                <th data-col="berco_fim">Berços fim</th> <!-- Nova -->
+                <th data-col="densidade">Densidade</th>
+                <th data-col="flow">Flow</th>
+                <th data-col="densidade_eps">Densidade EPS</th>
+                <th data-col="expansao">Expansão</th>
+                <th data-col="silo">Silo EPS</th>
+                <th data-col="cimento_real">Cimento</th>
+                <th data-col="agua_real">Água</th>
+                <th data-col="eps_real">eps_real</th>
+                <th data-col="superplast_real">Superplástico</th>
+                <th data-col="incorporador_real">Incorporador</th>
+                <th data-col="tempo_batida">Tempo de Batida</th>
+                <th data-col="obs">Observações</th> <!-- Nova -->
               </tr>
             </thead>
             <tbody id="relatorio-tbody">
@@ -81,4 +91,3 @@
 
       </div>
     </main>
-

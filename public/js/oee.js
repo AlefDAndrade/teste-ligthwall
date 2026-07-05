@@ -188,26 +188,47 @@
   // ── Quebra por um campo genérico (id_bateria ou tipo_montagem) — só
   // Performance e Qualidade fazem sentido aqui (Disponibilidade é uma
   // característica do TURNO como um todo, não de uma bateria/tipo isolado) ──
+  //
+  // Para os traços, id_bateria e tipo_montagem não existem como campos diretos
+  // (ver _buscarDados, onde são resolvidos e anotados como _baterias e
+  // _tipoMontagem). A lógica de agrupamento difere entre os dois campos:
+  // - id_bateria: um traço pode ter sido reaproveitado em baterias diferentes,
+  //   então entra no grupo de CADA bateria onde aparece (_baterias é um Set).
+  // - tipo_montagem: usa o tipo da operação original (_tipoMontagem), sem
+  //   duplicar pelas reutilizações.
   function calcularPorGrupo(historico, tracos, campo) {
     const grupos = {};
+
     historico.forEach(r => {
       const chave = r[campo] || '—';
-      if (!grupos[chave]) grupos[chave] = { historico: [], tracos: [] };
+      if (!grupos[chave]) grupos[chave] = { historico: [], tracos: new Set() };
       grupos[chave].historico.push(r);
     });
+
     tracos.forEach(t => {
-      const chave = t[campo] || '—';
-      if (!grupos[chave]) grupos[chave] = { historico: [], tracos: [] };
-      grupos[chave].tracos.push(t);
+      if (campo === 'id_bateria') {
+        // Traço pode pertencer a várias baterias — conta em cada uma
+        const baterias = t._baterias?.size ? t._baterias : new Set(['—']);
+        baterias.forEach(bat => {
+          if (!grupos[bat]) grupos[bat] = { historico: [], tracos: new Set() };
+          grupos[bat].tracos.add(t);
+        });
+      } else {
+        // tipo_montagem: usa o campo resolvido _tipoMontagem
+        const chave = t._tipoMontagem || '—';
+        if (!grupos[chave]) grupos[chave] = { historico: [], tracos: new Set() };
+        grupos[chave].tracos.add(t);
+      }
     });
 
     return Object.entries(grupos).map(([chave, g]) => {
+      const tracosArr = [...g.tracos];
       const perf = calcularPerformance(g.historico);
-      const qual = calcularQualidade(g.tracos);
+      const qual = calcularQualidade(tracosArr);
       return {
         chave,
         nOps: g.historico.length,
-        nTracos: g.tracos.length,
+        nTracos: tracosArr.length,
         perfPct: perf.pct,
         qualPct: qual.pct,
       };
@@ -220,12 +241,40 @@
     let historico = stats.data || [];
     if (filtros.bateria) historico = historico.filter(r => r.id_bateria === filtros.bateria);
 
+    // Mapa id_operacao → tipo_montagem, construído a partir do historico já
+    // carregado — evita uma segunda requisição a historico.json só pra
+    // resolver tipo_montagem nos traços (ver anotação abaixo).
+    const mapaTipoMontagem = new Map();
+    (stats.data || []).forEach(op => { if (op.id) mapaTipoMontagem.set(op.id, op.tipo_montagem || null); });
+
     let tracos = await fetch('db/relatorio_injecao.json').then(r => r.json()).catch(() => []);
+
+    // Anota cada traço com dois campos resolvidos:
+    // - _baterias (Set): ids das baterias onde esse traço foi usado, lidos
+    //   de ultilizado.operacao[].id_bateria. O campo t.id_bateria não existe
+    //   nesse nível (mesmo bug já corrigido no Relatório de Injeção e no CEP).
+    // - _tipoMontagem: tipo de montagem da operação original onde esse traço
+    //   foi registrado. t.tipo_montagem também não existe nesse nível — é um
+    //   campo da operação (historico.json), não do traço.
+    // Ambos são usados por calcularPorGrupo (quebra por Bateria / por Tipo
+    // de Montagem) e pelo filtro de bateria abaixo.
+    tracos.forEach(t => {
+      const usos = t.ultilizado?.operacao || [];
+      t._baterias = new Set(usos.map(u => u.id_bateria).filter(Boolean));
+      let tipoMontagem = null;
+      for (const uso of usos) {
+        tipoMontagem = mapaTipoMontagem.get(uso.id_operacao) || null;
+        if (tipoMontagem) break;
+      }
+      t._tipoMontagem = tipoMontagem;
+    });
+
     tracos = tracos.filter(t => {
       if (filtros.dataInicio && t.data < filtros.dataInicio) return false;
       if (filtros.dataFim && t.data > filtros.dataFim) return false;
       if (filtros.turno && t.turno !== filtros.turno) return false;
-      if (filtros.bateria && t.id_bateria !== filtros.bateria) return false;
+      // Antes: t.id_bateria !== filtros.bateria — nunca batia (campo inexistente)
+      if (filtros.bateria && !t._baterias.has(filtros.bateria)) return false;
       return true;
     });
 
@@ -328,14 +377,47 @@
   }
 
   // ── Render: gráfico de barras (canvas) — OEE por turno-instância ────────
+
+  // Altura "lógica" (CSS) do gráfico — mesmo valor do atributo height="160"
+  // do <canvas id="oee-chart-turnos"> (index.html/page-oee.html).
+  const ALTURA_CHART_TURNOS_PX = 160;
+
+  /**
+   * Prepara o canvas pra desenho nítido em telas de alta resolução
+   * (devicePixelRatio > 1 — Retina, a maioria dos notebooks/celulares
+   * modernos): aumenta a resolução INTERNA do bitmap (canvas.width/height)
+   * proporcionalmente ao dpr, mas trava o tamanho VISÍVEL na página via
+   * canvas.style.width/height, em px CSS fixos.
+   *
+   * BUG CORRIGIDO: antes, canvas.style.width/height nunca eram fixados —
+   * como este canvas não tem nenhuma regra de CSS controlando seu tamanho,
+   * o próprio atributo width/height (interno, já multiplicado pelo dpr)
+   * também definia o tamanho exibido na tela. Pior: canvas.height = (canvas
+   * .height || 160) * dpr relia no valor ATUAL de canvas.height como base
+   * — que já vinha inflado pelo dpr da renderização anterior — então a
+   * cada re-render (filtro, resize, etc.) a altura (e a largura, pelo mesmo
+   * motivo com rect.width) dobrava de novo, sem limite. Resultado: o
+   * gráfico crescia a cada atualização, vazando pra fora do card, e as
+   * datas (desenhadas com coordenadas baseadas no tamanho lógico) ficavam
+   * cada vez mais desalinhadas com a caixa real na tela — daí o efeito de
+   * "torto". Agora a altura lógica é sempre a mesma constante fixa, e o
+   * tamanho visível fica travado por CSS, então getBoundingClientRect()
+   * sempre devolve a largura real do card — nunca um valor já inflado.
+   */
   function _px(canvas) {
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = (canvas.height || 160) * dpr;
+    const wCss = rect.width;
+    const hCss = ALTURA_CHART_TURNOS_PX;
+
+    canvas.width = wCss * dpr;
+    canvas.height = hCss * dpr;
+    canvas.style.width = wCss + 'px';
+    canvas.style.height = hCss + 'px';
+
     ctx.scale(dpr, dpr);
-    return { ctx, w: rect.width, h: canvas.height / dpr };
+    return { ctx, w: wCss, h: hCss };
   }
 
   function _drawBarChart(id, labels, values, cor) {
@@ -426,7 +508,7 @@
     }
     tbody.innerHTML = linhas.map(l => `
       <tr>
-        <td>${l.chave}</td>
+        <td>${LW.escaparHtml(l.chave)}</td>
         <td>${l.nOps}</td>
         <td style="color:${_corPct(l.perfPct)}">${l.nOps ? _fmtPct(l.perfPct) : '—'}</td>
         <td>${l.nTracos}</td>
@@ -472,7 +554,7 @@
     elBar.innerHTML = segs.map(s => {
       const pct = (s.min / planejadoTotal) * 100;
       if (pct <= 0) return '';
-      return `<div style="height:100%;width:${pct}%;background:${s.cor}" title="${s.label}: ${_fmtMin(s.min)} (${_fmtPct(pct)})"></div>`;
+      return `<div style="height:100%;width:${pct}%;background:${s.cor}" data-tooltip="${s.label}: ${_fmtMin(s.min)} (${_fmtPct(pct)})"></div>`;
     }).join('');
 
     elLegenda.innerHTML = segs.map(s => {

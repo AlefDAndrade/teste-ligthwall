@@ -1,0 +1,46 @@
+<!-- ============ PAGE: ANÁLISE FOCADA ============ -->
+    <main class="main" id="page-analise-focada">
+      <div class="page-header">
+        <h1 class="page-title">Análise <span>Focada</span></h1>
+        <p class="page-desc">Berços, receita e avaliação de uma única operação — tudo ligado pelo ID da operação</p>
+      </div>
+
+      <div class="page-body">
+
+        <div style="margin-bottom:14px">
+          <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
+        </div>
+
+        <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
+        <div id="af-erro" style="display:none;text-align:center;padding:60px;color:var(--red)"></div>
+
+        <div id="af-content">
+
+          <!-- ═══ IDENTIFICAÇÃO ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">Identificação</div>
+            <div id="af-cabecalho" class="af-cabecalho-grid"></div>
+          </div>
+
+          <!-- ═══ BERÇOS (desenho da bateria) ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">📍 Berços</div>
+            <div id="af-bercos"></div>
+          </div>
+
+          <!-- ═══ RECEITA UTILIZADA ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">🧪 Receita Utilizada</div>
+            <div id="af-receita"></div>
+          </div>
+
+          <!-- ═══ AVALIAÇÃO DE QUALIDADE ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">✅ Avaliação de Qualidade</div>
+            <div id="af-avaliacao"></div>
+          </div>
+
+        </div><!-- #af-content -->
+
+      </div><!-- .page-body -->
+    </main>
