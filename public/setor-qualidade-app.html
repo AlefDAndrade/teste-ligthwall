@@ -31,8 +31,6 @@
   <!-- CSS específico desta tela -->
   <link rel="stylesheet" href="css/setor-qualidade.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -118,14 +116,14 @@
 
     <!-- Gráficos -->
     <div class="sq-charts-grid">
-      <div class="sq-chart-box"><h4>🏷️ Painéis por Tipo</h4><canvas id="sq-chart-tipo"></canvas></div>
-      <div class="sq-chart-box"><h4>📈 Evolução da Produção</h4><canvas id="sq-chart-production"></canvas></div>
-      <div class="sq-chart-box"><h4>📊 Distribuição das Classificações</h4><canvas id="sq-chart-quality"></canvas></div>
+      <div class="sq-chart-box"><h4>🏷️ Painéis por Tipo</h4><div id="sq-chart-tipo"></div></div>
+      <div class="sq-chart-box"><h4>📈 Evolução da Produção</h4><div id="sq-chart-production"></div></div>
+      <div class="sq-chart-box"><h4>📊 Distribuição das Classificações</h4><div id="sq-chart-quality"></div></div>
       <div class="sq-chart-box"><h4>🎯 Defeitos por Posição</h4><div id="sq-chart-posicao" style="min-height:200px;"></div></div>
-      <div class="sq-chart-box"><h4>🏭 Baterias com Mais Refugo</h4><canvas id="sq-chart-bat-refugo"></canvas></div>
-      <div class="sq-chart-box"><h4>🔴 Taxa de Refugo por Tipo (%)</h4><canvas id="sq-chart-rejections"></canvas></div>
-      <div class="sq-chart-box"><h4>⏳ Tempo de Pega × Refugo</h4><canvas id="sq-chart-tempo-pega"></canvas></div>
-      <div class="sq-chart-box"><h4>✅ Aprovação vs Reprovação por Bateria</h4><canvas id="sq-chart-approval-bat"></canvas></div>
+      <div class="sq-chart-box"><h4>🏭 Baterias com Mais Refugo</h4><div id="sq-chart-bat-refugo"></div></div>
+      <div class="sq-chart-box"><h4>🔴 Taxa de Refugo por Tipo (%)</h4><div id="sq-chart-rejections"></div></div>
+      <div class="sq-chart-box"><h4>⏳ Tempo de Pega × Refugo</h4><div id="sq-chart-tempo-pega"></div></div>
+      <div class="sq-chart-box"><h4>✅ Aprovação vs Reprovação por Bateria</h4><div id="sq-chart-approval-bat"></div></div>
     </div>
 
     <!-- Resumo -->
@@ -319,6 +317,12 @@
                 Círculo + traço → <strong>3T</strong> ou <strong>1T</strong> (conforme a cor do traço)
               </div>
             </div>
+            <p style="font-size:.72rem;color:var(--text-3);margin:-6px 0 14px;line-height:1.4">
+              A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só pra identificar o tipo — quem dita
+              aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma pra um tipo
+              novo (ver "Tipos sem marcação definida", mais abaixo), mesmo as que já têm outro significado quando a
+              marca vem <strong>sozinha</strong> (ex: um traço verde isolado continua sendo SP aprovado).
+            </p>
 
             <hr class="divider" style="margin:10px 0">
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:6px">Combinação → Classificação</div>

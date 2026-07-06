@@ -389,7 +389,7 @@ body {
 /* Reutiliza .card do Lightwall para as caixas */
 .sq-chart-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--sq-shadow); }
 .sq-chart-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.sq-chart-box canvas { max-height: 200px; max-width: 100%; }
+.sq-chart-box svg { max-height: 200px; max-width: 100%; display: block; margin: 0 auto; }
 
 /* ── Resumo executivo ─────────────────────────────────────── */
 .sq-summary-box {

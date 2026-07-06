@@ -7,6 +7,21 @@
 
 (function () {
 
+  /* ── Escape de HTML local — NÃO usar LW.escaparHtml aqui ──
+     Este arquivo roda dentro do <iframe> setor-qualidade-app.html, que
+     NUNCA carrega data.js (só carrega este script + libs de gráfico) —
+     então `LW` simplesmente não existe neste documento. Usar
+     LW.escaparHtml quebra com "ReferenceError: LW is not defined" assim
+     que há algo real pra escapar (ex: o label de um tipo de montagem
+     sem combinação, ver _renderAvisoCombinacoesFaltando), o erro sobe
+     e interrompe toda a função que estava rodando — foi exatamente o
+     que impedia a seção "Tipos sem marcação definida" de aparecer. */
+  function _escaparHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+  }
+
   /* ── Prefixo localStorage ─────────────────────────────── */
   const LS = {
     get: k => { try { return JSON.parse(localStorage.getItem('sq_' + k)); } catch (e) { return null; } },
@@ -117,8 +132,10 @@
     return opcao ? String(opcao.tipo).toUpperCase() : null;
   }
 
-  /* Referências Chart.js */
-  let charts = {};
+  // (Sem mais "charts"/Chart.js — os gráficos do dashboard agora são SVG
+  // puro, gerado em _renderGraficosDashboard() logo antes de
+  // renderDashboard(). Sem canvas, sem estado de instância pra
+  // destruir entre re-renders.)
 
   /* ── Combinações cor+forma → tipo simples ─────────────────
      Antes 100% fixo no código (só reconhecia 2P/SP/3T/1T). Agora vem de
@@ -141,6 +158,17 @@
   // a única coisa que realmente varia de tipo pra tipo é a FORMA (círculo
   // sozinho / traço sozinho / círculo+traço) e, quando combinada, a COR
   // do traço modificador.
+  //
+  // IMPORTANTE — a cor do TRAÇO dentro de uma combinação círculo+traço é
+  // livre: qualquer uma das 5 cores serve pra IDENTIFICAR um tipo (não
+  // só amarelo/laranja). Ex: um traço verde usado SOZINHO continua
+  // significando exatamente o que já significava (aprovado do tipo que
+  // ocupa "traço sozinho" hoje — SP); mas o MESMO traço verde, quando
+  // vem ACOMPANHADO de um círculo, pode identificar um tipo diferente
+  // (ex: 5T) — quem dita aprovado/reprovado nesse caso é a cor do
+  // CÍRCULO, não a do traço (ver classifyMarks(), logo abaixo: já trata
+  // "só traço" e "círculo+traço" em branches totalmente separados, sem
+  // nenhuma ambiguidade entre as duas leituras da mesma cor).
   const CORES_MARCACAO = ['verde', 'vermelho', 'azul', 'amarelo', 'laranja'];
   const CORES_RESERVADAS_APROVACAO = ['verde', 'azul', 'vermelho'];
 
@@ -227,10 +255,18 @@
   }
 
   // Combinações "de slot" ainda livres — círculo sozinho, traço sozinho,
-  // e círculo+traço com uma cor modificadora que ainda não está em uso.
-  // Vermelho/verde/azul NUNCA aparecem aqui como cor modificadora (ver
-  // CORES_RESERVADAS_APROVACAO, acima) — são sempre o par aprovado/
-  // reprovado, em toda combinação, não um jeito de diferenciar tipos.
+  // e círculo+traço com uma cor no TRAÇO que ainda não está em uso.
+  //
+  // "Círculo sozinho" e "traço sozinho" continuam sendo 1 slot ÚNICO
+  // cada (nunca variam por cor — a cor de uma marca sozinha sempre
+  // dita aprovado/reprovado, então só cabe 1 tipo em cada forma). Já
+  // dentro de círculo+traço, a cor do TRAÇO é livre — QUALQUER uma das
+  // 5 cores pode identificar um tipo novo, incluindo verde/azul/
+  // vermelho (antes só amarelo/laranja eram aceitas aqui, sem motivo
+  // real: um traço verde sozinho continua significando exatamente o
+  // que já significava — ver comentário de CORES_RESERVADAS_APROVACAO,
+  // acima — só quando vem ACOMPANHADO de um círculo é que passa a valer
+  // como identidade de tipo, com o círculo ditando o status).
   function _combinacoesDisponiveis() {
     const combinacoes = _combinacoesEfetivas();
     const disponiveis = [];
@@ -238,7 +274,7 @@
       disponiveis.push({ forma: 'circle', corModificadora: null, label: 'Círculo sozinho' });
     if (!combinacoes.some(c => c.forma === 'dash'))
       disponiveis.push({ forma: 'dash', corModificadora: null, label: 'Traço sozinho' });
-    CORES_MARCACAO.filter(c => !CORES_RESERVADAS_APROVACAO.includes(c)).forEach(corMod => {
+    CORES_MARCACAO.forEach(corMod => {
       if (!combinacoes.some(c => c.forma === 'circle+dash' && c.corModificadora === corMod)) {
         disponiveis.push({ forma: 'circle+dash', corModificadora: corMod, label: `Círculo + traço ${corMod}` });
       }
@@ -264,7 +300,7 @@
       ${semCombinacao.map(o => `
         <div class="sq-ref-tipo-pendente" id="sq-ref-pendente-${o.tipo}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:.82rem"><strong>${LW.escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
+            <span style="font-size:.82rem"><strong>${_escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
             ${disponiveis.length
               ? `<button type="button" class="btn btn-ghost btn-sm" onclick="SQ.abrirDefinirCombinacao('${o.tipo}')">Definir combinação</button>`
               : `<span style="font-size:.72rem;color:var(--text-3)">Nenhuma combinação disponível</span>`}
@@ -620,7 +656,20 @@
     if (!el) return;
     const wasActive = el.classList.contains('active');
     document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
-    if (!wasActive) el.classList.add('active');
+    if (!wasActive) {
+      el.classList.add('active');
+      // O popover de Referência mostra "Tipos sem marcação definida",
+      // calculado a partir de config.json (tipos_montagem/marcadores_
+      // qualidade) — SEM isto, quem cadastra um tipo novo em
+      // Configurações enquanto esta página já está aberta (ou só sem dar
+      // F5) não via o tipo novo aparecer aqui: o cache
+      // (_montagemOpcoesCache/_marcadoresQualidadeCache) só era
+      // atualizado 1 vez, no carregamento inicial da página. Recarregar
+      // toda vez que este popover específico abre é barato (só acontece
+      // no clique da pessoa) e garante que a lista sempre reflete o
+      // config.json mais recente.
+      if (id === 'popover-sq-referencia') _carregarOpcoesMontagem();
+    }
   }
   document.addEventListener('click', e => {
     if (!e.target.closest('.ao-popover') && !e.target.closest('.btn-sm')) {
@@ -1523,6 +1572,204 @@
     return p.marcas ? _linhaDoAprovado(p.marcas) : null;
   }
 
+  /* ── Gráficos do dashboard em SVG puro — substitui Chart.js/<canvas> ──
+     Antes cada gráfico era um <canvas> redesenhado via Chart.js — 2
+     dependências externas (chart.js + chartjs-plugin-datalabels) e uma
+     instância pra gerenciar/destruir a cada re-render (ver destroyChart,
+     que existia só por causa disso). Na prática o canvas se mostrava
+     pouco confiável aqui (textos sumindo, gráfico não redesenhando
+     direito ao trocar o filtro, PDF exportado com pedaços em branco —
+     html2canvas tem dificuldade justamente com <canvas> aninhado,
+     melhor com SVG/HTML puro). Os gráficos abaixo são só string SVG/HTML
+     montada aqui e jogada via innerHTML — sem canvas, sem instância pra
+     destruir, sem dependência externa nenhuma. Tooltip vem do <title>
+     nativo do SVG (o navegador mostra sozinho ao passar o mouse). */
+
+  const SVG_W = 600, SVG_H = 220; // viewBox de referência — os containers são <div>, escalam via width="100%".
+
+  // "2026-01-05" → "05/01" — só pro eixo X de datas, sem depender de LW
+  // (que não existe neste documento — é um <iframe> à parte, ver
+  // _escaparHtml/togglePopover mais acima pro mesmo motivo).
+  function _fmtDataEixo(iso) {
+    const p = String(iso).split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}` : String(iso);
+  }
+
+  // Linha/área — "📈 Evolução da Produção".
+  function _svgLineChart(labels, values) {
+    const w = SVG_W, h = SVG_H, padL = 34, padR = 14, padT = 14, padB = 28;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const max = Math.max(1, ...values);
+    const n = labels.length;
+    const stepX = n > 1 ? plotW / (n - 1) : 0;
+    const pts = values.map((v, i) => ({
+      x: padL + (n > 1 ? i * stepX : plotW / 2),
+      y: padT + plotH - (v / max) * plotH,
+      v, label: labels[i],
+    }));
+    const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${pts[pts.length - 1].x.toFixed(1)},${(padT + plotH).toFixed(1)} L${pts[0].x.toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
+    // No máx. ~6 rótulos no eixo X (sempre com o 1º e o último) — pra
+    // não empilhar texto ilegível quando há muitos dias no período.
+    const passo = Math.max(1, Math.ceil(n / 6));
+    const xLabels = pts.map((p, i) => (i === 0 || i === n - 1 || i % passo === 0)
+      ? `<text x="${p.x.toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(_fmtDataEixo(p.label))}</text>` : '').join('');
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(f => {
+      const y = padT + plotH * (1 - f);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>` +
+        `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(max * f)}</text>`;
+    }).join('');
+    const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)"><title>${_escaparHtml(_fmtDataEixo(p.label))}: ${p.v}</title></circle>`).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+      ${gridLines}
+      <path d="${areaPath}" fill="rgba(59,130,246,0.12)" stroke="none"/>
+      <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${xLabels}
+    </svg>`;
+  }
+
+  // Rosca (donut) — "📊 Distribuição das Classificações". items:
+  // [{label, value, color}]. Desenha com <circle>s empilhados via
+  // stroke-dasharray/dashoffset (técnica clássica de donut em SVG puro,
+  // sem calcular arco/path à mão) + legenda em HTML logo abaixo.
+  function _svgDonutChart(items) {
+    const total = items.reduce((s, it) => s + it.value, 0) || 1;
+    const r = 62, cx = 100, cy = 100, strokeW = 34, circ = 2 * Math.PI * r;
+    let acc = 0;
+    const arcs = items.map(it => {
+      const frac = it.value / total;
+      const dash = frac * circ;
+      const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${strokeW}"
+        stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" stroke-dashoffset="${(-acc * circ).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cy})"><title>${_escaparHtml(it.label)}: ${it.value} (${(frac * 100).toFixed(1)}%)</title></circle>`;
+      acc += frac;
+      return el;
+    }).join('');
+    const legenda = items.map(it => `
+      <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text-2)">
+        <span style="width:10px;height:10px;border-radius:50%;background:${it.color};display:inline-block;flex-shrink:0"></span>
+        ${_escaparHtml(it.label)} <span style="color:var(--text-3)">(${it.value})</span>
+      </div>`).join('');
+    return `
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">
+        <svg viewBox="0 0 200 200" width="150" height="150">${arcs}</svg>
+        <div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:120px">${legenda}</div>
+      </div>`;
+  }
+
+  // Barras verticais — "🏷️ Painéis por Tipo".
+  function _svgBarChart(labels, values, colors) {
+    const w = SVG_W, h = SVG_H, padL = 30, padR = 14, padT = 14, padB = 26;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const max = Math.max(1, ...values);
+    const n = labels.length || 1;
+    const gap = (plotW / n) * 0.3;
+    const barW = (plotW / n) - gap;
+    const bars = labels.map((lb, i) => {
+      const v = values[i] || 0;
+      const bh = (v / max) * plotH;
+      const x = padL + i * (plotW / n) + gap / 2;
+      const y = padT + plotH - bh;
+      const color = (colors && colors[i]) || 'var(--blue)';
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}</title></rect>
+        <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)" text-anchor="middle">${v}</text>
+        <text x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+      <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+      ${bars}
+    </svg>`;
+  }
+
+  // Barras horizontais — "🔴 Taxa de Refugo por Tipo" e "🏭 Baterias com
+  // Mais Refugo". opts.max fixa a escala (ex: 100 pra percentual); sem
+  // isso, usa o maior valor da própria lista. opts.suffix só decora o
+  // rótulo (ex: '%'), não afeta a escala.
+  function _svgHBarChart(labels, values, opts = {}) {
+    const w = SVG_W, rowH = 26, padL = 90, padR = 46, padT = 8;
+    const n = labels.length || 1;
+    const h = padT * 2 + rowH * n;
+    const plotW = w - padL - padR;
+    const max = opts.max || Math.max(1, ...values);
+    const color = opts.color || 'var(--red)';
+    const suffix = opts.suffix || '';
+    const rows = labels.map((lb, i) => {
+      const v = values[i] || 0;
+      const bw = Math.max(0, (v / max) * plotW);
+      const y = padT + i * rowH;
+      return `
+        <text x="${padL - 8}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
+        <rect x="${padL}" y="${(y + 4).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 8}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}${suffix}</title></rect>
+        <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 220)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
+  }
+
+  // Dispersão (scatter) + linha de tendência opcional — "⏳ Tempo de
+  // Pega × Refugo". points: [{x, y, label}]; trendPoints: [{x,y},{x,y}]
+  // (reta) ou null.
+  function _svgScatterChart(points, trendPoints) {
+    if (!points.length) {
+      return `<div style="color:var(--text-3);text-align:center;padding:40px 0;font-size:.82rem">Sem dados suficientes no período.</div>`;
+    }
+    const w = SVG_W, h = SVG_H, padL = 34, padR = 14, padT = 14, padB = 34;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const xs = points.map(p => p.x), ys = points.map(p => p.y);
+    const minX = Math.min(0, ...xs), maxX = Math.max(1, ...xs);
+    const minY = 0, maxY = Math.max(1, ...ys);
+    const sx = x => padL + ((x - minX) / ((maxX - minX) || 1)) * plotW;
+    const sy = y => padT + plotH - ((y - minY) / ((maxY - minY) || 1)) * plotH;
+    const gridY = [0, 0.5, 1].map(f => {
+      const y = padT + plotH * (1 - f);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+        <text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(minY + (maxY - minY) * f)}</text>`;
+    }).join('');
+    const dots = points.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="5" fill="var(--blue)" fill-opacity="0.8"><title>${_escaparHtml(p.label || '')}</title></circle>`).join('');
+    const trend = (trendPoints && trendPoints.length === 2)
+      ? `<line x1="${sx(trendPoints[0].x).toFixed(1)}" y1="${sy(trendPoints[0].y).toFixed(1)}" x2="${sx(trendPoints[1].x).toFixed(1)}" y2="${sy(trendPoints[1].y).toFixed(1)}" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`
+      : '';
+    const xTicks = [minX, (minX + maxX) / 2, maxX].map(x => `<text x="${sx(x).toFixed(1)}" y="${h - 18}" font-size="9" fill="var(--text-3)" text-anchor="middle">${x.toFixed(1)}h</text>`).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+      ${gridY}
+      <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+      ${trend}
+      ${dots}
+      ${xTicks}
+      <text x="${(padL + plotW / 2).toFixed(1)}" y="${h - 4}" font-size="9" fill="var(--text-3)" text-anchor="middle">Tempo de Pega (h)</text>
+    </svg>`;
+  }
+
+  // Barras agrupadas — "✅ Aprovação vs Reprovação por Bateria". series:
+  // [{name, color, values}] (2 séries, 1 grupo de barras por bateria).
+  function _svgGroupedBarChart(labels, series) {
+    const w = SVG_W, h = SVG_H, padL = 30, padR = 14, padT = 14, padB = 26;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const max = Math.max(1, ...series.flatMap(s => s.values));
+    const n = labels.length || 1;
+    const groupW = plotW / n;
+    const sideMargin = groupW * 0.15, barGap = 2;
+    const barW = (groupW - sideMargin * 2 - barGap * (series.length - 1)) / series.length;
+    const bars = labels.map((lb, i) => {
+      const gx = padL + i * groupW + sideMargin;
+      const barsHtml = series.map((s, si) => {
+        const v = s.values[i] || 0;
+        const bh = (v / max) * plotH;
+        const x = gx + si * (barW + barGap);
+        const y = padT + plotH - bh;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${s.color}"><title>${_escaparHtml(String(lb))} — ${_escaparHtml(s.name)}: ${v}</title></rect>`;
+      }).join('');
+      return `${barsHtml}<text x="${(gx + (groupW - sideMargin * 2) / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
+    }).join('');
+    const legenda = series.map(s => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block"></span><span style="font-size:.7rem;color:var(--text-3)">${_escaparHtml(s.name)}</span></span>`).join('');
+    return `
+      <div style="text-align:center;margin-bottom:4px">${legenda}</div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="190" preserveAspectRatio="xMidYMid meet">
+        <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+        ${bars}
+      </svg>`;
+  }
+
   /* ── Dashboard ────────────────────────────────────────── */
   function renderDashboard() {
     const d    = getData();
@@ -1558,13 +1805,7 @@
     const dp = {};
     fe.forEach(e => { const dk = new Date(e.dtMontagem||e.registeredAt).toISOString().slice(0,10); dp[dk]=(dp[dk]||0)+d.paineis.filter(p=>p.avaliacaoId===e.id).length; });
     const pl = Object.keys(dp).sort(), pv = pl.map(k => dp[k]);
-
-    destroyChart('production');
-    charts.production = new Chart(document.getElementById('sq-chart-production').getContext('2d'), {
-      type: 'line',
-      data: { labels: pl.length ? pl : ['Sem dados'], datasets: [{ label:'Painéis', data: pl.length?pv:[0], borderColor:'var(--blue)', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4, pointRadius:4 }] },
-      options: baseChartOptions({ legend: false }),
-    });
+    document.getElementById('sq-chart-production').innerHTML = _svgLineChart(pl.length ? pl : ['Sem dados'], pl.length ? pv : [0]);
 
     /* Distribuição das classificações — "(2ª linha)" vira fatia própria
        quando p.linha==='2ª' (ver getClassifiedInfo/_linhaDoAprovado); não
@@ -1574,32 +1815,26 @@
     const ql = Object.keys(cc), qv = Object.values(cc);
     const cmap = { 'SP aprovado':'#4d8dff','SP reprovado':'#ff6b6b','2P aprovado':'#a78bfa','2P reprovado':'#d45d79','3T aprovado':'#f1c40f','3T reprovado':'#f39c12','1T aprovado':'#2ed3a3','1T reprovado':'#d35400' };
     const corSegunda = 'var(--sq-cor-azul)';
-    destroyChart('quality');
-    charts.quality = new Chart(document.getElementById('sq-chart-quality').getContext('2d'), {
-      type: 'doughnut',
-      data: { labels: ql.length?ql:['Sem dados'], datasets: [{ data:ql.length?qv:[1], backgroundColor:ql.length?ql.map(l=>l.includes('2ª linha')?corSegunda:(cmap[l]||'var(--border-2)')):['var(--border-2)'], borderWidth:0 }] },
-      options: { ...baseChartOptions(), plugins: { legend:{ position:'bottom', labels:{ color:'var(--text-3)', boxWidth:12, padding:8 } }, datalabels:{display:false} } },
-    });
+    const donutItems = ql.length
+      ? ql.map((l, i) => ({ label: l, value: qv[i], color: l.includes('2ª linha') ? corSegunda : (cmap[l] || 'var(--border-2)') }))
+      : [{ label: 'Sem dados', value: 1, color: 'var(--border-2)' }];
+    document.getElementById('sq-chart-quality').innerHTML = _svgDonutChart(donutItems);
 
     /* Taxa de refugo por tipo */
     const tt2={SP:0,'2P':0,'3T':0,'1T':0}, tr2={SP:0,'2P':0,'3T':0,'1T':0};
     fp.forEach(p => { if (p.tipoEsperado && tt2[p.tipoEsperado]!==undefined) { tt2[p.tipoEsperado]++; if(p.resultado==='reprovado') tr2[p.tipoEsperado]++; } });
     const vtl = Object.keys(tt2).filter(k=>tt2[k]>0);
-    destroyChart('rejections');
-    charts.rejections = new Chart(document.getElementById('sq-chart-rejections').getContext('2d'), {
-      type: 'bar', indexAxis: 'y',
-      data: { labels: vtl.length?vtl:['Nenhum'], datasets: [{ label:'Refugo%', data:vtl.length?vtl.map(k=>((tr2[k]/tt2[k])*100).toFixed(1)):[0], backgroundColor:'var(--red)', borderRadius:4 }] },
-      options: { ...baseChartOptions({ legend:false }), plugins:{ ...baseChartOptions({legend:false}).plugins, datalabels:{ color:'var(--text-2)', anchor:'end', align:'end', font:{weight:'bold'}, formatter:v=>v+'%' } }, scales:{ x:{ticks:{color:'var(--text-3)'},beginAtZero:true,max:100}, y:{ticks:{color:'var(--text-3)'}} } },
-    });
+    document.getElementById('sq-chart-rejections').innerHTML = _svgHBarChart(
+      vtl.length ? vtl : ['Nenhum'],
+      vtl.length ? vtl.map(k => Number(((tr2[k]/tt2[k])*100).toFixed(1))) : [0],
+      { max: 100, suffix: '%', color: 'var(--red)' }
+    );
 
     /* Total por tipo */
     const tc={SP:0,'2P':0,'3T':0,'1T':0}; fp.forEach(p=>{if(p.tipoEsperado&&tc[p.tipoEsperado]!==undefined)tc[p.tipoEsperado]++;});
-    destroyChart('tipoPlacas');
-    charts.tipoPlacas = new Chart(document.getElementById('sq-chart-tipo').getContext('2d'), {
-      type: 'bar',
-      data: { labels:Object.keys(tc), datasets:[{ data:Object.values(tc), backgroundColor:['var(--blue)','var(--sq-purple)','var(--sq-yellow)','var(--sq-orange)'], borderRadius:4 }] },
-      options: baseChartOptions({ legend:false }),
-    });
+    document.getElementById('sq-chart-tipo').innerHTML = _svgBarChart(
+      Object.keys(tc), Object.values(tc), ['var(--blue)','var(--sq-purple)','var(--sq-yellow)','var(--sq-orange)']
+    );
 
     /* Defeitos por posição */
     const bec={};fe.forEach(e=>{bec[e.batteryId]=(bec[e.batteryId]||0)+1;});
@@ -1617,34 +1852,29 @@
     /* Baterias com mais refugo */
     const br={};fe.forEach(e=>{const n=d.paineis.filter(p=>p.avaliacaoId===e.id&&p.resultado==='reprovado').length;if(n)br[e.batteryId]=(br[e.batteryId]||0)+n;});
     const sb=Object.keys(br).sort((a,b)=>br[b]-br[a]).slice(0,10);
-    destroyChart('batRefugo');
-    charts.batRefugo = new Chart(document.getElementById('sq-chart-bat-refugo').getContext('2d'), {
-      type:'bar', indexAxis:'y',
-      data:{ labels:sb.length?sb:['Nenhuma'], datasets:[{ label:'Refugo', data:sb.length?sb.map(k=>br[k]):[0], backgroundColor:'var(--sq-orange)', borderRadius:4 }] },
-      options: baseChartOptions({ legend:false }),
-    });
+    document.getElementById('sq-chart-bat-refugo').innerHTML = _svgHBarChart(
+      sb.length ? sb : ['Nenhuma'],
+      sb.length ? sb.map(k => br[k]) : [0],
+      { color: 'var(--sq-orange)' }
+    );
 
     /* Scatter: tempo de pega × refugo */
-    const sc=[],sl=[];
-    fe.forEach(e=>{if(e.dtEnchimento&&e.dtDesmoldagem){const diff=new Date(e.dtDesmoldagem)-new Date(e.dtEnchimento);if(diff>0){const h=diff/3600000,refs=d.paineis.filter(p=>p.avaliacaoId===e.id&&p.resultado==='reprovado').length;sc.push({x:h,y:refs});sl.push(`Bat:${e.batteryId}|${h.toFixed(1)}h|${refs} refugos`);}}});
+    const sc=[];
+    fe.forEach(e=>{if(e.dtEnchimento&&e.dtDesmoldagem){const diff=new Date(e.dtDesmoldagem)-new Date(e.dtEnchimento);if(diff>0){const h=diff/3600000,refs=d.paineis.filter(p=>p.avaliacaoId===e.id&&p.resultado==='reprovado').length;sc.push({x:h,y:refs,label:`Bat:${e.batteryId} | ${h.toFixed(1)}h | ${refs} refugos`});}}});
     let trd=[];
-    if(sc.length>1){const n=sc.length,sx=sc.reduce((a,b)=>a+b.x,0),sy=sc.reduce((a,b)=>a+b.y,0),sxy=sc.reduce((a,b)=>a+b.x*b.y,0),sx2=sc.reduce((a,b)=>a+b.x*b.x,0),den=n*sx2-sx*sx,m=(n*sxy-sx*sy)/den,b=(sy-m*sx)/n,maxX=Math.max(...sc.map(d=>d.x)),minX=Math.min(...sc.map(d=>d.x));trd=[{x:minX,y:m*minX+b},{x:maxX,y:m*maxX+b}];}
-    destroyChart('tempoPega');
-    charts.tempoPega = new Chart(document.getElementById('sq-chart-tempo-pega').getContext('2d'), {
-      type:'scatter',
-      data:{datasets:[{label:'Avaliações',data:sc,backgroundColor:'var(--blue)',pointRadius:6},...(trd.length?[{label:'Tendência',data:trd,type:'line',borderColor:'var(--red)',borderWidth:2,pointRadius:0,fill:false}]:[])]},
-      options:{...baseChartOptions(),plugins:{...baseChartOptions().plugins,tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='Tendência'?'Tendência':sl[ctx.dataIndex]||''}},datalabels:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Tempo de Pega (h)',color:'var(--text-3)'},ticks:{color:'var(--text-3)'}},y:{title:{display:true,text:'Refugo',color:'var(--text-3)'},ticks:{color:'var(--text-3)'},beginAtZero:true}}},
-    });
+    if(sc.length>1){const n=sc.length,sx=sc.reduce((a,b)=>a+b.x,0),sy=sc.reduce((a,b)=>a+b.y,0),sxy=sc.reduce((a,b)=>a+b.x*b.y,0),sx2=sc.reduce((a,b)=>a+b.x*b.x,0),den=n*sx2-sx*sx,m=(n*sxy-sx*sy)/den,b=(sy-m*sx)/n,maxX=Math.max(...sc.map(pt=>pt.x)),minX=Math.min(...sc.map(pt=>pt.x));trd=[{x:minX,y:m*minX+b},{x:maxX,y:m*maxX+b}];}
+    document.getElementById('sq-chart-tempo-pega').innerHTML = _svgScatterChart(sc, trd.length ? trd : null);
 
     /* Aprovação vs reprovação por bateria */
     const bd={};fe.forEach(e=>{if(!bd[e.batteryId])bd[e.batteryId]={a:0,r:0};d.paineis.filter(p=>p.avaliacaoId===e.id).forEach(p=>{if(p.resultado==='aprovado')bd[e.batteryId].a++;else if(p.resultado==='reprovado')bd[e.batteryId].r++;});});
     const bl=Object.keys(bd);
-    destroyChart('approvalBat');
-    charts.approvalBat = new Chart(document.getElementById('sq-chart-approval-bat').getContext('2d'), {
-      type:'bar',
-      data:{labels:bl.length?bl:['Sem dados'],datasets:[{label:'Aprovados',data:bl.length?bl.map(k=>bd[k].a):[0],backgroundColor:'var(--green)',borderRadius:2},{label:'Reprovados',data:bl.length?bl.map(k=>bd[k].r):[0],backgroundColor:'var(--red)',borderRadius:2}]},
-      options: baseChartOptions(),
-    });
+    document.getElementById('sq-chart-approval-bat').innerHTML = _svgGroupedBarChart(
+      bl.length ? bl : ['Sem dados'],
+      [
+        { name: 'Aprovados', color: 'var(--green)', values: bl.length ? bl.map(k => bd[k].a) : [0] },
+        { name: 'Reprovados', color: 'var(--red)', values: bl.length ? bl.map(k => bd[k].r) : [0] },
+      ]
+    );
 
     /* Resumo */
     let summ=`Avaliados <b>${fp.length}</b> painéis em <b>${fe.length}</b> registros. `;
@@ -1654,22 +1884,6 @@
     else summ='Nenhum dado disponível para o período.';
     document.getElementById('sq-dash-summary').innerHTML = summ;
   }
-
-  function baseChartOptions(opts={}) {
-    return {
-      preserveDrawingBuffer: true,
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: 'var(--text-3)' }, ...( opts.legend === false ? { display: false } : {} ) },
-        datalabels: { color: 'var(--text-3)', anchor:'end', align:'end', font:{ weight:'bold' } },
-      },
-      scales: {
-        x: { ticks: { color: 'var(--text-3)' } },
-        y: { ticks: { color: 'var(--text-3)' }, beginAtZero: true },
-      },
-    };
-  }
-  function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
 
   /* ── Exportar PDF ─────────────────────────────────────── */
   async function exportDashboardPDF() {
