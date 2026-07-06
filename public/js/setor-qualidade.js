@@ -7,6 +7,21 @@
 
 (function () {
 
+  /* ── Escape de HTML local — NÃO usar LW.escaparHtml aqui ──
+     Este arquivo roda dentro do <iframe> setor-qualidade-app.html, que
+     NUNCA carrega data.js (só carrega este script + libs de gráfico) —
+     então `LW` simplesmente não existe neste documento. Usar
+     LW.escaparHtml quebra com "ReferenceError: LW is not defined" assim
+     que há algo real pra escapar (ex: o label de um tipo de montagem
+     sem combinação, ver _renderAvisoCombinacoesFaltando), o erro sobe
+     e interrompe toda a função que estava rodando — foi exatamente o
+     que impedia a seção "Tipos sem marcação definida" de aparecer. */
+  function _escaparHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+  }
+
   /* ── Prefixo localStorage ─────────────────────────────── */
   const LS = {
     get: k => { try { return JSON.parse(localStorage.getItem('sq_' + k)); } catch (e) { return null; } },
@@ -141,6 +156,17 @@
   // a única coisa que realmente varia de tipo pra tipo é a FORMA (círculo
   // sozinho / traço sozinho / círculo+traço) e, quando combinada, a COR
   // do traço modificador.
+  //
+  // IMPORTANTE — a cor do TRAÇO dentro de uma combinação círculo+traço é
+  // livre: qualquer uma das 5 cores serve pra IDENTIFICAR um tipo (não
+  // só amarelo/laranja). Ex: um traço verde usado SOZINHO continua
+  // significando exatamente o que já significava (aprovado do tipo que
+  // ocupa "traço sozinho" hoje — SP); mas o MESMO traço verde, quando
+  // vem ACOMPANHADO de um círculo, pode identificar um tipo diferente
+  // (ex: 5T) — quem dita aprovado/reprovado nesse caso é a cor do
+  // CÍRCULO, não a do traço (ver classifyMarks(), logo abaixo: já trata
+  // "só traço" e "círculo+traço" em branches totalmente separados, sem
+  // nenhuma ambiguidade entre as duas leituras da mesma cor).
   const CORES_MARCACAO = ['verde', 'vermelho', 'azul', 'amarelo', 'laranja'];
   const CORES_RESERVADAS_APROVACAO = ['verde', 'azul', 'vermelho'];
 
@@ -227,10 +253,18 @@
   }
 
   // Combinações "de slot" ainda livres — círculo sozinho, traço sozinho,
-  // e círculo+traço com uma cor modificadora que ainda não está em uso.
-  // Vermelho/verde/azul NUNCA aparecem aqui como cor modificadora (ver
-  // CORES_RESERVADAS_APROVACAO, acima) — são sempre o par aprovado/
-  // reprovado, em toda combinação, não um jeito de diferenciar tipos.
+  // e círculo+traço com uma cor no TRAÇO que ainda não está em uso.
+  //
+  // "Círculo sozinho" e "traço sozinho" continuam sendo 1 slot ÚNICO
+  // cada (nunca variam por cor — a cor de uma marca sozinha sempre
+  // dita aprovado/reprovado, então só cabe 1 tipo em cada forma). Já
+  // dentro de círculo+traço, a cor do TRAÇO é livre — QUALQUER uma das
+  // 5 cores pode identificar um tipo novo, incluindo verde/azul/
+  // vermelho (antes só amarelo/laranja eram aceitas aqui, sem motivo
+  // real: um traço verde sozinho continua significando exatamente o
+  // que já significava — ver comentário de CORES_RESERVADAS_APROVACAO,
+  // acima — só quando vem ACOMPANHADO de um círculo é que passa a valer
+  // como identidade de tipo, com o círculo ditando o status).
   function _combinacoesDisponiveis() {
     const combinacoes = _combinacoesEfetivas();
     const disponiveis = [];
@@ -238,7 +272,7 @@
       disponiveis.push({ forma: 'circle', corModificadora: null, label: 'Círculo sozinho' });
     if (!combinacoes.some(c => c.forma === 'dash'))
       disponiveis.push({ forma: 'dash', corModificadora: null, label: 'Traço sozinho' });
-    CORES_MARCACAO.filter(c => !CORES_RESERVADAS_APROVACAO.includes(c)).forEach(corMod => {
+    CORES_MARCACAO.forEach(corMod => {
       if (!combinacoes.some(c => c.forma === 'circle+dash' && c.corModificadora === corMod)) {
         disponiveis.push({ forma: 'circle+dash', corModificadora: corMod, label: `Círculo + traço ${corMod}` });
       }
@@ -264,7 +298,7 @@
       ${semCombinacao.map(o => `
         <div class="sq-ref-tipo-pendente" id="sq-ref-pendente-${o.tipo}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:.82rem"><strong>${LW.escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
+            <span style="font-size:.82rem"><strong>${_escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
             ${disponiveis.length
               ? `<button type="button" class="btn btn-ghost btn-sm" onclick="SQ.abrirDefinirCombinacao('${o.tipo}')">Definir combinação</button>`
               : `<span style="font-size:.72rem;color:var(--text-3)">Nenhuma combinação disponível</span>`}
@@ -620,7 +654,20 @@
     if (!el) return;
     const wasActive = el.classList.contains('active');
     document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
-    if (!wasActive) el.classList.add('active');
+    if (!wasActive) {
+      el.classList.add('active');
+      // O popover de Referência mostra "Tipos sem marcação definida",
+      // calculado a partir de config.json (tipos_montagem/marcadores_
+      // qualidade) — SEM isto, quem cadastra um tipo novo em
+      // Configurações enquanto esta página já está aberta (ou só sem dar
+      // F5) não via o tipo novo aparecer aqui: o cache
+      // (_montagemOpcoesCache/_marcadoresQualidadeCache) só era
+      // atualizado 1 vez, no carregamento inicial da página. Recarregar
+      // toda vez que este popover específico abre é barato (só acontece
+      // no clique da pessoa) e garante que a lista sempre reflete o
+      // config.json mais recente.
+      if (id === 'popover-sq-referencia') _carregarOpcoesMontagem();
+    }
   }
   document.addEventListener('click', e => {
     if (!e.target.closest('.ao-popover') && !e.target.closest('.btn-sm')) {

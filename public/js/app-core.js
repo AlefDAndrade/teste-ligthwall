@@ -1912,18 +1912,32 @@
 
       const novasOpcoesMontagem = _cfgDados.montagens.map(_montagemDaUIParaConfig);
 
-      const cfg = {
-        baterias: { ids: _cfgDados.baterias },
-        dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
-        tipos_montagem: { opcoes: novasOpcoesMontagem },
-        // Preserva volume_por_placa e dispositivosAutorizados tal como estão
-        // atualmente em memória — este modal não edita essas listas, então
-        // nunca deve sobrescrevê-las com algo vazio/ausente.
-        volume_por_placa: LW.VOLUME_POR_PLACA,
-        dispositivosAutorizados: LW.DISPOSITIVOS_AUTORIZADOS,
-      };
-
       try {
+        // IMPORTANTE: busca o config.json de verdade do servidor ANTES de
+        // salvar, em vez de reconstruir do zero só com o que esta tela
+        // conhece. /salvar-config SUBSTITUI o arquivo inteiro (não faz
+        // merge) — então campos que este modal nunca edita (ex:
+        // marcadores_qualidade, definido pelo Setor de Qualidade em
+        // "📖 Referência" → "Definir combinação"; modoAutomatico) eram
+        // APAGADOS silenciosamente toda vez que alguém salvava Baterias e
+        // Tipos de Montagem aqui, mesmo sem mexer neles. Usar `...cfgAtual`
+        // como base preserva tudo que já existe; só os campos abaixo são
+        // de fato sobrescritos por esta tela.
+        const resAtual = await fetch('/db/config.json');
+        const cfgAtual = resAtual.ok ? await resAtual.json() : {};
+
+        const cfg = {
+          ...cfgAtual,
+          baterias: { ids: _cfgDados.baterias },
+          dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
+          tipos_montagem: { opcoes: novasOpcoesMontagem },
+          // Preserva volume_por_placa e dispositivosAutorizados — usa o que
+          // acabou de vir do servidor; LW.* só como rede de segurança caso
+          // o fetch acima falhe e cfgAtual fique vazio.
+          volume_por_placa: cfgAtual.volume_por_placa || LW.VOLUME_POR_PLACA,
+          dispositivosAutorizados: cfgAtual.dispositivosAutorizados || LW.DISPOSITIVOS_AUTORIZADOS,
+        };
+
         const res = await fetch('/salvar-config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
