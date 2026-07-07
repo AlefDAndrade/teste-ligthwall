@@ -230,6 +230,24 @@
     $('op-dimensao').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); $('op-dimensao').blur(); }
     });
+    // Formata em tempo real: a pessoa digita só o número (ex: "9,5" ou
+    // "9.5") e o " cm" já aparece sozinho no final — ver
+    // _formatarDimensaoLive() logo abaixo pra detalhes (inclusive o
+    // ponto virando vírgula, que é o padrão usado no resto do sistema).
+    $('op-dimensao').addEventListener('input', e => {
+      const input = e.target;
+      const cursorPos = input.selectionStart;
+      const antes = input.value;
+      const formatado = _formatarDimensaoLive(antes);
+      if (formatado !== antes) {
+        input.value = formatado;
+        // Cursor: como só mexemos no sufixo " cm" (nunca no que a pessoa
+        // já digitou antes dele), mantém a posição relativa de onde ela
+        // estava digitando — assim o cursor não "pula" pro fim do campo.
+        const novaPos = Math.min(cursorPos, formatado.length);
+        input.setSelectionRange(novaPos, novaPos);
+      }
+    });
     if (document.getElementById('op-silo')) $('op-silo').addEventListener('change', e => {
       state.silo = e.target.value; persist();
     });
@@ -294,6 +312,45 @@
     }
   }
 
+  // Formata o texto digitado em "Dimensão" pra já virar "9,5 cm" sem a
+  // pessoa precisar escrever o "cm" — e sem duplicar caso ela escreva
+  // mesmo assim. Regras, na ordem aplicada:
+  //  1) descarta qualquer caractere que não seja número, vírgula ou ponto
+  //     — o campo é só pra medida, não aceita texto livre (letras,
+  //     símbolos etc. são simplesmente ignorados enquanto a pessoa
+  //     digita, nem chegam a aparecer no campo);
+  //  2) ponto vira vírgula (9.5 -> 9,5), que é o separador decimal
+  //     padrão usado no resto do sistema;
+  //  3) o que sobrar (só o número) recebe " cm" no final automaticamente.
+  // `final`: true quando é a formatação de fechamento (blur/Enter/✓) — aí
+  // uma vírgula sem nada depois (ex: "9,") não faz sentido como medida
+  // definitiva, então é descartada e vira só "9 cm". Enquanto a pessoa
+  // ainda está digitando (final=false), a vírgula solta é mantida, senão
+  // ela nunca conseguiria digitar as casas decimais depois dela.
+  function _formatarDimensaoLive(bruto, final) {
+    let v = (bruto || '');
+    // Tira um "cm" que já esteja no final (com/sem espaço, maiúsc/minúsc)
+    // pra recalcular em cima só do número — evita "9,5 cm cm" ao digitar
+    // mais alguma coisa depois do sufixo já ter aparecido.
+    v = v.replace(/\s*cm\s*$/i, '');
+    // Só dígitos, vírgula e ponto passam — qualquer letra, espaço ou
+    // outro símbolo é descartado (não é um valor inválido "a ser
+    // corrigido depois": simplesmente não entra no campo).
+    v = v.replace(/[^\d,.]/g, '');
+    // Ponto sempre vira vírgula (padrão decimal do sistema)
+    v = v.replace(/\./g, ',');
+    // Permite só uma vírgula (a partir da segunda, descarta) — evita algo
+    // como "9,5,3" que não seria uma medida válida.
+    const partes = v.split(',');
+    if (partes.length > 2) v = partes[0] + ',' + partes.slice(1).join('');
+    // Vírgula "pendurada" sem casa decimal depois (ex: "9," ou "9,,"): só
+    // faz sentido enquanto a pessoa ainda está digitando. Ao fechar o
+    // campo, tira a vírgula solta — "9," vira "9", não "9, cm".
+    if (final && /,$/.test(v)) v = v.replace(/,+$/, '');
+    if (v === '') return '';
+    return v + ' cm';
+  }
+
   // Trava o campo de novo e grava o valor digitado como definitivo pra
   // esta operação — chamado ao clicar de novo no ✓, apertar Enter, ou
   // sair do campo (blur), o que vier primeiro.
@@ -302,7 +359,8 @@
     const btn = $('btn-editar-dimensao');
     if (!input || input.readOnly) return; // já estava travado — nada a confirmar
 
-    const valor = input.value.trim();
+    const valor = _formatarDimensaoLive(input.value.trim(), true);
+    input.value = valor;
     state.dimensao = valor;
     // Vazio = desiste da edição manual, volta a acompanhar a bateria
     // selecionada automaticamente (mesmo espírito de "campo em branco

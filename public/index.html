@@ -306,7 +306,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -417,6 +417,7 @@
                 <label class="form-label">Dimensão (Tipo)</label>
                 <div style="display:flex;gap:6px;align-items:stretch">
                   <input class="form-input auto-filled" id="op-dimensao" readonly
+                    inputmode="decimal"
                     placeholder="Definido pela bateria" style="flex:1;min-width:0">
                   <button type="button" id="btn-editar-dimensao"
                     onmousedown="event.preventDefault()"
@@ -563,7 +564,7 @@
     </fieldset>
   </div>
 </main>
-    <!-- ============ PAGE: TURNOS ============ -->
+<!-- ============ PAGE: TURNOS ============ -->
     <main class="main" id="page-turnos">
       <div class="page-header">
         <h1 class="page-title">Desempenho por <span>Turnos</span></h1>
@@ -713,7 +714,6 @@
 
       </div>
     </main>
-
 <!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
       <div class="page-header" style="position:relative">
@@ -2005,7 +2005,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -2076,7 +2076,7 @@
       </div>
     </div>
   </div>
-
+
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2443,7 +2443,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
   <div id="editar-traco-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
@@ -2617,7 +2617,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -2687,7 +2687,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2758,8 +2758,8 @@
 
     </div>
   </div>
-
-  <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
+
+<!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2830,8 +2830,7 @@
 
     </div>
   </div>
-
-  <!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
+<!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
   <div id="mesclar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2918,8 +2917,7 @@
 
     </div>
   </div>
-
-  <!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
+<!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
   <div id="restaurar-geral-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -3002,8 +3000,7 @@
 
     </div>
   </div>
-
-  <div id="import-modal"
+<div id="import-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
