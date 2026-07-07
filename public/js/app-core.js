@@ -543,6 +543,14 @@
       // (VALIDADORES_BACKUP_DADOS, em server.js).
       'bercos_visuais.json':       v => Array.isArray(v),
       'avaliacoes_qualidade.json': v => Array.isArray(v),
+      // Adicionado: sem isso, esta cópia (client-side) ficava desatualizada
+      // em relação a VALIDADORES_BACKUP_DADOS (server.js) — o navegador
+      // nunca lia "operacoes_avaliadas.json" de dentro do .zip nem mandava
+      // no payload pro servidor, que então recusava a restauração INTEIRA
+      // com "Backup incompleto — faltam: operacoes_avaliadas.json" (o
+      // servidor sempre exige todos os arquivos que ele mesmo valida,
+      // ver esperados/faltando em /restaurar-backup-dados).
+      'operacoes_avaliadas.json':  v => Array.isArray(v),
     };
 
     // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -559,6 +567,7 @@
       'ajustes_tracos.json': [],
       'bercos_visuais.json': [],
       'avaliacoes_qualidade.json': [],
+      'operacoes_avaliadas.json': [],
     };
 
     function parseArquivoRestaurar(nome, texto) {
