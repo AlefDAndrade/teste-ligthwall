@@ -64,6 +64,24 @@
     return Math.round(diffMs / 60000);
   }
 
+  // Gera o id de uma parada NOVA (edição reaproveita _modoEdicao, ver
+  // salvarFormParada). Antes usava crypto.randomUUID() — a Web Crypto API
+  // só existe em "contexto seguro" (HTTPS, ou http://localhost) por
+  // especificação do navegador; acessada de outro computador/tablet da
+  // fábrica via IP da rede local (http://192.168.x.x:3000 — o jeito normal
+  // de usar este sistema, ver README) o navegador nem expõe
+  // crypto.randomUUID, chamar isso lança TypeError ANTES do try/catch de
+  // salvarFormParada sequer começar — o clique parecia não fazer nada
+  // (sem toast de erro, botão nunca chegava a desabilitar/"Salvando…").
+  // Mesmo padrão de id já usado no resto do sistema pra evitar exatamente
+  // esse problema (ex: 'traco_'+timestamp+'_'+n em operacao.js, 'ev_'+
+  // Date.now() em setor-qualidade.js) — timestamp + sufixo aleatório
+  // (Math.random, sempre disponível) só pra não colidir se 2 paradas
+  // forem salvas no mesmo milissegundo.
+  function _gerarIdParada() {
+    return 'parada_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
   // Retorna datetime-local string (YYYY-MM-DDTHH:MM) do momento atual em Brasília
   function nowLocalString() {
     const now = new Date();
@@ -191,7 +209,7 @@
     }
 
     const parada = {
-      id:             _modoEdicao || crypto.randomUUID(),
+      id:             _modoEdicao || _gerarIdParada(),
       inicio:         new Date(inicio).toISOString(),
       fim:            new Date(fim).toISOString(),
       duracao_min:    duracao,

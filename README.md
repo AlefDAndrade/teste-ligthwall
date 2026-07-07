@@ -301,7 +301,7 @@ Um único card no menu ("💾 Backup e Restauração") abre um painel com todas 
 
 | Opção | O que faz |
 |---|---|
-| **Backup de Dados** | Baixa um `.zip` com os 8 arquivos de `public/db/`. Gerado no navegador. |
+| **Backup de Dados** | Baixa um `.zip` com os arquivos de dados de `public/db/` (histórico, traços, paradas, avaliações de qualidade etc. — 13 no total, alguns reconstruídos a partir do SQLite). Gerado no navegador. |
 | **Backup Geral** | Baixa um `.zip` com o projeto inteiro (código + dados, exceto `node_modules`/`.git`). Gerado no servidor. |
 | **Restaurar Dados** | Sobrescreve `public/db/` a partir de um backup de dados. |
 | **Restaurar Geral** | Sobrescreve o projeto inteiro a partir de um backup geral. **Exige reiniciar o servidor manualmente depois**, pra mudanças em `server.js` valerem. |

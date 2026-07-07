@@ -1411,6 +1411,11 @@ const ARQUIVOS_BACKUP_DB = [
   // tabela SQL — a rota GET /db/<nome> reconstrói o JSON a partir do banco.
   'bercos_visuais.json',
   'avaliacoes_qualidade.json',
+  // Adicionado: sem isso, "quem já foi avaliado" (fila do Setor de
+  // Qualidade — ver CREATE TABLE operacoes_avaliadas, db.js) não saía no
+  // Backup de Dados — restaurar um backup fazia toda bateria já avaliada
+  // voltar a aparecer na fila, mesmo já avaliada de verdade antes do backup.
+  'operacoes_avaliadas.json',
 ];
 
 /**
@@ -1635,6 +1640,149 @@ function mostrarConfirmacao(mensagem, opcoes = {}) {
 
 // ---- Export ----
 
+/**
+ * Baixa uma string como arquivo — mesmo mecanismo (Blob + <a> temporário)
+ * já usado por gerarBackupDados(), só que genérico: qualquer tela pode
+ * chamar pra baixar texto/HTML/JSON sem duplicar esse boilerplate.
+ * Usado pelos botões "🌐 Exportar Interativo" dos dashboards (Setor de
+ * Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
+ * Berços, CEP, Análise Focada) — cada um monta seu próprio HTML
+ * autossuficiente (dados + gráficos + filtros embutidos) e só chama isto
+ * pra efetivamente baixar.
+ * @param {string} nomeArquivo
+ * @param {string} conteudo
+ * @param {string} mimeType - default 'text/html'
+ */
+function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
+  const blob = new Blob([conteudo], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// CSS compartilhado por TODOS os exports de "Dashboard Interativo" (Setor
+// de Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
+// Berços, CEP, Análise Focada) — cada um gera seu próprio HTML
+// autossuficiente, mas todos reaproveitam esta mesma paleta/layout base
+// (cabeçalho, filtros, grade de KPIs, chart-box, resumo), só some com o
+// resto do CSS que cada tela cria em cima disso pra seus gráficos
+// específicos.
+const CSS_EXPORT_PADRAO = `
+  :root {
+    --blue:#4d8dff; --red:#e5484d; --green:#2ecc71; --accent:#4d8dff;
+    --text:#1c2530; --text-2:#48576b; --text-3:#8492a6;
+    --border:#e2e8f0; --border-2:#cbd5e1;
+    --bg-1:#f5f7fb; --bg-card:#ffffff;
+    --radius:8px; --radius-lg:12px;
+    --purple:#8b5cf6; --yellow:#f1c40f; --orange:#f5821f; --cyan:#06b6d4;
+    --font-mono: 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg-1); color:var(--text-2); padding:28px; }
+  h1 { font-size:1.3rem; color:var(--text); margin:0 0 4px; }
+  .sub { font-size:.8rem; color:var(--text-3); margin-bottom:20px; }
+  .filtros { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:20px; }
+  .campo { display:flex; flex-direction:column; gap:4px; font-size:.75rem; color:var(--text-3); }
+  .campo input, .campo select { font:inherit; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-1); color:var(--text-2); }
+  .botao { padding:7px 16px; border-radius:var(--radius); border:1px solid var(--accent); background:var(--accent); color:#fff; font-size:.8rem; cursor:pointer; }
+  .botao:hover { opacity:.9; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .kpi-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px; }
+  .kpi-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:6px; }
+  .kpi-value { font-size:1.7rem; font-weight:700; color:var(--text); }
+  .green{color:var(--green)} .red{color:var(--red)} .accent{color:var(--accent)}
+  .charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:20px; }
+  .chart-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; }
+  .chart-box h4 { margin:0 0 10px; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:8px; font-weight:600; }
+  .summary-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; font-size:.85rem; }
+  .rodape { margin-top:22px; font-size:.7rem; color:var(--text-3); text-align:center; }
+  table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  th, td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--border); }
+  th { font-size:.68rem; text-transform:uppercase; color:var(--text-3); }
+  .lw-tooltip {
+    display:none; position:fixed; z-index:99999; left:0; top:0;
+    max-width:min(260px, calc(100vw - 24px)); padding:8px 12px;
+    background:var(--bg-card); border:1px solid var(--border-2); border-radius:var(--radius);
+    box-shadow:0 8px 24px rgba(0,0,0,.15); color:var(--text-2);
+    font-size:.78rem; line-height:1.45; white-space:pre-line; pointer-events:none;
+  }
+`;
+
+// Fonte de tooltip.js, embutida literalmente (não dá pra usar o truque de
+// toString() por função — as funções de tooltip.js vivem dentro da PRÓPRIA
+// IIFE dele, não são identificadores soltos que analise-operacional.js
+// (ou qualquer outro dashboard) possa referenciar direto) — usada pelos
+// exports de dashboard que têm gráfico em canvas com hover (Análise
+// Operacional, Análise de Berços, CEP): cola isto num <script> do HTML
+// exportado, ANTES do restante do script daquele dashboard, pra
+// LW.tooltip.ligarHoverCanvas existir do mesmo jeito que existe na tela
+// ao vivo (mesmo comentário de tooltip.js sobre ordem de carregamento:
+// isto pisa em cima de um window.LW já existente, nunca zera ele).
+const TOOLTIP_JS_FONTE = `
+  (function () {
+    let tooltipEl = null;
+    let alvoAtivo = null;
+    function _el() {
+      if (tooltipEl) return tooltipEl;
+      tooltipEl = document.createElement('div');
+      tooltipEl.className = 'lw-tooltip';
+      document.body.appendChild(tooltipEl);
+      return tooltipEl;
+    }
+    function _posicionar(x, y) {
+      const tt = _el();
+      const margem = 12;
+      let left = x + margem, top = y + margem;
+      const w = tt.offsetWidth, h = tt.offsetHeight;
+      if (left + w > window.innerWidth - 8) left = x - margem - w;
+      if (top + h > window.innerHeight - 8) top = y - margem - h;
+      if (left < 8) left = 8;
+      if (top < 8) top = 8;
+      tt.style.left = left + 'px';
+      tt.style.top = top + 'px';
+    }
+    function mostrarTexto(texto, x, y) {
+      if (!texto) { esconder(); return; }
+      const tt = _el();
+      tt.textContent = texto;
+      tt.style.display = 'block';
+      _posicionar(x, y);
+    }
+    function esconder() {
+      if (tooltipEl) tooltipEl.style.display = 'none';
+      alvoAtivo = null;
+    }
+    function ligarHoverCanvas(canvas, acharTexto) {
+      if (canvas._hoverLigado) return;
+      canvas._hoverLigado = true;
+      canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const texto = acharTexto(e.clientX - rect.left, e.clientY - rect.top);
+        if (texto) { canvas.style.cursor = 'pointer'; mostrarTexto(texto, e.clientX, e.clientY); }
+        else { canvas.style.cursor = 'default'; esconder(); }
+      });
+      canvas.addEventListener('mouseleave', () => { esconder(); canvas.style.cursor = 'default'; });
+      let _ultimoTexto = null;
+      canvas.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const texto = acharTexto(t.clientX - rect.left, t.clientY - rect.top);
+        if (texto && texto === _ultimoTexto) { esconder(); _ultimoTexto = null; }
+        else if (texto) { mostrarTexto(texto, t.clientX, t.clientY); _ultimoTexto = texto; }
+        else { esconder(); _ultimoTexto = null; }
+        e.stopPropagation();
+      }, { passive: true });
+    }
+    window.LW = window.LW || {};
+    window.LW.tooltip = { mostrarTexto, esconder, ligarHoverCanvas };
+  })();
+`;
+
 window.LW = {
   // Constantes fixas
   TURNO_OPTS,
@@ -1725,4 +1873,7 @@ window.LW = {
   // Escape de HTML — usar sempre que texto livre (digitado pelo usuário)
   // for inserido via innerHTML, pra evitar XSS armazenado.
   escaparHtml: _escaparHtml,
+  baixarArquivoTexto,
+  CSS_EXPORT_PADRAO,
+  TOOLTIP_JS_FONTE,
 };

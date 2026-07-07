@@ -56,13 +56,16 @@
        TELA 2: DASHBOARD
   ══════════════════════════════════════════════════════════ -->
   <div class="sq-section" id="sq-dashboard">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;" id="sq-dash-topbar">
       <span style="font-size:.82rem;color:var(--text-3);"><i class="fas fa-chart-pie"></i> Visão Executiva</span>
-      <button class="btn btn-danger btn-sm" id="sq-btn-pdf" onclick="SQ.exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
+      <div id="sq-dash-acoes" style="display:flex;gap:8px;">
+        <button class="btn btn-outline-accent btn-sm" id="sq-btn-html" onclick="SQ.exportDashboardHTML()"><i class="fas fa-file-code"></i> Exportar Interativo</button>
+        <button class="btn btn-danger btn-sm" id="sq-btn-pdf" onclick="SQ.exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
+      </div>
     </div>
 
     <!-- Filtros -->
-    <div class="sq-filters">
+    <div class="sq-filters" id="sq-dash-filtros">
       <div class="form-group">
         <label class="form-label">Data Inicial</label>
         <input class="form-input" type="date" id="sq-dash-start" style="width:150px;">
@@ -333,51 +336,16 @@
                   <th style="text-align:left;padding:4px 0 6px 6px;border-bottom:1px solid var(--border);color:var(--text-3);font-size:.66rem;text-transform:uppercase;font-weight:700">Classificação</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)"><span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-verde);margin-right:2px"></span><span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-azul)"></span> Círculo verde ou azul</td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>2P</strong> aprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)"><span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-vermelho)"></span> Círculo vermelho</td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>2P</strong> reprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)"><span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-verde);margin-right:2px"></span><span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-azul)"></span> Traço verde ou azul</td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>SP</strong> aprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)"><span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-vermelho)"></span> Traço vermelho</td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>SP</strong> reprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)">
-                    <span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-verde);margin-right:2px"></span><span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-azul);margin-right:4px"></span>+<span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-amarelo);margin-left:4px"></span>
-                    Círculo (verde/azul) + traço amarelo
-                  </td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>3T</strong> aprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)">
-                    <span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-vermelho);margin-right:4px"></span>+<span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-amarelo);margin-left:4px"></span>
-                    Círculo vermelho + traço amarelo
-                  </td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>3T</strong> reprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0;border-bottom:1px solid var(--border)">
-                    <span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-verde);margin-right:2px"></span><span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-azul);margin-right:4px"></span>+<span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-laranja);margin-left:4px"></span>
-                    Círculo (verde/azul) + traço laranja
-                  </td>
-                  <td style="padding:7px 0 7px 6px;border-bottom:1px solid var(--border)">Painel <strong>1T</strong> aprovado</td>
-                </tr>
-                <tr>
-                  <td style="padding:7px 6px 7px 0">
-                    <span class="sq-shape-circle" style="display:inline-block;background:var(--sq-cor-vermelho);margin-right:4px"></span>+<span class="sq-shape-dash" style="display:inline-block;background:var(--sq-cor-laranja);margin-left:4px"></span>
-                    Círculo vermelho + traço laranja
-                  </td>
-                  <td style="padding:7px 0 7px 6px">Painel <strong>1T</strong> reprovado</td>
-                </tr>
+              <!-- Preenchido dinamicamente por _renderTabelaCombinacoes()
+                   (setor-qualidade.js), a partir das combinações efetivas
+                   (config.json → marcadores_qualidade.opcoes, ou
+                   COMBINACOES_PADRAO enquanto nada foi definido) cruzadas
+                   com o LABEL real de cada tipo simples cadastrado em
+                   Configurações → Montagem (config.json → tipos_montagem.
+                   opcoes) — nunca mais texto fixo de "2P"/"SP"/"3T"/"1T"
+                   solto no HTML. Um tipo com código "sp" aparece aqui como
+                   o label cadastrado (ex.: "S/P"), não como "SP". -->
+              <tbody id="sq-ref-combinacoes-tbody">
               </tbody>
             </table>
 
@@ -547,7 +515,7 @@
         </select>
       </div>
     </div>
-    <div id="sq-hist-list">
+    <div>
       <div class="sq-empty" id="sq-hist-empty"><i class="fas fa-database"></i>Nenhum registro ainda.</div>
       <div class="table-wrap" id="sq-hist-table-wrap" style="display:none;">
         <table>

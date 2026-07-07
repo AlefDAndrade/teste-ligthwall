@@ -371,14 +371,6 @@ body {
   margin-bottom: 20px;
 }
 
-/* Variante de cor para os KPIs do Setor de Qualidade */
-.sq-kpi-card-verde .kpi-card::after,
-.kpi-card.sq-verde::after { background: var(--green); }
-.sq-kpi-card-laranja .kpi-card::after,
-.kpi-card.sq-laranja::after { background: var(--sq-orange); }
-.sq-kpi-card-vermelho .kpi-card::after,
-.kpi-card.sq-vermelho::after { background: var(--red); }
-
 /* ── Charts grid ──────────────────────────────────────────── */
 .sq-charts-grid {
   display: grid;

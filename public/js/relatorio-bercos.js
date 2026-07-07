@@ -19,6 +19,7 @@
   const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)' };
 
   let _cache = [];
+  let _modoVisual = false; // false = tabela (padrão), true = grade colorida por bateria
 
   // Monta o cabeçalho de 2 linhas (Bx em cima com colspan=2, E/D embaixo)
   // uma única vez — refazer isso em toda renderização não muda nada (o
@@ -89,6 +90,7 @@
 
     if (!linhas.length) {
       tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro no período.</td></tr>`;
+      _renderVisual(linhas);
       return;
     }
 
@@ -103,6 +105,96 @@
         ${_linhaBercos(l)}
       </tr>
     `).join('');
+
+    // Modo Visual é montado JUNTO (mesmo dado, mesma ordem) mesmo se não
+    // estiver visível agora — assim, alternar o botão "🎨 Modo Visual" só
+    // troca um display:none/'', instantâneo, sem precisar buscar os dados
+    // de novo nem esperar nada.
+    _renderVisual(linhas);
+  }
+
+  // Monta 1 card por bateria — resumo (mesmo formato do popover) + grade
+  // colorida (_montarGradeBercos) — pro Modo Visual. Mesma ordem "mais
+  // recente primeiro" da tabela.
+  function _renderVisual(linhas) {
+    const container = document.getElementById('relatorio-bercos-visual');
+    if (!container) return;
+
+    if (!linhas.length) {
+      container.innerHTML = `<div class="card" style="padding:30px;text-align:center;color:var(--text-3)">Nenhum registro no período.</div>`;
+      return;
+    }
+
+    container.innerHTML = linhas.slice().reverse().map(l => `
+      <div class="card mb-3" style="padding:14px 18px">
+        <div class="ba-resumo">
+          <strong>Bateria ${LW.escaparHtml(String(l.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(l.tipo_montagem || '—'))}
+          ${l.data ? ` — ${l.data.split('-').reverse().join('/')}${l.turno ? ' · ' + LW.escaparHtml(String(l.turno)) : ''}` : ''}
+        </div>
+        ${_montarGradeBercos(l)}
+      </div>
+    `).join('');
+  }
+
+  // Só alterna o que já está montado (ver render()/_renderVisual, acima) —
+  // nenhuma busca nova, nenhum re-render, troca instantânea.
+  function _aplicarModoVisual() {
+    const tableWrap = document.querySelector('#page-relatorio-bercos .table-wrap');
+    const visual    = document.getElementById('relatorio-bercos-visual');
+    if (tableWrap) tableWrap.style.display = _modoVisual ? 'none' : '';
+    if (visual)    visual.style.display    = _modoVisual ? '' : 'none';
+    const btn = document.getElementById('btn-rb-modo-visual');
+    if (btn) btn.classList.toggle('btn-primary', _modoVisual);
+  }
+
+  // ── Cor por tipo de montagem de um berço ────────────────────────────────
+  // Mesmo critério de "Bateria Atual" (ver bateria-atual.js, _baCorPorTipo/
+  // _baTiposPorBerco): Montagem Personalizada guarda o CÓDIGO do tipo por
+  // berço (bercos_personalizados, 1 posição por berço — ver db.
+  // relatorioBercos()), resolvido por LW.corPorTipoSimples; qualquer outro
+  // tipo (simples ou híbrido) é uniforme pra bateria inteira — todo berço
+  // usa o mesmo LABEL (linha.tipo_montagem), resolvido por
+  // LW.corMontagemPorLabel (que já sabe montar o gradiente 50/50 de
+  // híbridos). Sem tipo definido (personalizada com berço ainda vazio, ou
+  // tipo_montagem ausente) -> null, célula cai no cinza neutro de sempre.
+  function _tipoDoBerco(linha, ordem) {
+    if (linha.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+      const grade = Array.isArray(linha.bercos_personalizados) ? linha.bercos_personalizados : [];
+      return grade[ordem - 1] || null;
+    }
+    return linha.tipo_montagem || null;
+  }
+
+  function _corDoBerco(linha, ordem) {
+    const tipo = _tipoDoBerco(linha, ordem);
+    if (!tipo) return null;
+    return linha.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+      ? LW.corPorTipoSimples(tipo)
+      : LW.corMontagemPorLabel(tipo);
+  }
+
+  // Monta a grade (.ba-grid) de UMA bateria/linha — reaproveitada tanto
+  // pelo popover de hover/toque (tabela) quanto pelo Modo Visual (grade
+  // completa sempre visível, ver _renderVisual). Colorida por tipo de
+  // montagem (_corDoBerco, acima); célula sem cor cai no cinza neutro de
+  // sempre — nenhuma das duas visualizações perde a marcação de vazamento
+  // (.ba-dot-marcado), que continua sendo SEMPRE no indicador, não na
+  // célula (2 lados independentes por berço).
+  function _montarGradeBercos(linha) {
+    const bercosOrdenados = (linha.bercos || []).slice().sort((a, b) => a.ordem - b.ordem);
+    return `<div class="ba-grid">${bercosOrdenados.map(b => {
+      const dirMarcado = b.estado_direita === 'baixou';
+      const esqMarcado = b.estado_esquerda === 'baixou';
+      const algumMarcado = dirMarcado || esqMarcado;
+      const numero = String(b.ordem).padStart(2, '0');
+      const cor = _corDoBerco(linha, b.ordem);
+      return `
+        <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
+          <span class="ba-numero">B${numero}${algumMarcado ? ' ⚠️' : ''}</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
+        </div>`;
+    }).join('')}</div>`;
   }
 
   // ── Hover/toque: grade completa do berço, estilo "Bateria Atual" ────────
@@ -130,24 +222,13 @@
   }
 
   function _montarConteudoPopover(linha) {
-    const bercosOrdenados = (linha.bercos || []).slice().sort((a, b) => a.ordem - b.ordem);
+    const totalBercos = (linha.bercos || []).length;
     const resumo = `
       <div class="ba-resumo">
         <strong>Bateria ${LW.escaparHtml(String(linha.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(linha.tipo_montagem || '—'))}
-        ${bercosOrdenados.length ? ` — ${bercosOrdenados.length} berços` : ''}
+        ${totalBercos ? ` — ${totalBercos} berços` : ''}
       </div>`;
-    const grid = `<div class="ba-grid">${bercosOrdenados.map(b => {
-      const dirMarcado = b.estado_direita === 'baixou';
-      const esqMarcado = b.estado_esquerda === 'baixou';
-      const algumMarcado = dirMarcado || esqMarcado;
-      const numero = String(b.ordem).padStart(2, '0');
-      return `
-        <div class="ba-celula" style="background:var(--bg-2);color:var(--text-2);border:1px solid var(--border)">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
-          <span class="ba-numero">B${numero}${algumMarcado ? ' ⚠️' : ''}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
-        </div>`;
-    }).join('')}</div>`;
+    const grid = _montarGradeBercos(linha);
     const legenda = `<div class="ba-dica">🔴 Indicador vermelho = vazou · em cima = lado direito, embaixo = lado esquerdo</div>`;
     return resumo + grid + legenda;
   }
@@ -261,6 +342,10 @@
       if (ini) ini.value = '';
       if (fim) fim.value = '';
       render();
+    });
+    document.getElementById('btn-rb-modo-visual')?.addEventListener('click', () => {
+      _modoVisual = !_modoVisual;
+      _aplicarModoVisual();
     });
 
     render().then(_ligarPopoverLinhas);

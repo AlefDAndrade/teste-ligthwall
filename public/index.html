@@ -217,6 +217,11 @@
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
+          <div class="menu-card" onclick="showPage('setor-qualidade')">
+            <div class="menu-card-icon">🧪</div>
+            <div class="menu-card-title">Setor de Qualidade</div>
+            <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
+          </div>
           <div class="menu-card" data-admin-only onclick="abrirImportacao()">
             <div class="menu-card-icon">📥</div>
             <div class="menu-card-title">Importar Documento</div>
@@ -301,7 +306,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -410,7 +415,15 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Dimensão (Tipo)</label>
-                <input class="form-input auto-filled" id="op-dimensao" readonly placeholder="Definido pela bateria">
+                <div style="display:flex;gap:6px;align-items:stretch">
+                  <input class="form-input auto-filled" id="op-dimensao" readonly
+                    placeholder="Definido pela bateria" style="flex:1;min-width:0">
+                  <button type="button" id="btn-editar-dimensao"
+                    onmousedown="event.preventDefault()"
+                    style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
+                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica pra esta operação"
+                    onclick="LWOp.editarDimensao()">✏️</button>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Capacidade (Berços)</label>
@@ -572,6 +585,7 @@
                 <input class="form-input" type="date" id="turnos-data-fim" style="width:150px">
               </div>
               <button class="btn btn-outline-accent" id="btn-turnos-filtrar">Filtrar</button>
+              <button class="btn btn-outline-accent" id="btn-turnos-exportar">🌐 Exportar Interativo</button>
             </div>
             <div style="display:flex;gap:20px;font-size:.85rem">
               <div>🏆 Mais eficiente: <strong style="color:var(--accent)" id="melhor-turno">—</strong></div>
@@ -699,7 +713,7 @@
 
       </div>
     </main>
-
+
 <!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
       <div class="page-header" style="position:relative">
@@ -926,6 +940,7 @@
             <input class="form-input" type="date" id="rb-data-fim" style="width:150px" title="Data fim">
             <button class="btn btn-ghost btn-sm" id="btn-rb-filtrar">Filtrar</button>
             <button class="btn btn-ghost btn-sm" id="btn-rb-limpar">✕ Limpar</button>
+            <button class="btn btn-ghost btn-sm" id="btn-rb-modo-visual" title="Mostra o desenho de cada berço, colorido conforme o tipo de montagem, em vez da tabela">🎨 Modo Visual</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="rb-count"></span>
             </div>
@@ -947,6 +962,15 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Modo Visual: 1 card por bateria, com o desenho colorido dos
+             berços (mesma grade/estilo de "Bateria Atual" — .ba-grid/
+             .ba-celula/.ba-dot, ver styles.css) em vez da tabela. Montado
+             e escondido/mostrado por relatorio-bercos.js (_renderVisual/
+             _aplicarModoVisual) — começa escondido; alterna com a tabela
+             ao clicar em "🎨 Modo Visual", sem precisar buscar os dados
+             de novo (os dois já ficam prontos a cada render()). -->
+        <div id="relatorio-bercos-visual" style="display:none"></div>
 
       </div>
     </main>
@@ -980,6 +1004,7 @@
               <input class="form-input" type="date" id="ab-data-fim" style="width:150px">
             </div>
             <button class="btn btn-outline-accent" id="btn-ab-filtrar">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-ab-exportar">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1159,8 +1184,9 @@
 
       <div class="page-body">
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
+          <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
         </div>
 
         <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
@@ -1255,6 +1281,7 @@
               </select>
             </div>
             <button class="btn btn-primary" id="btn-qt-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-qt-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1484,6 +1511,7 @@
               </select>
             </div>
             <button class="btn btn-primary" id="btn-oee-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-oee-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1645,6 +1673,7 @@
               <input class="form-input" type="date" id="ao-data-fim" style="width:150px">
             </div>
             <button class="btn btn-outline-accent" id="btn-ao-filtrar">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-ao-exportar">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1976,7 +2005,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -2047,7 +2076,7 @@
       </div>
     </div>
   </div>
-
+
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2414,7 +2443,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
   <div id="editar-traco-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
@@ -2588,7 +2617,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -2658,7 +2687,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2729,7 +2758,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2756,7 +2785,7 @@
           salva automaticamente no servidor antes de qualquer substituição.
         </p>
 
-        <div id="restaurar-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2801,7 +2830,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
   <div id="mesclar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2828,7 +2857,7 @@
           sobra e contador de traços desta instalação não são tocados.
         </p>
 
-        <div id="mesclar-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2889,7 +2918,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
   <div id="restaurar-geral-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2920,7 +2949,7 @@
           reiniciar.
         </p>
 
-        <div id="restaurar-geral-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2973,7 +3002,7 @@
 
     </div>
   </div>
-
+
   <div id="import-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -3079,7 +3108,7 @@
           <div id="import-preview-info" style="color:var(--text-2);font-size:.88rem"></div>
         </div>
         <div style="overflow-x:auto;margin-bottom:20px;border:1px solid var(--border);border-radius:var(--radius)">
-          <table id="import-preview-table" style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem">
             <thead id="import-preview-head" style="background:var(--bg-2)"></thead>
             <tbody id="import-preview-body"></tbody>
           </table>
@@ -3103,7 +3132,7 @@
       </div>
 
     </div>
-  </div>
+  </div>
 
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>

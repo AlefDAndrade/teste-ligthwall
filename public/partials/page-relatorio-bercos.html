@@ -19,6 +19,7 @@
             <input class="form-input" type="date" id="rb-data-fim" style="width:150px" title="Data fim">
             <button class="btn btn-ghost btn-sm" id="btn-rb-filtrar">Filtrar</button>
             <button class="btn btn-ghost btn-sm" id="btn-rb-limpar">✕ Limpar</button>
+            <button class="btn btn-ghost btn-sm" id="btn-rb-modo-visual" title="Mostra o desenho de cada berço, colorido conforme o tipo de montagem, em vez da tabela">🎨 Modo Visual</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="rb-count"></span>
             </div>
@@ -40,6 +41,15 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Modo Visual: 1 card por bateria, com o desenho colorido dos
+             berços (mesma grade/estilo de "Bateria Atual" — .ba-grid/
+             .ba-celula/.ba-dot, ver styles.css) em vez da tabela. Montado
+             e escondido/mostrado por relatorio-bercos.js (_renderVisual/
+             _aplicarModoVisual) — começa escondido; alterna com a tabela
+             ao clicar em "🎨 Modo Visual", sem precisar buscar os dados
+             de novo (os dois já ficam prontos a cada render()). -->
+        <div id="relatorio-bercos-visual" style="display:none"></div>
 
       </div>
     </main>

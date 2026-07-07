@@ -2199,7 +2199,16 @@
       selBateria.value = bateria.id_bateria;
 
       const selTipo = document.getElementById('eo-tipo-montagem');
-      selTipo.innerHTML = LW.MONTAGEM_OPTS.map(t => `<option value="${t}">${t}</option>`).join('');
+      // "Personalizada" NUNCA vem em LW.MONTAGEM_OPTS (não é um tipo
+      // cadastrado em Configurações — é um modo à parte, ver
+      // operacao.js/_aplicarTiposMontagem). Sem essa opção aqui, editar
+      // uma operação Personalizada deixava o select sem nenhum valor
+      // correspondente (bateria.tipo_montagem === 'PERSONALIZADA' não
+      // batia com nenhuma <option>) — o que travava até EDITAR OUTROS
+      // CAMPOS dessa operação: "Selecione o tipo de montagem" barrava o
+      // salvamento porque o select ficava vazio.
+      selTipo.innerHTML = LW.MONTAGEM_OPTS.map(t => `<option value="${t}">${t}</option>`).join('') +
+        `<option value="${LW.TIPO_MONTAGEM_PERSONALIZADA}">Personalizada</option>`;
       selTipo.value = bateria.tipo_montagem;
 
       document.getElementById('eo-bercos-reais').value = bateria.bercos_reais || bateria.capacidade || '';
@@ -2243,13 +2252,30 @@
     // Recalcula painéis/m²/cimentícia em tempo real (mesma fórmula de
     // sempre, LW.calcPaineis) e mostra o resultado — só pra visualização,
     // quem efetivamente grava esses valores é salvarEdicaoOperacao().
+    //
+    // Personalizada é um caso à parte: LW.calcPaineis() espera UM tipo
+    // só pra bateria inteira (map[tipoMontagem]) — pra 'PERSONALIZADA'
+    // isso não existe em MONTAGEM_MAP, então caía no fallback histórico
+    // "trata como S/P puro" (ver calcPaineis, data.js), recalculando tudo
+    // errado mesmo sem essa tela ter como editar a grade berço a berço.
+    // A grade em si (bercos_personalizados) não é editável por aqui —
+    // por isso usamos a grade ORIGINAL da operação (_eoRegistroOriginal)
+    // como fonte de verdade dos totais, via LW.calcPaineisPersonalizado
+    // (mesma função que Registrar Operação usa pra esse modo).
+    function _eoCalcularPaineis(tipoMontagem, bercos) {
+      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        return LW.calcPaineisPersonalizado(_eoRegistroOriginal?.bercos_personalizados);
+      }
+      return LW.calcPaineis(tipoMontagem, bercos);
+    }
+
     function _eoAtualizarPreview() {
       const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
       const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
 
-      const calc = LW.calcPaineis(tipoMontagem, bercos);
+      const calc = _eoCalcularPaineis(tipoMontagem, bercos);
       document.getElementById('eo-preview').innerHTML = `
         <div>Dimensão: <strong style="color:var(--text)">${bateriaObj?.label || '—'}</strong></div>
         <div>Painéis Total: <strong style="color:var(--text)">${calc.total_paineis}</strong></div>
@@ -2277,7 +2303,7 @@
       if (!bercos || bercos < 1) { LW.mostrarAlerta('Informe a quantidade de berços reais.', { tipo: 'aviso' }); return; }
 
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
-      const calc = LW.calcPaineis(tipoMontagem, bercos);
+      const calc = _eoCalcularPaineis(tipoMontagem, bercos);
 
       const novosValores = {
         id_bateria: idBateria,

@@ -106,6 +106,7 @@
       html += '<option value="Personalizada">Personalizada</option>';
       sel.innerHTML = html;
       _renderAvisoCombinacoesFaltando();
+      _renderTabelaCombinacoes();
     } catch (err) {
       console.error('Falha ao carregar tipos de montagem de config.json — usando lista fixa de reserva:', err);
       // Fallback só pra tela não ficar sem nenhuma opção se config.json
@@ -117,6 +118,11 @@
         <option value="SP+2P">SP + 2P</option><option value="SP">SP</option>
         <option value="2P">2P</option><option value="3T">3T</option>
         <option value="Personalizada">Personalizada</option>`;
+      // Sem tipos_montagem carregados, a tabela de combinações cai pro
+      // fallback do próprio código em maiúsculas (_labelDoTipoMontagem) —
+      // mesmo texto que sempre apareceu (2P/SP/3T/1T), só que agora
+      // gerado, não mais hardcoded no HTML.
+      _renderTabelaCombinacoes();
     }
   }
 
@@ -310,6 +316,83 @@
     `;
   }
 
+  // Monta a tabela "Combinação → Classificação" dentro do popover "📖
+  // Referência" — antes era texto fixo no HTML (sempre "2P"/"SP"/"3T"/
+  // "1T", mesmo quando o tipo cadastrado em Configurações → Montagem
+  // tinha outro código ou nem existia). Agora cada linha vem das
+  // combinações efetivas (_combinacoesEfetivas — config.json →
+  // marcadores_qualidade.opcoes, com COMBINACOES_PADRAO como reserva) e
+  // o nome exibido é sempre o LABEL real do tipo simples correspondente
+  // em tipos_montagem.opcoes (ex.: código "sp" cadastrado com label
+  // "S/P" aparece como "S/P", não como "SP" — são a mesma coisa, só
+  // "SP" é o código interno usado pra casar com a combinação, nunca o
+  // texto mostrado pro usuário). Tipo sem cadastro correspondente (ex.:
+  // "1t" de COMBINACOES_PADRAO antes de existir um tipo "1T" em
+  // Configurações) cai no fallback do próprio código em maiúsculas, pra
+  // nunca ficar com uma linha em branco.
+  function _labelDoTipoMontagem(tipo) {
+    const opcao = (_montagemOpcoesCache || []).find(o => o && o.modo === 'simples' && o.tipo === tipo);
+    return opcao ? opcao.label : String(tipo).toUpperCase();
+  }
+
+  function _renderTabelaCombinacoes() {
+    const tbody = document.getElementById('sq-ref-combinacoes-tbody');
+    if (!tbody) return;
+
+    const marca = (shape, cor, extraStyle) =>
+      `<span class="sq-shape-${shape}" style="display:inline-block;background:var(--sq-cor-${cor});${extraStyle || ''}"></span>`;
+
+    const linhas = [];
+    _combinacoesEfetivas().forEach(combo => {
+      const label = _escaparHtml(_labelDoTipoMontagem(combo.tipo));
+
+      if (combo.forma === 'circle') {
+        linhas.push([
+          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul')} Círculo verde ou azul`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('circle', 'vermelho')} Círculo vermelho`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      } else if (combo.forma === 'dash') {
+        linhas.push([
+          `${marca('dash', 'verde', 'margin-right:2px')}${marca('dash', 'azul')} Traço verde ou azul`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('dash', 'vermelho')} Traço vermelho`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      } else if (combo.forma === 'circle+dash') {
+        const cm = combo.corModificadora;
+        linhas.push([
+          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo (verde/azul) + traço ${cm}`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('circle', 'vermelho', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo vermelho + traço ${cm}`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      }
+    });
+
+    if (!linhas.length) {
+      tbody.innerHTML = `<tr><td colspan="2" style="padding:8px 0;color:var(--text-3);font-size:.76rem">Nenhuma combinação definida ainda.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = linhas.map(([combinacao, classificacao], i) => {
+      const semBorda = i === linhas.length - 1;
+      const borda = semBorda ? '' : 'border-bottom:1px solid var(--border)';
+      return `
+        <tr>
+          <td style="padding:7px 6px 7px 0;${borda}">${combinacao}</td>
+          <td style="padding:7px 0 7px 6px;${borda}">${classificacao}</td>
+        </tr>`;
+    }).join('');
+  }
+
   // Abre o seletor de combinação disponível pra um tipo específico —
   // aparece embutido, logo abaixo do tipo, dentro do próprio popover.
   function abrirDefinirCombinacao(tipo) {
@@ -379,6 +462,7 @@
       _marcadoresQualidadeCache = novaLista;
       _configBrutoCache = cfg;
       _renderAvisoCombinacoesFaltando();
+      _renderTabelaCombinacoes();
       showAlert('Salvo', `Combinação definida para ${tipo.toUpperCase()} — já pode marcar painéis desse tipo.`);
     } catch (err) {
       console.error('Falha ao salvar combinação de marcação:', err);
@@ -818,6 +902,26 @@
         const turnoSel = document.getElementById('sq-turno');
         const opcaoTurno = Array.from(turnoSel.options).find(o => o.value.startsWith(digito));
         if (opcaoTurno) turnoSel.value = opcaoTurno.value;
+      }
+    }
+
+    // ── Data/Hora de Enchimento ──────────────────────────────────────
+    // Data = op.data (o dia em que a OPERAÇÃO começou — ver dataLocal em
+    // operacao.js: state.inicio.split('T')[0] — sempre a data de
+    // referência da operação, usada em todo o resto do sistema pra
+    // agrupar/filtrar). Hora = extraída de op.fim (timestamp completo de
+    // quando a operação foi finalizada — ver state.fim em operacao.js).
+    // Não usa op.fim inteiro direto: um turno que passa da meia-noite
+    // teria o "dia" de op.fim já no dia seguinte, e aqui queremos o dia
+    // da operação, não o do relógio no instante exato do fim.
+    // .toISOString() (não getHours/getMinutes locais) pelo mesmo motivo
+    // de fmtDTL, acima — mesma convenção usada em todo o resto deste
+    // arquivo pra ler/escrever os campos datetime-local daqui.
+    if (op.data && op.fim) {
+      const horaFim = new Date(op.fim);
+      if (!isNaN(horaFim)) {
+        document.getElementById('sq-dtEnchimento').value = `${op.data}T${horaFim.toISOString().slice(11, 16)}`;
+        calculateCureTime();
       }
     }
 
@@ -1777,7 +1881,23 @@
     const ed   = document.getElementById('sq-dash-end').value;
     const bf   = document.getElementById('sq-dash-bat').value;
 
+    // "Excluída da fila" (ver _excluirOperacaoDaFila) grava uma avaliação
+    // de verdade só pra deixar rastro no Histórico/Espelho — TODOS os
+    // painéis dela vêm com resultado 'nao_avaliado_no_sistema', nunca
+    // aprovado/reprovado. O Dashboard é sobre o que FOI avaliado (KPIs,
+    // produção, classificações) — por isso essas entram fora daqui desde
+    // o filtro inicial (marcador `excluidaDaFila`, gravado só nesse
+    // evento), como se não existissem no período: sem isso, "Painéis
+    // Avaliados"/"Total Registros" ficavam inflados com painéis que a
+    // própria avaliação diz que NUNCA foram avaliados, "Evolução Diária"
+    // contava produção que não existiu, e "Distribuição das
+    // Classificações" ganhava uma fatia solta "null nao_avaliado_no_
+    // sistema" (tipoObtido é sempre null nesses painéis). Continuam
+    // aparecendo normalmente em Registros (aba separada, sem esse
+    // filtro) — só o Dashboard/Espelho Visual (que usa este mesmo `fe`,
+    // ver dashboardEvals abaixo) que não conta com elas.
     const fe = d.avaliacoes.filter(item => {
+      if (item.excluidaDaFila) return false;
       const dt = new Date(item.registeredAt);
       return (!sd || dt >= new Date(sd)) &&
              (!ed || dt <= new Date(ed + 'T23:59:59')) &&
@@ -1885,19 +2005,339 @@
     document.getElementById('sq-dash-summary').innerHTML = summ;
   }
 
-  /* ── Exportar PDF ─────────────────────────────────────── */
+  // Descreve o período/filtro aplicado no momento — usado tanto no
+  // cabeçalho impresso do PDF quanto no subtítulo do dashboard exportado
+  // em HTML, pra o arquivo se explicar sozinho sem depender da tela.
+  function _descricaoPeriodoAtual() {
+    const sd = document.getElementById('sq-dash-start').value;
+    const ed = document.getElementById('sq-dash-end').value;
+    const bf = document.getElementById('sq-dash-bat').value;
+    const periodo = (sd || ed)
+      ? `${sd ? new Date(sd + 'T00:00:00').toLocaleDateString('pt-BR') : 'início'} até ${ed ? new Date(ed + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje'}`
+      : 'Todos os registros';
+    return `Período: ${periodo}${bf ? ' · Bateria: ' + bf : ''}`;
+  }
+
+  /* ── Exportar PDF ─────────────────────────────────────────
+     Ajustado pra virar um relatório de verdade, não uma captura de tela
+     crua: os controles interativos (filtros + os próprios botões de
+     exportar) somem da captura — não fazem sentido dentro de um PDF
+     estático, só poluíam a imagem — e ganha um cabeçalho impresso
+     (título + período aplicado + data de geração) que só existe durante
+     a captura, pro arquivo final se explicar sozinho. */
   async function exportDashboardPDF() {
-    const btn = document.getElementById('sq-btn-pdf');
+    const btn     = document.getElementById('sq-btn-pdf');
+    const acoes   = document.getElementById('sq-dash-acoes');
+    const filtros = document.getElementById('sq-dash-filtros');
+    const dash    = document.getElementById('sq-dashboard');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
+
+    const cabecalho = document.createElement('div');
+    cabecalho.style.cssText = 'padding:0 0 14px;margin-bottom:14px;border-bottom:2px solid var(--blue);';
+    cabecalho.innerHTML = `
+      <div style="font-size:1.3rem;font-weight:700;color:var(--text);">📋 Relatório de Qualidade — Avaliação de Baterias</div>
+      <div style="font-size:.8rem;color:var(--text-3);margin-top:4px;">${_escaparHtml(_descricaoPeriodoAtual())} · Gerado em ${new Date().toLocaleString('pt-BR')}</div>`;
+
+    if (acoes)   acoes.style.display   = 'none';
+    if (filtros) filtros.style.display = 'none';
+    dash.insertBefore(cabecalho, dash.firstChild);
+
     try {
-      const canvas = await html2canvas(document.getElementById('sq-dashboard'), { scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, scrollX:0, scrollY:-window.scrollY });
+      const canvas = await html2canvas(dash, { scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, scrollX:0, scrollY:-window.scrollY });
       const { jsPDF } = window.jspdf;
       const w = 297, h = Math.ceil((canvas.height * w) / canvas.width);
       const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:[w,h] });
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
-      pdf.save(`avaliacao_baterias_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.pdf`);
-    } catch (err) { console.error(err); showAlert('Erro','Falha ao gerar PDF.'); }
-    finally { btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false; }
+      pdf.save(`relatorio_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.pdf`);
+    } catch (err) {
+      console.error(err); showAlert('Erro','Falha ao gerar PDF.');
+    } finally {
+      cabecalho.remove();
+      if (acoes)   acoes.style.display   = '';
+      if (filtros) filtros.style.display = '';
+      btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false;
+    }
+  }
+
+  /* ── Exportar Dashboard Interativo (HTML standalone) ───────
+     Diferente do PDF (imagem estática), gera 1 arquivo .html AUTOSSU-
+     FICIENTE: dados (avaliações + painéis já embutidos, cada avaliação
+     com sua lista de painéis, mesmo formato de /avaliacoes-qualidade),
+     as mesmas funções de gráfico SVG puro (cópia fiel de _svgLineChart/
+     _svgDonutChart/_svgBarChart/_svgHBarChart/_svgScatterChart/
+     _svgGroupedBarChart, sem nenhuma dependência externa) e os mesmos
+     filtros (Data Inicial/Final, Bateria) — tudo recalculado no
+     JavaScript do PRÓPRIO arquivo exportado, sem precisar do servidor.
+     Quem abrir esse .html em qualquer navegador consegue trocar o
+     período/bateria e ver os gráficos recalcularem na hora, exatamente
+     como na tela ao vivo — só não leva "Espelho Visual" (é sobre revisar
+     UMA avaliação específica, não faz sentido fora do contexto do
+     formulário) nem os botões de exportar (um export não reexporta a
+     si mesmo).
+
+     Exclui avaliações "excluídaDaFila" (ver renderDashboard — mesmo
+     critério: painéis marcados 'nao_avaliado_no_sistema' não contam
+     como avaliados) ANTES de embutir, pra não precisar duplicar essa
+     regra dentro do script exportado. */
+  async function exportDashboardHTML() {
+    const btn = document.getElementById('sq-btn-html');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
+    try {
+      await carregarAvaliacoesQualidade(); // garante dataset atualizado antes de embutir
+      const avaliacoes = getData().avaliacoes.filter(a => !a.excluidaDaFila);
+      const html = _gerarHtmlDashboardStandalone(avaliacoes, _descricaoPeriodoAtual());
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `dashboard_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo:', err);
+      showAlert('Erro', 'Não consegui gerar o dashboard interativo agora.');
+    } finally {
+      btn.innerHTML = '<i class="fas fa-file-code"></i> Exportar Interativo'; btn.disabled = false;
+    }
+  }
+
+  // Monta o HTML standalone inteiro (string) — ver comentário de
+  // exportDashboardHTML, acima. `avaliacoes` já vem filtrado (sem
+  // excluídas da fila); cada item mantém sua própria lista `.paineis`
+  // (mesmo formato salvo em avaliacoes_qualidade.dados, db.js), então não
+  // precisa embutir uma 2ª lista de painéis separada — o script exportado
+  // usa flatMap nelas, igual a este arquivo faz em carregarAvaliacoesQualidade().
+  function _gerarHtmlDashboardStandalone(avaliacoes, descricaoPeriodo) {
+    // "</script" dentro de uma string do JSON quebraria o parser de HTML
+    // no meio do <script> — escapa a barra pra nunca fechar a tag sem
+    // querer (a barra invertida é removida de novo pelo JSON.parse no
+    // próprio navegador que abrir o arquivo, então o dado continua
+    // idêntico ao original).
+    const dadosJson = JSON.stringify(avaliacoes).replace(/<\/script/gi, '<\\/script');
+    const geradoEm  = new Date().toISOString();
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de Qualidade — Exportado</title>
+<style>
+  :root {
+    --blue:#4d8dff; --red:#e5484d; --green:#2ecc71; --accent:#4d8dff;
+    --text:#1c2530; --text-2:#48576b; --text-3:#8492a6;
+    --border:#e2e8f0; --border-2:#cbd5e1;
+    --bg-1:#f5f7fb; --bg-card:#ffffff;
+    --radius:8px; --radius-lg:12px;
+    --sq-orange:#f5821f; --sq-yellow:#f1c40f; --sq-purple:#8b5cf6;
+    --sq-cor-verde:var(--green); --sq-cor-vermelho:var(--red); --sq-cor-azul:var(--blue);
+    --font-mono: 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg-1); color:var(--text-2); padding:28px; }
+  h1 { font-size:1.3rem; color:var(--text); margin:0 0 4px; }
+  .sub { font-size:.8rem; color:var(--text-3); margin-bottom:20px; }
+  .filtros { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:20px; }
+  .campo { display:flex; flex-direction:column; gap:4px; font-size:.75rem; color:var(--text-3); }
+  .campo input, .campo select { font:inherit; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-1); color:var(--text-2); }
+  .botao { padding:7px 16px; border-radius:var(--radius); border:1px solid var(--accent); background:var(--accent); color:#fff; font-size:.8rem; cursor:pointer; }
+  .botao:hover { opacity:.9; }
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .kpi-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px; }
+  .kpi-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:6px; }
+  .kpi-value { font-size:1.7rem; font-weight:700; color:var(--text); }
+  .green{color:var(--green)} .red{color:var(--red)} .accent{color:var(--accent)}
+  .charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:20px; }
+  .chart-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; }
+  .chart-box h4 { margin:0 0 10px; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:8px; font-weight:600; }
+  .summary-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; font-size:.85rem; }
+  .rodape { margin-top:22px; font-size:.7rem; color:var(--text-3); text-align:center; }
+</style>
+</head>
+<body>
+  <h1>📋 Relatório de Qualidade — Avaliação de Baterias</h1>
+  <div class="sub" id="exp-sub"></div>
+
+  <div class="filtros">
+    <div class="campo"><label>Data Inicial</label><input type="date" id="exp-start"></div>
+    <div class="campo"><label>Data Final</label><input type="date" id="exp-end"></div>
+    <div class="campo"><label>Bateria</label><select id="exp-bat"><option value="">Todas</option></select></div>
+    <button class="botao" id="exp-aplicar">🔄 Aplicar</button>
+  </div>
+
+  <div class="kpi-grid" id="exp-kpi"></div>
+
+  <div class="charts-grid">
+    <div class="chart-box"><h4>🏷️ Painéis por Tipo</h4><div id="exp-chart-tipo"></div></div>
+    <div class="chart-box"><h4>📈 Evolução da Produção</h4><div id="exp-chart-producao"></div></div>
+    <div class="chart-box"><h4>📊 Distribuição das Classificações</h4><div id="exp-chart-qualidade"></div></div>
+    <div class="chart-box"><h4>🎯 Defeitos por Posição</h4><div id="exp-chart-posicao"></div></div>
+    <div class="chart-box"><h4>🏭 Baterias com Mais Refugo</h4><div id="exp-chart-refugo-bat"></div></div>
+    <div class="chart-box"><h4>🔴 Taxa de Refugo por Tipo (%)</h4><div id="exp-chart-refugo-tipo"></div></div>
+    <div class="chart-box"><h4>⏳ Tempo de Pega × Refugo</h4><div id="exp-chart-tempo-pega"></div></div>
+    <div class="chart-box"><h4>✅ Aprovação vs Reprovação por Bateria</h4><div id="exp-chart-aprov-bat"></div></div>
+  </div>
+
+  <div class="summary-box"><strong>Resumo &amp; Insights</strong><p id="exp-summary" style="margin:8px 0 0"></p></div>
+  <div class="rodape">Exportado do Setor de Qualidade — Lightwall SC · dados embutidos neste arquivo, funciona offline.</div>
+
+<script>
+(function () {
+  'use strict';
+  const DADOS      = ${dadosJson};
+  const GERADO_EM  = ${JSON.stringify(geradoEm)};
+  const DESCRICAO_INICIAL = ${JSON.stringify(descricaoPeriodo)};
+
+  function _escaparHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+  }
+  function _fmtDataEixo(iso) {
+    const p = String(iso).split('-');
+    return p.length === 3 ? \`\${p[2]}/\${p[1]}\` : String(iso);
+  }
+  function _linhaDoAprovado(marks) {
+    const circles = marks.filter(m => m.shape === 'circle');
+    const dashes  = marks.filter(m => m.shape === 'dash');
+    const corAprovacao = circles.length ? circles[0].color : (dashes.length ? dashes[0].color : null);
+    if (corAprovacao === 'verde') return '1ª';
+    if (corAprovacao === 'azul')  return '2ª';
+    return null;
+  }
+  function _linhaDoPainel(p) {
+    if (p.linha !== undefined) return p.linha;
+    return p.marcas ? _linhaDoAprovado(p.marcas) : null;
+  }
+
+  const SVG_W = 600, SVG_H = 220;
+
+  ${_svgLineChart}
+  ${_svgDonutChart}
+  ${_svgBarChart}
+  ${_svgHBarChart}
+  ${_svgScatterChart}
+  ${_svgGroupedBarChart}
+
+  function atualizar() {
+    const sd = document.getElementById('exp-start').value;
+    const ed = document.getElementById('exp-end').value;
+    const bf = document.getElementById('exp-bat').value;
+
+    const fe = DADOS.filter(item => {
+      const dt = new Date(item.registeredAt);
+      return (!sd || dt >= new Date(sd)) &&
+             (!ed || dt <= new Date(ed + 'T23:59:59')) &&
+             (!bf || item.batteryId === bf);
+    });
+    const fp = fe.flatMap(e => e.paineis || []);
+
+    const apr = fp.filter(p => p.resultado==='aprovado').length;
+    const rep = fp.filter(p => p.resultado==='reprovado').length;
+    const seg = fp.filter(p => _linhaDoPainel(p)==='2ª').length;
+    const tt  = apr + rep;
+    const ar  = tt ? ((apr/tt)*100).toFixed(1) : 0;
+    const rr  = tt ? ((rep/tt)*100).toFixed(1) : 0;
+
+    document.getElementById('exp-kpi').innerHTML = \`
+      <div class="kpi-card"><div class="kpi-label">Total Registros</div><div class="kpi-value">\${fe.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Painéis Avaliados</div><div class="kpi-value green">\${fp.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Painéis 2ª Linha</div><div class="kpi-value" style="color:var(--sq-cor-azul)">\${seg}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de Aprovação</div><div class="kpi-value accent">\${ar}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de Reprovação</div><div class="kpi-value red">\${rr}%</div></div>\`;
+
+    const dp = {};
+    fe.forEach(e => { const dk = new Date(e.dtMontagem||e.registeredAt).toISOString().slice(0,10); dp[dk]=(dp[dk]||0)+(e.paineis||[]).length; });
+    const pl = Object.keys(dp).sort(), pv = pl.map(k => dp[k]);
+    document.getElementById('exp-chart-producao').innerHTML = _svgLineChart(pl.length ? pl : ['Sem dados'], pl.length ? pv : [0]);
+
+    const cc = {}; fp.forEach(p => { const k = \`\${p.tipoObtido} \${p.resultado}\${_linhaDoPainel(p) === '2ª' ? ' (2ª linha)' : ''}\`; cc[k]=(cc[k]||0)+1; });
+    const ql = Object.keys(cc), qv = Object.values(cc);
+    const cmap = { 'SP aprovado':'#4d8dff','SP reprovado':'#ff6b6b','2P aprovado':'#a78bfa','2P reprovado':'#d45d79','3T aprovado':'#f1c40f','3T reprovado':'#f39c12','1T aprovado':'#2ed3a3','1T reprovado':'#d35400' };
+    const corSegunda = 'var(--sq-cor-azul)';
+    const donutItems = ql.length
+      ? ql.map((l, i) => ({ label: l, value: qv[i], color: l.includes('2ª linha') ? corSegunda : (cmap[l] || 'var(--border-2)') }))
+      : [{ label: 'Sem dados', value: 1, color: 'var(--border-2)' }];
+    document.getElementById('exp-chart-qualidade').innerHTML = _svgDonutChart(donutItems);
+
+    const tt2={SP:0,'2P':0,'3T':0,'1T':0}, tr2={SP:0,'2P':0,'3T':0,'1T':0};
+    fp.forEach(p => { if (p.tipoEsperado && tt2[p.tipoEsperado]!==undefined) { tt2[p.tipoEsperado]++; if(p.resultado==='reprovado') tr2[p.tipoEsperado]++; } });
+    const vtl = Object.keys(tt2).filter(k=>tt2[k]>0);
+    document.getElementById('exp-chart-refugo-tipo').innerHTML = _svgHBarChart(
+      vtl.length ? vtl : ['Nenhum'],
+      vtl.length ? vtl.map(k => Number(((tr2[k]/tt2[k])*100).toFixed(1))) : [0],
+      { max: 100, suffix: '%', color: 'var(--red)' }
+    );
+
+    const tc={SP:0,'2P':0,'3T':0,'1T':0}; fp.forEach(p=>{if(p.tipoEsperado&&tc[p.tipoEsperado]!==undefined)tc[p.tipoEsperado]++;});
+    document.getElementById('exp-chart-tipo').innerHTML = _svgBarChart(
+      Object.keys(tc), Object.values(tc), ['var(--blue)','var(--sq-purple)','var(--sq-yellow)','var(--sq-orange)']
+    );
+
+    const bec={};fe.forEach(e=>{bec[e.batteryId]=(bec[e.batteryId]||0)+1;});
+    const dm={};
+    fp.forEach(p=>{if(p.resultado==='reprovado'){const ev=fe.find(e=>(e.paineis||[]).includes(p));if(ev){const k=\`\${ev.batteryId}|P\${p.pallet}|Pos\${p.posicao}\`;if(!dm[k])dm[k]={batteryId:ev.batteryId,pallet:p.pallet,posicao:p.posicao,d:0};dm[k].d++;}}});
+    const rnk=Object.values(dm).map(r=>({...r,N:bec[r.batteryId]||0,taxa:bec[r.batteryId]?(r.d/bec[r.batteryId])*100:0})).filter(r=>r.d>=3&&r.taxa>=30).sort((a,b)=>b.taxa-a.taxa||b.d-a.d).slice(0,10);
+    const pc = document.getElementById('exp-chart-posicao');
+    pc.innerHTML = rnk.length ? '<div style="display:flex;flex-direction:column;gap:8px;">' + rnk.map(r=>{
+      const cor = r.taxa>=40?'var(--red)':r.taxa>=20?'var(--accent)':'var(--green)';
+      return \`<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;">
+        <span><strong>\${r.batteryId}</strong> · P\${r.pallet} · Pos \${r.posicao}</span>
+        <span style="font-family:var(--font-mono);color:\${cor};font-weight:700;">\${r.taxa.toFixed(0)}% <span style="color:var(--text-3);font-weight:400;">(\${r.d}/\${r.N})</span></span></div>\`;
+    }).join('') + '</div>' : '<div style="color:var(--text-3);text-align:center;padding:20px;font-size:.82rem;">Nenhum ponto de recorrência significativo (D≥3 e taxa≥30%).</div>';
+
+    const br={};fe.forEach(e=>{const n=(e.paineis||[]).filter(p=>p.resultado==='reprovado').length;if(n)br[e.batteryId]=(br[e.batteryId]||0)+n;});
+    const sb=Object.keys(br).sort((a,b)=>br[b]-br[a]).slice(0,10);
+    document.getElementById('exp-chart-refugo-bat').innerHTML = _svgHBarChart(
+      sb.length ? sb : ['Nenhuma'],
+      sb.length ? sb.map(k => br[k]) : [0],
+      { color: 'var(--sq-orange)' }
+    );
+
+    const sc=[];
+    fe.forEach(e=>{if(e.dtEnchimento&&e.dtDesmoldagem){const diff=new Date(e.dtDesmoldagem)-new Date(e.dtEnchimento);if(diff>0){const h=diff/3600000,refs=(e.paineis||[]).filter(p=>p.resultado==='reprovado').length;sc.push({x:h,y:refs,label:\`Bat:\${e.batteryId} | \${h.toFixed(1)}h | \${refs} refugos\`});}}});
+    let trd=[];
+    if(sc.length>1){const n=sc.length,sx=sc.reduce((a,b)=>a+b.x,0),sy=sc.reduce((a,b)=>a+b.y,0),sxy=sc.reduce((a,b)=>a+b.x*b.y,0),sx2=sc.reduce((a,b)=>a+b.x*b.x,0),den=n*sx2-sx*sx,m=(n*sxy-sx*sy)/den,b=(sy-m*sx)/n,maxX=Math.max(...sc.map(pt=>pt.x)),minX=Math.min(...sc.map(pt=>pt.x));trd=[{x:minX,y:m*minX+b},{x:maxX,y:m*maxX+b}];}
+    document.getElementById('exp-chart-tempo-pega').innerHTML = _svgScatterChart(sc, trd.length ? trd : null);
+
+    const bd={};fe.forEach(e=>{if(!bd[e.batteryId])bd[e.batteryId]={a:0,r:0};(e.paineis||[]).forEach(p=>{if(p.resultado==='aprovado')bd[e.batteryId].a++;else if(p.resultado==='reprovado')bd[e.batteryId].r++;});});
+    const bl=Object.keys(bd);
+    document.getElementById('exp-chart-aprov-bat').innerHTML = _svgGroupedBarChart(
+      bl.length ? bl : ['Sem dados'],
+      [
+        { name: 'Aprovados', color: 'var(--green)', values: bl.length ? bl.map(k => bd[k].a) : [0] },
+        { name: 'Reprovados', color: 'var(--red)', values: bl.length ? bl.map(k => bd[k].r) : [0] },
+      ]
+    );
+
+    let summ=\`Avaliados <b>\${fp.length}</b> painéis em <b>\${fe.length}</b> registros. \`;
+    if(seg) summ+=\`<b>\${seg}</b> aprovado\${seg>1?'s':''} de 2ª linha. \`;
+    if(rnk.length){const rx=rnk[0];summ+=\`Maior recorrência: <b>\${rx.batteryId} · Pallet \${rx.pallet} · Posição \${rx.posicao}</b> (\${rx.d}/\${rx.N}, \${rx.taxa.toFixed(0)}%).\`;}
+    else if(fe.length) summ+='Nenhum ponto de recorrência significativo detectado.';
+    else summ='Nenhum dado disponível para o período.';
+    document.getElementById('exp-summary').innerHTML = summ;
+
+    const periodo = (sd || ed)
+      ? \`\${sd ? new Date(sd+'T00:00:00').toLocaleDateString('pt-BR') : 'início'} até \${ed ? new Date(ed+'T00:00:00').toLocaleDateString('pt-BR') : 'hoje'}\`
+      : 'Todos os registros';
+    document.getElementById('exp-sub').textContent =
+      \`Período: \${periodo}\${bf ? ' · Bateria: ' + bf : ''} · Gerado em \${new Date(GERADO_EM).toLocaleString('pt-BR')}\`;
+  }
+
+  const baterias = [...new Set(DADOS.map(a => a.batteryId).filter(Boolean))].sort();
+  const selBat = document.getElementById('exp-bat');
+  baterias.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; selBat.appendChild(o); });
+
+  document.getElementById('exp-aplicar').addEventListener('click', atualizar);
+  document.getElementById('exp-sub').textContent = DESCRICAO_INICIAL + ' · Gerado em ' + new Date(GERADO_EM).toLocaleString('pt-BR');
+  atualizar();
+})();
+</script>
+</body>
+</html>`;
   }
 
   /* ── Utilitários do formulário ────────────────────────── */
@@ -2064,6 +2504,7 @@
     renderDashboard, renderHistory,
     prevMirror, nextMirror,
     exportDashboardPDF,
+    exportDashboardHTML,
     selectColor, selectShape,
     selectAllPallet, applyColorToPallet,
     toggleDropdown,

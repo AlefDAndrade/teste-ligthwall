@@ -699,10 +699,212 @@
     });
   }
 
+  // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
+  // Mesmo padrão dos outros — LW.getRelatorioBercos()/getCorrelacaoTracoBerco()
+  // já retornam TUDO sem filtro (o filtro de período é sempre aplicado
+  // depois, client-side, por _filtrar()) — então basta buscar as duas uma
+  // vez, embutir os dois arrays e embutir as mesmas funções via toString().
+  async function exportarInterativo() {
+    const btn = document.getElementById('btn-ab-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const [linhas, correlacoes] = await Promise.all([
+        LW.getRelatorioBercos(),
+        LW.getCorrelacaoTracoBerco(),
+      ]);
+      const html = _gerarHtmlAbStandalone(linhas, correlacoes);
+      LW.baixarArquivoTexto(
+        `analise_bercos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo (Análise de Berços):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  function _gerarHtmlAbStandalone(linhas, correlacoesTotal) {
+    const linhasJson = JSON.stringify(linhas).replace(/<\/script/gi, '<\\/script');
+    const correlacoesJson = JSON.stringify(correlacoesTotal).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise de Berços — Exportado</title>
+<style>${LW.CSS_EXPORT_PADRAO}
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  table.mono td { font-family:var(--font-mono); }
+</style>
+</head>
+<body>
+  <h1>🔍 Análise de Berços</h1>
+  <div class="sub" id="exp-sub"></div>
+
+  <div class="filtros">
+    <div class="campo"><label>Data Início</label><input type="date" id="ab-data-inicio"></div>
+    <div class="campo"><label>Data Fim</label><input type="date" id="ab-data-fim"></div>
+    <button class="botao" id="btn-ab-filtrar">🔄 Aplicar</button>
+  </div>
+
+  <div id="ab-empty" style="display:none;text-align:center;padding:40px;color:var(--text-3)">Nenhum registro no período selecionado.</div>
+
+  <div id="ab-content">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Total Vazamentos</div><div class="kpi-value red" id="ab-kpi-total">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Baterias no Período</div><div class="kpi-value" id="ab-kpi-baterias">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa Geral</div><div class="kpi-value accent" id="ab-kpi-taxa">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Berço Mais Afetado</div><div class="kpi-value" id="ab-kpi-berco-top" style="font-size:1.2rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Bateria Mais Afetada</div><div class="kpi-value" id="ab-kpi-bateria-top" style="font-size:1.1rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Montagem Mais Afetada</div><div class="kpi-value" id="ab-kpi-montagem-top" style="font-size:1.1rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Esquerda × Direita</div><div class="kpi-value" id="ab-kpi-lado" style="font-size:1.1rem">—</div></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>💡 Insights Automáticos</h4><div id="ab-insights"></div></div>
+
+    <div class="chart-box" style="margin-bottom:14px;display:none" id="ab-hotspots-card">
+      <h4>🚨 Pontos de Atenção (mesmo berço+bateria+mês, &gt;3 vazamentos)</h4>
+      <table><thead><tr><th>Bateria</th><th>Berço</th><th>Mês</th><th>Vazamentos</th><th>Atraso Vazamento?</th></tr></thead><tbody id="ab-hotspots-tbody"></tbody></table>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>Vazamentos por Berço</h4><canvas id="ab-chart-berco"></canvas></div>
+
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="chart-box"><h4>Vazamentos por Tipo de Montagem</h4><canvas id="ab-chart-montagem"></canvas></div>
+      <div class="chart-box"><h4>Vazamentos por Bateria (Top 15)</h4><canvas id="ab-chart-bateria"></canvas></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>Ajustes de Receita × Taxa de Vazamento (cada ponto = 1 traço)</h4><canvas id="ab-chart-traco-scatter"></canvas></div>
+
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="chart-box"><h4>Piores Casos (Traço × Berço)</h4><div style="overflow-x:auto"><table class="mono"><thead><tr><th>Traço</th><th>Data</th><th>Bateria</th><th>Berços</th><th>Ajustes</th><th>Densidade</th><th>Flow</th><th>Vazamento</th></tr></thead><tbody id="ab-traco-piores-tbody"></tbody></table></div></div>
+      <div class="chart-box"><h4>Referência (sem vazamento)</h4><div style="overflow-x:auto"><table class="mono"><thead><tr><th>Traço</th><th>Data</th><th>Bateria</th><th>Berços</th><th>Ajustes</th><th>Densidade</th><th>Flow</th><th>Vazamento</th></tr></thead><tbody id="ab-traco-melhores-tbody"></tbody></table></div></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>1º Traço × Último Traço da Bateria</h4><div id="ab-comparativo-traco"></div></div>
+
+    <div class="chart-box"><h4>Vazamentos por Mês</h4><canvas id="ab-chart-mes"></canvas></div>
+  </div>
+  <div class="rodape">Exportado da Análise de Berços — Lightwall SC · dados embutidos neste arquivo, funciona offline.</div>
+
+<script>${LW.TOOLTIP_JS_FONTE}</script>
+<script>
+(function () {
+  'use strict';
+  const LINHAS_TOTAL = ${linhasJson};
+  const CORRELACOES_TOTAL = ${correlacoesJson};
+  const C = ${JSON.stringify(C)};
+  const MESES = ${JSON.stringify(MESES)};
+  const LIMIAR_HOTSPOT = ${LIMIAR_HOTSPOT};
+  const LW = {
+    escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
+    tooltip: window.LW.tooltip,
+  };
+
+  ${_filtrar}
+  ${_achatar}
+  ${_agrupar}
+  ${_hotspots}
+  ${_mesLabel}
+  ${_setupCanvas}
+  ${_drawBar}
+  ${_drawScatter}
+  ${_fmtNum}
+  ${_linhaTracoBerco}
+  ${_renderTabelaTracoBerco}
+  ${_compararPrimeiroUltimoTraco}
+  ${_renderComparativoPrimeiroUltimo}
+  ${_gerarInsights}
+  ${_renderInsights}
+  ${_ehMotivoVazamento}
+  ${_mapaAtrasoVazamento}
+  ${_renderHotspots}
+  ${_renderKpis}
+
+  function render() {
+    const ini = document.getElementById('ab-data-inicio').value;
+    const fim = document.getElementById('ab-data-fim').value;
+    const linhas = _filtrar(LINHAS_TOTAL, ini, fim);
+    const empty = document.getElementById('ab-empty');
+    const content = document.getElementById('ab-content');
+
+    if (!linhas.length) {
+      empty.style.display = 'block';
+      content.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    content.style.display = 'block';
+
+    const pos = _achatar(linhas);
+    const totalPosicoes = pos.length;
+    const totalVazamentos = pos.filter(p => p.vazou).length;
+    const taxaGeral = totalPosicoes ? (totalVazamentos / totalPosicoes) * 100 : 0;
+
+    const porBerco = _agrupar(pos, p => p.berco, p => p.ordem).sort((a, b) => a.ordem - b.ordem);
+    const porBateria = _agrupar(pos, p => p.id_bateria);
+    const porMontagem = _agrupar(pos, p => p.tipo_montagem);
+    const porLado = _agrupar(pos, p => p.lado);
+    const porMes = _agrupar(pos, p => p.mes).sort((a, b) => String(a.chave).localeCompare(String(b.chave)));
+    const hotspots = _hotspots(pos);
+
+    const correlacoes = _filtrar(CORRELACOES_TOTAL, ini, fim).filter(c => c.taxa_vazamento !== null);
+    const atrasoMapa = _mapaAtrasoVazamento(linhas);
+    const comparativoTraco = _compararPrimeiroUltimoTraco(correlacoes);
+
+    const ctx = { totalVazamentos, totalPosicoes, taxaGeral, totalBaterias: linhas.length, porBerco, porBateria, porMontagem, porLado, porMes, hotspots, correlacoes, comparativoTraco };
+
+    _renderKpis(ctx);
+    _renderInsights(_gerarInsights(ctx));
+    _renderHotspots(hotspots, atrasoMapa);
+    _renderTabelaTracoBerco(correlacoes);
+    _renderComparativoPrimeiroUltimo(comparativoTraco);
+
+    requestAnimationFrame(() => {
+      _drawBar('ab-chart-berco', porBerco.map(b => b.chave), porBerco.map(b => b.vazamentos), C.red, 180,
+        (v, lab, i) => \`\${lab}: \${v} vazamento(s) de \${porBerco[i].total} avaliações (\${porBerco[i].pct.toFixed(0)}%)\`);
+
+      const montagemOrdenada = porMontagem.slice().sort((a, b) => b.vazamentos - a.vazamentos);
+      _drawBar('ab-chart-montagem', montagemOrdenada.map(m => m.chave), montagemOrdenada.map(m => m.vazamentos), C.accent, 170,
+        (v, lab, i) => \`\${lab}: \${v} vazamento(s) (\${montagemOrdenada[i].pct.toFixed(0)}%)\`);
+
+      const bateriaOrdenada = porBateria.slice().sort((a, b) => b.vazamentos - a.vazamentos).slice(0, 15);
+      _drawBar('ab-chart-bateria', bateriaOrdenada.map(b => String(b.chave)), bateriaOrdenada.map(b => b.vazamentos), C.purple, 170,
+        (v, lab, i) => \`Bateria \${lab}: \${v} vazamento(s) (\${bateriaOrdenada[i].pct.toFixed(0)}%)\`);
+
+      _drawBar('ab-chart-mes', porMes.map(m => _mesLabel(m.chave)), porMes.map(m => m.vazamentos), C.blue, 180,
+        (v, lab) => \`\${lab}: \${v} vazamento(s)\`);
+
+      const pontosTraco = correlacoes.map(c => ({
+        x: c.num_ajustes,
+        y: c.taxa_vazamento,
+        raio: Math.min(10, 3 + Math.sqrt(c.bercos_avaliados)),
+        texto: \`Traço \${c.id_traco} — Bateria \${LW.escaparHtml(String(c.id_bateria ?? '—'))} (\${_mesLabel(c.data ? c.data.slice(0, 7) : null)}): \`
+          + \`\${c.num_ajustes} ajuste\${c.num_ajustes === 1 ? '' : 's'} de receita, \${c.taxa_vazamento.toFixed(0)}% de vazamento em \${c.bercos_avaliados} berço(s) (B\${c.berco_inicio}-B\${c.berco_finalizacao})\`,
+      }));
+      _drawScatter('ab-chart-traco-scatter', pontosTraco, C.purple, 220);
+    });
+
+    document.getElementById('exp-sub').textContent =
+      \`Período: \${(ini || fim) ? (ini ? new Date(ini+'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim+'T00:00:00').toLocaleDateString('pt-BR') : 'hoje') : 'Todos os registros'} · Gerado em \${new Date().toLocaleString('pt-BR')}\`;
+  }
+
+  document.getElementById('btn-ab-filtrar').addEventListener('click', render);
+  render();
+})();
+</script>
+</body>
+</html>`;
+  }
+
   function init() {
     document.getElementById('btn-ab-filtrar')?.addEventListener('click', render);
+    document.getElementById('btn-ab-exportar')?.addEventListener('click', exportarInterativo);
     render();
   }
 
-  window.ABercos = { init, render };
+  window.ABercos = { init, render, exportarInterativo };
 })();

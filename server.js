@@ -195,6 +195,12 @@ const VALIDADORES_BACKUP_DADOS = {
   // GET /db/<nome> mais abaixo, que reconstrói o JSON a partir do banco).
   'bercos_visuais.json':       v => Array.isArray(v),
   'avaliacoes_qualidade.json': v => Array.isArray(v),
+  // Adicionado: sem isso, "quem já foi avaliado" (ver CREATE TABLE
+  // operacoes_avaliadas, db.js) nunca saía no Backup de Dados — restaurar
+  // um backup fazia toda bateria já avaliada voltar a aparecer na fila
+  // de "não avaliadas" do Setor de Qualidade, mesmo já tendo sido avaliada
+  // de verdade antes do backup.
+  'operacoes_avaliadas.json':  v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -214,6 +220,7 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'ajustes_tracos.json': [],
   'bercos_visuais.json': [],
   'avaliacoes_qualidade.json': [],
+  'operacoes_avaliadas.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -279,6 +286,8 @@ async function gerarZipDadosServidor() {
         zip.file(nome, JSON.stringify(db.todosOsBercosVisuais(), null, 2));
       } else if (nome === 'avaliacoes_qualidade.json') {
         zip.file(nome, JSON.stringify(db.listarAvaliacoesQualidade(), null, 2));
+      } else if (nome === 'operacoes_avaliadas.json') {
+        zip.file(nome, JSON.stringify(db.todosOsOperacoesAvaliadas(), null, 2));
       } else {
         zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
@@ -955,6 +964,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── GET /db/operacoes_avaliadas.json: idem, reconstrói a partir da
+  // tabela "operacoes_avaliadas" (lista de ids de operação já avaliados
+  // pelo Setor de Qualidade — ver CREATE TABLE, db.js) — usado pelo
+  // Backup de Dados.
+  if (req.method === 'GET' && urlPath === '/db/operacoes_avaliadas.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsOperacoesAvaliadas()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
   // ── GET /db/detalhe_operacao.json?id=...: tudo que se liga por
   // id_operacao — operação, berços visuais, receita de cada traço usado
   // (com ajustes) e a avaliação de qualidade vinculada. Usado pela
@@ -1044,7 +1068,9 @@ const server = http.createServer((req, res) => {
   // ── FILA DE BATERIAS NÃO AVALIADAS (Setor de Qualidade): lista enxuta
   // (só os campos necessários pra identificar a bateria na fila E
   // preencher automaticamente a tela de avaliação — ver "Nova Avaliação"
-  // em setor-qualidade.js) das operações com avaliado=0.
+  // em setor-qualidade.js) das operações QUE AINDA NÃO TÊM linha em
+  // operacoes_avaliadas (ver CREATE TABLE, db.js — substitui a antiga
+  // consulta por "avaliado=0" na própria tabela operacoes).
   // Nunca inclui operações de Modo de Teste (modo_teste=0) — o Setor de
   // Qualidade ainda não tem noção de Modo de Teste, então misturar geraria
   // uma bateria "fantasma" na fila de uma instalação de testes.
@@ -1056,7 +1082,8 @@ const server = http.createServer((req, res) => {
         SELECT id, id_bateria, tipo_montagem, data, fim, turno, capacidade,
                bercos_reais, bercos_personalizados
         FROM operacoes
-        WHERE avaliado = 0 AND modo_teste = 0
+        WHERE modo_teste = 0
+          AND id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)
         ORDER BY data ASC, fim ASC
       `).all();
       // bercos_personalizados vem serializado (TEXT) — desserializa aqui
@@ -1084,10 +1111,13 @@ const server = http.createServer((req, res) => {
       if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
-        // Toda operação nasce não avaliada — ignora qualquer valor vindo do
-        // front pra este campo (não é algo que o operador preenche; só
-        // muda depois, pelo Setor de Qualidade). Vale pros dois caminhos
-        // abaixo (Modo de Teste em JSON e SQLite).
+        // Campo LEGADO (coluna "operacoes.avaliado" — ver db.js): mantido
+        // só como default seguro (sempre 0/false na criação), mas quem
+        // decide "esta operação já foi avaliada?" a partir de agora é a
+        // tabela "operacoes_avaliadas" (ver db.marcarOperacaoAvaliada /
+        // marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada). Ignora
+        // qualquer valor vindo do front pra este campo. Vale pros dois
+        // caminhos abaixo (Modo de Teste em JSON e SQLite).
         record.avaliado = false;
 
         if (modoTeste) {
@@ -1229,6 +1259,9 @@ const server = http.createServer((req, res) => {
   // fila. Ação do Setor de Qualidade, não do Administrador: de propósito
   // sem exigir sessão de admin (diferente de /editar-operacao), mesmo
   // nível de fricção das outras rotas internas do dia a dia.
+  // Grava em "operacoes_avaliadas" (INSERT), não mais um UPDATE na
+  // própria linha de "operacoes" — ver db.marcarOperacaoAvaliada e a
+  // CREATE TABLE correspondente em db.js.
   if (req.method === 'POST' && urlPath === '/marcar-operacao-avaliada') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -1237,8 +1270,9 @@ const server = http.createServer((req, res) => {
         const { id } = JSON.parse(body);
         if (!id || typeof id !== 'string') throw new Error('ID da operação ausente.');
 
-        const info = db.prepare('UPDATE operacoes SET avaliado = 1 WHERE id = ?').run(id);
-        if (info.changes === 0) throw new Error('Operação não encontrada (id: ' + id + ').');
+        const existe = db.prepare('SELECT 1 FROM operacoes WHERE id = ?').get(id);
+        if (!existe) throw new Error('Operação não encontrada (id: ' + id + ').');
+        db.marcarOperacaoAvaliada(id); // idempotente — repetir a chamada não faz nada além de confirmar
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1267,6 +1301,22 @@ const server = http.createServer((req, res) => {
           throw new Error('Avaliação inválida — falta o id.');
         }
         db.salvarAvaliacaoQualidade(avaliacao);
+
+        // Classificação da operação como avaliada/não avaliada (ver
+        // db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada, db.js):
+        // avaliação vinda da fila já é marcada por uma chamada separada do
+        // front a /marcar-operacao-avaliada (com o id_operacao exato) —
+        // mas uma avaliação AVULSA (sem vir da fila, linkedOperacaoId
+        // ausente) nunca disparava essa chamada, deixando a operação real
+        // daquela bateria (se houver alguma pendente) presa como "não
+        // avaliada" pra sempre, mesmo já avaliada de verdade. Fecha essa
+        // lacuna aqui, casando pela bateria + mais antiga pendente (FIFO).
+        // Nunca mexe numa avaliação que já veio vinculada.
+        if (!avaliacao.linkedOperacaoId && avaliacao.batteryId) {
+          try { db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada(avaliacao.batteryId); }
+          catch (e) { console.error('Falha ao classificar operação (avaliação avulsa) como avaliada:', e); }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -1951,11 +2001,14 @@ const server = http.createServer((req, res) => {
   // de UM berço da operação em andamento — 'okay' -> 'baixou' -> 'okay'
   // de novo a cada clique naquele indicador específico (● ou •, ver
   // "Bateria Atual", bateria-atual.js). Os 2 lados de um mesmo berço são
-  // independentes — marcar um não afeta o outro. Sem exigir dispositivo
-  // autorizado nem "dono" da operação de propósito: é uma marcação de
-  // observação (quem estiver olhando "Bateria Atual" em qualquer tela),
-  // não um controle da operação em si — mesmo espírito de baixa fricção
-  // de outras rotas internas do dia a dia.
+  // independentes — marcar um não afeta o outro.
+  //
+  // Exige dispositivo autorizado + ser o "dono" da operação em andamento
+  // (mesma dupla checagem de POST /salvar-operacao-andamento, acima) —
+  // antes QUALQUER UM olhando essa tela podia marcar vazamento, de
+  // propósito, por ser "só uma observação". Isso mudou: só quem está no
+  // controle da operação (o dono) marca os vazamentos dela, mesma trava
+  // do resto do formulário de Registrar Operação.
   if (req.method === 'POST' && urlPath === '/marcar-berco-andamento') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -1970,8 +2023,27 @@ const server = http.createServer((req, res) => {
         if (lado !== 'esquerda' && lado !== 'direita') {
           throw new Error('Lado inválido — precisa ser "esquerda" ou "direita".');
         }
-        if (!lerOperacaoAndamento()) {
+
+        const atual = lerOperacaoAndamento();
+        if (!atual) {
           throw new Error('Nenhuma operação em andamento agora.');
+        }
+
+        if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+
+        // Mesmo critério de "dono" de POST /salvar-operacao-andamento —
+        // ver comentário lá. Sem operação vazia aqui pra "virar dono": a
+        // essa altura ela já existe (checado acima), então só quem já é
+        // o dono (ou nenhum dono foi definido ainda, caso raro) marca.
+        const donoAtual = (typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
+        const souODono = !donoAtual || donoAtual === deviceId;
+        if (!souODono) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: false,
+            erro: 'Esta operação está sendo controlada por outro computador autorizado — só ele pode marcar os vazamentos.',
+          }));
+          return;
         }
 
         const mapa = lerBercosAndamento();
@@ -2434,6 +2506,8 @@ const server = http.createServer((req, res) => {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsBercosVisuais(), null, 2), 'utf8');
             } else if (nome === 'avaliacoes_qualidade.json') {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.listarAvaliacoesQualidade(), null, 2), 'utf8');
+            } else if (nome === 'operacoes_avaliadas.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsOperacoesAvaliadas(), null, 2), 'utf8');
             } else {
               fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
@@ -2454,7 +2528,7 @@ const server = http.createServer((req, res) => {
         const nomesArquivo = esperados.filter(n =>
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
             'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json',
-            'bercos_visuais.json', 'avaliacoes_qualidade.json'].includes(n));
+            'bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
           tmp: caminhoArquivoDb(nome) + '.tmp',
           destino: caminhoArquivoDb(nome),
@@ -2462,6 +2536,32 @@ const server = http.createServer((req, res) => {
         }));
         pendentes.forEach(p => fs.writeFileSync(p.tmp, p.texto, 'utf8'));
         pendentes.forEach(p => fs.renameSync(p.tmp, p.destino));
+
+        // ATENÇÃO — ordem crítica: várias tabelas têm FK pra "operacoes(id)"
+        // com PRAGMA foreign_keys=ON sempre ligado (bercos_visuais,
+        // avaliacoes_qualidade, avaliacao_paineis, operacoes_avaliadas —
+        // ver CREATE TABLE de cada uma, db.js). Sem limpar essas ANTES,
+        // o "DELETE FROM operacoes" do bloco historico.json, logo abaixo,
+        // falha com "FOREIGN KEY constraint failed" sempre que alguma
+        // delas tiver QUALQUER linha apontando pra uma operação existente
+        // — ou seja, em qualquer instalação já usada de verdade (todo
+        // registro de operação já cria uma linha em bercos_visuais na
+        // hora). Isso derrubava a restauração inteira (nada era escrito,
+        // o catch mais abaixo só devolvia o erro), silenciosamente exceto
+        // pela mensagem de erro — nenhum dado chegava a ser perdido, mas
+        // "Restaurar Dados" simplesmente nunca funcionava.
+        // avaliacao_paineis primeiro (referencia avaliacoes_qualidade
+        // TAMBÉM, mesmo problema em cascata — ver substituirAvaliacoes
+        // Qualidade, db.js, que já tinha essa ordem certa só pra ELA
+        // mesma). Os dados novos de cada uma são reinseridos mais abaixo
+        // (bercos_visuais.json/avaliacoes_qualidade.json/operacoes_
+        // avaliadas.json) — limpar aqui não perde nada, só resolve a ordem.
+        db.transaction(() => {
+          db.prepare('DELETE FROM avaliacao_paineis').run();
+          db.prepare('DELETE FROM avaliacoes_qualidade').run();
+          db.prepare('DELETE FROM bercos_visuais').run();
+          db.prepare('DELETE FROM operacoes_avaliadas').run();
+        })();
 
         if (esperados.includes('historico.json')) {
           const novoHistorico = JSON.parse(textosValidados['historico.json']);
@@ -2542,6 +2642,10 @@ const server = http.createServer((req, res) => {
         if (esperados.includes('avaliacoes_qualidade.json')) {
           const novasAvaliacoes = JSON.parse(textosValidados['avaliacoes_qualidade.json']);
           db.transaction(() => db.substituirAvaliacoesQualidade(novasAvaliacoes))();
+        }
+        if (esperados.includes('operacoes_avaliadas.json')) {
+          const novasOperacoesAvaliadas = JSON.parse(textosValidados['operacoes_avaliadas.json']);
+          db.transaction(() => db.substituirOperacoesAvaliadas(novasOperacoesAvaliadas))();
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });

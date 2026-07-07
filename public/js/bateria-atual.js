@@ -122,6 +122,21 @@
     return lado === 'direita' ? 'Direito' : 'Esquerdo';
   }
 
+  // Indica se ESTE dispositivo pode marcar os vazamentos agora — mesmo
+  // critério de _bloqueadoPorAutorizacao/_aplicarTravaDeAutorizacao
+  // (operacao.js): Modo de Teste nunca trava (sandbox local, sem conceito
+  // de dono); fora dele, precisa estar Autorizado E (ninguém ser dono
+  // ainda, OU o dono ser este dispositivo). A trava de verdade é sempre
+  // no servidor (ver POST /marcar-berco-andamento) — isto aqui só evita
+  // deixar os indicadores clicáveis (e o clique falhando toda vez) pra
+  // quem já sabe, de cara, que não pode marcar nada agora.
+  function _podeMarcarVazamento(dados) {
+    if (dados.modo_teste) return true;
+    if (!LW.dispositivoEstaAutorizado()) return false;
+    const dono = dados.donoDeviceId || null;
+    return !dono || dono === LW.getDeviceId();
+  }
+
   function _renderBateriaAtual(dados) {
     const el = $('bateria-atual-content');
     if (!el) return;
@@ -138,19 +153,22 @@
     const capacidade = _baCapacidade(dados);
     const tipos = _baTiposPorBerco(dados, capacidade);
     const ehPersonalizada = dados.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
+    const podeMarcar = _podeMarcarVazamento(dados);
 
     const resumo = `
       <div class="ba-resumo">
         <strong>Bateria ${dados.id_bateria || '—'}</strong> — ${dados.tipo_montagem || '—'}
         ${dados.bercos_reais ? ` — ${dados.bercos_reais} berços` : ''}
       </div>`;
-    const dica = `<div class="ba-dica">🖱️ Clique num indicador (•) para marcar que aquele lado do berço baixou ou vazou</div>`;
+    const dica = podeMarcar
+      ? `<div class="ba-dica">🖱️ Clique num indicador (•) para marcar que aquele lado do berço baixou ou vazou</div>`
+      : `<div class="ba-dica">🔒 Só o computador que está no controle desta operação pode marcar os vazamentos.</div>`;
     // Fileira única: 1 2 3 4 5 6 7 8 ... (ver .ba-grid no CSS — flex row
     // que DIVIDE a largura disponível igualmente entre os berços, ficando
     // mais fina ou mais grossa conforme a quantidade, sem gerar scroll —
     // ver comentário em .ba-grid/.ba-celula no CSS). A célula em si NÃO é
     // clicável — só os 2 indicadores dentro dela (ver abaixo).
-    const grid = `<div class="ba-grid">${tipos.map((tipo, i) => {
+    const grid = `<div class="ba-grid${podeMarcar ? '' : ' ba-grid-bloqueada'}">${tipos.map((tipo, i) => {
       const cor = _baCorPorTipo(ehPersonalizada, tipo);
       const numero = String(i + 1).padStart(2, '0');
       const berco = 'B' + (i + 1);
@@ -170,6 +188,10 @@
     }).join('')}</div>`;
 
     el.innerHTML = resumo + dica + grid;
+
+    // Sem dono, os indicadores nem recebem listener de clique — trava já
+    // na origem, não só no CSS (que só cuida da aparência/cursor).
+    if (!podeMarcar) return;
 
     // Cada indicador marca/desmarca seu PRÓPRIO lado — independente do
     // outro indicador do mesmo berço (ver _baCliqueDot, abaixo).
@@ -207,7 +229,10 @@
     }
 
     try {
-      const res = await fetch('/marcar-berco-andamento', {
+      // A rota agora exige dispositivo autorizado + ser o dono da
+      // operação (ver server.js) — precisa mandar o deviceId, que antes
+      // não era necessário aqui (era uma marcação livre, sem trava).
+      const res = await fetch('/marcar-berco-andamento?deviceId=' + encodeURIComponent(LW.getDeviceId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ berco, lado }),

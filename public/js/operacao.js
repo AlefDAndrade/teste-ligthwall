@@ -11,6 +11,12 @@
   let state = {
     turno: '1º TURNO',
     dimensao: '',
+    // true depois que a Dimensão é definida manualmente (ver
+    // editarDimensao(), abaixo) — impede updateCapacidade() de
+    // sobrescrever com o label automático da bateria selecionada. Fica
+    // "grudado" pelo resto desta operação (mesmo trocando de bateria de
+    // novo) — só reseta numa operação nova (ver resetState()).
+    dimensaoManual: false,
     tipo_montagem: '',
     id_bateria: '',
     bercos_reais: '',
@@ -217,6 +223,13 @@
       recalcPaineis();
       persist();
     });
+    // Sair do campo (clicar fora) confirma a edição igual ao botão ✓ —
+    // Enter também confirma e já tira o foco (evita quebrar linha ou
+    // disparar o submit de algum form ancestral).
+    $('op-dimensao').addEventListener('blur', _confirmarDimensaoManual);
+    $('op-dimensao').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); $('op-dimensao').blur(); }
+    });
     if (document.getElementById('op-silo')) $('op-silo').addEventListener('change', e => {
       state.silo = e.target.value; persist();
     });
@@ -241,17 +254,72 @@
   function updateCapacidade() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     if (bateria) {
-      state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
+      // Só sincroniza automaticamente se ninguém definiu uma dimensão
+      // manual pra esta operação (ver editarDimensao(), abaixo) — sem essa
+      // trava, trocar de bateria (ou qualquer outra mudança que chame
+      // updateCapacidade) apagava a dimensão específica que o usuário
+      // acabou de digitar.
+      if (!state.dimensaoManual) {
+        state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
+        if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
+      }
       $('op-capacidade').value = `${bateria.bercos} berços`;
-      if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
     } else {
-      state.dimensao = '';
+      if (!state.dimensaoManual) {
+        state.dimensao = '';
+        if ($('op-dimensao')) $('op-dimensao').value = '';
+      }
       $('op-capacidade').value = '';
-      if ($('op-dimensao')) $('op-dimensao').value = '';
     }
   }
 
-  // Cores cíclicas para os cards de tipo (mesma paleta usada antes para 2P/SP)
+  // Alterna entre "mostrar a dimensão automática (travada)" e "deixar
+  // digitar uma dimensão específica" — mesmo padrão visual do botão
+  // "🔧 Configurar Berços" ao lado de Tipo de Montagem. Primeiro clique
+  // destrava o campo (tira o readonly, foca, seleciona o texto todo pra
+  // já poder digitar por cima); segundo clique (ou Enter, ou sair do
+  // campo — ver wireEvents()) confirma e trava nessa dimensão até o fim
+  // da operação (ver state.dimensaoManual, updateCapacidade()).
+  function editarDimensao() {
+    const input = $('op-dimensao');
+    const btn = $('btn-editar-dimensao');
+    if (!input) return;
+    if (input.readOnly) {
+      input.readOnly = false;
+      input.focus();
+      input.select();
+      if (btn) { btn.textContent = '✓'; btn.title = 'Confirmar esta dimensão'; }
+    } else {
+      _confirmarDimensaoManual();
+    }
+  }
+
+  // Trava o campo de novo e grava o valor digitado como definitivo pra
+  // esta operação — chamado ao clicar de novo no ✓, apertar Enter, ou
+  // sair do campo (blur), o que vier primeiro.
+  function _confirmarDimensaoManual() {
+    const input = $('op-dimensao');
+    const btn = $('btn-editar-dimensao');
+    if (!input || input.readOnly) return; // já estava travado — nada a confirmar
+
+    const valor = input.value.trim();
+    state.dimensao = valor;
+    // Vazio = desiste da edição manual, volta a acompanhar a bateria
+    // selecionada automaticamente (mesmo espírito de "campo em branco
+    // volta pro automático" usado em Berços Reais).
+    state.dimensaoManual = valor !== '';
+    input.readOnly = true;
+    // Deixa de parecer "automático" (cor/fonte de auto-filled) quando é
+    // uma escolha manual — some a distinção assim que volta a ser
+    // automático de novo (valor em branco, acima).
+    input.classList.toggle('auto-filled', !state.dimensaoManual);
+    if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica pra esta operação'; }
+
+    if (!state.dimensaoManual) updateCapacidade(); // reaplica o automático na hora
+    persist();
+  }
+
+
   const _CORES_TIPO = ['var(--blue)', 'var(--green)', 'var(--accent)', 'var(--purple)', 'var(--yellow)'];
 
   // Labels amigáveis para tipos conhecidos; tipos novos caem no fallback (maiúsculas + "/").
@@ -500,19 +568,6 @@
     if (state.modo_teste) {
       banner.innerHTML += ' <span class="badge" style="background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.5)">🧪 TESTE</span>';
     }
-  }
-
-  // Cria estrutura de insumo com suporte a ajustes
-  function criarInsumo(valorOriginal) {
-    const original = valorOriginal === '' ? '' : parseFloat(valorOriginal) || 0;
-    return {
-      original,
-      ajustes: [],
-      get total() {
-        if (this.original === '') return '';
-        return this.ajustes.reduce((s, a) => s + a, parseFloat(this.original) || 0);
-      }
-    };
   }
 
   // Retorna o total/atual de um insumo (serializado, sem getter).
@@ -2150,6 +2205,7 @@
     state = {
       turno: '1º TURNO',
       dimensao: '',
+      dimensaoManual: false,
       tipo_montagem: '',
       id_bateria: '',
       bercos_reais: '',
@@ -2183,6 +2239,16 @@
     $('op-toggle-teste').disabled = state.status !== 'idle';
     $('op-turno').value = state.turno || '1º TURNO';
     $('op-dimensao').value = state.dimensao || '';
+    // Reflete state.dimensaoManual na aparência — importante num reload
+    // (ou ao chegar estado de outro dispositivo via WebSocket): sem isso,
+    // o campo sempre voltava a parecer "automático" mesmo numa dimensão
+    // definida manualmente (ver editarDimensao()/updateCapacidade()).
+    $('op-dimensao').readOnly = true; // nunca começa destravado num render
+    $('op-dimensao').classList.toggle('auto-filled', !state.dimensaoManual);
+    if ($('btn-editar-dimensao')) {
+      $('btn-editar-dimensao').textContent = '✏️';
+      $('btn-editar-dimensao').title = 'Definir uma dimensão específica pra esta operação';
+    }
 
     $('op-montagem').value = state.tipo_montagem || '';
     _atualizarBtnConfigurarBercos();
@@ -2278,6 +2344,7 @@
     resetarOperacao,
     atualizarTravaAutorizacao: _aplicarTravaDeAutorizacao,
     abrirGradeMontagem: abrirGradeMontagemPersonalizada,
+    editarDimensao,
     selectTraco(i) {
       expandedTracoIndex = i; // Define o traço ativo e foca na visualização exclusiva
       renderTracos();

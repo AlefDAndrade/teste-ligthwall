@@ -837,6 +837,188 @@
     }).join('');
   }
 
+  // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
+  // Mesmo padrão dos outros dashboards: busca o histórico completo (sem
+  // filtro de data), embute os dados + as mesmas funções de cálculo/render
+  // deste arquivo via toString(). Simplificação assumida aqui: a cor "real"
+  // de cada Tipo de Montagem (LW.corMontagemPorLabel, que lê de
+  // Configurações → Montagem) não é embutida — o gráfico de Montagem ×
+  // Atraso usa uma paleta fixa cíclica no arquivo exportado, em vez da cor
+  // configurada. Tudo o mais (KPIs, insights, rankings, tendência,
+  // produtividade) é idêntico à tela ao vivo.
+  async function exportarInterativo() {
+    const btn = document.getElementById('btn-ao-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const res = await fetch('db/historico.json');
+      const dados = res.ok ? await res.json() : [];
+      const html = _gerarHtmlAoStandalone(dados);
+      LW.baixarArquivoTexto(
+        `analise_operacional_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo (Análise Operacional):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  function _gerarHtmlAoStandalone(dados) {
+    const dadosJson = JSON.stringify(dados).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise Operacional — Exportado</title>
+<style>${LW.CSS_EXPORT_PADRAO}
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+</style>
+</head>
+<body>
+  <h1>📊 Análise Operacional</h1>
+  <div class="sub" id="exp-sub"></div>
+
+  <div class="filtros">
+    <div class="campo"><label>Data Início</label><input type="date" id="ao-data-inicio"></div>
+    <div class="campo"><label>Data Fim</label><input type="date" id="ao-data-fim"></div>
+    <button class="botao" id="btn-ao-filtrar">🔄 Aplicar</button>
+  </div>
+
+  <div id="ao-content">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">m² Total</div><div class="kpi-value accent" id="ao-kpi-m2">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Painéis</div><div class="kpi-value" id="ao-kpi-paineis">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Baterias</div><div class="kpi-value" id="ao-kpi-baterias">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ciclo Médio</div><div class="kpi-value" id="ao-kpi-ciclo" style="font-family:var(--font-mono);font-size:1.3rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Tempo Médio/Bateria</div><div class="kpi-value" id="ao-kpi-tempo-bat" style="font-family:var(--font-mono);font-size:1.3rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">% Atraso</div><div class="kpi-value red" id="ao-kpi-atraso-pct">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Horas Perdidas</div><div class="kpi-value red" id="ao-kpi-horas-perd">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Eficiência Geral</div><div class="kpi-value green" id="ao-kpi-eficiencia">—</div><div style="height:6px;background:var(--border);border-radius:4px;margin-top:6px;overflow:hidden"><div id="ao-eficiencia-bar" style="height:100%;border-radius:4px"></div></div></div>
+      <div class="kpi-card"><div class="kpi-label">Melhor Bateria</div><div class="kpi-value green" id="ao-kpi-melhor-bat" style="font-size:1.3rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Pior Bateria</div><div class="kpi-value red" id="ao-kpi-pior-bat" style="font-size:1.3rem">—</div></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>💡 Insights Automáticos</h4><div id="ao-insights"></div></div>
+
+    <div class="chart-box" style="margin-bottom:14px">
+      <h4>🏭 Ranking de Baterias</h4>
+      <div id="ao-rank-baterias" style="overflow-x:auto;margin-bottom:14px"></div>
+      <canvas id="ao-chart-bat-ops"></canvas>
+    </div>
+
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="chart-box"><h4>⚠️ Motivos de Atraso</h4><div id="ao-rank-motivos"></div></div>
+      <div class="chart-box"><h4>📐 Produção por Dimensão</h4><div id="ao-prod-dimensao"></div></div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="chart-box"><h4>🔩 Montagem × Atraso</h4><canvas id="ao-cor-montagem"></canvas></div>
+      <div class="chart-box"><h4>📐 Dimensão × Tempo</h4><canvas id="ao-cor-dimensao"></canvas></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px"><h4>⏱ Bateria × Tempo Médio</h4><canvas id="ao-cor-bat-tempo"></canvas></div>
+
+    <div class="chart-box" style="margin-bottom:14px">
+      <h4>📈 Tendência (% Atraso e Tempo Médio)</h4>
+      <canvas id="ao-trend-chart"></canvas>
+      <div id="ao-baterias-piora" style="margin-top:10px"></div>
+    </div>
+
+    <div class="chart-box"><h4>🏆 m² por Bateria (Top 8)</h4><canvas id="ao-prod-m2"></canvas></div>
+  </div>
+  <div class="rodape">Exportado da Análise Operacional — Lightwall SC · dados embutidos neste arquivo, funciona offline.</div>
+
+<script>${LW.TOOLTIP_JS_FONTE}</script>
+<script>
+(function () {
+  'use strict';
+  const DADOS_TOTAL = ${dadosJson};
+  const C = ${JSON.stringify(C)};
+  // Paleta fixa cíclica pra Montagem × Atraso (ver comentário em
+  // exportarInterativo, acima — sem a cor configurada real aqui).
+  const PALETA_MONTAGEM = [C.blue, C.green, C.purple, C.orange, C.cyan, C.red, C.accent];
+  const LW = {
+    escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
+    tooltip: window.LW.tooltip,
+  };
+
+  ${normalizarMotivo}
+  ${tempoMin}
+  ${filtrar}
+  ${calcularKPIs}
+  ${gerarInsights}
+  ${px}
+  ${setupCanvas}
+  ${drawBar}
+  ${drawDualLine}
+  ${drawHorizBar}
+  ${fmt}
+  ${fmtMin}
+  ${renderKPIs}
+  ${renderInsights}
+  ${renderRankBaterias}
+  ${renderRankMotivos}
+  ${renderTendencias}
+  ${renderProdutividade}
+
+  // Versão simplificada de renderCorrelacoes (ver comentário no topo do
+  // gerador) — paleta fixa em vez de LW.corMontagemPorLabel.
+  function renderCorrelacoes(kpi, dadosFiltrados) {
+    const mountLabels = Object.keys(kpi.corMontagem);
+    const mountAtraso = mountLabels.map(m => kpi.corMontagem[m].total ? (kpi.corMontagem[m].atrasos/kpi.corMontagem[m].total)*100 : 0);
+    const mountCols = mountLabels.map((_, i) => PALETA_MONTAGEM[i % PALETA_MONTAGEM.length]);
+    setTimeout(() => drawBar('ao-cor-montagem', mountLabels, mountAtraso, mountCols, 160, true,
+      (valor, lbl) => \`\${lbl}: \${valor.toFixed(0)}% de atraso\`), 50);
+
+    const dimEntries = Object.entries(kpi.corDimensao);
+    const dimLabels = dimEntries.map(([d]) => d);
+    const dimTempo = dimEntries.map(([,v]) => v.tempos.length ? v.tempos.reduce((a,b)=>a+b,0)/v.tempos.length : 0);
+    setTimeout(() => drawBar('ao-cor-dimensao', dimLabels, dimTempo, C.blue, 160, true,
+      (valor, lbl) => \`\${lbl}: \${valor.toFixed(0)} min em média\`), 50);
+
+    const batLabels = kpi.rankBaterias.map(b => b.bat);
+    const batTempo = kpi.rankBaterias.map(b => b.tempoMedio);
+    const batCols = kpi.rankBaterias.map(b => b.tempoMedio > 59 ? C.red : b.tempoMedio > 50 ? C.accent : C.green);
+    setTimeout(() => drawBar('ao-cor-bat-tempo', batLabels, batTempo, batCols, 180, true,
+      (valor, lbl) => \`\${lbl}: \${valor.toFixed(0)} min em média\`), 50);
+  }
+
+  function render() {
+    const ini = document.getElementById('ao-data-inicio').value;
+    const fim = document.getElementById('ao-data-fim').value;
+    const filtrado = filtrar(DADOS_TOTAL, ini, fim);
+    const kpi = calcularKPIs(filtrado);
+
+    renderKPIs(kpi, filtrado);
+    renderInsights(kpi, filtrado);
+    renderRankBaterias(kpi);
+    renderRankMotivos(kpi);
+    renderCorrelacoes(kpi, filtrado);
+    renderTendencias(kpi);
+    renderProdutividade(kpi, filtrado);
+
+    document.getElementById('exp-sub').textContent =
+      \`Período: \${(ini || fim) ? (ini ? new Date(ini+'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim+'T00:00:00').toLocaleDateString('pt-BR') : 'hoje') : 'Todos os registros'} · Gerado em \${new Date().toLocaleString('pt-BR')}\`;
+  }
+
+  // Prefill: intervalo real dos dados (1º registro → mais recente).
+  if (DADOS_TOTAL.length) {
+    const dates = DADOS_TOTAL.map(r => r.data).filter(Boolean).sort();
+    document.getElementById('ao-data-inicio').value = dates[0];
+    document.getElementById('ao-data-fim').value = dates[dates.length - 1];
+  }
+  document.getElementById('btn-ao-filtrar').addEventListener('click', render);
+  render();
+})();
+</script>
+</body>
+</html>`;
+  }
+
   // ── Init / boot ───────────────────────────────────────────
   async function init() {
     // Ativa o estado de carregamento visual
@@ -864,6 +1046,7 @@
 
     const btn = document.getElementById('btn-ao-filtrar');
     if (btn) btn.addEventListener('click', render);
+    document.getElementById('btn-ao-exportar')?.addEventListener('click', exportarInterativo);
 
     const periodo = document.getElementById('ao-periodo');
     if (periodo) {
@@ -881,6 +1064,6 @@
   }
 
   // ── Public ─────────────────────────────────────────────────
-  window.AOp = { init, render };
+  window.AOp = { init, render, exportarInterativo };
 
 })();
