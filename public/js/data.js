@@ -845,6 +845,28 @@ function todayBrasilia() {
   return nowBrasilia().toISOString().split('T')[0];
 }
 
+// Converte um instante ISO (com hora, geralmente em UTC — ex: o
+// inicio/fim de uma parada, salvos via new Date(...).toISOString() no
+// navegador) pra data (YYYY-MM-DD) em Brasília. Diferente de
+// historico/tracos, que já guardam um campo "data" próprio já em
+// Brasília, "paradas" só guarda o instante ISO completo — pegar direto
+// os 10 primeiros caracteres desse ISO (ex: p.inicio.slice(0,10)) dá a
+// data em UTC, não em Brasília. Isso é inofensivo a maior parte do dia,
+// mas entre ~21h e 23h59 em Brasília (UTC-3), o instante em UTC já virou
+// o dia seguinte — uma parada registrada "hoje à noite" ganhava
+// silenciosamente a data de amanhã pros filtros, e sumia do Registro de
+// Paradas e do relatório de OEE sempre que o filtro não incluísse esse
+// dia seguinte (ex: filtro só de "hoje" no fim do período, ou range que
+// termina hoje). Usar esta função em vez de slice(0,10) em qualquer
+// comparação de data com inicio/fim de parada.
+function dataBrasiliaDeISO(iso) {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(iso));
+}
+
 // ---- Presets de período para filtros de dashboard (Todos / Hoje / Essa
 // semana / Esse mês / Mês passado) — usado em Análise Operacional e CEP.
 // Retorna { ini, fim } no formato YYYY-MM-DD; 'todos' retorna '' em ambos

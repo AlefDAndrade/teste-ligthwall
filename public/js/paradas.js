@@ -256,11 +256,15 @@
 
   function paradasFiltradas() {
     return _paradas.filter(p => {
-      if (_filtros.dataInicio && p.inicio < _filtros.dataInicio) return false;
-      if (_filtros.dataFim) {
-        const fimDia = _filtros.dataFim + 'T23:59:59';
-        if (p.inicio > fimDia) return false;
-      }
+      // p.inicio é um instante ISO em UTC — comparar direto contra as
+      // datas "cruas" dos filtros (Brasília) fazia paradas registradas
+      // à noite (21h-23h59 em Brasília) sumirem, porque em UTC esse
+      // instante já cai no dia seguinte. Ver dataBrasiliaDeISO em data.js.
+      const diaInicio = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : (p.inicio || '').slice(0, 10);
+      if (_filtros.dataInicio && diaInicio < _filtros.dataInicio) return false;
+      if (_filtros.dataFim && diaInicio > _filtros.dataFim) return false;
       if (_filtros.classificacao && p.classificacao !== _filtros.classificacao) return false;
       if (_filtros.motivo && p.motivo !== _filtros.motivo) return false;
       if (_filtros.equipamento && !p.equipamento?.toLowerCase().includes(_filtros.equipamento.toLowerCase())) return false;
@@ -354,10 +358,14 @@
     if (!canvas) return;
     const lista = paradasFiltradas();
 
-    // Agrupa por dia (quantidade de paradas)
+    // Agrupa por dia (quantidade de paradas) — data em Brasília, mesmo
+    // critério de paradasFiltradas(), pra uma parada não aparecer num dia
+    // diferente do que ela foi contada no filtro/tabela.
     const map = {};
     lista.forEach(p => {
-      const dia = p.inicio?.slice(0, 10);
+      const dia = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : p.inicio?.slice(0, 10);
       if (dia) map[dia] = (map[dia] || 0) + 1;
     });
 

@@ -286,7 +286,12 @@
     let paradas = await fetch('db/paradas.json').then(r => r.ok ? r.json() : []).catch(() => []);
     if (!Array.isArray(paradas)) paradas = [];
     paradas = paradas.filter(p => {
-      const data = (p.inicio || '').slice(0, 10);
+      // p.inicio é ISO em UTC — slice(0,10) cru pegava a data em UTC, não
+      // em Brasília, e fazia paradas registradas à noite sumirem do
+      // relatório (ver dataBrasiliaDeISO em data.js).
+      const data = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : (p.inicio || '').slice(0, 10);
       if (filtros.dataInicio && data < filtros.dataInicio) return false;
       if (filtros.dataFim && data > filtros.dataFim) return false;
       return true;
@@ -762,7 +767,11 @@
       return true;
     });
     let paradas = DADOS.paradas.filter(p => {
-      const data = (p.inicio || '').slice(0, 10);
+      // Mesma correção de _buscarDados: usar a data em Brasília, não o
+      // slice cru do ISO em UTC (ver dataBrasiliaDeISO em data.js).
+      const data = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : (p.inicio || '').slice(0, 10);
       if (di && data < di) return false;
       if (df && data > df) return false;
       return true;
