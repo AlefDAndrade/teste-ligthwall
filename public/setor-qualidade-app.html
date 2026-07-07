@@ -97,6 +97,7 @@
           <span><strong>Desmoldagem:</strong> <span id="sq-mirror-desmoldagem">---</span></span>
         </div>
         <div class="sq-mirror-nav">
+          <button id="sq-mirror-btn-editar" class="btn btn-outline-accent btn-sm" style="display:none;" onclick="SQ.editarAvaliacaoDoEspelho()" title="Corrigir esta avaliação já registrada (Administrador)"><i class="fas fa-pen"></i> Editar Avaliação</button>
           <button id="sq-mirror-prev" onclick="SQ.prevMirror()"><i class="fas fa-chevron-left"></i></button>
           <span id="sq-mirror-counter" style="font-size:.78rem;color:var(--text-3);">0 / 0</span>
           <button id="sq-mirror-next" onclick="SQ.nextMirror()"><i class="fas fa-chevron-right"></i></button>
@@ -143,6 +144,7 @@
     <!-- Ações do formulário -->
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;">
       <button class="btn btn-ghost btn-sm sq-hide-view"  id="sq-btn-save"     onclick="SQ.saveDraft()"><i class="fas fa-save"></i> Salvar</button>
+      <button class="btn btn-ghost btn-sm" id="sq-btn-cancelar-edicao" style="display:none;" onclick="SQ.cancelarEdicaoAvaliacao()"><i class="fas fa-times"></i> Cancelar</button>
       <button class="btn btn-success btn-sm sq-hide-view" id="sq-btn-register" onclick="SQ.registerEvaluation()"><i class="fas fa-check-circle"></i> Registrar</button>
       <button class="btn btn-ghost btn-sm sq-show-view"  id="sq-btn-back"     onclick="SQ.goBack()"><i class="fas fa-arrow-left"></i> Voltar</button>
     </div>

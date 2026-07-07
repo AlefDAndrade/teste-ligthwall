@@ -57,6 +57,20 @@
   let filaOperacoes    = [];  // última lista carregada de GET /operacoes-nao-avaliadas
   let linkedOperacaoId = null; // id_operacao da fila vinculado à avaliação em edição, ou null (avulsa)
 
+  // ── Edição de avaliação já registrada (só Administrador) — aberta a
+  // partir do Espelho Visual (ver editarAvaliacaoDoEspelho). Diferente
+  // de linkedOperacaoId (que é sobre uma avaliação NOVA, ainda ligada a
+  // uma bateria da fila), estas 3 variáveis só existem enquanto o
+  // formulário está corrigindo uma avaliação JÁ SALVA — não nula só
+  // nesse caso; registerEvaluation() usa isso pra saber se deve
+  // sobrescrever o registro original (mesmo id) em vez de criar um novo.
+  // Resetadas em clearForm() e ao sair da aba "form" por qualquer
+  // caminho (ver navigateTo) — nunca deve "vazar" pra uma avaliação nova
+  // e acabar sobrescrevendo a antiga por engano.
+  let _editandoAvaliacaoId      = null;
+  let _editandoRegistradoEm     = null;
+  let _editandoLinkedOperacaoId = null;
+
   // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
   // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
   // usado tanto pra montar o <select> quanto pra mapear tipo_montagem de
@@ -830,6 +844,11 @@
   /* ── Navegação interna ────────────────────────────────── */
   function navigateTo(section) {
     if (viewMode && section !== 'form') exitViewMode();
+    if (_editandoAvaliacaoId && section !== 'form') {
+      _editandoAvaliacaoId = null;
+      _editandoRegistradoEm = null;
+      _editandoLinkedOperacaoId = null;
+    }
     document.querySelectorAll('.sq-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sq-nav-btn').forEach(el => el.classList.remove('active'));
     const sec = document.getElementById('sq-' + section);
@@ -1412,25 +1431,37 @@
     renderDrafts();
   }
 
-  /* ── Registrar avaliação definitiva ───────────────────── */
+  /* ── Registrar avaliação definitiva (ou salvar correção) ── */
   function registerEvaluation() {
     if (viewMode) return;
     if (!document.getElementById('sq-batteryId').value) { showAlert('Erro','Selecione o ID da Bateria.'); return; }
-    showConfirm('Registrar','Ao registrar, a avaliação vai para o histórico. Continuar?', () => {
-      const evId = 'ev_' + Date.now();
+    const editando = !!_editandoAvaliacaoId;
+    showConfirm(
+      editando ? 'Salvar Correção' : 'Registrar',
+      editando
+        ? 'Confirma salvar a correção desta avaliação? O registro original será substituído.'
+        : 'Ao registrar, a avaliação vai para o histórico. Continuar?',
+      () => {
+      const evId = editando ? _editandoAvaliacaoId : ('ev_' + Date.now());
       const evalObj = {
         id: evId, schemaVersion: 2,
         batteryId: document.getElementById('sq-batteryId').value,
-        linkedOperacaoId: linkedOperacaoId || null,
+        linkedOperacaoId: editando ? _editandoLinkedOperacaoId : (linkedOperacaoId || null),
         montagem: { pallet1: palletTypes[0], pallet2: palletTypes[1], pallet3: palletTypes[2], pallet4: palletTypes[3] },
         turno:    document.getElementById('sq-turno').value,
         tempInput: parseFloat(document.getElementById('sq-temp').value) || 0,
         dtMontagem:    toISO(document.getElementById('sq-dtMontagem').value),
         dtEnchimento:  toISO(document.getElementById('sq-dtEnchimento').value),
         dtDesmoldagem: toISO(document.getElementById('sq-dtDesmoldagem').value),
-        registeredAt: new Date().toISOString(),
+        // Numa correção, preserva a data em que a avaliação REALMENTE
+        // aconteceu (registeredAt) — é o que ordena o Histórico/Dashboard;
+        // sem isso, corrigir um erro de digitação faria o registro "pular"
+        // pra hoje na lista, como se tivesse sido avaliado agora. A data
+        // do conserto em si fica em editadoEm, só como rastro auditável.
+        registeredAt: editando ? _editandoRegistradoEm : new Date().toISOString(),
         totalSlabs: parseInt(document.getElementById('sq-thickness').value) * 4,
         observations: document.getElementById('sq-obs').value,
+        ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
       // Painéis embutidos na própria avaliação — 1 linha no banco pra
       // avaliação inteira (ver db.salvarAvaliacaoQualidade, db.js),
@@ -1442,7 +1473,10 @@
         return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks };
       });
 
-      const opIdParaMarcar = linkedOperacaoId;
+      // Numa correção, a bateria já saiu da fila há muito tempo (foi por
+      // isso que virou avaliação) — não faz sentido tentar marcar a
+      // operação como avaliada de novo.
+      const opIdParaMarcar = editando ? null : linkedOperacaoId;
       const btnRegistrar = document.getElementById('sq-btn-register');
       if (btnRegistrar) btnRegistrar.disabled = true;
 
@@ -1462,10 +1496,11 @@
           // a pessoa continua na tela, com os dados intactos, e pode
           // tentar "Registrar" de novo.
           if (currentDraftId) LS.del('draft_' + currentDraftId);
+          const destino = editando ? 'dashboard' : 'form';
           clearForm();
           currentDraftId = null;
-          showAlert('Concluído', 'Avaliação registrada com sucesso!');
-          navigateTo('form');
+          showAlert('Concluído', editando ? 'Correção salva com sucesso!' : 'Avaliação registrada com sucesso!');
+          navigateTo(destino);
           carregarAvaliacoesQualidade();
 
           if (opIdParaMarcar) {
@@ -1506,12 +1541,12 @@
     closeAllCollapsibles();
   }
 
-  function viewHistoryRecord(evId) {
-    const d    = getData();
-    const item = d.avaliacoes.find(e => e.id === evId);
-    if (!item) { showAlert('Erro','Não encontrado.'); return; }
-    viewSource = 'history';
-    palletTypes = [item.montagem.pallet1, item.montagem.pallet2, item.montagem.pallet3, item.montagem.pallet4];
+  // Preenche o formulário inteiro (cabeçalho + grade de painéis) a partir
+  // de uma avaliação já salva — usado tanto por viewHistoryRecord (modo
+  // só-leitura) quanto por editarAvaliacaoDoEspelho (modo editável).
+  function _carregarAvaliacaoNoFormulario(item) {
+    const d = getData();
+    palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
     document.getElementById('sq-batteryId').value   = item.batteryId || 'B1';
@@ -1523,15 +1558,51 @@
     document.getElementById('sq-obs').value          = item.observations || '';
     refreshPalletInfos();
     const ns = {};
-    d.paineis.filter(p => p.avaliacaoId === evId).forEach(p => { ns[`stack${p.pallet}-${p.posicao}`] = p.marcas; });
+    d.paineis.filter(p => p.avaliacaoId === item.id).forEach(p => { ns[`stack${p.pallet}-${p.posicao}`] = p.marcas; });
     slabState     = ns;
     actionHistory = [];
     document.getElementById('sq-thickness').value = item.totalSlabs / 4;
     autoSetThickness();
     calculateCureTime();
+  }
+
+  function viewHistoryRecord(evId) {
+    const d    = getData();
+    const item = d.avaliacoes.find(e => e.id === evId);
+    if (!item) { showAlert('Erro','Não encontrado.'); return; }
+    viewSource = 'history';
+    _carregarAvaliacaoNoFormulario(item);
     setEditable(false);
     viewMode = true;
     navigateTo('form');
+  }
+
+  // Abre a mesma avaliação mostrada no Espelho Visual, EDITÁVEL, pra
+  // corrigir algum erro de lançamento — só Administrador (mesma trava
+  // usada em Editar Operação, app-core.js). Ao "Registrar" de novo,
+  // registerEvaluation() detecta _editandoAvaliacaoId e SALVA POR CIMA
+  // do mesmo registro (mesmo id), em vez de criar um novo — mantendo a
+  // data original de registro (só a correção fica marcada em
+  // "editadoEm", pro histórico continuar ordenado pela data real do
+  // evento, não pela data do conserto).
+  function editarAvaliacaoDoEspelho() {
+    if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+    const item = dashboardEvals[mirrorIndex];
+    if (!item) return;
+    showConfirm(
+      'Editar Avaliação',
+      `Isso abre a avaliação de "${item.batteryId || 'N/I'}" para correção. Ao salvar, o registro original é substituído. Continuar?`,
+      () => {
+        _carregarAvaliacaoNoFormulario(item);
+        viewSource = 'dashboard';
+        _editandoAvaliacaoId      = item.id;
+        _editandoRegistradoEm     = item.registeredAt || null;
+        _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
+        setEditable(true);
+        _aplicarModoBotoesForm();
+        navigateTo('form');
+      }
+    );
   }
 
   function exitViewMode()  { viewMode = false; setEditable(true); }
@@ -1553,6 +1624,7 @@
     const search  = (document.getElementById('sq-hist-search').value || '').toLowerCase();
     const turno   = document.getElementById('sq-hist-turno').value;
     const filtered = d.avaliacoes.filter(item =>
+      !item.excluidaDaFila &&
       (item.batteryId||'').toLowerCase().includes(search) &&
       (!turno || item.turno === turno)
     ).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt));
@@ -1573,10 +1645,10 @@
       tr.innerHTML = `
         <td>${new Date(item.registeredAt).toLocaleString('pt-BR')}</td>
         <td><strong>${item.batteryId||'N/I'}</strong></td>
-        <td style="color:#66bb6a;font-weight:700;">${item.montagem.pallet1||'—'}</td>
-        <td style="color:#42a5f5;font-weight:700;">${item.montagem.pallet2||'—'}</td>
-        <td style="color:#ab47bc;font-weight:700;">${item.montagem.pallet3||'—'}</td>
-        <td style="color:#ffa726;font-weight:700;">${item.montagem.pallet4||'—'}</td>
+        <td style="color:#66bb6a;font-weight:700;">${item.montagem?.pallet1||'—'}</td>
+        <td style="color:#42a5f5;font-weight:700;">${item.montagem?.pallet2||'—'}</td>
+        <td style="color:#ab47bc;font-weight:700;">${item.montagem?.pallet3||'—'}</td>
+        <td style="color:#ffa726;font-weight:700;">${item.montagem?.pallet4||'—'}</td>
         <td>${item.turno||'—'}</td>
         <td>${item.tempInput?item.tempInput+'°C':'—'}</td>
         <td>${item.totalSlabs||'—'}</td>
@@ -1620,12 +1692,14 @@
   function renderMirror(index) {
     const container = document.getElementById('sq-mirror-container');
     const counter   = document.getElementById('sq-mirror-counter');
+    const btnEditar = document.getElementById('sq-mirror-btn-editar');
     if (!dashboardEvals.length) {
       container.innerHTML = `<div class="sq-empty" style="padding:20px;"><i class="fas fa-inbox"></i>Nenhuma avaliação.</div>`;
       ['sq-mirror-battery','sq-mirror-turno','sq-mirror-desmoldagem'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='---'; });
       document.getElementById('sq-mirror-prev').disabled = true;
       document.getElementById('sq-mirror-next').disabled = true;
       counter.textContent = '0 / 0';
+      if (btnEditar) btnEditar.style.display = 'none';
       return;
     }
     const item   = dashboardEvals[index];
@@ -1637,6 +1711,7 @@
     counter.textContent = `${index+1} / ${dashboardEvals.length}`;
     document.getElementById('sq-mirror-prev').disabled = index === 0;
     document.getElementById('sq-mirror-next').disabled = index === dashboardEvals.length - 1;
+    if (btnEditar) btnEditar.style.display = sessionStorage.getItem('lw_role') === 'Administrador' ? 'inline-flex' : 'none';
 
     const n = getSlabCount(item.batteryId);
     const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
@@ -1882,7 +1957,7 @@
     const bf   = document.getElementById('sq-dash-bat').value;
 
     // "Excluída da fila" (ver _excluirOperacaoDaFila) grava uma avaliação
-    // de verdade só pra deixar rastro no Histórico/Espelho — TODOS os
+    // de verdade só pra deixar rastro auditável no banco — TODOS os
     // painéis dela vêm com resultado 'nao_avaliado_no_sistema', nunca
     // aprovado/reprovado. O Dashboard é sobre o que FOI avaliado (KPIs,
     // produção, classificações) — por isso essas entram fora daqui desde
@@ -1892,10 +1967,10 @@
     // própria avaliação diz que NUNCA foram avaliados, "Evolução Diária"
     // contava produção que não existiu, e "Distribuição das
     // Classificações" ganhava uma fatia solta "null nao_avaliado_no_
-    // sistema" (tipoObtido é sempre null nesses painéis). Continuam
-    // aparecendo normalmente em Registros (aba separada, sem esse
-    // filtro) — só o Dashboard/Espelho Visual (que usa este mesmo `fe`,
-    // ver dashboardEvals abaixo) que não conta com elas.
+    // sistema" (tipoObtido é sempre null nesses painéis). Registros (aba
+    // separada) usa o MESMO filtro (ver renderHistory) — esses itens não
+    // são avaliações de verdade (não têm nem "montagem"), só um marcador
+    // interno de que a bateria saiu da fila sem ser avaliada.
     const fe = d.avaliacoes.filter(item => {
       if (item.excluidaDaFila) return false;
       const dt = new Date(item.registeredAt);
@@ -2379,9 +2454,46 @@
     return 'ok';
   }
 
+  // Ajusta os botões de ação do formulário conforme está ou não editando
+  // uma avaliação já registrada (ver editarAvaliacaoDoEspelho): esconde
+  // "Salvar" (rascunho — não faz sentido pra uma correção), troca o
+  // texto de "Registrar" pra "Salvar Alteração", e mostra "Cancelar".
+  function _aplicarModoBotoesForm() {
+    const editando  = !!_editandoAvaliacaoId;
+    const btnSalvar = document.getElementById('sq-btn-save');
+    const btnReg    = document.getElementById('sq-btn-register');
+    const btnCancel = document.getElementById('sq-btn-cancelar-edicao');
+    if (btnSalvar) btnSalvar.style.display = editando ? 'none' : '';
+    if (btnReg)    btnReg.innerHTML = editando
+      ? '<i class="fas fa-check-circle"></i> Salvar Alteração'
+      : '<i class="fas fa-check-circle"></i> Registrar';
+    if (btnCancel) btnCancel.style.display = editando ? '' : 'none';
+  }
+
+  // Sai da edição SEM salvar nada — o registro original no banco nunca
+  // chegou a ser tocado (só foi lido, pra preencher o formulário), então
+  // não precisa desfazer nada no servidor: só descarta o que está na
+  // tela e volta pra onde a edição foi aberta (Dashboard).
+  function cancelarEdicaoAvaliacao() {
+    if (!_editandoAvaliacaoId) { navigateTo(viewSource); return; }
+    showConfirm(
+      'Cancelar Edição',
+      'Sair sem salvar? As alterações feitas nesta tela serão descartadas — o registro original continua exatamente como estava.',
+      () => {
+        const destino = viewSource;
+        clearForm();
+        navigateTo(destino);
+      }
+    );
+  }
+
   function clearForm() {
     slabState = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
     linkedOperacaoId = null;
+    _editandoAvaliacaoId = null;
+    _editandoRegistradoEm = null;
+    _editandoLinkedOperacaoId = null;
+    _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';
     document.getElementById('sq-dailySeq').value     = '1';
@@ -2497,6 +2609,7 @@
   /* ── API pública ──────────────────────────────────────── */
   window.SQ = {
     navigateTo, goBack, startNew,
+    editarAvaliacaoDoEspelho, cancelarEdicaoAvaliacao,
     iniciarAvaliacaoDaFila, iniciarAvaliacaoDoSelect,
     excluirDaFila, excluirDoSelect,
     saveDraft, loadDraft, deleteDraft, viewDraft,
