@@ -1196,19 +1196,44 @@
    * revisão (usado pela reconciliação ao registrar — ver
    * _reconciliarMontagemPersonalizada()), esconde as abas: todo clique ou
    * "Aplicar" só LIMPA o berço (pra marcar quais não foram usados).
+   *
+   * Por padrão (chamada sem capacidade/valoresIniciais/onConfirmar) lê a
+   * bateria/berços de `state` e, ao confirmar, grava direto em
+   * `state.bercos_personalizados` + recalcPaineis() + persist() — é assim
+   * que Registrar Operação sempre usou. Passando esses 3 parâmetros, a
+   * grade vira "genérica": não toca em `state` nenhuma vez, só entrega o
+   * array final pro `onConfirmar` informado — é o que permite reusar esta
+   * mesma grade em Editar Operação (app-core.js), que edita um registro
+   * já salvo, não o rascunho de uma operação em andamento.
    * @returns {Promise<boolean>} true se confirmado, false se cancelado
    */
-  function abrirGradeMontagemPersonalizada({ somenteRevisao = false } = {}) {
+  function abrirGradeMontagemPersonalizada({
+    somenteRevisao = false,
+    capacidade: capacidadeParam = null,
+    valoresIniciais: valoresIniciaisParam = null,
+    onConfirmar = null,
+    tituloBateria: tituloBateriaParam = null,
+  } = {}) {
     return new Promise((resolve) => {
-      const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-      if (!bateria) {
-        LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
-        resolve(false);
-        return;
-      }
-      const capacidade = bateria.bercos || 0;
+      let capacidade = capacidadeParam;
+      let tituloBateria = tituloBateriaParam;
 
-      const atual = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+      // Modo padrão (Registrar Operação): sem capacidade/valoresIniciais
+      // informados, deriva tudo de `state`, igual sempre foi.
+      if (capacidade == null) {
+        const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+        if (!bateria) {
+          LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
+          resolve(false);
+          return;
+        }
+        capacidade = bateria.bercos || 0;
+        tituloBateria = bateria.id;
+      }
+
+      const atual = Array.isArray(valoresIniciaisParam)
+        ? valoresIniciaisParam
+        : (Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : []);
       _gradeTrabalho = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
       _gradeSomenteRevisao = somenteRevisao;
       _gradeTipoAtivo = somenteRevisao ? '' : null; // '' = ferramenta de limpar, em modo de revisão
@@ -1229,7 +1254,7 @@
           <div style="text-align:center;margin-bottom:18px">
             <div style="font-size:2.2rem;margin-bottom:8px">🔧</div>
             <h2 style="font-family:var(--font-display);font-size:1.25rem;color:var(--accent);margin:0">
-              ${somenteRevisao ? 'Quais berços não foram preenchidos?' : 'Montagem Personalizada — Bateria ' + bateria.id}
+              ${somenteRevisao ? 'Quais berços não foram preenchidos?' : 'Montagem Personalizada' + (tituloBateria ? ' — Bateria ' + tituloBateria : '')}
             </h2>
             <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
               ${somenteRevisao
@@ -1286,9 +1311,14 @@
           erroEl.style.display = 'block';
           return;
         }
-        state.bercos_personalizados = [..._gradeTrabalho];
-        recalcPaineis();
-        persist();
+        const resultado = [..._gradeTrabalho];
+        if (onConfirmar) {
+          onConfirmar(resultado);
+        } else {
+          state.bercos_personalizados = resultado;
+          recalcPaineis();
+          persist();
+        }
         document.removeEventListener('keydown', _gradeKeydownHandler);
         modal.remove();
         resolve(true);

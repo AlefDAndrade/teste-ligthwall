@@ -306,7 +306,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -2005,7 +2005,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -2076,7 +2076,7 @@
       </div>
     </div>
   </div>
-
+
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2409,7 +2409,13 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Tipo de Montagem</label>
-          <select class="form-select" id="eo-tipo-montagem" onchange="_eoAtualizarPreview()"></select>
+          <div style="display:flex;gap:6px;align-items:stretch">
+            <select class="form-select" id="eo-tipo-montagem" style="flex:1;min-width:0" onchange="_eoAtualizarPreview()"></select>
+            <button type="button" id="eo-btn-configurar-bercos"
+              style="display:none;flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
+              class="btn btn-outline-accent btn-sm" title="Ver/editar os berços da Montagem Personalizada"
+              onclick="_eoAbrirGradeMontagem()">🔧</button>
+          </div>
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Turno</label>
@@ -2443,7 +2449,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
   <div id="editar-traco-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
@@ -2617,7 +2623,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -2687,7 +2693,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2758,7 +2764,7 @@
 
     </div>
   </div>
-
+
 <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">

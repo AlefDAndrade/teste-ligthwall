@@ -2203,11 +2203,21 @@
     // _eoAoMudarBateria). Evita o bug de "troquei a bateria, voltei pra
     // original, mas o berço ficou com o valor da bateria errada".
     let _eoBercosTocadoManualmente = false;
+    // Cópia de trabalho da grade berço-a-berço (Montagem Personalizada) —
+    // igual à _gradeTrabalho de operacao.js, mas separada dela de
+    // propósito: aqui é a edição de uma operação JÁ SALVA, não o rascunho
+    // de uma operação em andamento, então nunca deve tocar em
+    // state/persist() de operacao.js. Só vai pro servidor se o admin
+    // clicar "Salvar Alterações" (ver salvarEdicaoOperacao).
+    let _eoBercosPersonalizados = [];
 
     function abrirEdicaoOperacao(bateria) {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
       _eoBercosTocadoManualmente = false;
+      _eoBercosPersonalizados = Array.isArray(bateria.bercos_personalizados)
+        ? [...bateria.bercos_personalizados]
+        : [];
 
       document.getElementById('eo-erro').style.display = 'none';
 
@@ -2285,15 +2295,50 @@
     // isso não existe em MONTAGEM_MAP, então caía no fallback histórico
     // "trata como S/P puro" (ver calcPaineis, data.js), recalculando tudo
     // errado mesmo sem essa tela ter como editar a grade berço a berço.
-    // A grade em si (bercos_personalizados) não é editável por aqui —
-    // por isso usamos a grade ORIGINAL da operação (_eoRegistroOriginal)
-    // como fonte de verdade dos totais, via LW.calcPaineisPersonalizado
-    // (mesma função que Registrar Operação usa pra esse modo).
+    // Usa _eoBercosPersonalizados (cópia de trabalho, editável pelo botão
+    // "Configurar Berços" — ver _eoAbrirGradeMontagem), não mais o array
+    // congelado de _eoRegistroOriginal: antes a grade em si não era
+    // editável por aqui, então usar a grade ORIGINAL como fonte de
+    // verdade dos totais era a única opção; agora que dá pra editar,
+    // precisa refletir o que está sendo editado nesta tela.
     function _eoCalcularPaineis(tipoMontagem, bercos) {
       if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
-        return LW.calcPaineisPersonalizado(_eoRegistroOriginal?.bercos_personalizados);
+        return LW.calcPaineisPersonalizado(_eoBercosPersonalizados);
       }
       return LW.calcPaineis(tipoMontagem, bercos);
+    }
+
+    // Mostra/esconde o botão "Configurar Berços" (grade da Montagem
+    // Personalizada) de acordo com o tipo de montagem selecionado — mesmo
+    // padrão do botão equivalente em Registrar Operação (ver
+    // _atualizarVisibilidadeConfigurarBercos em operacao.js).
+    function _eoAtualizarBotaoBercos() {
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      const btn = document.getElementById('eo-btn-configurar-bercos');
+      if (btn) btn.style.display = tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? 'inline-flex' : 'none';
+    }
+
+    // Abre a mesma grade berço-a-berço de Registrar Operação (ver
+    // LWOp.abrirGradeMontagem em operacao.js), mas em modo genérico: não
+    // toca em state/persist() de operacao.js — só recebe o array
+    // resultante e guarda em _eoBercosPersonalizados, atualizando o
+    // preview de painéis/m² em seguida.
+    async function _eoAbrirGradeMontagem() {
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      if (!bateriaObj) {
+        LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
+        return;
+      }
+      await LWOp.abrirGradeMontagem({
+        capacidade: bateriaObj.bercos || 0,
+        valoresIniciais: _eoBercosPersonalizados,
+        tituloBateria: bateriaObj.id,
+        onConfirmar(resultado) {
+          _eoBercosPersonalizados = resultado;
+          _eoAtualizarPreview();
+        },
+      });
     }
 
     function _eoAtualizarPreview() {
@@ -2301,6 +2346,8 @@
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
       const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+
+      _eoAtualizarBotaoBercos();
 
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
       document.getElementById('eo-preview').innerHTML = `
@@ -2328,6 +2375,10 @@
       if (!idBateria) { LW.mostrarAlerta('Selecione a bateria.', { tipo: 'aviso' }); return; }
       if (!tipoMontagem) { LW.mostrarAlerta('Selecione o tipo de montagem.', { tipo: 'aviso' }); return; }
       if (!bercos || bercos < 1) { LW.mostrarAlerta('Informe a quantidade de berços reais.', { tipo: 'aviso' }); return; }
+      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA && (!_eoBercosPersonalizados.length || _eoBercosPersonalizados.every(t => !t))) {
+        LW.mostrarAlerta('Configure os berços da Montagem Personalizada antes de salvar (botão 🔧 Configurar Berços).', { tipo: 'aviso' });
+        return;
+      }
 
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
@@ -2340,6 +2391,7 @@
         tipo_montagem: tipoMontagem,
         turno,
         motivo_atraso: motivoAtraso,
+        ...(tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? { bercos_personalizados: _eoBercosPersonalizados } : {}),
         ...calc,
       };
 
