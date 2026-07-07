@@ -45,6 +45,22 @@
       'Analista': ['operacao'],
     };
 
+    // Restaura, depois de um F5, a última página que a pessoa estava
+    // vendo nesta aba (ver showPage, que grava sessionStorage a cada
+    // navegação) — sem isso, todo refresh jogava de volta pro Menu,
+    // mesmo no meio de um relatório/dashboard. Só chamada pros perfis que
+    // não têm uma tela fixa de boot (Analista/Administrador — Operador
+    // sempre volta pra Operação de propósito, ver comentário mais abaixo).
+    function _restaurarUltimaPagina() {
+      let pagina = null;
+      try { pagina = sessionStorage.getItem('lw_ultima_pagina'); } catch (e) { /* sessionStorage indisponível — sem restauração, sem quebrar o boot */ }
+      if (!pagina || pagina === 'menu') return; // já é o padrão (nenhum showPage() extra necessário)
+      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[sessionStorage.getItem('lw_role')] || [];
+      if (bloqueadas.includes(pagina)) return;
+      if (!document.getElementById('page-' + pagina)) return; // versão salva antiga/página que não existe mais
+      showPage(pagina);
+    }
+
     // ---- Indicador global de operações pendentes (registro offline) ----
     function _atualizarIndicadorFilaPendentes(n) {
       const el = document.getElementById('topbar-fila-pendentes');
@@ -72,6 +88,12 @@
       const role = sessionStorage.getItem('lw_role');
       const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
       if (bloqueadas.includes(pageId)) return;
+
+      // Lembra a página atual pra restaurar depois de um F5 (ver
+      // _restaurarUltimaPagina, chamada no boot) — sessionStorage, não
+      // localStorage: é só "continuar de onde parei nesta aba", não uma
+      // preferência que deveria seguir pra outras abas/sessões futuras.
+      try { sessionStorage.setItem('lw_ultima_pagina', pageId); } catch (e) { /* sessionStorage indisponível (modo privado etc.) — sem persistência, sem quebrar a navegação */ }
 
       // Log de acesso: registra só "Registrar Operação" por enquanto — é a
       // base pra, no futuro, restringir essa tela a um único computador.
@@ -318,6 +340,7 @@
         // também sem acesso à Operação — só dashboards e relatórios.
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
+        _restaurarUltimaPagina();
 
       } else if (role === 'Administrador') {
         // Verifica se a autenticação admin foi concluída corretamente
@@ -332,6 +355,7 @@
         // Garante que itens admin e de operação estejam visíveis
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
+        _restaurarUltimaPagina();
       }
 
       const roleEl = document.getElementById('topbar-role');

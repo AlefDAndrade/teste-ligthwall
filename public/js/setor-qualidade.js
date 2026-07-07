@@ -2620,6 +2620,7 @@
     editarAvaliacaoDoEspelho, cancelarEdicaoAvaliacao,
     iniciarAvaliacaoDaFila, iniciarAvaliacaoDoSelect,
     excluirDaFila, excluirDoSelect,
+    carregarFilaNaoAvaliadas,
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
     renderDashboard, renderHistory,
