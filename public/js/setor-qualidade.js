@@ -22,6 +22,15 @@
     return div.innerHTML;
   }
 
+  // Mesmo escape de _escaparHtml, + aspas duplas — necessário só quando o
+  // texto vai DENTRO de um atributo HTML delimitado por "..." (ex:
+  // data-tooltip="..." nos gráficos SVG abaixo). _escaparHtml sozinho
+  // escapa <, >, & (o bastante pra texto solto), mas não aspas — um
+  // rótulo com " quebraria o atributo e corromperia o SVG.
+  function _escaparAtributo(str) {
+    return _escaparHtml(str).replace(/"/g, '&quot;');
+  }
+
   /* ── Prefixo localStorage ─────────────────────────────── */
   const LS = {
     get: k => { try { return JSON.parse(localStorage.getItem('sq_' + k)); } catch (e) { return null; } },
@@ -1767,8 +1776,12 @@
      html2canvas tem dificuldade justamente com <canvas> aninhado,
      melhor com SVG/HTML puro). Os gráficos abaixo são só string SVG/HTML
      montada aqui e jogada via innerHTML — sem canvas, sem instância pra
-     destruir, sem dependência externa nenhuma. Tooltip vem do <title>
-     nativo do SVG (o navegador mostra sozinho ao passar o mouse). */
+     destruir, sem dependência externa nenhuma. Tooltip vem de
+     data-tooltip (mesmo balão estilizado do resto do sistema — ver
+     tooltip.js — funciona em <circle>/<rect> normalmente, não só em
+     elementos HTML) — ANTES usava <title> nativo do SVG, mas esse é o
+     tooltip cinza sem estilo do próprio navegador, sem contraste
+     garantido com o tema e sem funcionar em toque. */
 
   const SVG_W = 600, SVG_H = 220; // viewBox de referência — os containers são <div>, escalam via width="100%".
 
@@ -1804,7 +1817,7 @@
       return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>` +
         `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(max * f)}</text>`;
     }).join('');
-    const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)"><title>${_escaparHtml(_fmtDataEixo(p.label))}: ${p.v}</title></circle>`).join('');
+    const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)" style="cursor:help" data-tooltip="${_escaparAtributo(_fmtDataEixo(p.label))}: ${p.v}"/>`).join('');
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
       ${gridLines}
       <path d="${areaPath}" fill="rgba(59,130,246,0.12)" stroke="none"/>
@@ -1827,7 +1840,7 @@
       const dash = frac * circ;
       const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${strokeW}"
         stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" stroke-dashoffset="${(-acc * circ).toFixed(2)}"
-        transform="rotate(-90 ${cx} ${cy})"><title>${_escaparHtml(it.label)}: ${it.value} (${(frac * 100).toFixed(1)}%)</title></circle>`;
+        transform="rotate(-90 ${cx} ${cy})" style="cursor:help" data-tooltip="${_escaparAtributo(it.label)}: ${it.value} (${(frac * 100).toFixed(1)}%)"/>`;
       acc += frac;
       return el;
     }).join('');
@@ -1857,7 +1870,7 @@
       const x = padL + i * (plotW / n) + gap / 2;
       const y = padT + plotH - bh;
       const color = (colors && colors[i]) || 'var(--blue)';
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}</title></rect>
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}"/>
         <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)" text-anchor="middle">${v}</text>
         <text x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
@@ -1885,7 +1898,7 @@
       const y = padT + i * rowH;
       return `
         <text x="${padL - 8}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
-        <rect x="${padL}" y="${(y + 4).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 8}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}${suffix}</title></rect>
+        <rect x="${padL}" y="${(y + 4).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 8}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}${suffix}"/>
         <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
     }).join('');
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 220)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
@@ -1910,7 +1923,7 @@
       return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
         <text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(minY + (maxY - minY) * f)}</text>`;
     }).join('');
-    const dots = points.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="5" fill="var(--blue)" fill-opacity="0.8"><title>${_escaparHtml(p.label || '')}</title></circle>`).join('');
+    const dots = points.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="5" fill="var(--blue)" fill-opacity="0.8" style="cursor:help" data-tooltip="${_escaparAtributo(p.label || '')}"/>`).join('');
     const trend = (trendPoints && trendPoints.length === 2)
       ? `<line x1="${sx(trendPoints[0].x).toFixed(1)}" y1="${sy(trendPoints[0].y).toFixed(1)}" x2="${sx(trendPoints[1].x).toFixed(1)}" y2="${sy(trendPoints[1].y).toFixed(1)}" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`
       : '';
@@ -1942,7 +1955,7 @@
         const bh = (v / max) * plotH;
         const x = gx + si * (barW + barGap);
         const y = padT + plotH - bh;
-        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${s.color}"><title>${_escaparHtml(String(lb))} — ${_escaparHtml(s.name)}: ${v}</title></rect>`;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${s.color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))} — ${_escaparAtributo(s.name)}: ${v}"/>`;
       }).join('');
       return `${barsHtml}<text x="${(gx + (groupW - sideMargin * 2) / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
