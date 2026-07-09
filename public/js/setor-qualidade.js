@@ -1226,6 +1226,37 @@
     _iniciarForm(null);
   }
 
+  // Campos que vêm PRONTOS da operação real escolhida na fila (ver
+  // _prefillFromOperacao) — quem preenche o valor de verdade é o
+  // Registro de Operação, não a Qualidade. Ficam travados pra não deixar
+  // o lançamento da Qualidade divergir do que realmente aconteceu na
+  // operação; tudo que NÃO está preenchido automaticamente (temperatura,
+  // data/hora de montagem e desmoldagem, observações, e a marcação
+  // propriamente dita das placas) continua livre. A Espessura de cada
+  // pallet (grade "Medição") é um caso à parte — não é um <select>/
+  // <input> do formulário, é span com lápis (ver editField) — por isso
+  // é tratada separadamente aqui, via classe .sq-info-edit-locked.
+  const CAMPOS_AUTO_PREENCHIDOS = ['sq-batteryId', 'sq-mountType', 'sq-turno', 'sq-dtEnchimento'];
+
+  // bloquear=true trava. SEMPRE travado enquanto a tela de avaliação está
+  // aberta — mesmo em branco, antes de escolher a bateria: como avulsa não
+  // é mais permitida (ver registerEvaluation), esses 5 campos só têm valor
+  // de verdade depois de vir de uma operação real (fila/rascunho/correção,
+  // ver _prefillFromOperacao/loadDraft/editarAvaliacaoDoEspelho) — não faz
+  // sentido digitar neles antes disso, então ficam travados desde já.
+  // Desabilitar o <select>/<input> não impede o JS de setar .value por
+  // código (só bloqueia teclado/mouse do usuário), então prefill continua
+  // funcionando normalmente com o campo já travado.
+  function _bloquearCamposAutoPreenchidos(bloquear) {
+    CAMPOS_AUTO_PREENCHIDOS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = bloquear;
+    });
+    document.querySelectorAll('.sq-info-edit[data-field="espessura"]').forEach(btn => {
+      btn.classList.toggle('sq-info-edit-locked', bloquear);
+    });
+  }
+
   function _iniciarForm(operacaoVinculada) {
     if (viewMode) exitViewMode();
     clearForm();
@@ -1238,6 +1269,7 @@
       autoSetThickness();
     }
     setEditable(true);
+    _bloquearCamposAutoPreenchidos(true); // sempre travado — ver comentário na função, acima
     _aplicarModoBotoesForm(); // reflete no botão "Registrar" se ficou sem operação vinculada (ver comentário lá)
   }
 
@@ -1775,12 +1807,14 @@
     const raw = localStorage.getItem(`sq_draft_${id}`);
     if (!raw) { showAlert('Erro', 'Rascunho não encontrado.'); return; }
     const d = JSON.parse(raw);
-    applyFormData(d);
+    applyFormData(d); // já seta linkedOperacaoId = d.linkedOperacaoId — ver applyFormData
     currentDraftId = d.id;
     navigateTo('form');
     autoSetThickness();
     calculateCureTime();
     setEditable(true);
+    // Sempre travado — ver comentário em _bloquearCamposAutoPreenchidos.
+    _bloquearCamposAutoPreenchidos(true);
     validateAllSlabs();
     closeAllCollapsibles();
     _aplicarModoBotoesForm(); // reflete no botão "Registrar" se este rascunho não tem operação vinculada
@@ -2012,6 +2046,12 @@
         _editandoRegistradoEm     = item.registeredAt || null;
         _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
         setEditable(true);
+        // Mesma trava do lançamento novo: os dados vieram da operação
+        // real na hora do registro original, corrigir aqui não deveria
+        // divergir deles — só o que a Qualidade de fato controla
+        // (temperatura, datas de montagem/desmoldagem, observações,
+        // marcação das placas) fica editável na correção.
+        _bloquearCamposAutoPreenchidos(true);
         _aplicarModoBotoesForm();
         navigateTo('form');
       }
@@ -3006,6 +3046,7 @@
     autoSetThickness();
     calculateCureTime();
     setEditable(true);
+    _bloquearCamposAutoPreenchidos(true); // sempre travado — ver comentário na função, acima
     validateAllSlabs();
   }
 
@@ -3102,6 +3143,7 @@
 
   function editField(btn) {
     if (viewMode) return;
+    if (btn.classList.contains('sq-info-edit-locked')) return; // Espessura travada — ver _bloquearCamposAutoPreenchidos
     const pid = btn.dataset.pallet, fk = btn.dataset.field;
     const el  = document.getElementById(`sq-p${pid}-${fk}`);
     const labels = { comprimento:'Comprimento', largura:'Largura', linearidade:'Linearidade', espessura:'Espessura', esquadro:'Esquadro' };

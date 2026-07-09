@@ -848,6 +848,8 @@
 .sq-info-val { font-weight: 600; color: var(--text); text-align: right; min-width: 22px; }
 .sq-info-edit { cursor: pointer; color: var(--text-3); font-size: .7rem; transition: color .15s; }
 .sq-info-edit:hover { color: var(--blue); }
+.sq-info-edit-locked { cursor: not-allowed; opacity: .35; pointer-events: none; }
+.sq-info-edit-locked:hover { color: var(--text-3); }
 
 /* ── Observações ──────────────────────────────────────────── */
 .sq-obs-area {
