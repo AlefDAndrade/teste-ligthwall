@@ -18,6 +18,18 @@
   const ESTADO_LABEL = { okay: 'Okay', baixou: 'Vazou' };
   const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)' };
 
+  // Total de vazamentos de UMA bateria/linha — soma os 2 lados (esquerdo +
+  // direito) de todo berço marcado como 'baixou'. Usada tanto na coluna
+  // nova da tabela quanto no resumo do Modo Visual e do popover — 1 lugar
+  // só pra não recontar diferente em cada visualização.
+  function _contarVazamentos(linha) {
+    return (linha.bercos || []).reduce((soma, b) => {
+      if (b.estado_esquerda === 'baixou') soma++;
+      if (b.estado_direita  === 'baixou') soma++;
+      return soma;
+    }, 0);
+  }
+
   let _cache = [];
   let _modoVisual = false; // false = tabela (padrão), true = grade colorida por bateria
 
@@ -40,7 +52,7 @@
     const sub  = document.getElementById('relatorio-bercos-thead-sub');
     if (!topo || !sub || topo.childElementCount) return; // já construído
 
-    let topoHtml = '<th rowspan="2">Data</th><th rowspan="2">Montagem</th>';
+    let topoHtml = '<th rowspan="2">Data</th><th rowspan="2">Montagem</th><th rowspan="2">Vazamentos</th>';
     let subHtml  = '';
     for (let i = 1; i <= MAX_BERCOS; i++) {
       const grupo = _grupoBerco(i);
@@ -87,7 +99,7 @@
     const tbody = document.getElementById('relatorio-bercos-tbody');
     if (!tbody) return;
 
-    const colspanTotal = 2 + MAX_BERCOS * 2;
+    const colspanTotal = 3 + MAX_BERCOS * 2; // Data + Montagem + Vazamentos + (E/D de cada berço)
     tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td></tr>`;
 
     _construirThead();
@@ -111,13 +123,17 @@
     // data-id-operacao identifica a linha pro popover de hover/toque (ver
     // _ligarPopoverLinhas, mais abaixo) — sem isso não dá pra saber, a
     // partir do <tr>, qual item de _cache mostrar na grade completa.
-    tbody.innerHTML = linhas.slice().reverse().map(l => `
+    tbody.innerHTML = linhas.slice().reverse().map(l => {
+      const vaz = _contarVazamentos(l);
+      return `
       <tr data-id-operacao="${l.id_operacao}">
         <td class="mono" title="${l.turno || ''}">${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
         <td>${l.tipo_montagem || '—'}</td>
+        <td class="mono" style="text-align:center;font-weight:700;color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'}">${vaz}</td>
         ${_linhaBercos(l)}
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     // Modo Visual é montado JUNTO (mesmo dado, mesma ordem) mesmo se não
     // estiver visível agora — assim, alternar o botão "🎨 Modo Visual" só
@@ -138,15 +154,19 @@
       return;
     }
 
-    container.innerHTML = linhas.slice().reverse().map(l => `
+    container.innerHTML = linhas.slice().reverse().map(l => {
+      const vaz = _contarVazamentos(l);
+      return `
       <div class="card mb-3" style="padding:14px 18px">
         <div class="ba-resumo">
           <strong>Bateria ${LW.escaparHtml(String(l.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(l.tipo_montagem || '—'))}
           ${l.data ? ` — ${l.data.split('-').reverse().join('/')}${l.turno ? ' · ' + LW.escaparHtml(String(l.turno)) : ''}` : ''}
+          — <span style="color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'};font-weight:700">${vaz} vazamento${vaz === 1 ? '' : 's'}</span>
         </div>
         ${_montarGradeBercos(l)}
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   // Só alterna o que já está montado (ver render()/_renderVisual, acima) —
@@ -235,10 +255,12 @@
 
   function _montarConteudoPopover(linha) {
     const totalBercos = (linha.bercos || []).length;
+    const vaz = _contarVazamentos(linha);
     const resumo = `
       <div class="ba-resumo">
         <strong>Bateria ${LW.escaparHtml(String(linha.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(linha.tipo_montagem || '—'))}
         ${totalBercos ? ` — ${totalBercos} berços` : ''}
+        — <span style="color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'};font-weight:700">${vaz} vazamento${vaz === 1 ? '' : 's'}</span>
       </div>`;
     const grid = _montarGradeBercos(linha);
     const legenda = `<div class="ba-dica">🔴 Indicador vermelho = vazou · em cima = lado direito, embaixo = lado esquerdo</div>`;
