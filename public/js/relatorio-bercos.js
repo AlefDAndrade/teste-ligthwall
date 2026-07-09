@@ -18,7 +18,31 @@
   const ESTADO_LABEL = { okay: 'Okay', baixou: 'Vazou' };
   const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)' };
 
+  // Total de vazamentos de UMA bateria/linha — soma os 2 lados (esquerdo +
+  // direito) de todo berço marcado como 'baixou'. Usada tanto na coluna
+  // nova da tabela quanto no resumo do Modo Visual e do popover — 1 lugar
+  // só pra não recontar diferente em cada visualização.
+  function _contarVazamentos(linha) {
+    return (linha.bercos || []).reduce((soma, b) => {
+      if (b.estado_esquerda === 'baixou') soma++;
+      if (b.estado_direita  === 'baixou') soma++;
+      return soma;
+    }, 0);
+  }
+
   let _cache = [];
+  let _modoVisual = false; // false = tabela (padrão), true = grade colorida por bateria
+
+  // Alterna 2 classes por Bx (B1/B3/B5... vs B2/B4/B6...) — cada berço
+  // ocupa 2 colunas (E/D) inteiras nesta cor, pra ficar fácil ver de
+  // relance onde um berço termina e o próximo começa (ver .rb-grupo-a/
+  // .rb-grupo-b em styles.css). Uma função só, usada tanto no cabeçalho
+  // (_construirThead) quanto no corpo (_linhaBercos), pra garantir que as
+  // duas linhas do cabeçalho E o corpo sempre concordem em qual berço é
+  // "A" e qual é "B".
+  function _grupoBerco(i) {
+    return i % 2 === 1 ? 'rb-grupo-a' : 'rb-grupo-b';
+  }
 
   // Monta o cabeçalho de 2 linhas (Bx em cima com colspan=2, E/D embaixo)
   // uma única vez — refazer isso em toda renderização não muda nada (o
@@ -28,11 +52,12 @@
     const sub  = document.getElementById('relatorio-bercos-thead-sub');
     if (!topo || !sub || topo.childElementCount) return; // já construído
 
-    let topoHtml = '<th rowspan="2">Tipo de bateria</th><th rowspan="2">Montagem</th>';
+    let topoHtml = '<th rowspan="2">Data</th><th rowspan="2">Montagem</th><th rowspan="2">Vazamentos</th>';
     let subHtml  = '';
     for (let i = 1; i <= MAX_BERCOS; i++) {
-      topoHtml += `<th colspan="2">B${i}</th>`;
-      subHtml  += `<th class="rb-sub">E</th><th class="rb-sub">D</th>`;
+      const grupo = _grupoBerco(i);
+      topoHtml += `<th colspan="2" class="${grupo}">B${i}</th>`;
+      subHtml  += `<th class="rb-sub ${grupo}">E</th><th class="rb-sub ${grupo}">D</th>`;
     }
     topo.innerHTML = topoHtml;
     sub.innerHTML  = subHtml;
@@ -41,10 +66,10 @@
   // 'estado' aqui já chega sempre preenchido ('okay' por padrão — ver
   // criarBercosVisuaisIniciais, db.js); o "—" só aparece quando o berço
   // nem existe nesta bateria (ver _linhaBercos, abaixo).
-  function _celulaEstado(estado) {
+  function _celulaEstado(estado, grupo) {
     const label = ESTADO_LABEL[estado];
-    if (!label) return '<td class="rb-vazio">—</td>';
-    return `<td style="color:${ESTADO_COR[estado] || 'var(--text-2)'};font-weight:600">${label}</td>`;
+    if (!label) return `<td class="rb-vazio ${grupo}">—</td>`;
+    return `<td class="${grupo}" style="color:${ESTADO_COR[estado] || 'var(--text-2)'};font-weight:600">${label}</td>`;
   }
 
   // Monta as 44 (MAX_BERCOS × 2) células de berços de UMA linha/bateria.
@@ -52,12 +77,13 @@
     const porOrdem = new Map((linha.bercos || []).map(b => [b.ordem, b]));
     let html = '';
     for (let i = 1; i <= MAX_BERCOS; i++) {
+      const grupo = _grupoBerco(i);
       const b = porOrdem.get(i);
       if (!b) {
-        html += '<td class="rb-vazio">—</td><td class="rb-vazio">—</td>';
+        html += `<td class="rb-vazio ${grupo}">—</td><td class="rb-vazio ${grupo}">—</td>`;
         continue;
       }
-      html += _celulaEstado(b.estado_esquerda) + _celulaEstado(b.estado_direita);
+      html += _celulaEstado(b.estado_esquerda, grupo) + _celulaEstado(b.estado_direita, grupo);
     }
     return html;
   }
@@ -73,7 +99,7 @@
     const tbody = document.getElementById('relatorio-bercos-tbody');
     if (!tbody) return;
 
-    const colspanTotal = 2 + MAX_BERCOS * 2;
+    const colspanTotal = 3 + MAX_BERCOS * 2; // Data + Montagem + Vazamentos + (E/D de cada berço)
     tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td></tr>`;
 
     _construirThead();
@@ -89,6 +115,7 @@
 
     if (!linhas.length) {
       tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro no período.</td></tr>`;
+      _renderVisual(linhas);
       return;
     }
 
@@ -96,13 +123,110 @@
     // data-id-operacao identifica a linha pro popover de hover/toque (ver
     // _ligarPopoverLinhas, mais abaixo) — sem isso não dá pra saber, a
     // partir do <tr>, qual item de _cache mostrar na grade completa.
-    tbody.innerHTML = linhas.slice().reverse().map(l => `
+    tbody.innerHTML = linhas.slice().reverse().map(l => {
+      const vaz = _contarVazamentos(l);
+      return `
       <tr data-id-operacao="${l.id_operacao}">
-        <td class="mono" title="${l.data ? l.data.split('-').reverse().join('/') + (l.turno ? ' — ' + l.turno : '') : ''}">${l.id_bateria || '—'}</td>
+        <td class="mono" title="${l.turno || ''}">${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
         <td>${l.tipo_montagem || '—'}</td>
+        <td class="mono" style="text-align:center;font-weight:700;color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'}">${vaz}</td>
         ${_linhaBercos(l)}
       </tr>
-    `).join('');
+    `;
+    }).join('');
+
+    // Modo Visual é montado JUNTO (mesmo dado, mesma ordem) mesmo se não
+    // estiver visível agora — assim, alternar o botão "🎨 Modo Visual" só
+    // troca um display:none/'', instantâneo, sem precisar buscar os dados
+    // de novo nem esperar nada.
+    _renderVisual(linhas);
+  }
+
+  // Monta 1 card por bateria — resumo (mesmo formato do popover) + grade
+  // colorida (_montarGradeBercos) — pro Modo Visual. Mesma ordem "mais
+  // recente primeiro" da tabela.
+  function _renderVisual(linhas) {
+    const container = document.getElementById('relatorio-bercos-visual');
+    if (!container) return;
+
+    if (!linhas.length) {
+      container.innerHTML = `<div class="card" style="padding:30px;text-align:center;color:var(--text-3)">Nenhum registro no período.</div>`;
+      return;
+    }
+
+    container.innerHTML = linhas.slice().reverse().map(l => {
+      const vaz = _contarVazamentos(l);
+      return `
+      <div class="card mb-3" style="padding:14px 18px">
+        <div class="ba-resumo">
+          <strong>Bateria ${LW.escaparHtml(String(l.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(l.tipo_montagem || '—'))}
+          ${l.data ? ` — ${l.data.split('-').reverse().join('/')}${l.turno ? ' · ' + LW.escaparHtml(String(l.turno)) : ''}` : ''}
+          — <span style="color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'};font-weight:700">${vaz} vazamento${vaz === 1 ? '' : 's'}</span>
+        </div>
+        ${_montarGradeBercos(l)}
+      </div>
+    `;
+    }).join('');
+  }
+
+  // Só alterna o que já está montado (ver render()/_renderVisual, acima) —
+  // nenhuma busca nova, nenhum re-render, troca instantânea.
+  function _aplicarModoVisual() {
+    const tableWrap = document.querySelector('#page-relatorio-bercos .table-wrap');
+    const visual    = document.getElementById('relatorio-bercos-visual');
+    if (tableWrap) tableWrap.style.display = _modoVisual ? 'none' : '';
+    if (visual)    visual.style.display    = _modoVisual ? '' : 'none';
+    const btn = document.getElementById('btn-rb-modo-visual');
+    if (btn) btn.classList.toggle('btn-primary', _modoVisual);
+  }
+
+  // ── Cor por tipo de montagem de um berço ────────────────────────────────
+  // Mesmo critério de "Bateria Atual" (ver bateria-atual.js, _baCorPorTipo/
+  // _baTiposPorBerco): Montagem Personalizada guarda o CÓDIGO do tipo por
+  // berço (bercos_personalizados, 1 posição por berço — ver db.
+  // relatorioBercos()), resolvido por LW.corPorTipoSimples; qualquer outro
+  // tipo (simples ou híbrido) é uniforme pra bateria inteira — todo berço
+  // usa o mesmo LABEL (linha.tipo_montagem), resolvido por
+  // LW.corMontagemPorLabel (que já sabe montar o gradiente 50/50 de
+  // híbridos). Sem tipo definido (personalizada com berço ainda vazio, ou
+  // tipo_montagem ausente) -> null, célula cai no cinza neutro de sempre.
+  function _tipoDoBerco(linha, ordem) {
+    if (linha.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+      const grade = Array.isArray(linha.bercos_personalizados) ? linha.bercos_personalizados : [];
+      return grade[ordem - 1] || null;
+    }
+    return linha.tipo_montagem || null;
+  }
+
+  function _corDoBerco(linha, ordem) {
+    const tipo = _tipoDoBerco(linha, ordem);
+    if (!tipo) return null;
+    return linha.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+      ? LW.corPorTipoSimples(tipo)
+      : LW.corMontagemPorLabel(tipo);
+  }
+
+  // Monta a grade (.ba-grid) de UMA bateria/linha — reaproveitada tanto
+  // pelo popover de hover/toque (tabela) quanto pelo Modo Visual (grade
+  // completa sempre visível, ver _renderVisual). Colorida por tipo de
+  // montagem (_corDoBerco, acima); célula sem cor cai no cinza neutro de
+  // sempre — nenhuma das duas visualizações perde a marcação de vazamento
+  // (.ba-dot-marcado), que continua sendo SEMPRE no indicador, não na
+  // célula (2 lados independentes por berço).
+  function _montarGradeBercos(linha) {
+    const bercosOrdenados = (linha.bercos || []).slice().sort((a, b) => a.ordem - b.ordem);
+    return `<div class="ba-grid">${bercosOrdenados.map(b => {
+      const dirMarcado = b.estado_direita === 'baixou';
+      const esqMarcado = b.estado_esquerda === 'baixou';
+      const numero = String(b.ordem).padStart(2, '0');
+      const cor = _corDoBerco(linha, b.ordem);
+      return `
+        <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
+          <span class="ba-numero">B${numero}</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
+        </div>`;
+    }).join('')}</div>`;
   }
 
   // ── Hover/toque: grade completa do berço, estilo "Bateria Atual" ────────
@@ -130,24 +254,15 @@
   }
 
   function _montarConteudoPopover(linha) {
-    const bercosOrdenados = (linha.bercos || []).slice().sort((a, b) => a.ordem - b.ordem);
+    const totalBercos = (linha.bercos || []).length;
+    const vaz = _contarVazamentos(linha);
     const resumo = `
       <div class="ba-resumo">
         <strong>Bateria ${LW.escaparHtml(String(linha.id_bateria ?? '—'))}</strong> — ${LW.escaparHtml(String(linha.tipo_montagem || '—'))}
-        ${bercosOrdenados.length ? ` — ${bercosOrdenados.length} berços` : ''}
+        ${totalBercos ? ` — ${totalBercos} berços` : ''}
+        — <span style="color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'};font-weight:700">${vaz} vazamento${vaz === 1 ? '' : 's'}</span>
       </div>`;
-    const grid = `<div class="ba-grid">${bercosOrdenados.map(b => {
-      const dirMarcado = b.estado_direita === 'baixou';
-      const esqMarcado = b.estado_esquerda === 'baixou';
-      const algumMarcado = dirMarcado || esqMarcado;
-      const numero = String(b.ordem).padStart(2, '0');
-      return `
-        <div class="ba-celula" style="background:var(--bg-2);color:var(--text-2);border:1px solid var(--border)">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
-          <span class="ba-numero">B${numero}${algumMarcado ? ' ⚠️' : ''}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
-        </div>`;
-    }).join('')}</div>`;
+    const grid = _montarGradeBercos(linha);
     const legenda = `<div class="ba-dica">🔴 Indicador vermelho = vazou · em cima = lado direito, embaixo = lado esquerdo</div>`;
     return resumo + grid + legenda;
   }
@@ -261,6 +376,10 @@
       if (ini) ini.value = '';
       if (fim) fim.value = '';
       render();
+    });
+    document.getElementById('btn-rb-modo-visual')?.addEventListener('click', () => {
+      _modoVisual = !_modoVisual;
+      _aplicarModoVisual();
     });
 
     render().then(_ligarPopoverLinhas);

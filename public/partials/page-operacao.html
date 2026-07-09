@@ -106,7 +106,16 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Dimensão (Tipo)</label>
-                <input class="form-input auto-filled" id="op-dimensao" readonly placeholder="Definido pela bateria">
+                <div style="display:flex;gap:6px;align-items:stretch">
+                  <input class="form-input auto-filled" id="op-dimensao" readonly
+                    inputmode="decimal"
+                    placeholder="Definido pela bateria" style="flex:1;min-width:0">
+                  <button type="button" id="btn-editar-dimensao"
+                    onmousedown="event.preventDefault()"
+                    style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
+                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica pra esta operação"
+                    onclick="LWOp.editarDimensao()">✏️</button>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Capacidade (Berços)</label>

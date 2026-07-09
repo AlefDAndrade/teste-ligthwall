@@ -6,6 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Injeção — Lightwall SC</title>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- CSS do Setor de Qualidade — antes só carregado dentro do iframe
+       próprio (setor-qualidade-app.html); agora que a tela roda como
+       mais uma página do app, entra aqui igual a qualquer outra. -->
+  <link rel="stylesheet" href="css/setor-qualidade.css">
+  <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
+       resto do app não usa nenhum ícone fas/far); antes só era carregado
+       dentro do iframe próprio. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -36,11 +44,16 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- html2canvas/jspdf — usados só pelo "Exportar PDF" do Setor de
+       Qualidade; antes só carregados dentro do iframe próprio. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
+  <script src="js/setor-qualidade.js"></script>
   <script src="js/app-core.js"></script>
 <!-- INCLUDE:modal-editar-operacao.html -->
 <!-- INCLUDE:modal-editar-traco.html -->
@@ -62,6 +75,7 @@
   <script src="js/bateria-atual.js"></script>
   <script src="js/keyboard-shortcuts.js"></script>
   <script src="js/tour.js"></script>
+  <script src="js/abrir-nova-aba.js"></script>
 </body>
 
 </html>

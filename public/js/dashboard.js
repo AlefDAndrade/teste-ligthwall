@@ -79,6 +79,7 @@
     document.getElementById('turnos-data-fim').value = today;
 
     document.getElementById('btn-turnos-filtrar').addEventListener('click', renderTurnos);
+    document.getElementById('btn-turnos-exportar')?.addEventListener('click', exportarTurnosInterativo);
     renderTurnos();
   }
 
@@ -134,6 +135,168 @@
     el.innerHTML = items.map(i =>
       `<div class="insight-item"><span>${i.icon}</span><span>${i.text}</span></div>`
     ).join('');
+  }
+
+  // ── Exportar Dashboard Interativo (HTML standalone) ─────────────────────
+  // Retrato FIXO do que está na tela no momento do clique — busca o
+  // histórico já filtrado pelo mesmo período ativo nos campos
+  // #turnos-data-inicio/#turnos-data-fim, não mais o histórico inteiro
+  // com uma UI de filtro pra reaplicar depois.
+  async function exportarTurnosInterativo() {
+    const btn = document.getElementById('btn-turnos-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const inicio = document.getElementById('turnos-data-inicio')?.value || '';
+      const fim = document.getElementById('turnos-data-fim')?.value || '';
+      const s = await LW.getStats({ dataInicio: inicio, dataFim: fim });
+      const descricaoPeriodo = (inicio || fim)
+        ? (inicio ? new Date(inicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+        : 'Todos os registros';
+      const html = _gerarHtmlTurnosStandalone(s.data, descricaoPeriodo);
+      LW.baixarArquivoTexto(
+        `desempenho_turnos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo (Turnos):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  function _gerarHtmlTurnosStandalone(dataArray, descricaoPeriodo) {
+    const dadosJson = JSON.stringify(dataArray).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desempenho por Turnos — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  .turno-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px; }
+  .turno-card h3 { margin:0 0 10px; font-size:.9rem; }
+  .turno-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px; }
+  .turno-sub-label { font-size:.68rem; text-transform:uppercase; color:var(--text-3); }
+  .turno-sub-value { font-size:1.3rem; font-weight:700; color:var(--text); }
+  canvas { width:100%; height:200px; display:block; }
+</style>
+</head>
+<body>
+  <h1>📊 Desempenho por Turnos</h1>
+  <div class="sub" id="exp-sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  <div class="filtro-aplicado">📅 Filtro aplicado: <b>${LW.escaparHtml(descricaoPeriodo)}</b></div>
+
+  <div style="display:flex;gap:20px;font-size:.85rem;align-items:center;margin-bottom:20px">
+    <div>🏆 Mais eficiente: <strong class="accent" id="melhor-turno">—</strong></div>
+    <div>🐢 Menos eficiente: <strong id="pior-turno">—</strong></div>
+  </div>
+
+  <div class="turno-grid">
+    ${['1','2','3'].map(n => `
+    <div class="turno-card">
+      <h3>${n}º Turno</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div class="turno-sub-label">Baterias</div><div class="turno-sub-value" id="t${n}-baterias">—</div></div>
+        <div><div class="turno-sub-label">m² Prod.</div><div class="turno-sub-value" id="t${n}-m2">—</div></div>
+        <div><div class="turno-sub-label">Painéis</div><div class="turno-sub-value" id="t${n}-paineis">—</div></div>
+        <div><div class="turno-sub-label">% Atraso</div><div class="turno-sub-value red" id="t${n}-atraso">—</div></div>
+        <div><div class="turno-sub-label">Tempo Médio</div><div style="font-family:var(--font-mono);font-size:.85rem" id="t${n}-tempo">—</div></div>
+        <div><div class="turno-sub-label">2/P / S/P</div><div style="font-size:.8rem"><span id="t${n}-2p">—</span> / <span id="t${n}-sp">—</span></div></div>
+      </div>
+    </div>`).join('')}
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-box"><h4>m² por Turno</h4><canvas id="chart-turnos-m2"></canvas></div>
+    <div class="chart-box"><h4>Atrasos por Turno</h4><canvas id="chart-turnos-atraso"></canvas></div>
+  </div>
+
+  <div class="summary-box"><strong>Insights</strong><div id="turnos-insights" style="margin-top:8px"></div></div>
+  <div class="rodape">Exportado de Desempenho por Turnos — Lightwall SC · retrato do filtro aplicado no momento da exportação, dados embutidos neste arquivo, funciona offline.</div>
+
+<script>
+(function () {
+  'use strict';
+  const DADOS = ${dadosJson};
+
+  function formatDuration(minutes) {
+    if (!minutes || isNaN(minutes)) return '—';
+    const totalSegundos = Math.round(minutes * 60);
+    const h = Math.floor(totalSegundos / 3600);
+    const m = Math.floor((totalSegundos % 3600) / 60);
+    const s = totalSegundos % 60;
+    return \`\${h}:\${String(m).padStart(2, '0')}:\${String(s).padStart(2, '0')}\`;
+  }
+
+  ${somarPorTipo}
+  ${drawBarChart}
+
+  function calcularPorTurno(data) {
+    const por_turno = {};
+    ['1º TURNO', '2º TURNO', '3º TURNO'].forEach(t => {
+      const td = data.filter(b => b.turno === t);
+      const paineisPorTipoTurno = somarPorTipo(td, 'paineis_por_tipo');
+      const m2PorTipoTurno = somarPorTipo(td, 'm2_por_tipo');
+      por_turno[t] = {
+        total: td.length,
+        atraso: td.filter(b => b.houve_atraso === 'SIM').length,
+        m2: td.reduce((s, b) => s + (b.m2_total || 0), 0),
+        tempo_medio: td.length ? td.reduce((s, b) => s + (b.tempo_min || 0), 0) / td.length : 0,
+        paineis: td.reduce((s, b) => s + (b.total_paineis || 0), 0),
+        paineis_2p: paineisPorTipoTurno['2p'] || 0,
+        paineis_sp: paineisPorTipoTurno['sp'] || 0,
+      };
+    });
+    return por_turno;
+  }
+
+  function render() {
+    const por_turno = calcularPorTurno(DADOS);
+
+    const turnos = ['1º TURNO', '2º TURNO', '3º TURNO'];
+    const ids = ['t1', 't2', 't3'];
+    turnos.forEach((t, i) => {
+      const td = por_turno[t];
+      const id = ids[i];
+      document.getElementById(\`\${id}-baterias\`).textContent = td.total;
+      document.getElementById(\`\${id}-paineis\`).textContent = td.paineis.toLocaleString('pt-BR');
+      document.getElementById(\`\${id}-m2\`).textContent = td.m2.toFixed(0) + ' m²';
+      document.getElementById(\`\${id}-atraso\`).textContent = td.total ? Math.round(td.atraso / td.total * 100) + '%' : '—';
+      document.getElementById(\`\${id}-tempo\`).textContent = formatDuration(td.tempo_medio);
+      document.getElementById(\`\${id}-2p\`).textContent = td.paineis_2p.toLocaleString('pt-BR');
+      document.getElementById(\`\${id}-sp\`).textContent = td.paineis_sp.toLocaleString('pt-BR');
+    });
+
+    const byM2 = turnos.map(t => ({ t, m2: por_turno[t].m2 })).filter(x => x.m2 > 0);
+    if (byM2.length) {
+      byM2.sort((a, b) => b.m2 - a.m2);
+      document.getElementById('melhor-turno').textContent = byM2[0].t;
+      document.getElementById('pior-turno').textContent = byM2[byM2.length - 1].t;
+    }
+
+    drawBarChart('chart-turnos-m2', turnos.map(t => t.replace('º TURNO', '')), turnos.map(t => por_turno[t].m2), '#3b82f6');
+    drawBarChart('chart-turnos-atraso', turnos.map(t => t.replace('º TURNO', '')), turnos.map(t => por_turno[t].atraso), '#ef4444');
+
+    const el = document.getElementById('turnos-insights');
+    const items = [];
+    if (byM2.length) items.push({ icon: '🏆', text: \`Turno mais produtivo: \${byM2[0].t} com \${byM2[0].m2.toFixed(0)} m²\` });
+    turnos.forEach(t => {
+      const td = por_turno[t];
+      if (td.total > 0 && td.atraso / td.total > 0.3) {
+        items.push({ icon: '⚠️', text: \`\${t}: alta taxa de atraso (\${Math.round(td.atraso / td.total * 100)}%)\` });
+      }
+    });
+    if (!items.length) items.push({ icon: '✅', text: 'Desempenho equilibrado entre os turnos no período.' });
+    el.innerHTML = items.map(i => \`<div style="display:flex;gap:8px;padding:4px 0"><span>\${i.icon}</span><span>\${i.text}</span></div>\`).join('');
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>`;
   }
 
   // ---- Registro de Baterias (table) ----
@@ -1611,6 +1774,17 @@
       usos.forEach((op, idx) => {
         const limpa = v => (v === '—' ? '' : v); // _valRel devolve '—' pra vazio — fica '' na planilha
         const tempoTotal = limpa(_valRel(l.tempo_batida, 'tempo_batida'));
+        // Insumo (cimento/água/EPS/superplast/incorporador) é do TRAÇO
+        // inteiro, não de cada uso — mas a exportação gera 1 LINHA POR USO
+        // (ver comentário da função, acima), e repetia o mesmo total de
+        // insumo em toda linha do mesmo traço reaproveitado. Numa planilha,
+        // somar essa coluna contava o mesmo insumo 2x, 3x... (uma vez por
+        // uso) — o insumo em si só foi gasto UMA vez, na 1ª mistura. A
+        // partir do 2º uso (idx > 0), exporta "Reciclado" no lugar do
+        // número: fica claro pra quem lê que aquele insumo já está
+        // contado na linha do 1º uso deste traço, e um SOMA() na coluna
+        // ignora texto, então a soma bate certo sozinha.
+        const valorOuReciclado = v => (idx > 0 ? 'Reciclado' : limpa(v));
         out.push({
           data: l.data,
           id_bateria: op.id_bateria || '',
@@ -1623,11 +1797,11 @@
           densidade_eps: l.densidade_eps ?? '',
           expansao: l.expansao ?? '',
           silo: l.silo ?? '',
-          cimento: limpa(_valRel(l.cimento_real)),
-          agua: limpa(_valRel(l.agua_real)),
-          eps: limpa(_valRel(l.eps_real)),
-          superplast: limpa(_valRel(l.superplast_real)),
-          incorporador: limpa(_valRel(l.incorporador_real)),
+          cimento: valorOuReciclado(_valRel(l.cimento_real)),
+          agua: valorOuReciclado(_valRel(l.agua_real)),
+          eps: valorOuReciclado(_valRel(l.eps_real)),
+          superplast: valorOuReciclado(_valRel(l.superplast_real)),
+          incorporador: valorOuReciclado(_valRel(l.incorporador_real)),
           tempo_batida_seg: tempoTotal,
           obs: (op.obs !== undefined ? op.obs : l.obs) || '',
         });
@@ -1907,6 +2081,7 @@
   // ---- Public ----
   window.LWDash = {
     initTurnos, initRegistro, initRelatorio, renderRelatorio,
+    exportarTurnosInterativo,
     navegarParaTracosDoRegistro,
     toggleModoEdicaoRegistro,
     toggleModoFocoRegistro,

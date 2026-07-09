@@ -45,6 +45,22 @@
       'Analista': ['operacao'],
     };
 
+    // Restaura, depois de um F5, a última página que a pessoa estava
+    // vendo nesta aba (ver showPage, que grava sessionStorage a cada
+    // navegação) — sem isso, todo refresh jogava de volta pro Menu,
+    // mesmo no meio de um relatório/dashboard. Só chamada pros perfis que
+    // não têm uma tela fixa de boot (Analista/Administrador — Operador
+    // sempre volta pra Operação de propósito, ver comentário mais abaixo).
+    function _restaurarUltimaPagina() {
+      let pagina = null;
+      try { pagina = sessionStorage.getItem('lw_ultima_pagina'); } catch (e) { /* sessionStorage indisponível — sem restauração, sem quebrar o boot */ }
+      if (!pagina || pagina === 'menu') return; // já é o padrão (nenhum showPage() extra necessário)
+      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[sessionStorage.getItem('lw_role')] || [];
+      if (bloqueadas.includes(pagina)) return;
+      if (!document.getElementById('page-' + pagina)) return; // versão salva antiga/página que não existe mais
+      showPage(pagina);
+    }
+
     // ---- Indicador global de operações pendentes (registro offline) ----
     function _atualizarIndicadorFilaPendentes(n) {
       const el = document.getElementById('topbar-fila-pendentes');
@@ -72,6 +88,12 @@
       const role = sessionStorage.getItem('lw_role');
       const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
       if (bloqueadas.includes(pageId)) return;
+
+      // Lembra a página atual pra restaurar depois de um F5 (ver
+      // _restaurarUltimaPagina, chamada no boot) — sessionStorage, não
+      // localStorage: é só "continuar de onde parei nesta aba", não uma
+      // preferência que deveria seguir pra outras abas/sessões futuras.
+      try { sessionStorage.setItem('lw_ultima_pagina', pageId); } catch (e) { /* sessionStorage indisponível (modo privado etc.) — sem persistência, sem quebrar a navegação */ }
 
       // Log de acesso: registra só "Registrar Operação" por enquanto — é a
       // base pra, no futuro, restringir essa tela a um único computador.
@@ -164,6 +186,18 @@
       // páginas aqui que mostram sempre a mesma visão geral.
       if (pageId === 'analise-focada') {
         LWFocada.init();
+      }
+      // Setor de Qualidade — até pouco tempo rodava num <iframe> à parte
+      // (setor-qualidade-app.html), que carregava e chamava SQ.init()
+      // sozinho assim que o app subia, independente de qual página
+      // estivesse ativa (o iframe nunca saía do DOM, só ficava escondido
+      // por trás de .main{display:none}). Agora que é uma página normal
+      // (ver public/partials/page-setor-qualidade.html), reproduz o
+      // mesmo timing "só uma vez, na 1ª vez que abre" — mesmo padrão de
+      // guarda usado por todas as outras páginas aqui.
+      if (pageId === 'setor-qualidade' && !window._sqInit) {
+        window._sqInit = true;
+        SQ.init();
       }
 
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
@@ -270,6 +304,90 @@
       _aplicarTema(TEMAS.find(t => t.id === temaSalvo) ? temaSalvo : 'lightwall');
     })();
 
+    // ── "Dados SQL foram excluídos em outro dispositivo/aba" ────────────
+    // Registrada em LW.aoReceberDadosSqlExcluidos (ver DOMContentLoaded,
+    // abaixo) — dispara em QUALQUER página do app, não só quem está com
+    // Configurações → Dados SQL aberta, porque a exclusão pode ter
+    // afetado dados que aparecem em dashboards/relatórios que essa pessoa
+    // esteja vendo agora.
+    //
+    // EXCEÇÃO: se houver uma operação REALMENTE em andamento (cronômetro
+    // rodando — ver LWOp.operacaoEmAndamento, operacao.js) nesta aba, um
+    // modal travando a tela + reload forçado atrapalharia quem está no
+    // meio de registrar os traços — a exclusão quase sempre não tem nada
+    // a ver com a operação dela. Nesse caso, só um toast discreto (não
+    // bloqueia nada) avisa que existe uma atualização pendente; o reload
+    // de verdade só acontece depois que a operação parar de estar
+    // "running" (ver _agendarVerificacaoPosOperacao, abaixo) — os dados
+    // da própria operação não se perdem nesse meio-tempo: são
+    // sincronizados com o servidor (LW.getOperacaoAndamento), não só
+    // locais, então o reload adiado continua de onde parou normalmente.
+    let _sqlExcluidoPendente = null; // guarda a última msg recebida enquanto uma operação está rodando
+    let _sqlExcluidoVerificandoPendencia = false; // evita empilhar vários setInterval concorrentes
+
+    async function _aoReceberDadosSqlExcluidosDeOutroDispositivo(msg) {
+      const emAndamento = (typeof LWOp !== 'undefined' && typeof LWOp.operacaoEmAndamento === 'function')
+        ? LWOp.operacaoEmAndamento()
+        : false;
+
+      if (emAndamento) {
+        _sqlExcluidoPendente = msg;
+        _mostrarToastDadosSqlPendente(msg);
+        _agendarVerificacaoPosOperacao();
+        return;
+      }
+
+      await _confirmarEReceberDadosSqlExcluidos(msg);
+    }
+
+    // Modal de verdade (bloqueia até o OK) + reload — usado quando é
+    // seguro interromper na hora (nenhuma operação rodando nesta aba).
+    async function _confirmarEReceberDadosSqlExcluidos(msg) {
+      const nomeTabela = (msg && msg.tabela) || 'dados do sistema';
+      await LW.mostrarAlerta(
+        `Um administrador excluiu dados de "${nomeTabela}" nesta instalação (em outro dispositivo/aba). A página será recarregada agora para atualizar as informações.`,
+        { tipo: 'info', titulo: 'Dados atualizados' }
+      );
+      window.location.reload();
+    }
+
+    // Toast discreto (não-bloqueante, mesmo padrão de
+    // _mostrarToastSincronizacao acima) — só avisa, não interrompe quem
+    // está no meio de registrar uma operação.
+    function _mostrarToastDadosSqlPendente(msg) {
+      const nomeTabela = (msg && msg.tabela) || 'dados do sistema';
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:70px;right:24px;max-width:380px;z-index:1200;padding:14px 18px;border-radius:8px;font-size:.85rem;line-height:1.45;box-shadow:0 12px 32px rgba(0,0,0,.4);background:rgba(245,158,11,.15);border:1px solid var(--accent-dim);color:var(--accent);transition:opacity .3s';
+      el.textContent = `ℹ️ Um administrador excluiu dados de "${nomeTabela}" em outro dispositivo. A página será atualizada automaticamente assim que esta operação for finalizada.`;
+      document.body.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 350);
+      }, 8000);
+    }
+
+    // Fica checando (a cada 3s) se a operação desta aba já deixou de
+    // estar "running" — assim que isso acontecer, mostra o modal de
+    // verdade e recarrega. Só existe 1 verificação ativa por vez
+    // (_sqlExcluidoVerificandoPendencia evita duplicar o setInterval se
+    // chegar mais de um broadcast enquanto ainda está rodando).
+    function _agendarVerificacaoPosOperacao() {
+      if (_sqlExcluidoVerificandoPendencia) return;
+      _sqlExcluidoVerificandoPendencia = true;
+      const intervalo = setInterval(() => {
+        const aindaRodando = (typeof LWOp !== 'undefined' && typeof LWOp.operacaoEmAndamento === 'function')
+          ? LWOp.operacaoEmAndamento()
+          : false;
+        if (aindaRodando) return;
+
+        clearInterval(intervalo);
+        _sqlExcluidoVerificandoPendencia = false;
+        const msg = _sqlExcluidoPendente;
+        _sqlExcluidoPendente = null;
+        if (msg) _confirmarEReceberDadosSqlExcluidos(msg);
+      }, 3000);
+    }
+
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
       // Set date in topbar and op form
@@ -282,6 +400,17 @@
 
       // Init operation page
       LWOp.init();
+
+      // ---- "Dados SQL foram excluídos em outro dispositivo" ────────────
+      // Reusa o MESMO canal WebSocket que LWOp.init() acabou de abrir
+      // (aberto uma vez só, aqui no boot, independente de qual página
+      // está visível — ver conectarOperacaoAndamento, data.js) — só
+      // registra o callback à parte, porque esse evento não é específico
+      // da tela de Registrar Operação (ver aoReceberDadosSqlExcluidos,
+      // data.js). Dispara em QUALQUER página/aba/computador que esteja
+      // com o site aberto (exceto quem originou a exclusão, que já
+      // recarrega sozinho — ver cfgSqlExcluirLinha, mais abaixo).
+      LW.aoReceberDadosSqlExcluidos(_aoReceberDadosSqlExcluidosDeOutroDispositivo);
 
       // ---- Indicador global de operações pendentes (registro offline) ----
       // Fica visível em qualquer página, já que a sincronização pode
@@ -318,6 +447,7 @@
         // também sem acesso à Operação — só dashboards e relatórios.
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
+        _restaurarUltimaPagina();
 
       } else if (role === 'Administrador') {
         // Verifica se a autenticação admin foi concluída corretamente
@@ -332,6 +462,7 @@
         // Garante que itens admin e de operação estejam visíveis
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
+        _restaurarUltimaPagina();
       }
 
       const roleEl = document.getElementById('topbar-role');
@@ -543,6 +674,14 @@
       // (VALIDADORES_BACKUP_DADOS, em server.js).
       'bercos_visuais.json':       v => Array.isArray(v),
       'avaliacoes_qualidade.json': v => Array.isArray(v),
+      // Adicionado: sem isso, esta cópia (client-side) ficava desatualizada
+      // em relação a VALIDADORES_BACKUP_DADOS (server.js) — o navegador
+      // nunca lia "operacoes_avaliadas.json" de dentro do .zip nem mandava
+      // no payload pro servidor, que então recusava a restauração INTEIRA
+      // com "Backup incompleto — faltam: operacoes_avaliadas.json" (o
+      // servidor sempre exige todos os arquivos que ele mesmo valida,
+      // ver esperados/faltando em /restaurar-backup-dados).
+      'operacoes_avaliadas.json':  v => Array.isArray(v),
     };
 
     // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -559,6 +698,7 @@
       'ajustes_tracos.json': [],
       'bercos_visuais.json': [],
       'avaliacoes_qualidade.json': [],
+      'operacoes_avaliadas.json': [],
     };
 
     function parseArquivoRestaurar(nome, texto) {
@@ -619,15 +759,27 @@
       try {
         const zip = await JSZip.loadAsync(file);
         const esperados = Object.keys(RESTAURAR_VALIDACOES);
-        const faltando = esperados.filter(nome => !zip.file(nome));
+        // Mesma lista de opcionais do servidor (ver OPCIONAIS_BACKUP_DADOS,
+        // server.js) — um backup ANTIGO, de antes desses 3 arquivos
+        // existirem, é válido mesmo sem eles; sem esta lista, o próprio
+        // navegador já recusava o arquivo antes de chegar a enviar
+        // qualquer coisa pro servidor.
+        const OPCIONAIS = ['bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json'];
+        const obrigatorios = esperados.filter(n => !OPCIONAIS.includes(n));
+        const faltando = obrigatorios.filter(nome => !zip.file(nome));
         if (faltando.length) {
           mostrarErroRestaurar('Arquivo de backup incompleto — faltam: ' + faltando.join(', '));
           return;
         }
+        // Só os que realmente existem dentro deste .zip — um opcional
+        // ausente simplesmente não é lido nem mandado pro servidor (que
+        // por sua vez sabe que, faltando, é pra deixar aquela tabela como
+        // já está, sem mexer nela).
+        const presentes = esperados.filter(nome => !!zip.file(nome));
 
         const conteudos = {};
         const resumo = [];
-        for (const nome of esperados) {
+        for (const nome of presentes) {
           const texto = await zip.file(nome).async('string');
           let valor;
           try {
@@ -642,6 +794,12 @@
           }
           conteudos[nome] = texto;
           resumo.push(`• ${nome}: ${Array.isArray(valor) ? valor.length + ' registro(s)' : 'ok'}`);
+        }
+        // Avisa quais opcionais faltaram (backup mais antigo) — não bloqueia,
+        // só deixa claro que essas tabelas não vão ser tocadas pela restauração.
+        const opcionaisFaltando = OPCIONAIS.filter(n => !presentes.includes(n));
+        if (opcionaisFaltando.length) {
+          resumo.push(`<div style="margin-top:6px;color:var(--text-3)">⚠ Backup mais antigo — não tinha ainda: ${opcionaisFaltando.join(', ')} (essas tabelas não serão alteradas).</div>`);
         }
 
         _restaurarArquivos = conteudos;
@@ -1390,6 +1548,16 @@
         cimenticia: (opcao.cimenticia && typeof opcao.cimenticia === 'object')
           ? { leva: !!opcao.cimenticia.leva, quantidade: Number(opcao.cimenticia.quantidade) || 0 }
           : { leva: false, quantidade: 0 },
+        // Combinação de avaliação (Setor de Qualidade → Referência) —
+        // SÓ é lida aqui, nunca editada nesta tela (ver cfgRenderTudo:
+        // mostra um aviso quando vazia, mas não tem campo pra
+        // preencher). Precisa ser copiada pra UI e devolvida intacta em
+        // _montagemDaUIParaConfig (abaixo) — sem isso, abrir e salvar
+        // Configurações (por qualquer motivo, nem precisa mexer em
+        // Montagem) apagava silenciosamente toda combinação já definida.
+        combinacaoAvaliacao: (opcao.combinacaoAvaliacao && typeof opcao.combinacaoAvaliacao === 'object')
+          ? { forma: opcao.combinacaoAvaliacao.forma, corModificadora: opcao.combinacaoAvaliacao.corModificadora }
+          : null,
       };
     }
 
@@ -1411,6 +1579,11 @@
           leva: !!m.cimenticia?.leva,
           quantidade: m.cimenticia?.leva ? (m.cimenticia.quantidade || 0) : 0,
         },
+        // Ver comentário em _montagemDoConfigParaUI, acima — preserva o
+        // que já estava definido (ou null, se ainda não tiver sido).
+        combinacaoAvaliacao: (m.combinacaoAvaliacao && typeof m.combinacaoAvaliacao === 'object')
+          ? { forma: m.combinacaoAvaliacao.forma, corModificadora: m.combinacaoAvaliacao.corModificadora }
+          : null,
       };
       opcao[`paineis_${m.tipo}_por_berco`] = m.paineisPorBerco;
       return opcao;
@@ -1477,10 +1650,12 @@
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
+      const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
+      if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
@@ -1488,14 +1663,17 @@
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
+      const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'autorizados') cfgRenderAutorizados();
       if (secao === 'automacao') cfgRenderAutomacao();
+      if (secao === 'sql') cfgSqlAoAbrirSecao();
     }
 
     // ---- Automação (Configurações → Automação) ────────────────────────
@@ -1554,6 +1732,228 @@
       });
       // Se cancelar o modal de senha, o checkbox já foi revertido acima —
       // nada mais precisa acontecer.
+    }
+
+    // ---- Dados SQL (Configurações → Dados SQL) ─────────────────────────
+    // Consulta/exclusão manual de linha do SQLite, direto da tela de
+    // administração — ver TABELAS_SQL_ADMIN e as 3 rotas /admin/sql-*
+    // em server.js (a lista de tabelas permitidas vive SÓ lá; aqui é
+    // só exibição/interação com o que o servidor devolve).
+    let _cfgSqlTabelas = [];       // [{tabela, label, pk, linhas}, ...] — vem de GET /admin/sql-tabelas
+    let _cfgSqlDadosAtuais = null; // {tabela, pk, colunas, linhas} da tabela selecionada agora
+
+    // Chamado toda vez que a seção é mostrada (ver cfgMostrarSecao) — só
+    // busca a LISTA de tabelas (rápido); as linhas de uma tabela só são
+    // buscadas quando o usuário escolhe uma no <select> (cfgSqlCarregarLinhas).
+    async function cfgSqlAoAbrirSecao() {
+      const select = document.getElementById('cfg-sql-tabela');
+      const status = document.getElementById('cfg-sql-status');
+      if (!select) return;
+      const selecaoAnterior = select.value;
+      try {
+        const res = await fetch('/admin/sql-tabelas', { cache: 'no-store' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível carregar a lista de tabelas.');
+        _cfgSqlTabelas = json.tabelas;
+        select.innerHTML = '<option value="">Selecione uma tabela…</option>' +
+          _cfgSqlTabelas.map(t => `<option value="${t.tabela}">${t.label} (${t.linhas} linha${t.linhas === 1 ? '' : 's'})</option>`).join('');
+        if (selecaoAnterior && _cfgSqlTabelas.some(t => t.tabela === selecaoAnterior)) {
+          select.value = selecaoAnterior;
+          cfgSqlCarregarLinhas();
+        } else {
+          if (status) status.textContent = '';
+          document.getElementById('cfg-sql-thead').innerHTML = '';
+          document.getElementById('cfg-sql-tbody').innerHTML = '';
+          const btnLimpar = document.getElementById('cfg-sql-btn-limpar');
+          if (btnLimpar) btnLimpar.disabled = true;
+          _cfgSqlDadosAtuais = null;
+        }
+      } catch (e) {
+        if (status) status.textContent = '⚠ ' + e.message;
+      }
+    }
+
+    // Busca colunas + linhas da tabela escolhida no <select> e desenha a
+    // tabela HTML (via cfgSqlRenderLinhas, que também cuida do filtro de busca).
+    async function cfgSqlCarregarLinhas() {
+      const select = document.getElementById('cfg-sql-tabela');
+      const status = document.getElementById('cfg-sql-status');
+      const thead = document.getElementById('cfg-sql-thead');
+      const tbody = document.getElementById('cfg-sql-tbody');
+      const btnLimpar = document.getElementById('cfg-sql-btn-limpar');
+      const tabela = select?.value || '';
+
+      _cfgSqlDadosAtuais = null;
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+      if (btnLimpar) btnLimpar.disabled = !tabela;
+
+      if (!tabela) { if (status) status.textContent = ''; return; }
+
+      if (status) status.textContent = 'Carregando…';
+      try {
+        const res = await fetch('/admin/sql-linhas?tabela=' + encodeURIComponent(tabela), { cache: 'no-store' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível carregar as linhas desta tabela.');
+        _cfgSqlDadosAtuais = json;
+        cfgSqlRenderLinhas();
+      } catch (e) {
+        if (status) status.textContent = '⚠ ' + e.message;
+      }
+    }
+
+    // Redesenha a tabela HTML a partir de _cfgSqlDadosAtuais, aplicando o
+    // filtro de texto (busca simples: alguma coluna contém o termo,
+    // sem diferenciar maiúsculas/minúsculas) — chamado a cada tecla
+    // digitada em "Buscar nas linhas carregadas", sem ir ao servidor de
+    // novo (as linhas já estão carregadas no navegador).
+    function cfgSqlRenderLinhas() {
+      const status = document.getElementById('cfg-sql-status');
+      const thead = document.getElementById('cfg-sql-thead');
+      const tbody = document.getElementById('cfg-sql-tbody');
+      if (!_cfgSqlDadosAtuais) return;
+
+      const { tabela, pk, colunas, linhas, limite } = _cfgSqlDadosAtuais;
+      const termo = (document.getElementById('cfg-sql-busca')?.value || '').trim().toLowerCase();
+      const linhasFiltradas = termo
+        ? linhas.filter(linha => colunas.some(c => String(linha[c] ?? '').toLowerCase().includes(termo)))
+        : linhas;
+
+      thead.innerHTML = `<tr>${colunas.map(c => `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-3);font-weight:600;white-space:nowrap">${c}${c === pk ? ' 🔑' : ''}</th>`).join('')}<th style="padding:8px 10px;border-bottom:1px solid var(--border)"></th></tr>`;
+
+      tbody.innerHTML = linhasFiltradas.map(linha => `
+        <tr style="border-bottom:1px solid var(--border)">
+          ${colunas.map(c => {
+            let valor = linha[c];
+            if (valor === null || valor === undefined) valor = '';
+            valor = String(valor);
+            const truncado = valor.length > 80 ? valor.slice(0, 80) + '…' : valor;
+            return `<td style="padding:6px 10px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--text-2)" title="${valor.replace(/"/g, '&quot;')}">${truncado || '<span style="color:var(--text-3)">—</span>'}</td>`;
+          }).join('')}
+          <td style="padding:6px 10px;white-space:nowrap">
+            <button onclick='cfgSqlExcluirLinha(${JSON.stringify(tabela)}, ${JSON.stringify(String(linha[pk]))})'
+              style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem">✕ Excluir</button>
+          </td>
+        </tr>
+      `).join('') || `<tr><td colspan="${colunas.length + 1}" style="padding:14px;text-align:center;color:var(--text-3)">Nenhuma linha encontrada.</td></tr>`;
+
+      if (status) {
+        status.textContent = termo
+          ? `${linhasFiltradas.length} de ${linhas.length} linha(s) carregada(s)${linhas.length >= limite ? ' (mostrando só as ' + limite + ' mais recentes)' : ''}.`
+          : `${linhas.length} linha(s) carregada(s)${linhas.length >= limite ? ' — mostrando só as ' + limite + ' mais recentes' : ''}.`;
+      }
+    }
+
+    // Exclui UMA linha pelo valor da PK (coluna real, ver TABELAS_SQL_ADMIN
+    // no servidor) — pede confirmação normal e, por ser uma exclusão
+    // permanente e fora do fluxo comum de edição, pede a senha de
+    // Administrador DE NOVO (mesmo padrão de cfgToggleModoAutomatico, acima).
+    //
+    // "operacoes_avaliadas" é um caso especial: excluir uma linha aqui
+    // desfaz a avaliação de qualidade inteira daquela operação (apaga
+    // também avaliacoes_qualidade e avaliacao_paineis, no servidor — ver
+    // db.desfazerAvaliacaoOperacao) e a operação volta a aparecer na fila
+    // de avaliação pendente do Setor de Qualidade. O aviso de confirmação
+    // deixa isso explícito ANTES de excluir, pra não ser uma surpresa.
+    async function cfgSqlExcluirLinha(tabela, valorPk) {
+      const ehDesfazerAvaliacao = tabela === 'operacoes_avaliadas';
+      const mensagemConfirmacao = ehDesfazerAvaliacao
+        ? `Isto vai desfazer TODA a avaliação de qualidade da operação "${valorPk}" — a avaliação e os painéis vinculados também serão apagados, e a operação volta a aparecer como pendente na fila do Setor de Qualidade. Esta ação não pode ser desfeita. Continuar?`
+        : `Excluir permanentemente esta linha de "${tabela}"? Esta ação não pode ser desfeita.`;
+
+      const confirmou = await LW.mostrarConfirmacao(
+        mensagemConfirmacao,
+        { titulo: ehDesfazerAvaliacao ? 'Desfazer avaliação de qualidade' : 'Excluir linha do banco', textoConfirmar: 'Excluir', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/admin/sql-excluir-linha?wsClientId=' + encodeURIComponent(LW.OP_ANDAMENTO_CLIENT_ID), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tabela, valor: valorPk }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível excluir. Tente novamente.');
+
+          const mensagemSucesso = (ehDesfazerAvaliacao && json.cascata)
+            ? `Avaliação desfeita: ${json.cascata.avaliacoes_qualidade} avaliação(ões), ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. A operação volta pra fila de avaliação pendente. A página será recarregada.`
+            : 'Linha excluída com sucesso. A página será recarregada para atualizar todas as telas.';
+
+          // Recarrega a página inteira depois de excluir — mesmo motivo de
+          // cfgSalvar(), acima: várias telas (dashboards, relatórios,
+          // Registrar Operação etc.) carregam os dados UMA VEZ, na
+          // inicialização, e guardam em variáveis JS (ver data.js) — sem
+          // recarregar, o navegador continuaria mostrando a linha já
+          // apagada do banco até um F5 manual. Um reload garante que TODO
+          // o site passe a refletir a exclusão, não só a própria aba.
+          await LW.mostrarAlerta(mensagemSucesso, { tipo: 'sucesso' });
+          window.location.reload();
+        } catch (e) {
+          LW.mostrarAlerta(e.message, { tipo: 'erro' });
+        }
+      });
+    }
+
+    // Apaga TODAS as linhas da tabela selecionada de uma vez (botão "🧹
+    // Limpar Todas") — mesmo padrão de segurança de cfgSqlExcluirLinha
+    // (confirmação + senha de Administrador de novo), só que em lote.
+    // "operacoes_avaliadas" tem o MESMO tratamento especial de
+    // cfgSqlExcluirLinha: o servidor desfaz cada avaliação em cascata (ver
+    // POST /admin/sql-limpar-tabela, server.js) e devolve json.cascata —
+    // tratado abaixo pra montar a mensagem de sucesso certa.
+    async function cfgSqlLimparTabela() {
+      const select = document.getElementById('cfg-sql-tabela');
+      const tabela = select?.value || '';
+      if (!tabela) return;
+      const labelTabela = select.options[select.selectedIndex]?.textContent || tabela;
+      const ehDesfazerAvaliacao = tabela === 'operacoes_avaliadas';
+      const mensagemConfirmacao = ehDesfazerAvaliacao
+        ? 'Isto vai desfazer TODAS as avaliações de qualidade registradas — as avaliações e os painéis vinculados também serão apagados, e todas as operações voltam a aparecer como pendentes na fila do Setor de Qualidade. Esta ação não pode ser desfeita. Continuar?'
+        : `Excluir permanentemente TODAS as linhas de "${labelTabela}"? Esta ação não pode ser desfeita.`;
+
+      const confirmou = await LW.mostrarConfirmacao(
+        mensagemConfirmacao,
+        { titulo: ehDesfazerAvaliacao ? 'Desfazer todas as avaliações de qualidade' : 'Limpar tabela inteira', textoConfirmar: 'Limpar Todas', tipo: 'perigo', icon: '🧹' }
+      );
+      if (!confirmou) return;
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/admin/sql-limpar-tabela?wsClientId=' + encodeURIComponent(LW.OP_ANDAMENTO_CLIENT_ID), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tabela }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível limpar a tabela. Tente novamente.');
+
+          // "operacoes_avaliadas" limpa em cascata (mesmo caso especial de
+          // cfgSqlExcluirLinha, só que em lote — ver POST
+          // /admin/sql-limpar-tabela, server.js): o servidor devolve
+          // json.cascata com o total de cada tabela afetada, e todas essas
+          // operações voltam pra fila de avaliação pendente.
+          const mensagemSucesso = json.cascata
+            ? `Limpeza desfez ${json.cascata.avaliacoes_qualidade} avaliação(ões): ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. Todas essas operações voltam pra fila de avaliação pendente. A página será recarregada.`
+            : `${json.excluidas} linha(s) excluída(s) de "${labelTabela}". A página será recarregada para atualizar todas as telas.`;
+
+          await LW.mostrarAlerta(mensagemSucesso, { tipo: 'sucesso' });
+          window.location.reload();
+        } catch (e) {
+          LW.mostrarAlerta(e.message, { tipo: 'erro' });
+        }
+      });
     }
 
     // ---- Atalhos de Teclado (Configurações → Atalhos) ----
@@ -1694,6 +2094,15 @@
         const swatch = (m.modo === 'simples' && typeof m.cor === 'string')
           ? `<span title="Cor deste tipo" style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${m.cor};flex:0 0 auto"></span>`
           : '';
+        // Combinação de avaliação (cor+forma da marcação, Setor de
+        // Qualidade → Referência) nasce vazia (null) num tipo simples
+        // recém-cadastrado (ver cfgAdicionarMontagemSimples) — só quem
+        // define é o Setor de Qualidade, nunca aqui. Sinaliza o estado
+        // "ainda vazio" pra quem cadastra saber que falta esse passo,
+        // sem precisar ir até lá conferir.
+        const avisoSemCombinacao = (m.modo === 'simples' && !m.combinacaoAvaliacao)
+          ? `<span style="font-size:.7rem;color:var(--accent)" title="Definida em Setor de Qualidade → 📖 Referência">⚠ sem marcação definida</span>`
+          : '';
         return `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
       ${swatch}
@@ -1701,6 +2110,7 @@
       <span style="font-size:.66rem;font-weight:700;color:${corBadge};text-transform:uppercase;letter-spacing:.06em;border:1px solid ${corBadge};border-radius:4px;padding:2px 6px">${m.modo === 'hibrida' ? 'Híbrida' : 'Simples'}</span>
       <span style="font-size:.78rem;color:var(--text-3)">${detalhe}</span>
       <span style="font-size:.78rem;color:var(--text-3)">${cimenticiaTxt}</span>
+      ${avisoSemCombinacao}
       <button onclick="cfgRemoverMontagem(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
     </div>
   `;
@@ -1846,6 +2256,12 @@
       _cfgDados.montagens.push({
         label, modo: 'simples', tipo, paineisPorBerco, cor,
         cimenticia: { leva: levaCimenticia, quantidade: levaCimenticia ? qtdCimenticia : 0 },
+        // Combinação cor+forma da Referência de Marcação (Setor de
+        // Qualidade) — nasce vazia de propósito. Só é preenchida de lá
+        // (ver salvarCombinacaoTipo, setor-qualidade.js), nunca aqui no
+        // cadastro: cadastrar o tipo e decidir sua marcação visual são
+        // passos distintos, e nem sempre feitos pela mesma pessoa.
+        combinacaoAvaliacao: null,
       });
 
       document.getElementById('cfg-mont-simples-label').value = '';
@@ -1917,12 +2333,18 @@
         // salvar, em vez de reconstruir do zero só com o que esta tela
         // conhece. /salvar-config SUBSTITUI o arquivo inteiro (não faz
         // merge) — então campos que este modal nunca edita (ex:
-        // marcadores_qualidade, definido pelo Setor de Qualidade em
-        // "📖 Referência" → "Definir combinação"; modoAutomatico) eram
-        // APAGADOS silenciosamente toda vez que alguém salvava Baterias e
-        // Tipos de Montagem aqui, mesmo sem mexer neles. Usar `...cfgAtual`
-        // como base preserva tudo que já existe; só os campos abaixo são
-        // de fato sobrescritos por esta tela.
+        // dispositivosAutorizados; modoAutomatico) eram APAGADOS
+        // silenciosamente toda vez que alguém salvava Baterias e Tipos de
+        // Montagem aqui, mesmo sem mexer neles. Usar `...cfgAtual` como
+        // base preserva tudo que já existe; só os campos abaixo são de
+        // fato sobrescritos por esta tela. (`tipos_montagem.opcoes` é UM
+        // desses campos sobrescritos — por isso `combinacaoAvaliacao` de
+        // cada tipo, definida pelo Setor de Qualidade em "📖 Referência"
+        // → "Definir combinação", precisa ser preservada no ROUND-TRIP
+        // config→UI→config, ver _montagemDoConfigParaUI/
+        // _montagemDaUIParaConfig acima — não dá pra confiar só no
+        // `...cfgAtual` pra isto, porque tipos_montagem não é herdado
+        // dele, é reconstruído do zero a partir de _cfgDados.montagens.)
         const resAtual = await fetch('/db/config.json');
         const cfgAtual = resAtual.ok ? await resAtual.json() : {};
 
@@ -2176,11 +2598,21 @@
     // _eoAoMudarBateria). Evita o bug de "troquei a bateria, voltei pra
     // original, mas o berço ficou com o valor da bateria errada".
     let _eoBercosTocadoManualmente = false;
+    // Cópia de trabalho da grade berço-a-berço (Montagem Personalizada) —
+    // igual à _gradeTrabalho de operacao.js, mas separada dela de
+    // propósito: aqui é a edição de uma operação JÁ SALVA, não o rascunho
+    // de uma operação em andamento, então nunca deve tocar em
+    // state/persist() de operacao.js. Só vai pro servidor se o admin
+    // clicar "Salvar Alterações" (ver salvarEdicaoOperacao).
+    let _eoBercosPersonalizados = [];
 
     function abrirEdicaoOperacao(bateria) {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
       _eoBercosTocadoManualmente = false;
+      _eoBercosPersonalizados = Array.isArray(bateria.bercos_personalizados)
+        ? [...bateria.bercos_personalizados]
+        : [];
 
       document.getElementById('eo-erro').style.display = 'none';
 
@@ -2199,7 +2631,16 @@
       selBateria.value = bateria.id_bateria;
 
       const selTipo = document.getElementById('eo-tipo-montagem');
-      selTipo.innerHTML = LW.MONTAGEM_OPTS.map(t => `<option value="${t}">${t}</option>`).join('');
+      // "Personalizada" NUNCA vem em LW.MONTAGEM_OPTS (não é um tipo
+      // cadastrado em Configurações — é um modo à parte, ver
+      // operacao.js/_aplicarTiposMontagem). Sem essa opção aqui, editar
+      // uma operação Personalizada deixava o select sem nenhum valor
+      // correspondente (bateria.tipo_montagem === 'PERSONALIZADA' não
+      // batia com nenhuma <option>) — o que travava até EDITAR OUTROS
+      // CAMPOS dessa operação: "Selecione o tipo de montagem" barrava o
+      // salvamento porque o select ficava vazio.
+      selTipo.innerHTML = LW.MONTAGEM_OPTS.map(t => `<option value="${t}">${t}</option>`).join('') +
+        `<option value="${LW.TIPO_MONTAGEM_PERSONALIZADA}">Personalizada</option>`;
       selTipo.value = bateria.tipo_montagem;
 
       document.getElementById('eo-bercos-reais').value = bateria.bercos_reais || bateria.capacidade || '';
@@ -2243,13 +2684,67 @@
     // Recalcula painéis/m²/cimentícia em tempo real (mesma fórmula de
     // sempre, LW.calcPaineis) e mostra o resultado — só pra visualização,
     // quem efetivamente grava esses valores é salvarEdicaoOperacao().
+    //
+    // Personalizada é um caso à parte: LW.calcPaineis() espera UM tipo
+    // só pra bateria inteira (map[tipoMontagem]) — pra 'PERSONALIZADA'
+    // isso não existe em MONTAGEM_MAP, então caía no fallback histórico
+    // "trata como S/P puro" (ver calcPaineis, data.js), recalculando tudo
+    // errado mesmo sem essa tela ter como editar a grade berço a berço.
+    // Usa _eoBercosPersonalizados (cópia de trabalho, editável pelo botão
+    // "Configurar Berços" — ver _eoAbrirGradeMontagem), não mais o array
+    // congelado de _eoRegistroOriginal: antes a grade em si não era
+    // editável por aqui, então usar a grade ORIGINAL como fonte de
+    // verdade dos totais era a única opção; agora que dá pra editar,
+    // precisa refletir o que está sendo editado nesta tela.
+    function _eoCalcularPaineis(tipoMontagem, bercos) {
+      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        return LW.calcPaineisPersonalizado(_eoBercosPersonalizados);
+      }
+      return LW.calcPaineis(tipoMontagem, bercos);
+    }
+
+    // Mostra/esconde o botão "Configurar Berços" (grade da Montagem
+    // Personalizada) de acordo com o tipo de montagem selecionado — mesmo
+    // padrão do botão equivalente em Registrar Operação (ver
+    // _atualizarVisibilidadeConfigurarBercos em operacao.js).
+    function _eoAtualizarBotaoBercos() {
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      const btn = document.getElementById('eo-btn-configurar-bercos');
+      if (btn) btn.style.display = tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? 'inline-flex' : 'none';
+    }
+
+    // Abre a mesma grade berço-a-berço de Registrar Operação (ver
+    // LWOp.abrirGradeMontagem em operacao.js), mas em modo genérico: não
+    // toca em state/persist() de operacao.js — só recebe o array
+    // resultante e guarda em _eoBercosPersonalizados, atualizando o
+    // preview de painéis/m² em seguida.
+    async function _eoAbrirGradeMontagem() {
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      if (!bateriaObj) {
+        LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
+        return;
+      }
+      await LWOp.abrirGradeMontagem({
+        capacidade: bateriaObj.bercos || 0,
+        valoresIniciais: _eoBercosPersonalizados,
+        tituloBateria: bateriaObj.id,
+        onConfirmar(resultado) {
+          _eoBercosPersonalizados = resultado;
+          _eoAtualizarPreview();
+        },
+      });
+    }
+
     function _eoAtualizarPreview() {
       const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
       const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
 
-      const calc = LW.calcPaineis(tipoMontagem, bercos);
+      _eoAtualizarBotaoBercos();
+
+      const calc = _eoCalcularPaineis(tipoMontagem, bercos);
       document.getElementById('eo-preview').innerHTML = `
         <div>Dimensão: <strong style="color:var(--text)">${bateriaObj?.label || '—'}</strong></div>
         <div>Painéis Total: <strong style="color:var(--text)">${calc.total_paineis}</strong></div>
@@ -2275,9 +2770,13 @@
       if (!idBateria) { LW.mostrarAlerta('Selecione a bateria.', { tipo: 'aviso' }); return; }
       if (!tipoMontagem) { LW.mostrarAlerta('Selecione o tipo de montagem.', { tipo: 'aviso' }); return; }
       if (!bercos || bercos < 1) { LW.mostrarAlerta('Informe a quantidade de berços reais.', { tipo: 'aviso' }); return; }
+      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA && (!_eoBercosPersonalizados.length || _eoBercosPersonalizados.every(t => !t))) {
+        LW.mostrarAlerta('Configure os berços da Montagem Personalizada antes de salvar (botão 🔧 Configurar Berços).', { tipo: 'aviso' });
+        return;
+      }
 
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
-      const calc = LW.calcPaineis(tipoMontagem, bercos);
+      const calc = _eoCalcularPaineis(tipoMontagem, bercos);
 
       const novosValores = {
         id_bateria: idBateria,
@@ -2287,6 +2786,7 @@
         tipo_montagem: tipoMontagem,
         turno,
         motivo_atraso: motivoAtraso,
+        ...(tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? { bercos_personalizados: _eoBercosPersonalizados } : {}),
         ...calc,
       };
 

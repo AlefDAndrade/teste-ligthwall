@@ -316,6 +316,164 @@
     };
   }
 
+  // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
+  // Retrato FIXO do que está na tela no momento do clique — busca com os
+  // MESMOS filtros ativos agora (lerFiltros(): período, bateria, turno,
+  // tipo de montagem), não mais tudo com uma UI de filtro pra reaplicar
+  // depois. Embute o array já filtrado + as mesmas funções de cálculo/
+  // render via toString().
+  async function exportarInterativo() {
+    const btn = document.getElementById('btn-qt-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const filtros = lerFiltros();
+      const tracos = await getTracosComFiltros(filtros);
+      const descricaoFiltro = [
+        (filtros.dataInicio || filtros.dataFim)
+          ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+          : 'Todos os períodos',
+        filtros.bateria ? `Bateria ${filtros.bateria}` : null,
+        filtros.turno || null,
+        filtros.tipoMontagem || null,
+      ].filter(Boolean).join(' · ');
+      const html = _gerarHtmlQtStandalone(tracos, descricaoFiltro);
+      LW.baixarArquivoTexto(
+        `cep_qualidade_tracos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo (CEP):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  function _gerarHtmlQtStandalone(tracos, descricaoFiltro) {
+    const tracosJson = JSON.stringify(tracos).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CEP — Controle Estatístico de Processo — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+</style>
+</head>
+<body>
+  <h1>📐 CEP — Controle Estatístico de Processo</h1>
+  <div class="sub" id="exp-sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  <div class="filtro-aplicado">📅 Filtro aplicado: <b>${LW.escaparHtml(descricaoFiltro)}</b></div>
+
+  <div id="qt-alertas" style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px"></div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Taxa de Acerto</div>
+      <div class="kpi-value green" id="qt-taxa-acerto">—</div>
+      <div style="font-size:.72rem;margin-top:4px"><span id="qt-sem-ajuste">—</span> sem ajuste / <span id="qt-total-tracos">—</span> total</div>
+      <div style="height:6px;background:var(--border);border-radius:4px;margin-top:6px;overflow:hidden"><div id="qt-taxa-bar" style="height:100%;border-radius:4px"></div></div>
+      <div style="font-size:.72rem;margin-top:4px"><span id="qt-com-ajuste">—</span> com ajuste <span id="qt-tendencia-taxa" style="font-style:italic"></span></div>
+    </div>
+    <div class="kpi-card" id="qt-card-total-ajustes"><div class="kpi-label">Total de Ajustes</div><div class="kpi-value" id="qt-total-ajustes-num">—</div><div style="font-size:.72rem;margin-top:4px" id="qt-media-ajustes">—</div></div>
+    <div class="kpi-card" id="qt-card-receita-estavel" style="border-left:3px solid var(--green)"><div class="kpi-label">Receita Mais Estável</div><div id="qt-receita-estavel" style="font-size:1.15rem;font-weight:700">—</div><div id="qt-receita-estavel-pct" style="font-size:.72rem;margin-top:4px">—</div></div>
+    <div class="kpi-card" id="qt-card-receita-instavel" style="border-left:3px solid var(--red)"><div class="kpi-label">Receita Mais Instável</div><div id="qt-receita-instavel" style="font-size:1.15rem;font-weight:700">—</div><div id="qt-receita-instavel-pct" style="font-size:.72rem;margin-top:4px">—</div></div>
+    <div class="kpi-card" id="qt-card-insumo-mais-ajustado" style="border-left:3px solid var(--red)"><div class="kpi-label">Insumo Mais Ajustado</div><div id="qt-insumo-mais-ajustado" style="font-size:1.15rem;font-weight:700;color:var(--red)">—</div><div id="qt-insumo-mais-ajustado-cnt" style="font-size:.72rem;margin-top:4px">—</div></div>
+    <div class="kpi-card" id="qt-card-insumo-maior-desvio" style="border-left:3px solid var(--accent)"><div class="kpi-label">Maior Desvio Planejado×Real</div><div id="qt-insumo-maior-desvio" style="font-size:1.15rem;font-weight:700;color:var(--accent)">—</div><div id="qt-insumo-maior-desvio-val" style="font-size:.72rem;margin-top:4px">—</div></div>
+  </div>
+
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="chart-box" style="text-align:center">
+      <h4>Distribuição</h4>
+      <canvas id="qt-donut" width="90" height="90"></canvas>
+      <div style="display:flex;justify-content:center;gap:20px;margin-top:10px">
+        <div id="qt-donut-sem">—</div>
+        <div id="qt-donut-com">—</div>
+      </div>
+    </div>
+    <div class="chart-box"><h4>💡 Insights Automáticos</h4><div id="qt-insights" style="display:flex;flex-direction:column;gap:8px"></div></div>
+  </div>
+
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="chart-box"><h4>Ranking de Materiais Mais Ajustados</h4><div id="qt-ranking-materiais"></div></div>
+    <div class="chart-box"><h4>Estabilidade por Tipo de Montagem</h4><div id="qt-ranking-receitas"></div></div>
+  </div>
+
+  <div class="chart-box" style="margin-bottom:14px"><h4>Tabela CEP por Insumo</h4><div id="qt-cep-tabela" style="overflow-x:auto"></div></div>
+  <div class="chart-box" style="margin-bottom:14px"><h4>Consumo Planejado × Real</h4><div id="qt-consumo-grid"></div></div>
+
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="chart-box"><h4>Evolução Mensal da Taxa de Acerto</h4><canvas id="qt-evolucao-chart"></canvas></div>
+    <div class="chart-box"><h4>Ajustes por Insumo/Mês</h4><canvas id="qt-barras-insumos"></canvas></div>
+  </div>
+
+  <div class="chart-box"><h4>Tendência por Tipo de Montagem</h4><div id="qt-tendencia-montagem" style="color:var(--text-3);font-size:.84rem"></div></div>
+
+  <div class="rodape">Exportado do CEP — Lightwall SC · retrato do filtro aplicado no momento da exportação, dados embutidos neste arquivo, funciona offline.</div>
+
+<script>${LW.TOOLTIP_JS_FONTE}</script>
+<script>
+(function () {
+  'use strict';
+  const TRACOS = ${tracosJson};
+  const INSUMOS_LABELS = ${JSON.stringify(INSUMOS_LABELS)};
+  const LIMITE_DESVIO_PCT = ${LIMITE_DESVIO_PCT};
+  const LIMITE_TAXA_ACERTO = ${LIMITE_TAXA_ACERTO};
+  const LW = {
+    escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
+    tooltip: window.LW.tooltip,
+  };
+  const _ligarHoverCanvas = LW.tooltip.ligarHoverCanvas;
+
+  ${normalizarInsumo}
+  ${estatisticas}
+  ${tendencia}
+  ${calcularIndicadores}
+  ${setText}
+  ${fmtN}
+  ${nowBrasilia}
+  ${nomeMes}
+  ${_tooltipEvolucaoMensalInsumo}
+  ${_tooltipReceitaPorMes}
+  ${renderKPIs}
+  ${renderDonut}
+  ${renderRankingMateriais}
+  ${renderRankingReceitas}
+  ${renderCEP}
+  ${renderConsumo}
+  ${renderEvolucao}
+  ${renderBarrasInsumos}
+  ${renderTendenciaMontagem}
+  ${renderInsights}
+  ${renderAlertas}
+
+  function render() {
+    const ind = calcularIndicadores(TRACOS);
+
+    renderAlertas(ind);
+    renderKPIs(ind);
+    renderInsights(ind);
+    requestAnimationFrame(() => {
+      renderDonut(ind);
+      renderEvolucao(ind);
+      renderBarrasInsumos(ind);
+    });
+    renderRankingMateriais(ind);
+    renderRankingReceitas(ind);
+    renderCEP(ind);
+    renderConsumo(ind);
+    renderTendenciaMontagem(ind);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>`;
+  }
+
   // ── HELPERS ──────────────────────────────────────────────
   function setText(id, val) {
     const el = document.getElementById(id);
@@ -325,7 +483,6 @@
     if (isNaN(n) || !isFinite(n)) return '—';
     return n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
   }
-  function fmtI(n) { return isNaN(n) ? '—' : Math.round(n).toLocaleString('pt-BR'); }
   function nomeMes(yyyymm) {
     const [y, m] = yyyymm.split('-');
     const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -1065,6 +1222,7 @@
     if (fim && !fim.value) fim.value = today;
 
     document.getElementById('btn-qt-filtrar')?.addEventListener('click', render);
+    document.getElementById('btn-qt-exportar')?.addEventListener('click', exportarInterativo);
 
     const periodo = document.getElementById('qt-periodo');
     if (periodo) {
@@ -1081,6 +1239,6 @@
     popularFiltros().then(() => render());
   }
 
-  window.LWQualidade = { init, render };
+  window.LWQualidade = { init, render, exportarInterativo };
 
 })();

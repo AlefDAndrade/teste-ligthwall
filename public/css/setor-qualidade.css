@@ -7,7 +7,7 @@
    ============================================================ */
 
 /* Variáveis específicas desta tela — nomes distintos dos do
-   Lightwall para não colidir, mesmo dentro do iframe */
+   Lightwall para não colidir, mesmo agora rodando no mesmo documento */
 :root {
   --sq-orange:      #f5821f;
   --sq-yellow:      #f1c40f;
@@ -17,6 +17,11 @@
   --sq-cor-azul:    var(--blue);
   --sq-cor-amarelo: #f1c40f;
   --sq-cor-laranja: #f5821f;
+  /* Cor FIXA (não configurável, nunca escolhida na paleta) do marcador
+     "X" — Painel não preenchido. Sempre a mesma, ao contrário das outras
+     5 cores de marcação (verde/vermelho/azul/amarelo/laranja, que o
+     usuário escolhe na paleta). */
+  --sq-cor-cinza:   red;
   /* Antes eram cores fixas (#23354a/#2a4054) — só faziam sentido no tema
      escuro padrão. bg-3/border-2 já existem no sistema principal (ver
      css/styles.css) e mudam com o tema selecionado, então a "placa" some
@@ -39,21 +44,29 @@
 /* Reset mínimo — o Lightwall já faz o global */
 *, *::before, *::after { box-sizing: border-box; }
 
-body {
+/* Antes era "body { ... }" — fazia sentido quando esta tela era um
+   documento HTML à parte (iframe, setor-qualidade-app.html). Agora que
+   roda como mais uma página do app principal (mesmo <body> de todas as
+   outras — ver public/partials/page-setor-qualidade.html), esses
+   estilos precisam ficar presos ao CONTAINER desta tela, não vazar pro
+   <body> compartilhado (que quebraria o layout de todas as outras
+   páginas).
+   max-width era 1280px — bem mais estreito que as outras páginas do
+   sistema (que usam .page-body full-bleed, sem limite — ver .page-body
+   em styles.css), o que deixava sobra grande dos dois lados em
+   monitores largos e espremia Dashboard/Espelho Visual numa faixa
+   central pequena. 1800px aproxima esta tela do comportamento das
+   demais, sem ficar largo demais a ponto dos gráficos/pallets
+   esticarem de forma estranha em telas ultra-wide. */
+.sq-container {
+  max-width: 1800px;
+  width: 100%;
+  margin: 0 auto;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  min-height: 100vh;
-  padding: 20px 28px;
-  display: flex;
-  justify-content: center;
+  padding: 20px 32px;
 }
-
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-2); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
-
-.sq-container { max-width: 1280px; width: 100%; }
 
 /* ── "Em Andamento" e Fila de baterias pendentes de avaliação — vivem
      dentro da aba "🧪 Avaliação" (#sq-form), logo ACIMA do "Cabeçalho do
@@ -363,33 +376,57 @@ body {
 }
 
 /* ── KPI grid ─────────────────────────────────────────────── */
-/* Reutiliza .kpi-card, .kpi-label, .kpi-value do Lightwall   */
+/* Reutiliza .kpi-card, .kpi-label, .kpi-value do Lightwall — hover
+   próprio daqui (escopado por #sq-dashboard) pra não mudar o hover de
+   .kpi-card em nenhuma outra tela do sistema, já que ela é compartilhada
+   com o Dashboard geral/OEE/Paradas. Mesmo padrão fluido do
+   .menu-card:hover (styles.css): leve elevação + sombra colorida — aqui
+   em azul, a cor de destaque deste módulo (ver --sq-cor-azul, acima). */
 .sq-kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
-
-/* Variante de cor para os KPIs do Setor de Qualidade */
-.sq-kpi-card-verde .kpi-card::after,
-.kpi-card.sq-verde::after { background: var(--green); }
-.sq-kpi-card-laranja .kpi-card::after,
-.kpi-card.sq-laranja::after { background: var(--sq-orange); }
-.sq-kpi-card-vermelho .kpi-card::after,
-.kpi-card.sq-vermelho::after { background: var(--red); }
+#sq-dashboard .kpi-card {
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+#sq-dashboard .kpi-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--blue);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, .15);
+}
 
 /* ── Charts grid ──────────────────────────────────────────── */
+/* Era repeat(4,1fr) — com 8 gráficos na tela, cada caixa ficava
+   estreita demais. Como os gráficos são SVG com viewBox fixo (ver
+   SVG_W/SVG_H em setor-qualidade.js) escalado proporcionalmente
+   (preserveAspectRatio="xMidYMid meet"), quem realmente limitava o
+   tamanho de tudo — inclusive o texto — não era a altura (já ajustada
+   antes), e sim essa LARGURA estreita: o fator de escala final é o
+   MENOR entre largura-disponível/600 e altura-disponível/220, e com 4
+   colunas a largura sempre perdia. 2 colunas dá o dobro de largura por
+   caixa, o que finalmente deixa a altura maior (280/300px) fazer
+   diferença de verdade. */
 .sq-charts-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
   margin-bottom: 20px;
 }
 /* Reutiliza .card do Lightwall para as caixas */
-.sq-chart-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--sq-shadow); }
-.sq-chart-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.sq-chart-box svg { max-height: 200px; max-width: 100%; display: block; margin: 0 auto; }
+.sq-chart-box {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 16px; box-shadow: var(--sq-shadow);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.sq-chart-box:hover {
+  transform: translateY(-3px);
+  border-color: var(--blue);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, .15);
+}
+.sq-chart-box h4 { color: var(--text-2); font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.sq-chart-box svg { max-height: 300px; max-width: 100%; display: block; margin: 0 auto; }
 
 /* ── Resumo executivo ─────────────────────────────────────── */
 .sq-summary-box {
@@ -399,6 +436,14 @@ body {
   padding: 16px 24px;
   margin-top: 12px;
   box-shadow: var(--sq-shadow);
+  transition: box-shadow .2s ease, border-color .2s ease;
+}
+/* Sem o "translateY" aqui de propósito — é uma caixa larga de texto
+   corrido (não um "card" que se clica/navega), então só realça a borda
+   e a sombra; levantar ela junto com o texto ficaria estranho. */
+.sq-summary-box:hover {
+  border-color: var(--blue);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, .12);
 }
 .sq-summary-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 .sq-summary-box p { font-size: .88rem; color: var(--text-2); line-height: 1.6; }
@@ -434,17 +479,25 @@ body {
 .sq-mirror-nav button:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
 .sq-mirror-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
-.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
-.sq-mini-pallet-header { font-size: .52rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 4px; border-bottom: 1px solid var(--border); padding-bottom: 2px; text-transform: uppercase; }
-.sq-mini-slab { height: 16px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 2px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
-.sq-mini-slab-number { font-size: .42rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
-.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 1px; flex: 1; }
-.sq-mini-slab-type { font-size: .42rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
+.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
+.sq-mini-pallet-header { font-size: .68rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 5px; border-bottom: 1px solid var(--border); padding-bottom: 3px; text-transform: uppercase; }
+.sq-mini-slab { height: 24px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 3px; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
+.sq-mini-slab-number { font-size: .58rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
+.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 2px; flex: 1; }
+.sq-mini-slab-type { font-size: .58rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
 .sq-mini-slab-type.sp { color: var(--sq-tipo-sp-text); }
 .sq-mini-slab-type.p2 { color: var(--sq-tipo-p2-text); }
 .sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
 .sq-mini-slab-type.t1 { color: var(--sq-tipo-t1-text); }
+/* Código do motivo (ex: "BC") no Espelho Visual — só leitura aqui (sem
+   clique — o espelho é a visão consolidada, editar motivo é lá no
+   formulário, ver editarAvaliacaoDoEspelho). */
+.sq-mini-slab-motivo {
+  font-size: .55rem; font-weight: 700; font-family: var(--font-mono);
+  color: #fff; background: var(--sq-cor-vermelho);
+  border-radius: 3px; padding: 1px 4px; line-height: 1.4;
+}
 .sq-mini-mark { display: inline-block; }
 /* "Sem marcação" (a imensa maioria das placas) — círculo VAZADO (sem
    preenchimento), pra nunca ser confundido com uma marca real (círculo
@@ -452,7 +505,7 @@ body {
    setor-qualidade.js). Antes era uma barrinha sólida do mesmo tamanho
    do traço de SP, o que fazia parecer marcação onde não havia nenhuma. */
 .sq-mini-mark-vazia {
-  width: 6px; height: 6px;
+  width: 9px; height: 9px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid var(--sq-placa-borda);
@@ -461,10 +514,26 @@ body {
    Setor de Qualidade de verdade; precisa ser óbvio que é OUTRA coisa,
    não "sem marcação" nem uma marca real. */
 .sq-mini-mark-nao-avaliado {
-  font-size: .6rem;
+  font-size: .78rem;
   line-height: 1;
   font-weight: 700;
   color: var(--text-3);
+}
+/* "Painel não preenchido" (marca X feita pelo avaliador — ver
+   COR_NAO_PREENCHIDO em setor-qualidade.js). De propósito, um badge
+   preenchido (fundo cinza + × branco), não texto solto como
+   .sq-mini-mark-nao-avaliado logo acima — são conceitos diferentes
+   (aqui é uma marcação real; lá é a bateria inteira nunca avaliada) e
+   não podem ficar visualmente iguais no Espelho. */
+.sq-mini-mark-x {
+  width: 9px; height: 9px;
+  border-radius: 1px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--sq-cor-cinza);
+  color: #fff;
+  font-size: .58rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .sq-mirror-legend {
@@ -542,6 +611,21 @@ body {
 .sq-btn-shape.active { border-color: var(--text); background: var(--border); }
 .sq-shape-circle { width: 13px; height: 13px; border-radius: 50%; background: var(--text); }
 .sq-shape-dash   { width: 17px; height: 3px; border-radius: 2px; background: var(--text); }
+/* Ícone do botão de forma "X" — Painel não preenchido. Caractere, não
+   bloco preenchido (diferente de circle/dash), porque não há "cor
+   selecionada" pra representar aqui: é sempre neutro, veja
+   .sq-btn-color-disabled logo abaixo. */
+.sq-shape-x {
+  width: 13px; height: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.6rem; line-height: 1;
+  color: var(--sq-cor-cinza);
+}
+
+/* Paleta de cor desabilitada enquanto a forma "X" está selecionada — X
+   nunca usa a cor escolhida (é sempre --sq-cor-cinza, ver
+   COR_NAO_PREENCHIDO em setor-qualidade.js). */
+.sq-btn-color-disabled { opacity: .3; pointer-events: none; }
 
 /* Badge com o número do atalho de teclado — canto inferior direito de
    cada botão. Cor sozinha = número (tecla "1", "2"...); forma usa o
@@ -692,6 +776,35 @@ body {
 }
 .sq-mark-circle { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
 .sq-mark-dash   { width: 12px; height: 3px; border-radius: 2px; }
+/* Marca "X" — Painel não preenchido. Quadrada (não círculo/traço) e
+   sempre na cor fixa --sq-cor-cinza, nunca lida de m.color (ver
+   renderMarks, setor-qualidade.js) — só pra ficar visualmente óbvio,
+   de longe, que é uma categoria à parte das marcas normais. */
+.sq-mark-x {
+  width: 9px; height: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: red; font-size: 1.56rem; font-weight: 800; line-height: 1;
+}
+
+/* Badge do código de motivo (ex: "BC") — canto oposto ao número da placa
+   (sq-slab-number, top-left), pra não competir por espaço. Pill com fundo
+   sólido (diferente de -number/-type, que são só texto solto) porque
+   também é CLICÁVEL (reabre o seletor — ver _abrirSeletorMotivo,
+   setor-qualidade.js) — precisa parecer um botão pequeno, não só uma
+   legenda. "?" (sq-slab-motivo-pendente) usa a cor de alerta — placa com
+   defeito marcado mas sem motivo escolhido ainda, fica visualmente
+   diferente do código já preenchido, pra chamar atenção sem travar nada. */
+.sq-slab-motivo {
+  position: absolute; top: 2px; right: 4px;
+  display: none; align-items: center; justify-content: center;
+  min-width: 15px; height: 13px; padding: 0 3px;
+  font-size: .48rem; font-weight: 700; font-family: var(--font-mono);
+  color: #fff; background: var(--sq-cor-vermelho);
+  border-radius: 3px; cursor: pointer; line-height: 1;
+  z-index: 1;
+}
+.sq-slab-motivo.sq-slab-motivo-pendente { background: var(--accent); }
+.sq-slab-motivo:hover { filter: brightness(1.15); }
 
 .sq-slab.invalid {
   border: 2px solid var(--red) !important;
@@ -735,6 +848,8 @@ body {
 .sq-info-val { font-weight: 600; color: var(--text); text-align: right; min-width: 22px; }
 .sq-info-edit { cursor: pointer; color: var(--text-3); font-size: .7rem; transition: color .15s; }
 .sq-info-edit:hover { color: var(--blue); }
+.sq-info-edit-locked { cursor: not-allowed; opacity: .35; pointer-events: none; }
+.sq-info-edit-locked:hover { color: var(--text-3); }
 
 /* ── Observações ──────────────────────────────────────────── */
 .sq-obs-area {
@@ -832,14 +947,59 @@ body {
   margin-bottom: 6px;
 }
 
+/* ── Seletor de motivo (popover flutuante) ───────────────────
+   Diferente de .ao-popover (que fica DENTRO de um container relative,
+   posicionado por CSS puro — top/left fixos em relação ao botão-pai):
+   este é anexado direto em document.body (ver _abrirSeletorMotivo,
+   setor-qualidade.js) porque pode ancorar em QUALQUER placa da grade —
+   posição calculada em JS (getBoundingClientRect) e aplicada via
+   style.left/top inline, por isso position:fixed aqui (coordenadas de
+   viewport, iguais às que getBoundingClientRect devolve). */
+.sq-motivo-popover {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  animation: fadeInDown .15s ease;
+}
+.sq-motivo-popover-titulo {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: .78rem; font-weight: 700; color: var(--text);
+  margin-bottom: 10px;
+}
+.sq-motivo-popover-fechar {
+  background: none; border: none; color: var(--text-3);
+  font-size: 1rem; cursor: pointer; line-height: 1; padding: 0 2px;
+}
+.sq-motivo-popover-fechar:hover { color: var(--text); }
+.sq-motivo-popover-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+}
+.sq-motivo-popover-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 5px 7px; cursor: pointer;
+  text-align: left; transition: border-color .1s, background .1s;
+}
+.sq-motivo-popover-item:hover { border-color: var(--accent); background: var(--bg-3); }
+.sq-motivo-popover-item strong { font-size: .74rem; color: var(--accent); font-family: var(--font-mono); }
+.sq-motivo-popover-item span { font-size: .64rem; color: var(--text-2); line-height: 1.25; }
+
 /* ── Responsivo ───────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  body { padding: 14px 18px; }
-  .sq-charts-grid { grid-template-columns: repeat(2, 1fr); }
+  .sq-container { padding: 14px 18px; }
+  /* Base já é 2 colunas — abaixo de 1024px cada gráfico ficaria
+     estreito de novo (mesmo problema que motivou reduzir de 4 pra 2,
+     ver .sq-charts-grid acima), então cai direto pra 1 coluna larga. */
+  .sq-charts-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
-  body { padding: 8px 10px; }
-  .sq-charts-grid { grid-template-columns: 1fr; }
+  .sq-container { padding: 8px 10px; }
   .sq-kpi-grid { grid-template-columns: 1fr 1fr; }
   .sq-topbar, .sq-nav { flex-wrap: wrap; justify-content: center; }
   .sq-stacks, .sq-pallet-info-grid, .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }

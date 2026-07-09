@@ -11,6 +11,12 @@
   let state = {
     turno: '1º TURNO',
     dimensao: '',
+    // true depois que a Dimensão é definida manualmente (ver
+    // editarDimensao(), abaixo) — impede updateCapacidade() de
+    // sobrescrever com o label automático da bateria selecionada. Fica
+    // "grudado" pelo resto desta operação (mesmo trocando de bateria de
+    // novo) — só reseta numa operação nova (ver resetState()).
+    dimensaoManual: false,
     tipo_montagem: '',
     id_bateria: '',
     bercos_reais: '',
@@ -217,6 +223,31 @@
       recalcPaineis();
       persist();
     });
+    // Sair do campo (clicar fora) confirma a edição igual ao botão ✓ —
+    // Enter também confirma e já tira o foco (evita quebrar linha ou
+    // disparar o submit de algum form ancestral).
+    $('op-dimensao').addEventListener('blur', _confirmarDimensaoManual);
+    $('op-dimensao').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); $('op-dimensao').blur(); }
+    });
+    // Formata em tempo real: a pessoa digita só o número (ex: "9,5" ou
+    // "9.5") e o " cm" já aparece sozinho no final — ver
+    // _formatarDimensaoLive() logo abaixo pra detalhes (inclusive o
+    // ponto virando vírgula, que é o padrão usado no resto do sistema).
+    $('op-dimensao').addEventListener('input', e => {
+      const input = e.target;
+      const cursorPos = input.selectionStart;
+      const antes = input.value;
+      const formatado = _formatarDimensaoLive(antes);
+      if (formatado !== antes) {
+        input.value = formatado;
+        // Cursor: como só mexemos no sufixo " cm" (nunca no que a pessoa
+        // já digitou antes dele), mantém a posição relativa de onde ela
+        // estava digitando — assim o cursor não "pula" pro fim do campo.
+        const novaPos = Math.min(cursorPos, formatado.length);
+        input.setSelectionRange(novaPos, novaPos);
+      }
+    });
     if (document.getElementById('op-silo')) $('op-silo').addEventListener('change', e => {
       state.silo = e.target.value; persist();
     });
@@ -241,17 +272,112 @@
   function updateCapacidade() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     if (bateria) {
-      state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
+      // Só sincroniza automaticamente se ninguém definiu uma dimensão
+      // manual pra esta operação (ver editarDimensao(), abaixo) — sem essa
+      // trava, trocar de bateria (ou qualquer outra mudança que chame
+      // updateCapacidade) apagava a dimensão específica que o usuário
+      // acabou de digitar.
+      if (!state.dimensaoManual) {
+        state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
+        if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
+      }
       $('op-capacidade').value = `${bateria.bercos} berços`;
-      if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
     } else {
-      state.dimensao = '';
+      if (!state.dimensaoManual) {
+        state.dimensao = '';
+        if ($('op-dimensao')) $('op-dimensao').value = '';
+      }
       $('op-capacidade').value = '';
-      if ($('op-dimensao')) $('op-dimensao').value = '';
     }
   }
 
-  // Cores cíclicas para os cards de tipo (mesma paleta usada antes para 2P/SP)
+  // Alterna entre "mostrar a dimensão automática (travada)" e "deixar
+  // digitar uma dimensão específica" — mesmo padrão visual do botão
+  // "🔧 Configurar Berços" ao lado de Tipo de Montagem. Primeiro clique
+  // destrava o campo (tira o readonly, foca, seleciona o texto todo pra
+  // já poder digitar por cima); segundo clique (ou Enter, ou sair do
+  // campo — ver wireEvents()) confirma e trava nessa dimensão até o fim
+  // da operação (ver state.dimensaoManual, updateCapacidade()).
+  function editarDimensao() {
+    const input = $('op-dimensao');
+    const btn = $('btn-editar-dimensao');
+    if (!input) return;
+    if (input.readOnly) {
+      input.readOnly = false;
+      input.focus();
+      input.select();
+      if (btn) { btn.textContent = '✓'; btn.title = 'Confirmar esta dimensão'; }
+    } else {
+      _confirmarDimensaoManual();
+    }
+  }
+
+  // Formata o texto digitado em "Dimensão" pra já virar "9,5 cm" sem a
+  // pessoa precisar escrever o "cm" — e sem duplicar caso ela escreva
+  // mesmo assim. Regras, na ordem aplicada:
+  //  1) descarta qualquer caractere que não seja número, vírgula ou ponto
+  //     — o campo é só pra medida, não aceita texto livre (letras,
+  //     símbolos etc. são simplesmente ignorados enquanto a pessoa
+  //     digita, nem chegam a aparecer no campo);
+  //  2) ponto vira vírgula (9.5 -> 9,5), que é o separador decimal
+  //     padrão usado no resto do sistema;
+  //  3) o que sobrar (só o número) recebe " cm" no final automaticamente.
+  // `final`: true quando é a formatação de fechamento (blur/Enter/✓) — aí
+  // uma vírgula sem nada depois (ex: "9,") não faz sentido como medida
+  // definitiva, então é descartada e vira só "9 cm". Enquanto a pessoa
+  // ainda está digitando (final=false), a vírgula solta é mantida, senão
+  // ela nunca conseguiria digitar as casas decimais depois dela.
+  function _formatarDimensaoLive(bruto, final) {
+    let v = (bruto || '');
+    // Tira um "cm" que já esteja no final (com/sem espaço, maiúsc/minúsc)
+    // pra recalcular em cima só do número — evita "9,5 cm cm" ao digitar
+    // mais alguma coisa depois do sufixo já ter aparecido.
+    v = v.replace(/\s*cm\s*$/i, '');
+    // Só dígitos, vírgula e ponto passam — qualquer letra, espaço ou
+    // outro símbolo é descartado (não é um valor inválido "a ser
+    // corrigido depois": simplesmente não entra no campo).
+    v = v.replace(/[^\d,.]/g, '');
+    // Ponto sempre vira vírgula (padrão decimal do sistema)
+    v = v.replace(/\./g, ',');
+    // Permite só uma vírgula (a partir da segunda, descarta) — evita algo
+    // como "9,5,3" que não seria uma medida válida.
+    const partes = v.split(',');
+    if (partes.length > 2) v = partes[0] + ',' + partes.slice(1).join('');
+    // Vírgula "pendurada" sem casa decimal depois (ex: "9," ou "9,,"): só
+    // faz sentido enquanto a pessoa ainda está digitando. Ao fechar o
+    // campo, tira a vírgula solta — "9," vira "9", não "9, cm".
+    if (final && /,$/.test(v)) v = v.replace(/,+$/, '');
+    if (v === '') return '';
+    return v + ' cm';
+  }
+
+  // Trava o campo de novo e grava o valor digitado como definitivo pra
+  // esta operação — chamado ao clicar de novo no ✓, apertar Enter, ou
+  // sair do campo (blur), o que vier primeiro.
+  function _confirmarDimensaoManual() {
+    const input = $('op-dimensao');
+    const btn = $('btn-editar-dimensao');
+    if (!input || input.readOnly) return; // já estava travado — nada a confirmar
+
+    const valor = _formatarDimensaoLive(input.value.trim(), true);
+    input.value = valor;
+    state.dimensao = valor;
+    // Vazio = desiste da edição manual, volta a acompanhar a bateria
+    // selecionada automaticamente (mesmo espírito de "campo em branco
+    // volta pro automático" usado em Berços Reais).
+    state.dimensaoManual = valor !== '';
+    input.readOnly = true;
+    // Deixa de parecer "automático" (cor/fonte de auto-filled) quando é
+    // uma escolha manual — some a distinção assim que volta a ser
+    // automático de novo (valor em branco, acima).
+    input.classList.toggle('auto-filled', !state.dimensaoManual);
+    if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica pra esta operação'; }
+
+    if (!state.dimensaoManual) updateCapacidade(); // reaplica o automático na hora
+    persist();
+  }
+
+
   const _CORES_TIPO = ['var(--blue)', 'var(--green)', 'var(--accent)', 'var(--purple)', 'var(--yellow)'];
 
   // Labels amigáveis para tipos conhecidos; tipos novos caem no fallback (maiúsculas + "/").
@@ -500,19 +626,6 @@
     if (state.modo_teste) {
       banner.innerHTML += ' <span class="badge" style="background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.5)">🧪 TESTE</span>';
     }
-  }
-
-  // Cria estrutura de insumo com suporte a ajustes
-  function criarInsumo(valorOriginal) {
-    const original = valorOriginal === '' ? '' : parseFloat(valorOriginal) || 0;
-    return {
-      original,
-      ajustes: [],
-      get total() {
-        if (this.original === '') return '';
-        return this.ajustes.reduce((s, a) => s + a, parseFloat(this.original) || 0);
-      }
-    };
   }
 
   // Retorna o total/atual de um insumo (serializado, sem getter).
@@ -1083,19 +1196,44 @@
    * revisão (usado pela reconciliação ao registrar — ver
    * _reconciliarMontagemPersonalizada()), esconde as abas: todo clique ou
    * "Aplicar" só LIMPA o berço (pra marcar quais não foram usados).
+   *
+   * Por padrão (chamada sem capacidade/valoresIniciais/onConfirmar) lê a
+   * bateria/berços de `state` e, ao confirmar, grava direto em
+   * `state.bercos_personalizados` + recalcPaineis() + persist() — é assim
+   * que Registrar Operação sempre usou. Passando esses 3 parâmetros, a
+   * grade vira "genérica": não toca em `state` nenhuma vez, só entrega o
+   * array final pro `onConfirmar` informado — é o que permite reusar esta
+   * mesma grade em Editar Operação (app-core.js), que edita um registro
+   * já salvo, não o rascunho de uma operação em andamento.
    * @returns {Promise<boolean>} true se confirmado, false se cancelado
    */
-  function abrirGradeMontagemPersonalizada({ somenteRevisao = false } = {}) {
+  function abrirGradeMontagemPersonalizada({
+    somenteRevisao = false,
+    capacidade: capacidadeParam = null,
+    valoresIniciais: valoresIniciaisParam = null,
+    onConfirmar = null,
+    tituloBateria: tituloBateriaParam = null,
+  } = {}) {
     return new Promise((resolve) => {
-      const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-      if (!bateria) {
-        LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
-        resolve(false);
-        return;
-      }
-      const capacidade = bateria.bercos || 0;
+      let capacidade = capacidadeParam;
+      let tituloBateria = tituloBateriaParam;
 
-      const atual = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+      // Modo padrão (Registrar Operação): sem capacidade/valoresIniciais
+      // informados, deriva tudo de `state`, igual sempre foi.
+      if (capacidade == null) {
+        const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+        if (!bateria) {
+          LW.mostrarAlerta('Selecione a bateria antes de configurar os berços.', { tipo: 'aviso' });
+          resolve(false);
+          return;
+        }
+        capacidade = bateria.bercos || 0;
+        tituloBateria = bateria.id;
+      }
+
+      const atual = Array.isArray(valoresIniciaisParam)
+        ? valoresIniciaisParam
+        : (Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : []);
       _gradeTrabalho = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
       _gradeSomenteRevisao = somenteRevisao;
       _gradeTipoAtivo = somenteRevisao ? '' : null; // '' = ferramenta de limpar, em modo de revisão
@@ -1116,7 +1254,7 @@
           <div style="text-align:center;margin-bottom:18px">
             <div style="font-size:2.2rem;margin-bottom:8px">🔧</div>
             <h2 style="font-family:var(--font-display);font-size:1.25rem;color:var(--accent);margin:0">
-              ${somenteRevisao ? 'Quais berços não foram preenchidos?' : 'Montagem Personalizada — Bateria ' + bateria.id}
+              ${somenteRevisao ? 'Quais berços não foram preenchidos?' : 'Montagem Personalizada' + (tituloBateria ? ' — Bateria ' + tituloBateria : '')}
             </h2>
             <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
               ${somenteRevisao
@@ -1173,9 +1311,14 @@
           erroEl.style.display = 'block';
           return;
         }
-        state.bercos_personalizados = [..._gradeTrabalho];
-        recalcPaineis();
-        persist();
+        const resultado = [..._gradeTrabalho];
+        if (onConfirmar) {
+          onConfirmar(resultado);
+        } else {
+          state.bercos_personalizados = resultado;
+          recalcPaineis();
+          persist();
+        }
         document.removeEventListener('keydown', _gradeKeydownHandler);
         modal.remove();
         resolve(true);
@@ -2022,6 +2165,26 @@
     }, 8000);
   }
 
+  // Setor de Qualidade tem sua própria fila de baterias pendentes de
+  // avaliação, carregada só quando aquela página é aberta/reaberta. Sem
+  // isso, uma bateria acabada de registrar aqui só aparecia lá depois de
+  // sair e voltar pra aba (ou dar F5) — esta função avisa SQ na hora,
+  // sem recarregar nada visível: só refaz o fetch da fila dele. (Até
+  // pouco tempo, Setor de Qualidade rodava num <iframe> à parte e isto
+  // precisava atravessar a fronteira via contentWindow — ver histórico
+  // do arquivo; hoje é só mais uma página do mesmo documento, chamada
+  // direta.) Silenciosa de propósito — SQ pode não ter inicializado
+  // ainda (ninguém abriu aquela página nesta sessão, ver app-core.js
+  // #_sqInit) — nunca deve travar o fluxo de Registrar Operação por
+  // causa disso.
+  function _atualizarFilaSetorQualidade() {
+    try {
+      if (window.SQ && typeof window.SQ.carregarFilaNaoAvaliadas === 'function') {
+        window.SQ.carregarFilaNaoAvaliadas();
+      }
+    } catch (e) { /* SQ ainda não inicializado, ou indisponível por algum motivo — sem problema */ }
+  }
+
   /**
    * @param {object} record - resumo da operação (mesmo formato usado no Registrar Operação local)
    * @param {object} [opts]
@@ -2050,6 +2213,7 @@
       ? '<span class="badge badge-red">SIM</span>'
       : '<span class="badge badge-green">NÃO</span>';
     modal.style.display = 'flex';
+    _atualizarFilaSetorQualidade();
   }
 
   // Caminho do som da notificação — INTENCIONALMENTE sem o arquivo em si
@@ -2150,6 +2314,7 @@
     state = {
       turno: '1º TURNO',
       dimensao: '',
+      dimensaoManual: false,
       tipo_montagem: '',
       id_bateria: '',
       bercos_reais: '',
@@ -2183,6 +2348,16 @@
     $('op-toggle-teste').disabled = state.status !== 'idle';
     $('op-turno').value = state.turno || '1º TURNO';
     $('op-dimensao').value = state.dimensao || '';
+    // Reflete state.dimensaoManual na aparência — importante num reload
+    // (ou ao chegar estado de outro dispositivo via WebSocket): sem isso,
+    // o campo sempre voltava a parecer "automático" mesmo numa dimensão
+    // definida manualmente (ver editarDimensao()/updateCapacidade()).
+    $('op-dimensao').readOnly = true; // nunca começa destravado num render
+    $('op-dimensao').classList.toggle('auto-filled', !state.dimensaoManual);
+    if ($('btn-editar-dimensao')) {
+      $('btn-editar-dimensao').textContent = '✏️';
+      $('btn-editar-dimensao').title = 'Definir uma dimensão específica pra esta operação';
+    }
 
     $('op-montagem').value = state.tipo_montagem || '';
     _atualizarBtnConfigurarBercos();
@@ -2273,11 +2448,18 @@
   // ---- Public API ----
   window.LWOp = {
     init,
+    // Usado por app-core.js (ver _aoReceberDadosSqlExcluidosDeOutroDispositivo)
+    // pra saber se é seguro recarregar a página agora ou se precisa
+    // esperar — true só quando o cronômetro está de fato rodando (uma
+    // operação foi INICIADA e ainda não foi finalizada/zerada), nunca
+    // com a tela só "aberta" sem nada em andamento.
+    operacaoEmAndamento: () => state.status === 'running',
     iniciarInjecao,
     finalizarInjecao,
     resetarOperacao,
     atualizarTravaAutorizacao: _aplicarTravaDeAutorizacao,
     abrirGradeMontagem: abrirGradeMontagemPersonalizada,
+    editarDimensao,
     selectTraco(i) {
       expandedTracoIndex = i; // Define o traço ativo e foca na visualização exclusiva
       renderTracos();
@@ -2362,6 +2544,18 @@
     },
     closeModal() {
       $('success-modal').style.display = 'none';
+      _atualizarFilaSetorQualidade();
+    },
+    // Fecha o modal a partir do "✕" no canto — função própria, separada de
+    // closeModal() (usada por "Nova Operação"/"Ver Registro"), de propósito:
+    // o "✕" só deve fechar e manter a pessoa exatamente onde ela está,
+    // sem carregar nenhum sentido de "começar uma operação nova" nem
+    // qualquer navegação — mesmo que hoje as duas façam a mesma coisa por
+    // baixo, ficam desacopladas pra uma futura mudança em closeModal() (ex:
+    // resetar algo do formulário) nunca vazar pro comportamento do "✕".
+    fecharModalSucesso() {
+      $('success-modal').style.display = 'none';
+      _atualizarFilaSetorQualidade();
     }
   };
 

@@ -1,4 +1,4 @@
-  <!-- ============ SUCCESS MODAL ============ -->
+<!-- ============ SUCCESS MODAL ============ -->
   <div id="success-modal" style="
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
   z-index:999;align-items:center;justify-content:center
@@ -6,8 +6,12 @@
     <div style="
     background:var(--bg-card);border:1px solid var(--border);
     border-radius:var(--radius-lg);padding:36px;width:420px;max-width:90vw;
-    box-shadow:0 24px 80px rgba(0,0,0,.6)
+    box-shadow:0 24px 80px rgba(0,0,0,.6);position:relative
   ">
+      <button onclick="LWOp.fecharModalSucesso()" title="Fechar" aria-label="Fechar" style="
+      position:absolute;top:14px;right:14px;background:none;border:none;
+      color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1
+    ">✕</button>
       <div style="text-align:center;margin-bottom:24px">
         <div style="font-size:3rem;margin-bottom:12px">✅</div>
         <h2 id="success-modal-titulo" style="font-family:var(--font-display);font-size:1.6rem;color:var(--green)">Operação Registrada!</h2>
@@ -49,4 +53,3 @@
       </div>
     </div>
   </div>
-

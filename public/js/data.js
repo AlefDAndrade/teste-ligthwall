@@ -558,6 +558,16 @@ let _opAndamentoReconectarTimeout = null;
 let _opAndamentoEnviarTimeout = null;
 let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
 
+// Callback pra "uma linha foi excluída em Configurações → Dados SQL, em
+// QUALQUER dispositivo" — ver broadcastDadosSqlExcluidos, server.js.
+// Registrado à parte de conectarOperacaoAndamento (abaixo) de propósito:
+// esse evento não tem nada a ver com a tela de Registrar Operação, é
+// global ao app inteiro — só usa o MESMO canal WebSocket (já aberto uma
+// vez só, no boot, independente de qual página está visível) porque criar
+// uma 2ª conexão só pra isso seria desperdício. Ver
+// LW.aoReceberDadosSqlExcluidos, registrado no boot em app-core.js.
+let _opAndamentoOnDadosSqlExcluidos = null;
+
 /**
  * Abre a conexão WebSocket com o servidor pra acompanhar, em tempo real,
  * qualquer mudança feita em OUTRA aba/computador na operação em andamento
@@ -578,6 +588,19 @@ function conectarOperacaoAndamento(onAtualizacao, onFinalizadaPorOutro) {
   _abrirWsOperacaoAndamento();
 }
 
+/**
+ * Registra o callback pra "uma linha do banco foi excluída em
+ * Configurações → Dados SQL, em QUALQUER dispositivo" — ver
+ * broadcastDadosSqlExcluidos, server.js. Chamado uma vez no boot do app
+ * (app-core.js), sem depender de conectarOperacaoAndamento já ter sido
+ * chamado antes ou depois — é só uma variável lida quando a mensagem
+ * chegar (ver _abrirWsOperacaoAndamento, acima), então a ordem entre os
+ * dois registros não importa. `callback(msg)` recebe `{ tabela, valor }`.
+ */
+function aoReceberDadosSqlExcluidos(callback) {
+  _opAndamentoOnDadosSqlExcluidos = callback;
+}
+
 function _abrirWsOperacaoAndamento() {
   if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
   try {
@@ -588,12 +611,14 @@ function _abrirWsOperacaoAndamento() {
     ws.addEventListener('message', (event) => {
       let msg;
       try { msg = JSON.parse(event.data); } catch (_) { return; }
-      if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, nos dois tipos de mensagem
+      if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, em todos os tipos de mensagem
 
       if (msg.tipo === 'estado') {
         if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
       } else if (msg.tipo === 'operacao_finalizada') {
         if (_opAndamentoOnFinalizadaPorOutro) _opAndamentoOnFinalizadaPorOutro(msg.resumo);
+      } else if (msg.tipo === 'dados_sql_excluidos') {
+        if (_opAndamentoOnDadosSqlExcluidos) _opAndamentoOnDadosSqlExcluidos(msg);
       }
     });
 
@@ -843,6 +868,28 @@ function nowBrasilia() {
 // Retorna a data de hoje em Brasília no formato YYYY-MM-DD
 function todayBrasilia() {
   return nowBrasilia().toISOString().split('T')[0];
+}
+
+// Converte um instante ISO (com hora, geralmente em UTC — ex: o
+// inicio/fim de uma parada, salvos via new Date(...).toISOString() no
+// navegador) pra data (YYYY-MM-DD) em Brasília. Diferente de
+// historico/tracos, que já guardam um campo "data" próprio já em
+// Brasília, "paradas" só guarda o instante ISO completo — pegar direto
+// os 10 primeiros caracteres desse ISO (ex: p.inicio.slice(0,10)) dá a
+// data em UTC, não em Brasília. Isso é inofensivo a maior parte do dia,
+// mas entre ~21h e 23h59 em Brasília (UTC-3), o instante em UTC já virou
+// o dia seguinte — uma parada registrada "hoje à noite" ganhava
+// silenciosamente a data de amanhã pros filtros, e sumia do Registro de
+// Paradas e do relatório de OEE sempre que o filtro não incluísse esse
+// dia seguinte (ex: filtro só de "hoje" no fim do período, ou range que
+// termina hoje). Usar esta função em vez de slice(0,10) em qualquer
+// comparação de data com inicio/fim de parada.
+function dataBrasiliaDeISO(iso) {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(iso));
 }
 
 // ---- Presets de período para filtros de dashboard (Todos / Hoje / Essa
@@ -1411,6 +1458,18 @@ const ARQUIVOS_BACKUP_DB = [
   // tabela SQL — a rota GET /db/<nome> reconstrói o JSON a partir do banco.
   'bercos_visuais.json',
   'avaliacoes_qualidade.json',
+  // Adicionado: sem isso, "quem já foi avaliado" (fila do Setor de
+  // Qualidade — ver CREATE TABLE operacoes_avaliadas, db.js) não saía no
+  // Backup de Dados — restaurar um backup fazia toda bateria já avaliada
+  // voltar a aparecer na fila, mesmo já avaliada de verdade antes do backup.
+  'operacoes_avaliadas.json',
+  // Adicionado: agora "não avaliadas" é uma fila DE VERDADE, guardada em
+  // arquivo (não mais calculada na hora — ver OPERACOES_NAO_AVALIADAS_PATH,
+  // server.js) — sem isso, ela ficaria de fora do Backup de Dados (o
+  // servidor recalcula sozinho a partir do SQL se este arquivo faltar
+  // junto de historico.json/operacoes_avaliadas.json na restauração, mas
+  // é melhor levar o estado exato de qualquer jeito).
+  'operacoes_nao_avaliadas.json',
 ];
 
 /**
@@ -1635,6 +1694,198 @@ function mostrarConfirmacao(mensagem, opcoes = {}) {
 
 // ---- Export ----
 
+/**
+ * Baixa uma string como arquivo — mesmo mecanismo (Blob + <a> temporário)
+ * já usado por gerarBackupDados(), só que genérico: qualquer tela pode
+ * chamar pra baixar texto/HTML/JSON sem duplicar esse boilerplate.
+ * Usado pelos botões "🌐 Exportar Interativo" dos dashboards (Setor de
+ * Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
+ * Berços, CEP, Análise Focada) — cada um monta seu próprio HTML
+ * autossuficiente (dados + gráficos + filtros embutidos) e só chama isto
+ * pra efetivamente baixar.
+ * @param {string} nomeArquivo
+ * @param {string} conteudo
+ * @param {string} mimeType - default 'text/html'
+ */
+function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
+  const blob = new Blob([conteudo], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// CSS compartilhado por TODOS os exports de "Dashboard Interativo" (Setor
+// de Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
+// Berços, CEP, Análise Focada) — cada um gera seu próprio HTML
+// autossuficiente, mas todos reaproveitam esta mesma paleta/layout base
+// (cabeçalho, filtros, grade de KPIs, chart-box, resumo), só some com o
+// resto do CSS que cada tela cria em cima disso pra seus gráficos
+// específicos.
+//
+// gerarCssExportPadrao() — antes era uma string FIXA (sempre a mesma
+// paleta clara, nada a ver com o tema escolhido na tela) — agora é uma
+// função que lê o tema ATUAL (data-theme no <html>, ver
+// aplicarTema()/theme picker, app-core.js) e devolve a paleta
+// correspondente, pra o arquivo exportado parecer visualmente com a tela
+// de onde ele saiu, não um template genérico à parte. 3 paletas fixas
+// (não getComputedStyle direto): as variáveis do app "cru" (--text-3,
+// por exemplo, é branco puro ali — usado como destaque forte em outro
+// contexto) não bateriam com o PAPEL que cada variável tem AQUI (ex:
+// --text-3 aqui é o tom mais apagado, pra legendas/rodapé) — 3 paletas
+// próprias, uma por tema, evita herdar semântica errada.
+const _PALETAS_EXPORT_POR_TEMA = {
+  dark: { // tema padrão do app (sem data-theme) — azul-marinho neutro
+    bg1: '#0d0f12', bgCard: '#1e2229', border: '#2a2f3a', border2: '#353c4a',
+    text: '#e8eaf0', text2: '#9aa3b2', text3: '#6b7688',
+    blue: '#3b82f6', red: '#ef4444', green: '#10b981', accent: '#2968ff',
+    shadow: '0 4px 24px rgba(0,0,0,.5)',
+  },
+  light: {
+    bg1: '#f0f2f5', bgCard: '#ffffff', border: '#d1d5db', border2: '#b0b7c3',
+    text: '#111827', text2: '#4b5563', text3: '#8492a6',
+    blue: '#2563eb', red: '#dc2626', green: '#059669', accent: '#2968ff',
+    shadow: '0 4px 24px rgba(0,0,0,.10)',
+  },
+  lightwall: { // azul-marinho + laranja, paleta institucional (ver styles.css)
+    bg1: '#0a1626', bgCard: '#122236', border: '#1f3450', border2: '#2c4a6b',
+    text: '#eef2f7', text2: '#9fb0c4', text3: '#6f8296',
+    blue: '#3b82f6', red: '#ef4444', green: '#1fb88a', accent: '#2968ff',
+    shadow: '0 4px 24px rgba(0,0,0,.55)',
+  },
+};
+// Roxo/amarelo/laranja/ciano são só cores AUXILIARES de gráfico (scatter,
+// séries extras) — não têm variável equivalente no app em si, então ficam
+// fixas, iguais nos 3 temas (não precisam combinar com "fundo/texto").
+const _CORES_AUXILIARES_EXPORT = { purple: '#8b5cf6', yellow: '#f1c40f', orange: '#f5821f', cyan: '#06b6d4' };
+
+function gerarCssExportPadrao() {
+  let nomeTema = 'dark';
+  try { nomeTema = document.documentElement.getAttribute('data-theme') || 'dark'; } catch (e) { /* sem document (não deveria acontecer aqui, mas não quebra) */ }
+  const p = _PALETAS_EXPORT_POR_TEMA[nomeTema] || _PALETAS_EXPORT_POR_TEMA.dark;
+  const a = _CORES_AUXILIARES_EXPORT;
+  return `
+  :root {
+    --blue:${p.blue}; --red:${p.red}; --green:${p.green}; --accent:${p.accent};
+    --text:${p.text}; --text-2:${p.text2}; --text-3:${p.text3};
+    --border:${p.border}; --border-2:${p.border2};
+    --bg-1:${p.bg1}; --bg-card:${p.bgCard};
+    --radius:8px; --radius-lg:12px;
+    --purple:${a.purple}; --yellow:${a.yellow}; --orange:${a.orange}; --cyan:${a.cyan};
+    --font-mono: 'SFMono-Regular', Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg-1); color:var(--text-2); padding:28px; }
+  h1 { font-size:1.3rem; color:var(--text); margin:0 0 4px; }
+  .sub { font-size:.8rem; color:var(--text-3); margin-bottom:20px; }
+  .filtros { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:20px; }
+  .campo { display:flex; flex-direction:column; gap:4px; font-size:.75rem; color:var(--text-3); }
+  .campo input, .campo select { font:inherit; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg-1); color:var(--text-2); }
+  .botao { padding:7px 16px; border-radius:var(--radius); border:1px solid var(--accent); background:var(--accent); color:#fff; font-size:.8rem; cursor:pointer; }
+  .botao:hover { opacity:.9; }
+  /* Chip de "filtro aplicado" — export agora é um RETRATO fixo do que
+     estava na tela (ver comentário em cada exportarInterativo), não tem
+     mais inputs de filtro pra reaplicar; isto substitui visualmente o
+     antigo bloco ".filtros" com inputs, mostrando só o que foi usado. */
+  .filtro-aplicado { display:inline-flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border); border-radius:999px; padding:6px 14px; font-size:.78rem; color:var(--text-2); margin-bottom:20px; }
+  .filtro-aplicado b { color:var(--text); }
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .kpi-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px; }
+  .kpi-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:6px; }
+  .kpi-value { font-size:1.7rem; font-weight:700; color:var(--text); }
+  .green{color:var(--green)} .red{color:var(--red)} .accent{color:var(--accent)}
+  .charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin-bottom:20px; }
+  .chart-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; }
+  .chart-box h4 { margin:0 0 10px; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-2); border-bottom:1px solid var(--border); padding-bottom:8px; font-weight:600; }
+  .summary-box { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; font-size:.85rem; }
+  .rodape { margin-top:22px; font-size:.7rem; color:var(--text-3); text-align:center; }
+  table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  th, td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--border); }
+  th { font-size:.68rem; text-transform:uppercase; color:var(--text-3); }
+  .lw-tooltip {
+    display:none; position:fixed; z-index:99999; left:0; top:0;
+    max-width:min(260px, calc(100vw - 24px)); padding:8px 12px;
+    background:var(--bg-card); border:1px solid var(--border-2); border-radius:var(--radius);
+    box-shadow:0 8px 24px rgba(0,0,0,.15); color:var(--text-2);
+    font-size:.78rem; line-height:1.45; white-space:pre-line; pointer-events:none;
+  }
+`;
+}
+
+// Fonte de tooltip.js, embutida literalmente (não dá pra usar o truque de
+// toString() por função — as funções de tooltip.js vivem dentro da PRÓPRIA
+// IIFE dele, não são identificadores soltos que analise-operacional.js
+// (ou qualquer outro dashboard) possa referenciar direto) — usada pelos
+// exports de dashboard que têm gráfico em canvas com hover (Análise
+// Operacional, Análise de Berços, CEP): cola isto num <script> do HTML
+// exportado, ANTES do restante do script daquele dashboard, pra
+// LW.tooltip.ligarHoverCanvas existir do mesmo jeito que existe na tela
+// ao vivo (mesmo comentário de tooltip.js sobre ordem de carregamento:
+// isto pisa em cima de um window.LW já existente, nunca zera ele).
+const TOOLTIP_JS_FONTE = `
+  (function () {
+    let tooltipEl = null;
+    let alvoAtivo = null;
+    function _el() {
+      if (tooltipEl) return tooltipEl;
+      tooltipEl = document.createElement('div');
+      tooltipEl.className = 'lw-tooltip';
+      document.body.appendChild(tooltipEl);
+      return tooltipEl;
+    }
+    function _posicionar(x, y) {
+      const tt = _el();
+      const margem = 12;
+      let left = x + margem, top = y + margem;
+      const w = tt.offsetWidth, h = tt.offsetHeight;
+      if (left + w > window.innerWidth - 8) left = x - margem - w;
+      if (top + h > window.innerHeight - 8) top = y - margem - h;
+      if (left < 8) left = 8;
+      if (top < 8) top = 8;
+      tt.style.left = left + 'px';
+      tt.style.top = top + 'px';
+    }
+    function mostrarTexto(texto, x, y) {
+      if (!texto) { esconder(); return; }
+      const tt = _el();
+      tt.textContent = texto;
+      tt.style.display = 'block';
+      _posicionar(x, y);
+    }
+    function esconder() {
+      if (tooltipEl) tooltipEl.style.display = 'none';
+      alvoAtivo = null;
+    }
+    function ligarHoverCanvas(canvas, acharTexto) {
+      if (canvas._hoverLigado) return;
+      canvas._hoverLigado = true;
+      canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const texto = acharTexto(e.clientX - rect.left, e.clientY - rect.top);
+        if (texto) { canvas.style.cursor = 'pointer'; mostrarTexto(texto, e.clientX, e.clientY); }
+        else { canvas.style.cursor = 'default'; esconder(); }
+      });
+      canvas.addEventListener('mouseleave', () => { esconder(); canvas.style.cursor = 'default'; });
+      let _ultimoTexto = null;
+      canvas.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const texto = acharTexto(t.clientX - rect.left, t.clientY - rect.top);
+        if (texto && texto === _ultimoTexto) { esconder(); _ultimoTexto = null; }
+        else if (texto) { mostrarTexto(texto, t.clientX, t.clientY); _ultimoTexto = texto; }
+        else { esconder(); _ultimoTexto = null; }
+        e.stopPropagation();
+      }, { passive: true });
+    }
+    window.LW = window.LW || {};
+    window.LW.tooltip = { mostrarTexto, esconder, ligarHoverCanvas };
+  })();
+`;
+
 window.LW = {
   // Constantes fixas
   TURNO_OPTS,
@@ -1672,6 +1923,7 @@ window.LW = {
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+  aoReceberDadosSqlExcluidos,
   get OP_ANDAMENTO_CLIENT_ID() { return OP_ANDAMENTO_CLIENT_ID; },
 
   // Log de Acesso
@@ -1725,4 +1977,7 @@ window.LW = {
   // Escape de HTML — usar sempre que texto livre (digitado pelo usuário)
   // for inserido via innerHTML, pra evitar XSS armazenado.
   escaparHtml: _escaparHtml,
+  baixarArquivoTexto,
+  gerarCssExportPadrao,
+  TOOLTIP_JS_FONTE,
 };

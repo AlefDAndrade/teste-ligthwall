@@ -74,10 +74,12 @@ db.exec(`
     -- que vai responder a mesma pergunta via JOIN; até lá, mantido aqui
     -- pra não depender de uma fase que ainda não existe.
     tracos_json           TEXT,
-    -- Se esta operação já foi avaliada pelo Setor de Qualidade (ver
-    -- setor-qualidade-app.html) ou não. Sempre nasce como 0 (falso) — só
-    -- é marcada como avaliada por uma rota dedicada, nunca pelo formulário
-    -- geral de edição (ver CAMPOS_PROTEGIDOS em /editar-operacao, server.js).
+    -- LEGADO — não é mais escrita por rota nenhuma a partir da criação da
+    -- tabela "operacoes_avaliadas" (ver mais abaixo). Mantida só pra não
+    -- quebrar instalações antigas (e pra migração única que preenche
+    -- operacoes_avaliadas a partir daqui); "esta operação já foi avaliada?"
+    -- passa a ser respondido por "existe uma linha em operacoes_avaliadas
+    -- com este id_operacao?", nunca mais por esta coluna.
     avaliado              INTEGER NOT NULL DEFAULT 0,
     modo_teste            INTEGER DEFAULT 0,
     criado_em             TEXT NOT NULL DEFAULT (datetime('now'))
@@ -354,6 +356,30 @@ db.exec(`
     paineis       TEXT NOT NULL  -- JSON: [{pallet, posicao, tipoEsperado, tipoObtido, resultado, linha, marcas}, ...]
   );
   CREATE INDEX IF NOT EXISTS idx_avaliacao_paineis_operacao ON avaliacao_paineis(id_operacao);
+
+  -- ============================================================
+  --  Operações Avaliadas (Setor de Qualidade) — só a LISTA de IDs de
+  --  operação que já foram avaliadas, nada mais. Existe pra não precisar
+  --  gravar esse status DENTRO da própria linha de "operacoes" (que o
+  --  resto do sistema trata como praticamente imutável — ver
+  --  CAMPOS_PROTEGIDOS em /editar-operacao, server.js): marcar uma
+  --  operação como avaliada vira um INSERT aqui, nunca mais um UPDATE em
+  --  "operacoes".
+  --
+  --  Fonte de verdade de "esta operação já foi avaliada?" a partir de
+  --  agora: GET /operacoes-nao-avaliadas (a fila do Setor de Qualidade)
+  --  exclui pelo NOT IN nesta tabela. A coluna "operacoes.avaliado"
+  --  (acima) fica só como legado, não é mais escrita por rota nenhuma.
+  --
+  --  Não guarda mais nada além do id — quem quiser os DADOS da avaliação
+  --  em si (painéis, observações, datas etc.) continua buscando em
+  --  avaliacoes_qualidade (via id_operacao); esta tabela responde só
+  --  "avaliada ou não", não "o que foi avaliado".
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS operacoes_avaliadas (
+    id_operacao TEXT PRIMARY KEY REFERENCES operacoes(id),
+    avaliado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // ------------------------------------------------------------
@@ -501,6 +527,80 @@ if (!_colunasOperacoes.includes('avaliado')) {
   db.exec('ALTER TABLE operacoes ADD COLUMN avaliado INTEGER NOT NULL DEFAULT 0');
   console.log('[migração] Coluna "avaliado" adicionada à tabela operacoes (default: não avaliado).');
 }
+
+// ------------------------------------------------------------
+//  Migração única: popula "operacoes_avaliadas" a partir da coluna
+//  legada "operacoes.avaliado" — sem isso, toda operação que já tivesse
+//  sido marcada avaliado=1 ANTES desta tabela existir voltaria a
+//  aparecer na fila de "não avaliadas" (que passa a consultar só esta
+//  tabela, nunca mais a coluna). INSERT OR IGNORE — idempotente, roda
+//  toda subida do servidor sem duplicar nem sobrescrever o
+//  "avaliado_em" de quem já foi migrado numa subida anterior.
+// ------------------------------------------------------------
+const _operacoesAvaliadoLegado = db.prepare(
+  'SELECT id FROM operacoes WHERE avaliado = 1'
+).all();
+if (_operacoesAvaliadoLegado.length) {
+  const _inserirLegado = db.prepare(
+    'INSERT OR IGNORE INTO operacoes_avaliadas (id_operacao) VALUES (?)'
+  );
+  const _migrarLegado = db.transaction((linhas) => {
+    for (const r of linhas) _inserirLegado.run(r.id);
+  });
+  _migrarLegado(_operacoesAvaliadoLegado);
+  console.log(`[migração] ${_operacoesAvaliadoLegado.length} operação(ões) com "avaliado=1" (coluna legada) migrada(s) para "operacoes_avaliadas".`);
+}
+
+// ------------------------------------------------------------
+//  Migração única: corrige avaliações AVULSAS registradas ANTES da
+//  correção do bug em marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada
+//  (ver comentário lá) — essas avaliações já tiraram a operação certa
+//  da fila (existe uma linha em "operacoes_avaliadas"), mas nunca
+//  ganharam id_operacao em "avaliacoes_qualidade" (ficou NULL pra
+//  sempre), o que fazia a Análise Focada nunca encontrar o resultado
+//  pra essas operações.
+//
+//  Conservador de propósito: só liga os pontos quando a resposta é
+//  INEQUÍVOCA — 1 avaliação avulsa (id_operacao NULL) e 1 operação
+//  daquela mesma bateria já marcada como avaliada mas ainda sem
+//  NENHUMA avaliação vinculada (nem desta nem de nenhuma outra). Se
+//  houver mais de uma avaliação avulsa OU mais de uma operação
+//  candidata pra mesma bateria, pula (ambíguo demais pra adivinhar) —
+//  melhor deixar sem vincular do que vincular errado.
+// ------------------------------------------------------------
+(function _migrarAvaliacoesAvulsasOrfas() {
+  const avulsas = db.prepare(`
+    SELECT id, id_bateria FROM avaliacoes_qualidade
+    WHERE id_operacao IS NULL AND id_bateria IS NOT NULL
+  `).all();
+  if (!avulsas.length) return;
+
+  const porBateria = new Map();
+  for (const a of avulsas) {
+    if (!porBateria.has(a.id_bateria)) porBateria.set(a.id_bateria, []);
+    porBateria.get(a.id_bateria).push(a.id);
+  }
+
+  let vinculadas = 0;
+  const executar = db.transaction(() => {
+    for (const [idBateria, idsAvaliacao] of porBateria) {
+      if (idsAvaliacao.length !== 1) continue; // mais de uma avulsa pra mesma bateria — ambíguo, pula
+
+      const candidatas = db.prepare(`
+        SELECT o.id FROM operacoes o
+        JOIN operacoes_avaliadas oa ON oa.id_operacao = o.id
+        WHERE o.id_bateria = ?
+          AND o.id NOT IN (SELECT id_operacao FROM avaliacoes_qualidade WHERE id_operacao IS NOT NULL)
+      `).all(idBateria);
+      if (candidatas.length !== 1) continue; // 0 ou >1 operação candidata — ambíguo, pula
+
+      _vincularAvaliacaoAOperacao(idsAvaliacao[0], candidatas[0].id);
+      vinculadas++;
+    }
+  });
+  executar();
+  if (vinculadas) console.log(`[migração] ${vinculadas} avaliação(ões) avulsa(s) retro-vinculada(s) à operação correta (bug da Análise Focada corrigido para dados já existentes).`);
+})();
 
 /**
  * Cria a linha inicial de bercos_visuais pra uma operação recém-
@@ -688,7 +788,8 @@ module.exports.SQL_INSERIR_OPERACAO = SQL_INSERIR_OPERACAO;
 function relatorioBercos() {
   const rows = db.prepare(`
     SELECT o.id AS id_operacao, o.data, o.turno, o.id_bateria, o.tipo_montagem,
-           o.capacidade, o.bercos_reais, o.houve_atraso, o.motivo_atraso, bv.bercos
+           o.capacidade, o.bercos_reais, o.houve_atraso, o.motivo_atraso,
+           o.bercos_personalizados, bv.bercos
     FROM bercos_visuais bv
     JOIN operacoes o ON o.id = bv.id_operacao
     ORDER BY o.data ASC, o.turno ASC, o.criado_em ASC
@@ -701,6 +802,11 @@ function relatorioBercos() {
     tipo_montagem: r.tipo_montagem,
     capacidade: r.capacidade,
     bercos_reais: r.bercos_reais,
+    // Só preenchido quando tipo_montagem === 'PERSONALIZADA' (ver
+    // coluna operacoes.bercos_personalizados) — usado pelo Modo Visual do
+    // Relatório de Berços (relatorio-bercos.js) pra colorir CADA berço
+    // pelo seu próprio tipo, em vez de um tipo único pra bateria inteira.
+    bercos_personalizados: r.bercos_personalizados ? JSON.parse(r.bercos_personalizados) : null,
     // Adicionados pra cruzar com a tabela de Pontos de Atenção (Análise
     // de Berços): confirma se o vazamento marcado no berço bate com um
     // atraso já registrado com esse motivo (ver _mapaAtrasoVazamento, em
@@ -899,6 +1005,11 @@ function _normalizarPaineisParaSql(paineis) {
     tipoEsperado: p.tipoEsperado || null, tipoObtido: p.tipoObtido || null,
     resultado: p.resultado || null, linha: p.linha || null,
     marcas: p.marcas || [],
+    // Código do motivo do defeito (ver MOTIVOS_DEFEITO, setor-qualidade.js)
+    // — só existe (não-null) em painéis 2ª linha ou reprovados.
+    motivo: p.motivo || null,
+    // Descrição livre — só existe quando motivo === 'OT' ("Outros").
+    motivoDescricao: p.motivoDescricao || null,
   }));
 }
 function salvarAvaliacaoQualidade(avaliacao) {
@@ -1012,10 +1123,201 @@ function substituirAvaliacoesQualidade(lista) {
   }
 }
 
+/**
+ * Marca uma operação como avaliada — INSERT (idempotente) em
+ * "operacoes_avaliadas", nunca mais um UPDATE na própria linha de
+ * "operacoes" (ver comentário na CREATE TABLE, acima). Usada por
+ * POST /marcar-operacao-avaliada (server.js) quando a avaliação vem
+ * vinculada a uma operação da fila (linkedOperacaoId presente).
+ *
+ * FK (operacoes_avaliadas.id_operacao REFERENCES operacoes(id), com
+ * PRAGMA foreign_keys=ON) faz o SQLite recusar silenciosamente um id que
+ * não exista em "operacoes" — por isso quem chama (a rota) confere a
+ * existência ANTES de chamar esta função, se precisar de um erro
+ * explícito pro front (ver server.js).
+ *
+ * @param {string} idOperacao
+ * @returns {boolean} true se inseriu (1ª vez); false se já estava
+ *   marcada (chamada repetida, idempotente) ou se o id não existe.
+ */
+function marcarOperacaoAvaliada(idOperacao) {
+  if (!idOperacao) return false;
+  const info = db.prepare(
+    'INSERT OR IGNORE INTO operacoes_avaliadas (id_operacao) VALUES (?)'
+  ).run(idOperacao);
+  return info.changes > 0;
+}
+
+/**
+ * Desfaz COMPLETAMENTE a avaliação de qualidade de uma operação — usada
+ * por POST /admin/sql-excluir-linha (Configurações → Dados SQL) quando a
+ * linha excluída é de "operacoes_avaliadas": em vez de só tirar a
+ * operação da lista de avaliadas (o que deixaria avaliacoes_qualidade e
+ * avaliacao_paineis "órfãs" — a avaliação continuaria existindo, só que
+ * de uma operação que voltou a aparecer como pendente), remove os 3
+ * rastros da avaliação de uma vez, numa transação só:
+ *
+ *   1) avaliacao_paineis   (referencia avaliacoes_qualidade via FK — por
+ *                            isso sai PRIMEIRO, senão o DELETE de
+ *                            avaliacoes_qualidade seria bloqueado)
+ *   2) avaliacoes_qualidade (a avaliação em si, com o JSON completo)
+ *   3) operacoes_avaliadas  (a marcação "esta operação já foi avaliada")
+ *
+ * Depois disso, a operação passa a aparecer de novo em
+ * GET /operacoes-nao-avaliadas (a fila do Setor de Qualidade) — não por
+ * nenhuma ação extra aqui, mas porque essa fila já é definida como "toda
+ * operação cujo id NÃO esteja em operacoes_avaliadas" (ver comentário na
+ * CREATE TABLE operacoes_avaliadas, acima).
+ *
+ * @returns {{avaliacaoPaineis:number, avaliacoesQualidade:number, operacoesAvaliadas:number}}
+ *   nº de linhas removidas em cada tabela (todos 0 se o id_operacao não
+ *   tinha avaliação nenhuma).
+ */
+function desfazerAvaliacaoOperacao(idOperacao) {
+  const excluirTudo = db.transaction(() => {
+    const r1 = db.prepare('DELETE FROM avaliacao_paineis WHERE id_operacao = ?').run(idOperacao);
+    const r2 = db.prepare('DELETE FROM avaliacoes_qualidade WHERE id_operacao = ?').run(idOperacao);
+    const r3 = db.prepare('DELETE FROM operacoes_avaliadas WHERE id_operacao = ?').run(idOperacao);
+    return {
+      avaliacaoPaineis: r1.changes,
+      avaliacoesQualidade: r2.changes,
+      operacoesAvaliadas: r3.changes,
+    };
+  });
+  return excluirTudo();
+}
+module.exports.desfazerAvaliacaoOperacao = desfazerAvaliacaoOperacao;
+
+/**
+ * Marca como avaliada a operação PENDENTE mais antiga de uma bateria —
+ * usada quando uma avaliação de qualidade é registrada SEM vir vinculada
+ * a uma operação da fila (linkedOperacaoId ausente, ver
+ * /registrar-avaliacao-qualidade, server.js).
+ *
+ * Por quê isso existe: uma avaliação AVULSA (o operador digita/seleciona
+ * só o ID da bateria, sem escolher da fila) não tinha como marcar
+ * nenhuma operação como avaliada — a operação real daquela bateria, se
+ * houvesse alguma pendente, ficava "não avaliada" pra sempre, mesmo já
+ * avaliada de verdade. Isso classificava a bateria errado (continuava
+ * aparecendo na fila do Setor de Qualidade, sujeita a ser avaliada de
+ * novo) e podia gerar avaliação duplicada pra mesma operação.
+ *
+ * Mesmo critério FIFO de GET /operacoes-nao-avaliadas (mais antiga
+ * primeiro: "data ASC, fim ASC") — se a bateria tiver mais de uma
+ * operação pendente, marca só a mais antiga (a que, na prática, é a
+ * próxima da fila) e nunca mexe numa avaliação que já veio vinculada
+ * (essa continua só pelo marcarOperacaoAvaliada explícito, acima,
+ * chamado pelo front com o id_operacao exato).
+ *
+ * Nunca considera operações de Modo de Teste (modo_teste=0) — mesmo
+ * motivo de /operacoes-nao-avaliadas: o Setor de Qualidade não tem
+ * noção de Modo de Teste.
+ *
+ * BUG CORRIGIDO: esta função só tirava a operação da FILA (INSERT em
+ * "operacoes_avaliadas"), mas nunca vinculava a própria avaliação
+ * avulsa a essa operação (avaliacoes_qualidade.id_operacao continuava
+ * NULL). Resultado: a bateria sumia da fila (parecia "avaliada"), mas
+ * a Análise Focada — que busca a avaliação estritamente por
+ * id_operacao (ver db.detalheOperacao) — nunca encontrava nada pra
+ * essa operação, mesmo a avaliação certa já existindo. Agora, quando
+ * o FIFO identifica qual operação pendente é essa (`pendente.id`),
+ * também retro-vincula a avaliação avulsa a ela (ver
+ * _vincularAvaliacaoAOperacao), na mesma transação.
+ *
+ * @param {string} idBateria
+ * @param {string} [idAvaliacao] - id da avaliação avulsa que disparou
+ *   esta chamada (ver POST /registrar-avaliacao-qualidade, server.js) —
+ *   usado só pra retro-vincular essa avaliação à operação encontrada.
+ *   Sem isso (chamada legada, sem o 2º argumento), o comportamento
+ *   volta a ser só o antigo (tira da fila, sem vincular).
+ * @returns {string|false} o id da operação marcada, ou false se não havia
+ *   nenhuma pendente pra essa bateria. Quem chama (server.js) usa esse id
+ *   pra também tirar a operação da fila em arquivo (ver
+ *   removerDaFilaNaoAvaliadas, server.js) — CONTINUA truthy como antes
+ *   (era `true`), então nenhuma chamada existente que só faz `if (...)`
+ *   com o retorno precisa mudar.
+ */
+function marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada(idBateria, idAvaliacao) {
+  if (!idBateria) return false;
+  const pendente = db.prepare(`
+    SELECT id FROM operacoes
+    WHERE id_bateria = ? AND modo_teste = 0
+      AND id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)
+    ORDER BY data ASC, fim ASC
+    LIMIT 1
+  `).get(idBateria);
+  if (!pendente) return false;
+
+  const executar = db.transaction(() => {
+    marcarOperacaoAvaliada(pendente.id);
+    if (idAvaliacao) _vincularAvaliacaoAOperacao(idAvaliacao, pendente.id);
+  });
+  executar();
+  return pendente.id;
+}
+
+/**
+ * Vincula, DEPOIS de já registrada, uma avaliação de qualidade a uma
+ * operação — usado só por marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada
+ * (acima), pra fechar a lacuna de uma avaliação AVULSA cuja operação
+ * correspondente só é descoberta depois (pelo FIFO de bateria), não no
+ * momento do registro.
+ *
+ * Atualiza id_operacao em avaliacoes_qualidade E avaliacao_paineis
+ * (mesma coluna nas duas tabelas — ver CREATE TABLE), e também
+ * "linkedOperacaoId" DENTRO do JSON "dados" — "dados" é quem o front
+ * lê de volta (ver listarAvaliacoesQualidade/editarAvaliacaoDoEspelho),
+ * então precisa continuar consistente com a coluna, senão a avaliação
+ * passaria a ser encontrada pela Análise Focada mas ainda apareceria
+ * como "avulsa" (sem vínculo) em qualquer tela que leia o JSON direto.
+ */
+function _vincularAvaliacaoAOperacao(idAvaliacao, idOperacao) {
+  const row = db.prepare('SELECT dados FROM avaliacoes_qualidade WHERE id = ?').get(idAvaliacao);
+  if (!row) return; // avaliação não existe (não deveria acontecer, mas não quebra a marcação da fila por causa disso)
+  const dados = JSON.parse(row.dados);
+  if (dados.linkedOperacaoId === idOperacao) return; // já vinculada a esta mesma operação — nada a fazer
+  dados.linkedOperacaoId = idOperacao;
+  db.prepare('UPDATE avaliacoes_qualidade SET id_operacao = ?, dados = ? WHERE id = ?')
+    .run(idOperacao, JSON.stringify(dados), idAvaliacao);
+  db.prepare('UPDATE avaliacao_paineis SET id_operacao = ? WHERE id_avaliacao = ?')
+    .run(idOperacao, idAvaliacao);
+}
+
+/**
+ * Lista todo o conteúdo de "operacoes_avaliadas" — usado por GET
+ * /db/operacoes_avaliadas.json (Backup de Dados) e pelo backup automático
+ * do servidor (gerarZipDadosServidor, server.js). Formato simples:
+ * [{ id_operacao, avaliado_em }, ...].
+ */
+function todosOsOperacoesAvaliadas() {
+  return db.prepare('SELECT id_operacao, avaliado_em FROM operacoes_avaliadas ORDER BY avaliado_em ASC').all();
+}
+
+/**
+ * Substitui TODO o conteúdo de "operacoes_avaliadas" pelo array informado
+ * — usado por /restaurar-backup-dados, mesmo padrão "apaga tudo e
+ * reinsere" das outras tabelas (ver substituirBercosVisuais/
+ * substituirAvaliacoesQualidade). Quem chama é responsável por já ter
+ * limpado esta tabela ANTES de mexer em "operacoes" (ver comentário em
+ * /restaurar-backup-dados, server.js, sobre a ordem por causa da FK) —
+ * aqui só limpa de novo (idempotente, não custa nada) e reinsere.
+ */
+function substituirOperacoesAvaliadas(lista) {
+  const inserir = db.prepare('INSERT OR IGNORE INTO operacoes_avaliadas (id_operacao, avaliado_em) VALUES (?, ?)');
+  db.prepare('DELETE FROM operacoes_avaliadas').run();
+  for (const item of (lista || [])) {
+    if (item && item.id_operacao) inserir.run(item.id_operacao, item.avaliado_em || new Date().toISOString());
+  }
+}
+
 module.exports.salvarAvaliacaoQualidade = salvarAvaliacaoQualidade;
 module.exports.listarAvaliacoesQualidade = listarAvaliacoesQualidade;
 module.exports.listarPaineisAvaliacao = listarPaineisAvaliacao;
 module.exports.substituirAvaliacoesQualidade = substituirAvaliacoesQualidade;
+module.exports.marcarOperacaoAvaliada = marcarOperacaoAvaliada;
+module.exports.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada = marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada;
+module.exports.todosOsOperacoesAvaliadas = todosOsOperacoesAvaliadas;
+module.exports.substituirOperacoesAvaliadas = substituirOperacoesAvaliadas;
 
 // ============================================================
 //  Migração automática (Fase 2): historico.json -> tabela operacoes

@@ -6,6 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Injeção — Lightwall SC</title>
   <link rel="stylesheet" href="css/styles.css">
+  <!-- CSS do Setor de Qualidade — antes só carregado dentro do iframe
+       próprio (setor-qualidade-app.html); agora que a tela roda como
+       mais uma página do app, entra aqui igual a qualquer outra. -->
+  <link rel="stylesheet" href="css/setor-qualidade.css">
+  <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
+       resto do app não usa nenhum ícone fas/far); antes só era carregado
+       dentro do iframe próprio. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -217,6 +225,11 @@
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
+          <div class="menu-card" onclick="showPage('setor-qualidade')">
+            <div class="menu-card-icon">🧪</div>
+            <div class="menu-card-title">Setor de Qualidade</div>
+            <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
+          </div>
           <div class="menu-card" data-admin-only onclick="abrirImportacao()">
             <div class="menu-card-icon">📥</div>
             <div class="menu-card-title">Importar Documento</div>
@@ -410,7 +423,16 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Dimensão (Tipo)</label>
-                <input class="form-input auto-filled" id="op-dimensao" readonly placeholder="Definido pela bateria">
+                <div style="display:flex;gap:6px;align-items:stretch">
+                  <input class="form-input auto-filled" id="op-dimensao" readonly
+                    inputmode="decimal"
+                    placeholder="Definido pela bateria" style="flex:1;min-width:0">
+                  <button type="button" id="btn-editar-dimensao"
+                    onmousedown="event.preventDefault()"
+                    style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
+                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica pra esta operação"
+                    onclick="LWOp.editarDimensao()">✏️</button>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Capacidade (Berços)</label>
@@ -550,7 +572,7 @@
     </fieldset>
   </div>
 </main>
-    <!-- ============ PAGE: TURNOS ============ -->
+<!-- ============ PAGE: TURNOS ============ -->
     <main class="main" id="page-turnos">
       <div class="page-header">
         <h1 class="page-title">Desempenho por <span>Turnos</span></h1>
@@ -572,6 +594,7 @@
                 <input class="form-input" type="date" id="turnos-data-fim" style="width:150px">
               </div>
               <button class="btn btn-outline-accent" id="btn-turnos-filtrar">Filtrar</button>
+              <button class="btn btn-outline-accent" id="btn-turnos-exportar">🌐 Exportar Interativo</button>
             </div>
             <div style="display:flex;gap:20px;font-size:.85rem">
               <div>🏆 Mais eficiente: <strong style="color:var(--accent)" id="melhor-turno">—</strong></div>
@@ -699,7 +722,6 @@
 
       </div>
     </main>
-
 <!-- ============ PAGE: Relatorio de Baterias ============ -->
     <main class="main" id="page-registro">
       <div class="page-header" style="position:relative">
@@ -926,6 +948,7 @@
             <input class="form-input" type="date" id="rb-data-fim" style="width:150px" title="Data fim">
             <button class="btn btn-ghost btn-sm" id="btn-rb-filtrar">Filtrar</button>
             <button class="btn btn-ghost btn-sm" id="btn-rb-limpar">✕ Limpar</button>
+            <button class="btn btn-ghost btn-sm" id="btn-rb-modo-visual" title="Mostra o desenho de cada berço, colorido conforme o tipo de montagem, em vez da tabela">🎨 Modo Visual</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
               <span style="font-size:.78rem;color:var(--text-3)" id="rb-count"></span>
             </div>
@@ -947,6 +970,15 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Modo Visual: 1 card por bateria, com o desenho colorido dos
+             berços (mesma grade/estilo de "Bateria Atual" — .ba-grid/
+             .ba-celula/.ba-dot, ver styles.css) em vez da tabela. Montado
+             e escondido/mostrado por relatorio-bercos.js (_renderVisual/
+             _aplicarModoVisual) — começa escondido; alterna com a tabela
+             ao clicar em "🎨 Modo Visual", sem precisar buscar os dados
+             de novo (os dois já ficam prontos a cada render()). -->
+        <div id="relatorio-bercos-visual" style="display:none"></div>
 
       </div>
     </main>
@@ -980,6 +1012,7 @@
               <input class="form-input" type="date" id="ab-data-fim" style="width:150px">
             </div>
             <button class="btn btn-outline-accent" id="btn-ab-filtrar">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-ab-exportar">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1159,8 +1192,9 @@
 
       <div class="page-body">
 
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
+          <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
         </div>
 
         <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
@@ -1255,6 +1289,7 @@
               </select>
             </div>
             <button class="btn btn-primary" id="btn-qt-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-qt-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1484,6 +1519,7 @@
               </select>
             </div>
             <button class="btn btn-primary" id="btn-oee-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-oee-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1645,6 +1681,7 @@
               <input class="form-input" type="date" id="ao-data-fim" style="width:150px">
             </div>
             <button class="btn btn-outline-accent" id="btn-ao-filtrar">Filtrar</button>
+            <button class="btn btn-outline-accent" id="btn-ao-exportar">🌐 Exportar Interativo</button>
           </div>
         </div>
 
@@ -1983,20 +2020,571 @@
         <h1 class="page-title">Setor de <span>Qualidade</span></h1>
         <p class="page-desc">Avaliação de Baterias · Classificação de Painéis · Dashboard de Refugo</p>
       </div>
-      <div class="page-body" style="padding:0;height:calc(100vh - 130px);">
-        <iframe
-          id="setor-qualidade-frame"
-          src="setor-qualidade-app.html"
-          style="width:100%;height:100%;border:none;border-radius:0 0 var(--radius) var(--radius);"
-          allow="clipboard-write"
-          title="Setor de Qualidade — Avaliação de Baterias"
-        ></iframe>
+      <div class="page-body" style="padding:0;">
+      <div class="sq-container">
+
+        <!-- ── TOPBAR ──────────────────────────────────────────── -->
+        <div class="sq-topbar">
+          <div class="sq-brand"><div class="sq-bar"></div>Avaliação de Baterias</div>
+          <nav class="sq-nav">
+            <button class="sq-nav-btn active" id="sq-nav-form"       onclick="SQ.startNew()">🧪 Avaliação</button>
+            <button class="sq-nav-btn"        id="sq-nav-dashboard"  onclick="SQ.navigateTo('dashboard')">📊 Dashboard</button>
+            <button class="sq-nav-btn"        id="sq-nav-history"    onclick="SQ.navigateTo('history')">📋 Registros</button>
+          </nav>
+        </div>
+
+        <!-- "Em Andamento" deixou de ser uma tela própria — agora é um dos 2
+             colapsáveis dentro da aba "Avaliação" (ver #sq-form, mais abaixo),
+             junto com a Fila, os dois retraídos por padrão (abrem em popover
+             ao clicar — ver SQ.toggleCollapsible, js/setor-qualidade.js). -->
+
+        <!-- ══════════════════════════════════════════════════════
+             TELA 2: DASHBOARD
+        ══════════════════════════════════════════════════════════ -->
+        <div class="sq-section" id="sq-dashboard">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;" id="sq-dash-topbar">
+            <span style="font-size:.82rem;color:var(--text-3);"><i class="fas fa-chart-pie"></i> Visão Executiva</span>
+            <div id="sq-dash-acoes" style="display:flex;gap:8px;">
+              <button class="btn btn-outline-accent btn-sm" id="sq-btn-html" onclick="SQ.exportDashboardHTML()"><i class="fas fa-file-code"></i> Exportar Interativo</button>
+              <button class="btn btn-danger btn-sm" id="sq-btn-pdf" onclick="SQ.exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
+            </div>
+          </div>
+
+          <!-- Filtros -->
+          <div class="sq-filters" id="sq-dash-filtros">
+            <div class="form-group">
+              <label class="form-label">Data Inicial</label>
+              <input class="form-input" type="date" id="sq-dash-start" style="width:150px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Data Final</label>
+              <input class="form-input" type="date" id="sq-dash-end" style="width:150px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bateria</label>
+              <select class="form-input form-select" id="sq-dash-bat" style="width:140px;">
+                <option value="">Todas</option>
+                <option value="B1">B1</option><option value="B2">B2</option><option value="B3">B3</option>
+                <option value="B4">B4</option><option value="B5-7.5">B5-7,5cm</option><option value="B6-12">B6-12cm</option>
+                <option value="B7">B7</option><option value="B8">B8</option><option value="B9">B9</option>
+                <option value="B10">B10</option><option value="B11">B11</option><option value="B12">B12</option><option value="B13">B13</option>
+              </select>
+            </div>
+            <button class="btn btn-outline-accent btn-sm" onclick="SQ.renderDashboard()"><i class="fas fa-sync-alt"></i> Aplicar</button>
+          </div>
+
+          <!-- Espelho visual -->
+          <div class="sq-mirror-wrapper">
+            <div class="sq-mirror-header">
+              <div class="sq-mirror-title"><i class="fas fa-cube" style="color:var(--blue);"></i> Espelho Visual da Avaliação</div>
+              <div class="sq-mirror-info">
+                <span><strong>Bateria:</strong> <span id="sq-mirror-battery">---</span></span>
+                <span><strong>Turno:</strong>   <span id="sq-mirror-turno">---</span></span>
+                <span><strong>Desmoldagem:</strong> <span id="sq-mirror-desmoldagem">---</span></span>
+              </div>
+              <div class="sq-mirror-nav">
+                <div style="position:relative;display:inline-block">
+                  <button class="btn btn-ghost btn-sm" onclick="SQ.togglePopover('popover-sq-motivos', event)" title="O que cada código de motivo significa">
+                    <i class="fas fa-list-ul"></i> Motivos
+                  </button>
+                  <!-- Conteúdo montado em JS (ver _renderReferenciaMotivos,
+                       setor-qualidade.js) a partir de MOTIVOS_DEFEITO — evita
+                       duplicar a lista de 14 códigos aqui E lá; sempre reflete
+                       exatamente a mesma lista usada no seletor de marcação. -->
+                  <div id="popover-sq-motivos" class="ao-popover" style="width:280px"></div>
+                </div>
+                <button id="sq-mirror-btn-editar" class="btn btn-outline-accent btn-sm" style="display:none;" onclick="SQ.editarAvaliacaoDoEspelho()" title="Corrigir esta avaliação já registrada (Administrador)"><i class="fas fa-pen"></i> Editar Avaliação</button>
+                <button id="sq-mirror-prev" onclick="SQ.prevMirror()"><i class="fas fa-chevron-left"></i></button>
+                <span id="sq-mirror-counter" style="font-size:.78rem;color:var(--text-3);">0 / 0</span>
+                <button id="sq-mirror-next" onclick="SQ.nextMirror()"><i class="fas fa-chevron-right"></i></button>
+              </div>
+            </div>
+            <div id="sq-mirror-container">
+              <div class="sq-empty" style="padding:20px;"><i class="fas fa-inbox"></i>Nenhuma avaliação.</div>
+            </div>
+            <div class="sq-mirror-legend">
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-verde);width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Aprovado</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-vermelho);width:10px;height:10px;border-radius:50%;display:inline-block;"></span>Reprovado</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-azul);width:10px;height:10px;border-radius:50%;display:inline-block;"></span>2ª linha</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-amarelo);width:12px;height:3px;border-radius:2px;display:inline-block;"></span>3T</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-laranja);width:12px;height:3px;border-radius:2px;display:inline-block;"></span>1T</div>
+            </div>
+          </div>
+
+          <!-- KPIs -->
+          <div class="sq-kpi-grid" id="sq-kpi-grid"></div>
+
+          <!-- Gráficos -->
+          <div class="sq-charts-grid">
+            <div class="sq-chart-box"><h4>🏷️ Painéis por Tipo</h4><div id="sq-chart-tipo"></div></div>
+            <div class="sq-chart-box"><h4>📈 Evolução da Produção</h4><div id="sq-chart-production"></div></div>
+            <div class="sq-chart-box"><h4>📊 Distribuição das Classificações</h4><div id="sq-chart-quality"></div></div>
+            <div class="sq-chart-box"><h4>🎯 Defeitos por Posição</h4><div id="sq-chart-posicao" style="min-height:200px;"></div></div>
+            <div class="sq-chart-box"><h4>🏭 Baterias com Mais Refugo</h4><div id="sq-chart-bat-refugo"></div></div>
+            <div class="sq-chart-box"><h4>🔴 Taxa de Refugo por Tipo (%)</h4><div id="sq-chart-rejections"></div></div>
+            <div class="sq-chart-box"><h4>⏳ Tempo de Pega × Refugo</h4><div id="sq-chart-tempo-pega"></div></div>
+            <div class="sq-chart-box"><h4>✅ Aprovação vs Reprovação por Bateria</h4><div id="sq-chart-approval-bat"></div></div>
+          </div>
+
+          <!-- Resumo -->
+          <div class="sq-summary-box">
+            <h4><i class="fas fa-file-alt"></i> Resumo &amp; Insights</h4>
+            <p id="sq-dash-summary">Nenhum dado disponível.</p>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             TELA 3: FORMULÁRIO DE AVALIAÇÃO
+        ══════════════════════════════════════════════════════════ -->
+        <div class="sq-section active" id="sq-form">
+          <!-- Ações do formulário -->
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;">
+            <button class="btn btn-ghost btn-sm sq-hide-view"  id="sq-btn-save"     onclick="SQ.saveDraft()"><i class="fas fa-save"></i> Salvar</button>
+            <button class="btn btn-ghost btn-sm" id="sq-btn-cancelar-edicao" style="display:none;" onclick="SQ.cancelarEdicaoAvaliacao()"><i class="fas fa-times"></i> Cancelar</button>
+            <button class="btn btn-success btn-sm sq-hide-view" id="sq-btn-register" onclick="SQ.registerEvaluation()"><i class="fas fa-check-circle"></i> Registrar</button>
+            <button class="btn btn-ghost btn-sm sq-show-view"  id="sq-btn-back"     onclick="SQ.goBack()"><i class="fas fa-arrow-left"></i> Voltar</button>
+          </div>
+
+          <!-- "Em Andamento" (avaliações já iniciadas/salvas como rascunho) e
+               Fila de baterias pendentes, ordenada por previsão de desemplaque
+               (a mais antiga = 1ª = a que já pode/deve ser desemplacada e
+               avaliada primeiro) — ACIMA do "Cabeçalho do registro", logo
+               abaixo. Os dois ficam RETRAÍDOS por padrão (só um botão com a
+               contagem) — clicar abre um popover com a lista completa (ver
+               SQ.toggleCollapsible, js/setor-qualidade.js); só 1 aberto por vez.
+
+               Na Fila: só as 3 primeiras posições viram cartão; da 4ª em diante
+               fica num <select> (ver sq-fila-outras-wrap), pra não lotar o
+               popover quando a fila for grande. Clicar em qualquer cartão (ou
+               escolher no select + Iniciar) preenche o formulário inteiro com
+               os dados daquela bateria (ver SQ.iniciarAvaliacaoDaFila /
+               SQ.iniciarAvaliacaoDoSelect, js/setor-qualidade.js) e fecha o
+               popover. Atualizada sempre que uma avaliação é salva ou
+               registrada — a 2ª sobe pra 1ª, a 3ª pra 2ª, a 1ª do select vira
+               3ª, e assim por diante, automaticamente (é só a ordem de chegada
+               na fila, não algo guardado por item).
+
+               Escondidos em modo só-leitura (ver .sq-hide-view — mesma classe
+               usada nos botões Salvar/Registrar), já que fazem sentido pra
+               iniciar/continuar uma avaliação, não pra quem só está revendo
+               uma já registrada. -->
+          <div class="sq-collapsible-row sq-hide-view" id="sq-collapsible-row">
+
+            <div class="sq-collapsible" id="sq-andamento-wrap">
+              <button type="button" class="sq-collapsible-btn" onclick="SQ.toggleCollapsible('andamento')">
+                <i class="fas fa-folder-open"></i> Em Andamento
+                <span class="sq-collapsible-badge" id="sq-andamento-badge">0</span>
+                <i class="fas fa-chevron-down sq-collapsible-chevron"></i>
+              </button>
+              <div class="sq-collapsible-panel">
+                <div id="sq-draft-list">
+                  <div class="sq-empty"><i class="fas fa-inbox"></i>Nenhuma avaliação em andamento.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sq-collapsible" id="sq-fila-wrap">
+              <button type="button" class="sq-collapsible-btn" onclick="SQ.toggleCollapsible('fila')">
+                <i class="fas fa-list-ol"></i> Ordem de Previsão de Desemplaque
+                <span class="sq-collapsible-badge" id="sq-fila-badge">0</span>
+                <i class="fas fa-chevron-down sq-collapsible-chevron"></i>
+              </button>
+              <div class="sq-collapsible-panel">
+                <!-- 4ª posição em diante — só aparece se houver mais de 3 na fila -->
+                <div class="sq-fila-outras" id="sq-fila-outras-wrap" style="display:none;">
+                  <select class="form-input form-select" id="sq-fila-select"></select>
+                  <button class="btn btn-primary btn-sm" onclick="SQ.iniciarAvaliacaoDoSelect()"><i class="fas fa-play"></i> Iniciar</button>
+                  <button type="button" class="sq-fila-item-excluir" onclick="SQ.excluirDoSelect()" title="Excluir da fila o item selecionado (marca todos os painéis como &quot;Não avaliado no sistema&quot;)"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div id="sq-fila-list">
+                  <span class="sq-fila-pendentes-vazio"><i class="fas fa-spinner fa-spin"></i> Carregando…</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="position:relative;">
+            <div id="sq-view-overlay" class="sq-view-overlay" style="display:none;"></div>
+            <!-- campo técnico oculto -->
+            <select id="sq-thickness" style="display:none;">
+              <option value="11">7,5cm (11)</option>
+              <option value="10" selected>9cm (10)</option>
+              <option value="8">12cm (8)</option>
+            </select>
+
+            <!-- Cabeçalho do registro -->
+            <div class="sq-header-grid">
+              <div class="form-group">
+                <label class="form-label">ID da Bateria</label>
+                <select class="form-input form-select" id="sq-batteryId" onchange="SQ.autoSetThickness()">
+                  <option value="B1">B1</option><option value="B2">B2</option><option value="B3">B3</option>
+                  <option value="B4">B4</option><option value="B5-7.5">B5-7,5cm</option><option value="B6-12">B6-12cm</option>
+                  <option value="B7">B7</option><option value="B8">B8</option><option value="B9">B9</option>
+                  <option value="B10">B10</option><option value="B11">B11</option><option value="B12">B12</option><option value="B13">B13</option>
+                </select>
+              </div>
+              <div class="form-group" style="grid-column:span 2;">
+                <label class="form-label">Tipo de Montagem</label>
+                <select class="form-input form-select" id="sq-mountType" onchange="SQ.changeMountType()">
+                  <option value="">Carregando…</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sequência do Dia</label>
+                <select class="form-input form-select" id="sq-dailySeq">
+                  <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                  <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+                  <option>11</option><option>12</option><option>13</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Turno</label>
+                <select class="form-input form-select" id="sq-turno">
+                  <option value="1° TURNO">1° Turno</option>
+                  <option value="2° TURNO">2° Turno</option>
+                  <option value="3° TURNO">3° Turno</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Temperatura</label>
+                <input class="form-input" type="text" id="sq-temp" placeholder="38°C" onblur="SQ.formatTemperature(this)">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Data/Hora Montagem</label>
+                <input class="form-input" type="datetime-local" step="60" id="sq-dtMontagem">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Data/Hora Enchimento</label>
+                <input class="form-input" type="datetime-local" step="60" id="sq-dtEnchimento" oninput="SQ.calculateCureTime()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Data/Hora Desmoldagem</label>
+                <input class="form-input" type="datetime-local" step="60" id="sq-dtDesmoldagem" oninput="SQ.calculateCureTime()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Tempo de Pega</label>
+                <input class="form-input" type="text" id="sq-cure-time" readonly placeholder="--">
+              </div>
+            </div>
+
+            <!-- Ferramentas de marcação -->
+            <div class="sq-tools">
+              <span class="sq-tools-label"><i class="fas fa-palette"></i> Cor</span>
+              <button class="sq-btn-color verde active"    onclick="SQ.selectColor(this,'verde')"></button>
+              <button class="sq-btn-color vermelho"        onclick="SQ.selectColor(this,'vermelho')"></button>
+              <button class="sq-btn-color azul"            onclick="SQ.selectColor(this,'azul')"></button>
+              <button class="sq-btn-color amarelo"         onclick="SQ.selectColor(this,'amarelo')"></button>
+              <button class="sq-btn-color laranja"         onclick="SQ.selectColor(this,'laranja')"></button>
+              <div class="sq-tools-sep"></div>
+              <span class="sq-tools-label"><i class="fas fa-shapes"></i> Forma</span>
+              <button class="sq-btn-shape circle active"   onclick="SQ.selectShape(this,'circle')"><span class="sq-shape-circle"></span></button>
+              <button class="sq-btn-shape dash"            onclick="SQ.selectShape(this,'dash')"><span class="sq-shape-dash"></span></button>
+              <button class="sq-btn-shape x"                onclick="SQ.selectShape(this,'x')" title="Painel não preenchido — sempre sozinha, cor vermelha fixa"><span class="sq-shape-x">×</span></button>
+              <div class="sq-tools-sep"></div>
+              <button class="btn btn-ghost btn-sm"         onclick="SQ.undoLastAction()"><i class="fas fa-undo-alt"></i> Desfazer</button>
+              <button class="btn btn-danger btn-sm"        onclick="SQ.clearAllMarks()"><i class="fas fa-trash-alt"></i> Limpar</button>
+              <div class="sq-tools-sep"></div>
+              <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
+              <div class="sq-tools-sep"></div>
+
+              <!-- Referência visual dos marcadores — mesmo padrão do botão
+                   "📖 Referências" da página Registrar Operação (popover
+                   .ao-popover, ver css/styles.css e SQ.togglePopover no JS).
+                   Mostra o que cada cor/forma significa e as combinações mais
+                   comuns, no mesmo critério exato de classifyMarks()
+                   (setor-qualidade.js) — círculo sozinho = 2P, traço sozinho =
+                   SP, os dois juntos = 3T (traço amarelo) ou 1T (traço laranja). -->
+              <div style="position:relative;display:inline-block">
+                <button class="btn btn-ghost btn-sm" onclick="SQ.togglePopover('popover-sq-referencia', event)">
+                  <i class="fas fa-book-open"></i> Referência
+                </button>
+                <div id="popover-sq-referencia" class="ao-popover" style="width:340px">
+                  <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Cor</div>
+                  <div style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;margin-bottom:14px">
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:12px;height:12px;border-radius:50%;background:var(--sq-cor-verde);display:inline-block;flex-shrink:0"></span>Verde — Aprovado (1ª linha)</div>
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:12px;height:12px;border-radius:50%;background:var(--sq-cor-azul);display:inline-block;flex-shrink:0"></span>Azul — Aprovado (2ª linha)</div>
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:12px;height:12px;border-radius:50%;background:var(--sq-cor-vermelho);display:inline-block;flex-shrink:0"></span>Vermelho — Reprovado</div>
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:3px;border-radius:2px;background:var(--sq-cor-amarelo);display:inline-block;flex-shrink:0"></span>Amarelo (só no traço) — indica 3T</div>
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:3px;border-radius:2px;background:var(--sq-cor-laranja);display:inline-block;flex-shrink:0"></span>Laranja (só no traço) — indica 1T</div>
+                    <div style="display:flex;align-items:center;gap:9px"><span style="width:12px;height:12px;display:inline-flex;align-items:center;justify-content:center;color:red;font-weight:800;font-size:1.6rem;flex-shrink:0">×</span>Vermelho (fixa, não é escolhida) — só da marca X</div>
+                  </div>
+
+                  <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Forma</div>
+                  <div style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;margin-bottom:14px">
+                    <div style="display:flex;align-items:center;gap:9px"><span class="sq-shape-circle" style="display:inline-block;flex-shrink:0;background:var(--text-2)"></span>Círculo sozinho → <strong>2P</strong></div>
+                    <div style="display:flex;align-items:center;gap:9px"><span class="sq-shape-dash" style="display:inline-block;flex-shrink:0;background:var(--text-2)"></span>Traço sozinho → <strong>SP</strong></div>
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <span class="sq-shape-circle" style="display:inline-block;flex-shrink:0;background:var(--text-2)"></span><span style="margin:0 2px">+</span><span class="sq-shape-dash" style="display:inline-block;flex-shrink:0;background:var(--text-2)"></span>
+                      Círculo + traço → <strong>3T</strong> ou <strong>1T</strong> (conforme a cor do traço)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:9px"><span class="sq-shape-x" style="display:inline-flex;flex-shrink:0">×</span>X sozinho → <strong>Painel não preenchido</strong> (categoria própria — não conta como aprovado nem reprovado)</div>
+                  </div>
+                  <p style="font-size:.72rem;color:var(--text-3);margin:-6px 0 14px;line-height:1.4">
+                    A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só pra identificar o tipo — quem dita
+                    aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma pra um tipo
+                    novo (ver "Tipos sem marcação definida", mais abaixo), mesmo as que já têm outro significado quando a
+                    marca vem <strong>sozinha</strong> (ex: um traço verde isolado continua sendo SP aprovado).
+                  </p>
+
+                  <hr class="divider" style="margin:10px 0">
+                  <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:6px">Combinação → Classificação</div>
+                  <table style="width:100%;font-size:.76rem;border-collapse:collapse;color:var(--text-2)">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left;padding:4px 6px 6px 0;border-bottom:1px solid var(--border);color:var(--text-3);font-size:.66rem;text-transform:uppercase;font-weight:700">Combinação</th>
+                        <th style="text-align:left;padding:4px 0 6px 6px;border-bottom:1px solid var(--border);color:var(--text-3);font-size:.66rem;text-transform:uppercase;font-weight:700">Classificação</th>
+                      </tr>
+                    </thead>
+                    <!-- Preenchido dinamicamente por _renderTabelaCombinacoes()
+                         (setor-qualidade.js), a partir das combinações efetivas
+                         (config.json → marcadores_qualidade.opcoes, ou
+                         COMBINACOES_PADRAO enquanto nada foi definido) cruzadas
+                         com o LABEL real de cada tipo simples cadastrado em
+                         Configurações → Montagem (config.json → tipos_montagem.
+                         opcoes) — nunca mais texto fixo de "2P"/"SP"/"3T"/"1T"
+                         solto no HTML. Um tipo com código "sp" aparece aqui como
+                         o label cadastrado (ex.: "S/P"), não como "SP". -->
+                    <tbody id="sq-ref-combinacoes-tbody">
+                    </tbody>
+                  </table>
+
+                  <!-- Preenchido dinamicamente por _renderAvisoCombinacoesFaltando()
+                       (setor-qualidade.js) — só aparece algo aqui se houver tipo
+                       simples cadastrado em Configurações → Montagem sem
+                       combinação de marcação definida ainda. -->
+                  <div id="sq-ref-sem-combinacao"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pallets -->
+            <div class="sq-stacks">
+              <!-- Pallet 1 -->
+              <div class="sq-pallet-col">
+                <div class="sq-pallet-header">
+                  <span class="sq-pallet-label">PALLET 1</span>
+                  <div class="sq-pallet-actions">
+                    <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack1')">⚡ Todas</button>
+                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack1')">🎨</button>
+                    <div class="sq-color-dropdown" id="sq-dd-stack1">
+                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack1','verde')"></button>
+                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack1','vermelho')"></button>
+                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack1','azul')"></button>
+                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack1','amarelo')"></button>
+                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack1','laranja')"></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="sq-slab-stack" id="stack1"></div>
+              </div>
+              <!-- Pallet 2 -->
+              <div class="sq-pallet-col">
+                <div class="sq-pallet-header">
+                  <span class="sq-pallet-label">PALLET 2</span>
+                  <div class="sq-pallet-actions">
+                    <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack2')">⚡ Todas</button>
+                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack2')">🎨</button>
+                    <div class="sq-color-dropdown" id="sq-dd-stack2">
+                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack2','verde')"></button>
+                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack2','vermelho')"></button>
+                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack2','azul')"></button>
+                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack2','amarelo')"></button>
+                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack2','laranja')"></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="sq-slab-stack" id="stack2"></div>
+              </div>
+              <!-- Pallet 3 -->
+              <div class="sq-pallet-col">
+                <div class="sq-pallet-header">
+                  <span class="sq-pallet-label">PALLET 3</span>
+                  <div class="sq-pallet-actions">
+                    <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack3')">⚡ Todas</button>
+                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack3')">🎨</button>
+                    <div class="sq-color-dropdown" id="sq-dd-stack3">
+                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack3','verde')"></button>
+                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack3','vermelho')"></button>
+                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack3','azul')"></button>
+                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack3','amarelo')"></button>
+                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack3','laranja')"></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="sq-slab-stack" id="stack3"></div>
+              </div>
+              <!-- Pallet 4 -->
+              <div class="sq-pallet-col">
+                <div class="sq-pallet-header">
+                  <span class="sq-pallet-label">PALLET 4</span>
+                  <div class="sq-pallet-actions">
+                    <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack4')">⚡ Todas</button>
+                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack4')">🎨</button>
+                    <div class="sq-color-dropdown" id="sq-dd-stack4">
+                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack4','verde')"></button>
+                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack4','vermelho')"></button>
+                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack4','azul')"></button>
+                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack4','amarelo')"></button>
+                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack4','laranja')"></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="sq-slab-stack" id="stack4"></div>
+              </div>
+            </div>
+
+            <!-- Legenda -->
+            <div class="sq-legend">
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-verde);width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid var(--border);"></span> Aprovado</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-vermelho);width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid var(--border);"></span> Reprovado</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-azul);width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid var(--border);"></span> 2ª linha</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-amarelo);width:14px;height:3px;border-radius:2px;display:inline-block;"></span> painel 3T</div>
+              <div class="sq-legend-item"><span style="background:var(--sq-cor-laranja);width:14px;height:3px;border-radius:2px;display:inline-block;"></span> painel 1T</div>
+            </div>
+
+            <!-- Medição -->
+            <div class="sq-medicao-title-wrap"><span class="sq-medicao-title"><i class="fas fa-ruler-combined"></i> MEDIÇÃO</span></div>
+            <div class="sq-pallet-info-grid">
+              <!-- Pallet 1 -->
+              <div class="sq-info-col">
+                <div class="sq-info-col-header">Pallet 1</div>
+                <div class="sq-info-row"><span class="sq-info-key">Comprimento</span><span class="sq-info-val" id="sq-p1-comprimento">3m</span><span class="sq-info-edit" data-pallet="1" data-field="comprimento" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Largura</span><span class="sq-info-val" id="sq-p1-largura">61cm</span><span class="sq-info-edit" data-pallet="1" data-field="largura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Linearidade</span><span class="sq-info-val" id="sq-p1-linearidade">ok</span><span class="sq-info-edit" data-pallet="1" data-field="linearidade" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Espessura</span><span class="sq-info-val" id="sq-p1-espessura">9 cm</span><span class="sq-info-edit" data-pallet="1" data-field="espessura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Esquadro</span><span class="sq-info-val" id="sq-p1-esquadro">ok</span><span class="sq-info-edit" data-pallet="1" data-field="esquadro" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+              </div>
+              <!-- Pallet 2 -->
+              <div class="sq-info-col">
+                <div class="sq-info-col-header">Pallet 2</div>
+                <div class="sq-info-row"><span class="sq-info-key">Comprimento</span><span class="sq-info-val" id="sq-p2-comprimento">3m</span><span class="sq-info-edit" data-pallet="2" data-field="comprimento" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Largura</span><span class="sq-info-val" id="sq-p2-largura">61cm</span><span class="sq-info-edit" data-pallet="2" data-field="largura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Linearidade</span><span class="sq-info-val" id="sq-p2-linearidade">ok</span><span class="sq-info-edit" data-pallet="2" data-field="linearidade" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Espessura</span><span class="sq-info-val" id="sq-p2-espessura">9 cm</span><span class="sq-info-edit" data-pallet="2" data-field="espessura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Esquadro</span><span class="sq-info-val" id="sq-p2-esquadro">ok</span><span class="sq-info-edit" data-pallet="2" data-field="esquadro" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+              </div>
+              <!-- Pallet 3 -->
+              <div class="sq-info-col">
+                <div class="sq-info-col-header">Pallet 3</div>
+                <div class="sq-info-row"><span class="sq-info-key">Comprimento</span><span class="sq-info-val" id="sq-p3-comprimento">3m</span><span class="sq-info-edit" data-pallet="3" data-field="comprimento" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Largura</span><span class="sq-info-val" id="sq-p3-largura">61cm</span><span class="sq-info-edit" data-pallet="3" data-field="largura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Linearidade</span><span class="sq-info-val" id="sq-p3-linearidade">ok</span><span class="sq-info-edit" data-pallet="3" data-field="linearidade" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Espessura</span><span class="sq-info-val" id="sq-p3-espessura">9 cm</span><span class="sq-info-edit" data-pallet="3" data-field="espessura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Esquadro</span><span class="sq-info-val" id="sq-p3-esquadro">ok</span><span class="sq-info-edit" data-pallet="3" data-field="esquadro" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+              </div>
+              <!-- Pallet 4 -->
+              <div class="sq-info-col">
+                <div class="sq-info-col-header">Pallet 4</div>
+                <div class="sq-info-row"><span class="sq-info-key">Comprimento</span><span class="sq-info-val" id="sq-p4-comprimento">3m</span><span class="sq-info-edit" data-pallet="4" data-field="comprimento" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Largura</span><span class="sq-info-val" id="sq-p4-largura">61cm</span><span class="sq-info-edit" data-pallet="4" data-field="largura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Linearidade</span><span class="sq-info-val" id="sq-p4-linearidade">ok</span><span class="sq-info-edit" data-pallet="4" data-field="linearidade" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Espessura</span><span class="sq-info-val" id="sq-p4-espessura">9 cm</span><span class="sq-info-edit" data-pallet="4" data-field="espessura" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+                <div class="sq-info-row"><span class="sq-info-key">Esquadro</span><span class="sq-info-val" id="sq-p4-esquadro">ok</span><span class="sq-info-edit" data-pallet="4" data-field="esquadro" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span></div>
+              </div>
+            </div>
+
+            <!-- Observações -->
+            <div class="sq-obs-area">
+              <label class="sq-obs-label"><i class="fas fa-sticky-note"></i> Observações</label>
+              <textarea class="form-input form-textarea" id="sq-obs" rows="3" placeholder="Observações adicionais sobre a avaliação desta bateria…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             TELA 4: HISTÓRICO
+        ══════════════════════════════════════════════════════════ -->
+        <div class="sq-section" id="sq-history">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <span style="font-size:.82rem;color:var(--text-3);"><i class="fas fa-database"></i> Base de Registros</span>
+            <span style="font-size:.75rem;color:var(--text-3);" id="sq-hist-count">0 registros</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);">
+            <div class="form-group">
+              <label class="form-label">Buscar Bateria</label>
+              <input class="form-input" type="text" id="sq-hist-search" placeholder="Ex: B3…" oninput="SQ.renderHistory()" style="width:160px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Turno</label>
+              <select class="form-input form-select" id="sq-hist-turno" onchange="SQ.renderHistory()" style="width:140px;">
+                <option value="">Todos</option>
+                <option value="1° TURNO">1° Turno</option>
+                <option value="2° TURNO">2° Turno</option>
+                <option value="3° TURNO">3° Turno</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <div class="sq-empty" id="sq-hist-empty"><i class="fas fa-database"></i>Nenhum registro ainda.</div>
+            <div class="table-wrap" id="sq-hist-table-wrap" style="display:none;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data/Hora</th><th>Bateria</th>
+                    <th style="background:var(--sq-tipo-sp);color:#fff;">P1</th>
+                    <th style="background:var(--sq-tipo-2p);color:#fff;">P2</th>
+                    <th style="background:var(--sq-tipo-3t);color:#fff;">P3</th>
+                    <th style="background:var(--sq-tipo-1t);color:#fff;">P4</th>
+                    <th>Turno</th><th>Temp.</th><th>Placas</th><th>Classificações</th>
+                    <th style="text-align:center;">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="sq-hist-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             MODAL GENÉRICO
+        ══════════════════════════════════════════════════════════ -->
+        <div class="sq-modal-pallet-overlay" id="sq-modal" style="z-index:99998;">
+          <div class="sq-modal-pallet-box" style="max-width:400px;">
+            <div class="sq-modal-pallet-header">
+              <h2 id="sq-modal-title">Título</h2>
+              <p id="sq-modal-msg" style="font-size:.82rem;color:var(--text-3);margin-top:4px;white-space:pre-line;"></p>
+            </div>
+            <input class="form-input" type="text" id="sq-modal-input" style="display:none;" placeholder="Digite aqui…">
+            <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:12px;border-top:1px solid var(--border);">
+              <button class="btn btn-ghost btn-sm"   id="sq-modal-cancel" style="display:none;">Cancelar</button>
+              <button class="btn btn-primary btn-sm" id="sq-modal-ok">OK</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             MODAL CONFIGURAÇÃO PERSONALIZADA DE PALLET
+        ══════════════════════════════════════════════════════════ -->
+        <div class="sq-modal-pallet-overlay" id="sq-modal-pallet">
+          <div class="sq-modal-pallet-box">
+            <div class="sq-modal-pallet-header">
+              <h2><i class="fas fa-wrench" style="color:var(--blue);"></i> Configuração Personalizada</h2>
+              <p>Selecione um tipo e clique nas placas para aplicar individualmente.</p>
+            </div>
+            <div class="sq-modal-tipo-actions">
+              <button class="sq-btn-tipo sp" onclick="SQ.setModalTipo('SP')">SP</button>
+              <button class="sq-btn-tipo p2" onclick="SQ.setModalTipo('2P')">2P</button>
+              <button class="sq-btn-tipo t3" onclick="SQ.setModalTipo('3T')">3T</button>
+              <button class="sq-btn-tipo t1" onclick="SQ.setModalTipo('1T')">1T</button>
+              <button class="btn btn-danger btn-sm" onclick="SQ.clearModalPlates()"><i class="fas fa-trash-alt"></i> Limpar</button>
+            </div>
+            <div id="sq-modal-slabs-grid" class="sq-modal-slabs-grid"></div>
+            <div class="sq-modal-pallet-footer">
+              <button class="btn btn-ghost btn-sm"   onclick="SQ.closePalletModal()">Cancelar</button>
+              <button class="btn btn-primary btn-sm" onclick="SQ.confirmPalletModal()">Salvar e Aplicar</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- .sq-container -->
       </div>
     </main>
 
   </div><!-- .app-shell -->
 
-  <!-- ============ SUCCESS MODAL ============ -->
+<!-- ============ SUCCESS MODAL ============ -->
   <div id="success-modal" style="
   display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
   z-index:999;align-items:center;justify-content:center
@@ -2004,8 +2592,12 @@
     <div style="
     background:var(--bg-card);border:1px solid var(--border);
     border-radius:var(--radius-lg);padding:36px;width:420px;max-width:90vw;
-    box-shadow:0 24px 80px rgba(0,0,0,.6)
+    box-shadow:0 24px 80px rgba(0,0,0,.6);position:relative
   ">
+      <button onclick="LWOp.fecharModalSucesso()" title="Fechar" aria-label="Fechar" style="
+      position:absolute;top:14px;right:14px;background:none;border:none;
+      color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1
+    ">✕</button>
       <div style="text-align:center;margin-bottom:24px">
         <div style="font-size:3rem;margin-bottom:12px">✅</div>
         <h2 id="success-modal-titulo" style="font-family:var(--font-display);font-size:1.6rem;color:var(--green)">Operação Registrada!</h2>
@@ -2047,7 +2639,6 @@
       </div>
     </div>
   </div>
-
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -2081,6 +2672,9 @@
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
+          <button type="button" id="cfg-nav-sql" onclick="cfgMostrarSecao('sql')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🗄️ Dados SQL</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -2318,6 +2912,43 @@
           </div>
           <!-- ========== /SEÇÃO: Automação ========== -->
 
+          <!-- ========== SEÇÃO: Dados SQL ========== -->
+          <div id="cfg-secao-sql" style="display:none">
+            <div class="card-title">🗄️ Dados SQL</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Consulta direta às tabelas do banco (SQLite), pra apagar uma linha específica ou a tabela
+              <strong>inteira</strong> manualmente — use com cuidado: a exclusão é <strong>permanente</strong> e
+              não passa pelo fluxo normal de edição do sistema. Prefira sempre as telas normais (Editar
+              Operação, Editar Traço etc.) quando possível; use isto só pra corrigir um registro de teste,
+              duplicado ou corrompido que não dá pra remover de outro jeito.
+            </p>
+
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+              <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
+                <label class="form-label">Arquivo / Tabela</label>
+                <select class="form-select" id="cfg-sql-tabela" onchange="cfgSqlCarregarLinhas()">
+                  <option value="">Selecione uma tabela…</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;flex:2;min-width:220px">
+                <label class="form-label">Buscar nas linhas carregadas</label>
+                <input class="form-input" id="cfg-sql-busca" placeholder="Digite pra filtrar…" oninput="cfgSqlRenderLinhas()">
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="cfgSqlCarregarLinhas()" title="Recarregar">↺ Atualizar</button>
+              <button class="btn btn-danger btn-sm" id="cfg-sql-btn-limpar" onclick="cfgSqlLimparTabela()" title="Excluir TODAS as linhas desta tabela" disabled>🧹 Limpar Todas</button>
+            </div>
+
+            <div id="cfg-sql-status" style="font-size:.75rem;color:var(--text-3);margin-bottom:10px"></div>
+
+            <div id="cfg-sql-tabela-wrap" style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);max-height:44vh;overflow-y:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:.76rem">
+                <thead id="cfg-sql-thead" style="position:sticky;top:0;background:var(--bg-2);z-index:1"></thead>
+                <tbody id="cfg-sql-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Dados SQL ========== -->
+
         </div>
       </div>
 
@@ -2326,13 +2957,18 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- html2canvas/jspdf — usados só pelo "Exportar PDF" do Setor de
+       Qualidade; antes só carregados dentro do iframe próprio. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
+  <script src="js/setor-qualidade.js"></script>
   <script src="js/app-core.js"></script>
-  <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
+<!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
   <div id="editar-operacao-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2380,7 +3016,13 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Tipo de Montagem</label>
-          <select class="form-select" id="eo-tipo-montagem" onchange="_eoAtualizarPreview()"></select>
+          <div style="display:flex;gap:6px;align-items:stretch">
+            <select class="form-select" id="eo-tipo-montagem" style="flex:1;min-width:0" onchange="_eoAtualizarPreview()"></select>
+            <button type="button" id="eo-btn-configurar-bercos"
+              style="display:none;flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
+              class="btn btn-outline-accent btn-sm" title="Ver/editar os berços da Montagem Personalizada"
+              onclick="_eoAbrirGradeMontagem()">🔧</button>
+          </div>
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Turno</label>
@@ -2414,7 +3056,6 @@
 
     </div>
   </div>
-
   <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
   <div id="editar-traco-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
@@ -2730,7 +3371,7 @@
     </div>
   </div>
 
-  <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
+<!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2756,7 +3397,7 @@
           salva automaticamente no servidor antes de qualquer substituição.
         </p>
 
-        <div id="restaurar-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2801,8 +3442,7 @@
 
     </div>
   </div>
-
-  <!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
+<!-- ============ MODAL: MESCLAR BACKUP DE DADOS (de outra instalação) ============ -->
   <div id="mesclar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2828,7 +3468,7 @@
           sobra e contador de traços desta instalação não são tocados.
         </p>
 
-        <div id="mesclar-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2889,8 +3529,7 @@
 
     </div>
   </div>
-
-  <!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
+<!-- ============ MODAL: RESTAURAR BACKUP GERAL ============ -->
   <div id="restaurar-geral-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
@@ -2920,7 +3559,7 @@
           reiniciar.
         </p>
 
-        <div id="restaurar-geral-dropzone" style="
+        <div style="
             border:2px dashed var(--border);border-radius:var(--radius);padding:48px 24px;
             text-align:center;cursor:pointer;transition:border-color .2s,background .2s;
             background:var(--bg-2)
@@ -2973,8 +3612,7 @@
 
     </div>
   </div>
-
-  <div id="import-modal"
+<div id="import-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
@@ -3079,7 +3717,7 @@
           <div id="import-preview-info" style="color:var(--text-2);font-size:.88rem"></div>
         </div>
         <div style="overflow-x:auto;margin-bottom:20px;border:1px solid var(--border);border-radius:var(--radius)">
-          <table id="import-preview-table" style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <table style="width:100%;border-collapse:collapse;font-size:.8rem">
             <thead id="import-preview-head" style="background:var(--bg-2)"></thead>
             <tbody id="import-preview-body"></tbody>
           </table>
@@ -3103,7 +3741,7 @@
       </div>
 
     </div>
-  </div>
+  </div>
 
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
@@ -3116,6 +3754,7 @@
   <script src="js/bateria-atual.js"></script>
   <script src="js/keyboard-shortcuts.js"></script>
   <script src="js/tour.js"></script>
+  <script src="js/abrir-nova-aba.js"></script>
 </body>
 
 </html>

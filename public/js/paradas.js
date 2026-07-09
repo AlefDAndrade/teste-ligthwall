@@ -64,6 +64,24 @@
     return Math.round(diffMs / 60000);
   }
 
+  // Gera o id de uma parada NOVA (edição reaproveita _modoEdicao, ver
+  // salvarFormParada). Antes usava crypto.randomUUID() — a Web Crypto API
+  // só existe em "contexto seguro" (HTTPS, ou http://localhost) por
+  // especificação do navegador; acessada de outro computador/tablet da
+  // fábrica via IP da rede local (http://192.168.x.x:3000 — o jeito normal
+  // de usar este sistema, ver README) o navegador nem expõe
+  // crypto.randomUUID, chamar isso lança TypeError ANTES do try/catch de
+  // salvarFormParada sequer começar — o clique parecia não fazer nada
+  // (sem toast de erro, botão nunca chegava a desabilitar/"Salvando…").
+  // Mesmo padrão de id já usado no resto do sistema pra evitar exatamente
+  // esse problema (ex: 'traco_'+timestamp+'_'+n em operacao.js, 'ev_'+
+  // Date.now() em setor-qualidade.js) — timestamp + sufixo aleatório
+  // (Math.random, sempre disponível) só pra não colidir se 2 paradas
+  // forem salvas no mesmo milissegundo.
+  function _gerarIdParada() {
+    return 'parada_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
   // Retorna datetime-local string (YYYY-MM-DDTHH:MM) do momento atual em Brasília
   function nowLocalString() {
     const now = new Date();
@@ -191,7 +209,7 @@
     }
 
     const parada = {
-      id:             _modoEdicao || crypto.randomUUID(),
+      id:             _modoEdicao || _gerarIdParada(),
       inicio:         new Date(inicio).toISOString(),
       fim:            new Date(fim).toISOString(),
       duracao_min:    duracao,
@@ -238,11 +256,15 @@
 
   function paradasFiltradas() {
     return _paradas.filter(p => {
-      if (_filtros.dataInicio && p.inicio < _filtros.dataInicio) return false;
-      if (_filtros.dataFim) {
-        const fimDia = _filtros.dataFim + 'T23:59:59';
-        if (p.inicio > fimDia) return false;
-      }
+      // p.inicio é um instante ISO em UTC — comparar direto contra as
+      // datas "cruas" dos filtros (Brasília) fazia paradas registradas
+      // à noite (21h-23h59 em Brasília) sumirem, porque em UTC esse
+      // instante já cai no dia seguinte. Ver dataBrasiliaDeISO em data.js.
+      const diaInicio = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : (p.inicio || '').slice(0, 10);
+      if (_filtros.dataInicio && diaInicio < _filtros.dataInicio) return false;
+      if (_filtros.dataFim && diaInicio > _filtros.dataFim) return false;
       if (_filtros.classificacao && p.classificacao !== _filtros.classificacao) return false;
       if (_filtros.motivo && p.motivo !== _filtros.motivo) return false;
       if (_filtros.equipamento && !p.equipamento?.toLowerCase().includes(_filtros.equipamento.toLowerCase())) return false;
@@ -336,10 +358,14 @@
     if (!canvas) return;
     const lista = paradasFiltradas();
 
-    // Agrupa por dia (quantidade de paradas)
+    // Agrupa por dia (quantidade de paradas) — data em Brasília, mesmo
+    // critério de paradasFiltradas(), pra uma parada não aparecer num dia
+    // diferente do que ela foi contada no filtro/tabela.
     const map = {};
     lista.forEach(p => {
-      const dia = p.inicio?.slice(0, 10);
+      const dia = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : p.inicio?.slice(0, 10);
       if (dia) map[dia] = (map[dia] || 0) + 1;
     });
 

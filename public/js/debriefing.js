@@ -111,27 +111,23 @@
     // chave de deduplicação. Traços reaproveitados são sobra de um traço já
     // contabilizado em outra bateria e NÃO devem ser somados novamente.
     const tracosUnicos = new Set();
-    const densidadesEps = [];
-    estrutura.forEach(({ tracos }) => {
+    const temposInjecao = [];
+    estrutura.forEach(({ bateria, tracos }) => {
       tracos.forEach(t => {
         if (!t.reaproveitado) {
           tracosUnicos.add(t.num_traco != null ? String(t.num_traco) : '_' + Math.random());
         }
-        if (t.densidade_eps !== null) densidadesEps.push(t.densidade_eps);
       });
+      const tempoMin = parseFloat(bateria?.tempo_min);
+      if (!isNaN(tempoMin)) temposInjecao.push(tempoMin);
     });
     const qtdTracos = tracosUnicos.size;
     const qtdBaterias = estrutura.length;
     const mediaTracos = qtdBaterias ? qtdTracos / qtdBaterias : 0;
-    let epsPredominante = null;
-    if (densidadesEps.length) {
-      const cnt = {};
-      densidadesEps.forEach(v => { cnt[v] = (cnt[v] || 0) + 1; });
-      const maxF = Math.max(...Object.values(cnt));
-      const tops = Object.keys(cnt).filter(k => cnt[k] === maxF).map(Number);
-      epsPredominante = tops.length === 1 ? tops[0] : tops.reduce((a, b) => a + b, 0) / tops.length;
-    }
-    return { qtdBaterias, qtdTracos, mediaTracos, epsPredominante };
+    const tempoMedioInjecao = temposInjecao.length
+      ? temposInjecao.reduce((a, b) => a + b, 0) / temposInjecao.length
+      : null;
+    return { qtdBaterias, qtdTracos, mediaTracos, tempoMedioInjecao };
   }
 
   function renderRelatorio(estrutura, data) {
@@ -145,8 +141,8 @@
 
     html += `<div class="dbf-stats">
       <div class="dbf-stat">
-        <span class="dbf-stat-val">${cab.epsPredominante !== null ? fmtNum(cab.epsPredominante, 0) : '—'}</span>
-        <span class="dbf-stat-label">EPS kg/m³</span>
+        <span class="dbf-stat-val">${cab.tempoMedioInjecao !== null ? (window.LW && LW.formatDuration ? LW.formatDuration(cab.tempoMedioInjecao) : fmtNum(cab.tempoMedioInjecao, 0)) : '—'}</span>
+        <span class="dbf-stat-label">Tempo médio de injeção</span>
       </div>
       <div class="dbf-stat">
         <span class="dbf-stat-val">${cab.qtdBaterias}</span>

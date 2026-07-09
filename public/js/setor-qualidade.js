@@ -7,19 +7,30 @@
 
 (function () {
 
-  /* ── Escape de HTML local — NÃO usar LW.escaparHtml aqui ──
-     Este arquivo roda dentro do <iframe> setor-qualidade-app.html, que
-     NUNCA carrega data.js (só carrega este script + libs de gráfico) —
-     então `LW` simplesmente não existe neste documento. Usar
-     LW.escaparHtml quebra com "ReferenceError: LW is not defined" assim
-     que há algo real pra escapar (ex: o label de um tipo de montagem
-     sem combinação, ver _renderAvisoCombinacoesFaltando), o erro sobe
-     e interrompe toda a função que estava rodando — foi exatamente o
-     que impedia a seção "Tipos sem marcação definida" de aparecer. */
+  /* ── Escape de HTML local ──────────────────────────────
+     Função própria em vez de LW.escaparHtml (que já existe no mesmo
+     documento — este arquivo carrega depois de data.js, ver
+     index.template.html) só por não depender da ordem de carregamento
+     dos scripts: histórico daqui é que, quando esta tela rodava dentro
+     de um <iframe> à parte (setor-qualidade-app.html), LW simplesmente
+     não existia neste documento, e usar LW.escaparHtml quebrava com
+     "ReferenceError: LW is not defined" assim que havia algo real pra
+     escapar — o erro subia e interrompia toda a função que estava
+     rodando. A função local sobrou porque não há motivo real pra trocar
+     algo que já funciona só pra "usar a função companheira". */
   function _escaparHtml(str) {
     const div = document.createElement('div');
     div.textContent = String(str ?? '');
     return div.innerHTML;
+  }
+
+  // Mesmo escape de _escaparHtml, + aspas duplas — necessário só quando o
+  // texto vai DENTRO de um atributo HTML delimitado por "..." (ex:
+  // data-tooltip="..." nos gráficos SVG abaixo). _escaparHtml sozinho
+  // escapa <, >, & (o bastante pra texto solto), mas não aspas — um
+  // rótulo com " quebraria o atributo e corromperia o SVG.
+  function _escaparAtributo(str) {
+    return _escaparHtml(str).replace(/"/g, '&quot;');
   }
 
   /* ── Prefixo localStorage ─────────────────────────────── */
@@ -41,6 +52,22 @@
   let selectedColor  = 'verde';
   let selectedShape  = 'circle';
   let slabState      = {};
+  // Motivo do defeito (código, ver MOTIVOS_DEFEITO) por placa — só
+  // preenchido quando a placa vira 2ª linha (azul) ou reprovada
+  // (vermelho); sempre um objeto PARALELO a slabState (mesma chave —
+  // "stack{pallet}-{posicao}" — nunca uma propriedade DENTRO de cada
+  // marca), porque o motivo é do PAINEL como um todo, não de uma marca
+  // específica (um painel 3T reprovado, por exemplo, tem um círculo
+  // vermelho + um traço amarelo — o motivo se refere ao painel, não a
+  // qual das duas marcas). Precisa ser resetado/restaurado em todo lugar
+  // que mexe em slabState — ver clearForm, clearAllMarks, pushState/undo,
+  // saveDraft/loadDraft, _carregarAvaliacaoNoFormulario.
+  let slabMotivo     = {};
+  // Descrição livre — só existe (não-undefined) quando slabMotivo[id] ===
+  // 'OT' ("Outros"); todo o resto do ciclo de vida (undo, rascunho,
+  // limpar, carregar avaliação existente) trata este objeto exatamente
+  // igual a slabMotivo, sempre em paralelo, mesma chave.
+  let slabMotivoDescricao = {};
   let actionHistory  = [];
   let currentDraftId = null;
   let viewMode       = false;
@@ -57,6 +84,20 @@
   let filaOperacoes    = [];  // última lista carregada de GET /operacoes-nao-avaliadas
   let linkedOperacaoId = null; // id_operacao da fila vinculado à avaliação em edição, ou null (avulsa)
 
+  // ── Edição de avaliação já registrada (só Administrador) — aberta a
+  // partir do Espelho Visual (ver editarAvaliacaoDoEspelho). Diferente
+  // de linkedOperacaoId (que é sobre uma avaliação NOVA, ainda ligada a
+  // uma bateria da fila), estas 3 variáveis só existem enquanto o
+  // formulário está corrigindo uma avaliação JÁ SALVA — não nula só
+  // nesse caso; registerEvaluation() usa isso pra saber se deve
+  // sobrescrever o registro original (mesmo id) em vez de criar um novo.
+  // Resetadas em clearForm() e ao sair da aba "form" por qualquer
+  // caminho (ver navigateTo) — nunca deve "vazar" pra uma avaliação nova
+  // e acabar sobrescrevendo a antiga por engano.
+  let _editandoAvaliacaoId      = null;
+  let _editandoRegistradoEm     = null;
+  let _editandoLinkedOperacaoId = null;
+
   // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
   // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
   // usado tanto pra montar o <select> quanto pra mapear tipo_montagem de
@@ -65,13 +106,18 @@
   let _montagemOpcoesCache = [];
 
   // ── Combinações cor+forma → tipo simples (Referência de Marcadores) —
-  // também vem de config.json (marcadores_qualidade.opcoes), gravado lá
-  // JUNTO com o resto da configuração de montagem (ver salvarCombinacao
-  // Tipo, mais abaixo). _configBrutoCache guarda o config.json inteiro
-  // (não só marcadores_qualidade) porque salvar de volta usa /salvar-
+  // Antes: combinação cor+forma vivia numa lista À PARTE
+  // (marcadores_qualidade.opcoes), casada com o tipo só na hora de usar
+  // (por código `tipo`, ver _combinacoesEfetivas mais abaixo). Agora cada
+  // tipo SIMPLES carrega sua própria combinação junto (campo
+  // `combinacaoAvaliacao` dentro do próprio item de
+  // tipos_montagem.opcoes) — nasce vazia (null) quando o tipo é criado em
+  // Configurações → Montagem (ver cfgAdicionarMontagemSimples, app-
+  // core.js), e só é preenchida aqui, pelo Setor de Qualidade (ver
+  // salvarCombinacaoTipo, abaixo). _configBrutoCache guarda o config.json
+  // inteiro (não só tipos_montagem) porque salvar de volta usa /salvar-
   // config, que substitui o arquivo inteiro — precisa reenviar tudo, não
   // só o pedaço que mudou.
-  let _marcadoresQualidadeCache = null;
   let _configBrutoCache = null;
 
   /**
@@ -90,8 +136,8 @@
       const res = await fetch('/db/config.json');
       if (!res.ok) throw new Error('Falha ao buscar config.json');
       const cfg = await res.json();
+      const migrou = _migrarCombinacoesParaTiposMontagem(cfg);
       _configBrutoCache = cfg;
-      _marcadoresQualidadeCache = Array.isArray(cfg?.marcadores_qualidade?.opcoes) ? cfg.marcadores_qualidade.opcoes : null;
       const opcoes = Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : [];
       _montagemOpcoesCache = opcoes;
       const simples = opcoes.filter(o => o && o.modo === 'simples' && o.tipo && o.label);
@@ -106,6 +152,16 @@
       html += '<option value="Personalizada">Personalizada</option>';
       sel.innerHTML = html;
       _renderAvisoCombinacoesFaltando();
+      _renderTabelaCombinacoes();
+
+      // Migração é feita só uma vez por instalação: persiste de volta pro
+      // config.json assim que detectada, pra outros dispositivos/abas já
+      // carregarem o formato novo direto, sem precisar migrar de novo.
+      if (migrou) {
+        fetch('/salvar-config', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg),
+        }).catch(err => console.error('Falha ao persistir migração de combinações de avaliação:', err));
+      }
     } catch (err) {
       console.error('Falha ao carregar tipos de montagem de config.json — usando lista fixa de reserva:', err);
       // Fallback só pra tela não ficar sem nenhuma opção se config.json
@@ -117,7 +173,36 @@
         <option value="SP+2P">SP + 2P</option><option value="SP">SP</option>
         <option value="2P">2P</option><option value="3T">3T</option>
         <option value="Personalizada">Personalizada</option>`;
+      // Sem tipos_montagem carregados, a tabela de combinações cai pro
+      // fallback do próprio código em maiúsculas (_labelDoTipoMontagem) —
+      // mesmo texto que sempre apareceu (2P/SP/3T/1T), só que agora
+      // gerado, não mais hardcoded no HTML.
+      _renderTabelaCombinacoes();
     }
+  }
+
+  // Migração única — instalações de antes desta mudança têm as
+  // combinações separadas em cfg.marcadores_qualidade.opcoes. Copia cada
+  // uma pro campo combinacaoAvaliacao do tipo correspondente (por código
+  // `tipo`) em cfg.tipos_montagem.opcoes, e remove a lista antiga (não é
+  // mais lida por nada depois desta mudança). Idempotente: instalação já
+  // migrada (sem marcadores_qualidade, ou já com combinacaoAvaliacao
+  // preenchido) não sofre nenhuma alteração — devolve false nesse caso,
+  // pra _carregarOpcoesMontagem saber que não precisa regravar o arquivo.
+  function _migrarCombinacoesParaTiposMontagem(cfg) {
+    const antigas = Array.isArray(cfg?.marcadores_qualidade?.opcoes) ? cfg.marcadores_qualidade.opcoes : [];
+    if (!antigas.length) return false;
+    const tipos = Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : [];
+    let mudou = false;
+    antigas.forEach(c => {
+      const alvo = tipos.find(o => o && o.modo === 'simples' && o.tipo === c.tipo);
+      if (alvo && !alvo.combinacaoAvaliacao) {
+        alvo.combinacaoAvaliacao = { forma: c.forma, corModificadora: c.corModificadora };
+        mudou = true;
+      }
+    });
+    delete cfg.marcadores_qualidade; // formato antigo, não é mais lido por nada depois de migrado
+    return mudou;
   }
 
   // Converte o tipo_montagem de uma operação real (LABEL — ex: "S/P",
@@ -138,13 +223,14 @@
   // destruir entre re-renders.)
 
   /* ── Combinações cor+forma → tipo simples ─────────────────
-     Antes 100% fixo no código (só reconhecia 2P/SP/3T/1T). Agora vem de
-     config.json (marcadores_qualidade.opcoes) — qualquer tipo simples
-     novo cadastrado em Configurações → Montagem só ganha uma combinação
-     de marcação quando alguém definir uma explicitamente (ver "📖
-     Referência" → "Tipos sem marcação definida", mais abaixo). Até lá,
-     ou enquanto config.json ainda não carregou, usa exatamente o
-     comportamento de sempre (COMBINACOES_PADRAO) — ninguém que já usa
+     Antes 100% fixo no código (só reconhecia 2P/SP/3T/1T). Agora vem do
+     campo combinacaoAvaliacao de cada item em config.json
+     (tipos_montagem.opcoes) — qualquer tipo simples novo cadastrado em
+     Configurações → Montagem nasce com combinacaoAvaliacao vazio (null),
+     e só ganha uma combinação de marcação quando alguém definir uma
+     explicitamente (ver "📖 Referência" → "Tipos sem marcação
+     definida", mais abaixo). Até lá, ou enquanto config.json ainda não
+     carregou, usa exatamente o comportamento de sempre (COMBINACOES_PADRAO) — ninguém que já usa
      2P/SP/3T/1T é afetado por esta mudança. */
   const COMBINACOES_PADRAO = [
     { tipo: '2p', forma: 'circle',      corModificadora: null },
@@ -172,14 +258,73 @@
   const CORES_MARCACAO = ['verde', 'vermelho', 'azul', 'amarelo', 'laranja'];
   const CORES_RESERVADAS_APROVACAO = ['verde', 'azul', 'vermelho'];
 
+  // ── Marcador "X" — Painel não preenchido ──────────────────────────
+  // Forma extra, fora do sistema círculo/traço de COMBINACOES_PADRAO:
+  // não representa nenhum tipo de montagem, não é combinável com outra
+  // marca (sempre sozinha, ver toggleMark/applyMarksToPallet) e nunca
+  // muda de cor — é sempre cinza fixo (COR_NAO_PREENCHIDO), diferente de
+  // verde/vermelho/azul/amarelo/laranja (que o usuário escolhe). Existe
+  // pra distinguir, na hora de marcar, um painel que o avaliador olhou e
+  // decidiu conscientemente "não deu pra preencher" de um painel apenas
+  // esquecido (que fica "Sem marcação", ver classifyMarks). Entra numa
+  // categoria própria nos relatórios/KPIs — nunca conta como aprovado
+  // nem reprovado (ver getClassifiedInfo: resultado vira
+  // "não_preenchido", que nenhum filtro `resultado==='aprovado'/
+  // 'reprovado'` do dashboard/relatórios reconhece).
+  const COR_NAO_PREENCHIDO = 'cinza';
+
+  // Motivo do defeito — obrigatório sempre que uma placa vira 2ª linha
+  // (azul) ou reprovada (vermelho): ver _corExigeMotivo/_abrirSeletorMotivo,
+  // mais abaixo. Lista fixa (não configurável em Configurações — diferente
+  // dos tipos de montagem), porque é terminologia de qualidade já em uso
+  // na fábrica, não algo que varia por instalação.
+  const MOTIVOS_DEFEITO = [
+    { codigo: 'BC', nome: 'Borra de Cimento' },
+    { codigo: 'CD', nome: 'Cimentícia Descamando' },
+    { codigo: 'CC', nome: 'Cimentícia Não Colada' },
+    { codigo: 'CF', nome: 'Cimentícia Fora de Posição' },
+    { codigo: 'EM', nome: 'Espessura Maior' },
+    { codigo: 'EP', nome: 'Engoliu Placa' },
+    { codigo: 'FD', nome: 'Falha Desmoldante' },
+    { codigo: 'FE', nome: 'Falha Enchimento' },
+    { codigo: 'FT', nome: 'Falha Traço' },
+    { codigo: 'PA', nome: 'Painel Amassado' },
+    { codigo: 'QE', nome: 'Quebra por Empilhadeira' },
+    { codigo: 'PQ', nome: 'Painel Quebrado' },
+    { codigo: 'PT', nome: 'Perfil Torto' },
+    { codigo: 'TR', nome: 'Trincada' },
+    // "Outros" é diferente de todo o resto da lista: não tem uma
+    // descrição fixa — quem marca digita a descrição na hora (ver
+    // _abrirSeletorMotivo, showPrompt). O hover no badge "OT" mostra essa
+    // descrição digitada, não um nome fixo (diferente dos outros 14
+    // códigos, cujo hover é sempre o mesmo texto pra todo mundo).
+    { codigo: 'OT', nome: 'Outros' },
+  ];
+  const _MOTIVO_POR_CODIGO = Object.fromEntries(MOTIVOS_DEFEITO.map(m => [m.codigo, m.nome]));
+
+  // Cor da MARCA que dispara a exigência de motivo — 2ª linha (azul) e
+  // reprovado (vermelho), nas duas formas (círculo sozinho, ou traço
+  // sozinho quando o tipo é "traço só" — ver COMBINACOES_PADRAO). Verde
+  // (1ª linha aprovada) e amarelo/laranja (modificador de tipo, não de
+  // status) NUNCA exigem motivo — só fazem sentido junto de um círculo,
+  // que é quem já decide aprovado/reprovado.
+  function _corExigeMotivo(cor) {
+    return cor === 'azul' || cor === 'vermelho';
+  }
+
   function _combinacoesEfetivas() {
-    return (Array.isArray(_marcadoresQualidadeCache) && _marcadoresQualidadeCache.length)
-      ? _marcadoresQualidadeCache
-      : COMBINACOES_PADRAO;
+    const doConfig = (_montagemOpcoesCache || [])
+      .filter(o => o && o.modo === 'simples' && o.tipo && o.combinacaoAvaliacao)
+      .map(o => ({ tipo: o.tipo, forma: o.combinacaoAvaliacao.forma, corModificadora: o.combinacaoAvaliacao.corModificadora }));
+    return doConfig.length ? doConfig : COMBINACOES_PADRAO;
   }
 
   /* ── Classificação de marcas ──────────────────────────── */
   function classifyMarks(marks) {
+    // "X" é sempre sozinho (garantido em toggleMark/applyMarksToPallet —
+    // adicionar um X limpa qualquer outra marca da placa, e vice-versa),
+    // então basta checar a presença dele antes de qualquer outra coisa.
+    if (marks.some(m => m.shape === 'x')) return 'Não preenchido';
     const circles = marks.filter(m => m.shape === 'circle');
     const dashes  = marks.filter(m => m.shape === 'dash');
     const cor     = arr => arr.length ? arr[0].color : null;
@@ -217,7 +362,7 @@
   }
   function getClassifiedInfo(marks) {
     const s = classifyMarks(marks);
-    if (['Sem marcação', 'Múltiplas', 'Outros'].includes(s))
+    if (['Sem marcação', 'Múltiplas', 'Outros', 'Não preenchido'].includes(s))
       return { tipoObtido: s, resultado: s.toLowerCase().replace(' ', '_'), linha: null };
     const [tipo, resultado] = s.split(' ');
     // "linha" é um dado A MAIS — nunca muda o valor de "resultado" (seguem
@@ -242,12 +387,12 @@
   }
 
   /* ── Referência de Marcadores: tipos sem combinação definida ──────
-     Compara os tipos simples cadastrados em Configurações → Montagem
-     (tipos_montagem.opcoes) com as combinações já definidas
-     (marcadores_qualidade.opcoes) — qualquer tipo simples cadastrado
-     que ainda não tenha uma combinação aparece aqui, com a opção de
-     definir uma (só entre as que ainda não estão em uso por outro
-     tipo — nunca duas combinações pro mesmo par cor+forma). */
+     Verifica os tipos simples cadastrados em Configurações → Montagem
+     (tipos_montagem.opcoes) cujo campo combinacaoAvaliacao ainda está
+     vazio (null — estado de quando o tipo foi criado) — qualquer tipo
+     simples cadastrado que ainda não tenha uma combinação aparece aqui,
+     com a opção de definir uma (só entre as que ainda não estão em uso
+     por outro tipo — nunca duas combinações pro mesmo par cor+forma). */
   function _tiposSimplesSemCombinacao() {
     const simples = (_montagemOpcoesCache || []).filter(o => o && o.modo === 'simples' && o.tipo && o.label);
     const combinacoes = _combinacoesEfetivas();
@@ -310,6 +455,102 @@
     `;
   }
 
+  // Monta a tabela "Combinação → Classificação" dentro do popover "📖
+  // Referência" — antes era texto fixo no HTML (sempre "2P"/"SP"/"3T"/
+  // "1T", mesmo quando o tipo cadastrado em Configurações → Montagem
+  // tinha outro código ou nem existia). Agora cada linha vem das
+  // combinações efetivas (_combinacoesEfetivas — campo combinacaoAvaliacao
+  // de cada tipo em tipos_montagem.opcoes, com COMBINACOES_PADRAO como
+  // reserva) e o nome exibido é sempre o LABEL real do tipo simples correspondente
+  // em tipos_montagem.opcoes (ex.: código "sp" cadastrado com label
+  // "S/P" aparece como "S/P", não como "SP" — são a mesma coisa, só
+  // "SP" é o código interno usado pra casar com a combinação, nunca o
+  // texto mostrado pro usuário). Tipo sem cadastro correspondente (ex.:
+  // "1t" de COMBINACOES_PADRAO antes de existir um tipo "1T" em
+  // Configurações) cai no fallback do próprio código em maiúsculas, pra
+  // nunca ficar com uma linha em branco.
+  function _labelDoTipoMontagem(tipo) {
+    const opcao = (_montagemOpcoesCache || []).find(o => o && o.modo === 'simples' && o.tipo === tipo);
+    return opcao ? opcao.label : String(tipo).toUpperCase();
+  }
+
+  function _renderTabelaCombinacoes() {
+    const tbody = document.getElementById('sq-ref-combinacoes-tbody');
+    if (!tbody) return;
+
+    const marca = (shape, cor, extraStyle) =>
+      `<span class="sq-shape-${shape}" style="display:inline-block;background:var(--sq-cor-${cor});${extraStyle || ''}"></span>`;
+
+    const linhas = [];
+    _combinacoesEfetivas().forEach(combo => {
+      const label = _escaparHtml(_labelDoTipoMontagem(combo.tipo));
+
+      if (combo.forma === 'circle') {
+        linhas.push([
+          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul')} Círculo verde ou azul`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('circle', 'vermelho')} Círculo vermelho`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      } else if (combo.forma === 'dash') {
+        linhas.push([
+          `${marca('dash', 'verde', 'margin-right:2px')}${marca('dash', 'azul')} Traço verde ou azul`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('dash', 'vermelho')} Traço vermelho`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      } else if (combo.forma === 'circle+dash') {
+        const cm = combo.corModificadora;
+        linhas.push([
+          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo (verde/azul) + traço ${cm}`,
+          `Painel <strong>${label}</strong> aprovado`,
+        ]);
+        linhas.push([
+          `${marca('circle', 'vermelho', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo vermelho + traço ${cm}`,
+          `Painel <strong>${label}</strong> reprovado`,
+        ]);
+      }
+    });
+
+    if (!linhas.length) {
+      tbody.innerHTML = `<tr><td colspan="2" style="padding:8px 0;color:var(--text-3);font-size:.76rem">Nenhuma combinação definida ainda.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = linhas.map(([combinacao, classificacao], i) => {
+      const semBorda = i === linhas.length - 1;
+      const borda = semBorda ? '' : 'border-bottom:1px solid var(--border)';
+      return `
+        <tr>
+          <td style="padding:7px 6px 7px 0;${borda}">${combinacao}</td>
+          <td style="padding:7px 0 7px 6px;${borda}">${classificacao}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  // Popover "Motivos" no cabeçalho do Espelho Visual — o que cada código
+  // (ex: "BC") significa. Renderizado 1 vez, no init (a lista é fixa,
+  // MOTIVOS_DEFEITO, não muda em tempo de execução) — diferente de
+  // _renderTabelaCombinacoes/_renderAvisoCombinacoesFaltando, que dependem
+  // de config.json e por isso são re-renderizadas toda vez que ele recarrega.
+  function _renderReferenciaMotivos() {
+    const el = document.getElementById('popover-sq-motivos');
+    if (!el) return;
+    el.innerHTML = `
+      <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">
+        Motivo do defeito (2ª linha / reprovado)
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:.8rem">
+        ${MOTIVOS_DEFEITO.map(m => `
+          <div style="display:flex;gap:8px"><strong style="min-width:26px;color:var(--accent)">${m.codigo}</strong><span>${_escaparHtml(m.nome)}${m.codigo === 'OT' ? ' — descrição livre, veja no hover do código' : ''}</span></div>
+        `).join('')}
+      </div>`;
+  }
+
   // Abre o seletor de combinação disponível pra um tipo específico —
   // aparece embutido, logo abaixo do tipo, dentro do próprio popover.
   function abrirDefinirCombinacao(tipo) {
@@ -329,12 +570,13 @@
     picker.dataset.disponiveis = JSON.stringify(disponiveis);
   }
 
-  // Grava a combinação escolhida em config.json (marcadores_qualidade.
-  // opcoes) via /salvar-config — mesma rota que Configurações usa pra
-  // qualquer alteração (reenvia o config.json INTEIRO, não só o pedaço
-  // que mudou, porque é assim que /salvar-config funciona: substitui o
-  // arquivo por completo). Revalida contra o config.json mais recente
-  // antes de gravar — se ALGUÉM MAIS já tiver usado essa combinação
+  // Grava a combinação escolhida DENTRO do próprio tipo, em
+  // cfg.tipos_montagem.opcoes[i].combinacaoAvaliacao — via /salvar-config
+  // (mesma rota que Configurações usa pra qualquer alteração; reenvia o
+  // config.json INTEIRO, não só o pedaço que mudou, porque é assim que
+  // /salvar-config funciona: substitui o arquivo por completo). Revalida
+  // contra o config.json mais recente antes de gravar — se ALGUÉM MAIS
+  // já tiver usado essa combinação, ou definido uma pro mesmo tipo,
   // enquanto o picker estava aberto aqui, recusa e avisa, em vez de
   // gravar 2 tipos na mesma combinação.
   async function salvarCombinacaoTipo(tipo) {
@@ -349,25 +591,34 @@
       const res = await fetch('/db/config.json');
       if (!res.ok) throw new Error('Falha ao buscar config.json atualizado.');
       const cfg = await res.json();
-      const atuais = Array.isArray(cfg?.marcadores_qualidade?.opcoes) ? cfg.marcadores_qualidade.opcoes : [];
+      _migrarCombinacoesParaTiposMontagem(cfg); // idempotente — cobre o caso de outro dispositivo ainda não migrado
+      const tipos = Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : [];
+      const alvo = tipos.find(o => o && o.modo === 'simples' && o.tipo === tipo);
+      if (!alvo) {
+        showAlert('Aviso', 'Este tipo não existe mais em Configurações → Montagem. Recarregando a referência...');
+        _carregarOpcoesMontagem();
+        return;
+      }
       // Revalidação: já existe combinação pra este tipo, ou a combinação
       // escolhida já foi usada por outro tipo enquanto o picker estava
       // aberto? Nos 2 casos, recusa — só pode existir 1 combinação por
       // tipo, e 1 tipo por combinação.
-      if (atuais.some(c => c.tipo === tipo)) {
+      if (alvo.combinacaoAvaliacao) {
         showAlert('Aviso', 'Este tipo já ganhou uma combinação (talvez em outra aba/dispositivo). Recarregando a referência...');
         _carregarOpcoesMontagem();
         return;
       }
-      if (atuais.some(c => c.forma === escolhida.forma && c.corModificadora === escolhida.corModificadora)) {
+      const emUsoPorOutro = tipos.some(o => o !== alvo && o?.combinacaoAvaliacao
+        && o.combinacaoAvaliacao.forma === escolhida.forma
+        && o.combinacaoAvaliacao.corModificadora === escolhida.corModificadora);
+      if (emUsoPorOutro) {
         showAlert('Aviso', 'Essa combinação acabou de ser usada por outro tipo (talvez em outra aba/dispositivo). Escolha outra.');
         abrirDefinirCombinacao(tipo); // reabre com a lista de disponíveis já atualizada
         _carregarOpcoesMontagem();
         return;
       }
 
-      const novaLista = [...atuais, { tipo, forma: escolhida.forma, corModificadora: escolhida.corModificadora }];
-      cfg.marcadores_qualidade = { opcoes: novaLista };
+      alvo.combinacaoAvaliacao = { forma: escolhida.forma, corModificadora: escolhida.corModificadora };
 
       const salvar = await fetch('/salvar-config', {
         method: 'POST',
@@ -376,9 +627,10 @@
       });
       if (!salvar.ok) throw new Error('O servidor recusou salvar.');
 
-      _marcadoresQualidadeCache = novaLista;
       _configBrutoCache = cfg;
+      _montagemOpcoesCache = tipos;
       _renderAvisoCombinacoesFaltando();
+      _renderTabelaCombinacoes();
       showAlert('Salvo', `Combinação definida para ${tipo.toUpperCase()} — já pode marcar painéis desse tipo.`);
     } catch (err) {
       console.error('Falha ao salvar combinação de marcação:', err);
@@ -419,6 +671,25 @@
   }
 
   /* ── Validação de consistência ────────────────────────── */
+  // Todas as placas do formulário atual (stack1..stack4 × espessura) que
+  // ainda NÃO têm nenhuma marca em slabState — nem uma marca real
+  // (círculo/traço) nem o X de "painel não preenchido". Usada só na hora
+  // de registrar (ver registerEvaluation) pra impedir de fato o registro
+  // enquanto sobrar alguma — substitui o antigo checkbox de confirmação
+  // manual ("confirmo que avaliei todos os painéis"), que dependia da
+  // pessoa lembrar de marcar e não impedia nada por si só.
+  function _paineisNaoMarcados() {
+    const n = parseInt(document.getElementById('sq-thickness').value) || 0;
+    const faltando = [];
+    ['stack1', 'stack2', 'stack3', 'stack4'].forEach(sid => {
+      for (let i = 1; i <= n; i++) {
+        const id = `${sid}-${i}`;
+        if (!slabState[id] || !slabState[id].length) faltando.push(id);
+      }
+    });
+    return faltando;
+  }
+
   function validateAllSlabs() {
     document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
     let hasError = false, msgs = [];
@@ -430,7 +701,7 @@
         const exp = getExpectedType(id);
         if (!exp) return;
         const cls = classifyMarks(slabState[id] || []);
-        if (cls === 'Sem marcação') return;
+        if (cls === 'Sem marcação' || cls === 'Não preenchido') return;
         if (!cls.includes(exp)) {
           slab.classList.add('invalid');
           hasError = true;
@@ -472,12 +743,56 @@
         mc.className = 'sq-slab-marks';
         slab.appendChild(mc);
 
+        // Badge do código de motivo (ex: "BC") — só aparece quando a placa
+        // tem um motivo salvo (ver _renderBadgeMotivo). Clique reabre o
+        // seletor pra trocar, SEM alternar a marca (stopPropagation — o
+        // clique na placa em si continua marcando/desmarcando normalmente).
+        const mo = document.createElement('span');
+        mo.className = 'sq-slab-motivo';
+        mo.title = 'Clique para editar o motivo';
+        mo.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (viewMode) return;
+          if ((slabState[id] || []).some(m => _corExigeMotivo(m.color))) _abrirSeletorMotivo(id);
+        });
+        slab.appendChild(mo);
+
         if (slabState[id]) renderMarks(slab, slabState[id]);
+        _renderBadgeMotivo(id);
         slab.addEventListener('click', () => toggleMark(slab));
         stack.appendChild(slab);
       }
     });
     validateAllSlabs();
+  }
+
+  // Mostra/esconde o badge do código de motivo (ex: "BC") na placa —
+  // "?" quando a placa tem marca que exige motivo mas ainda não foi
+  // escolhido (chama atenção pra terminar); o código quando já escolhido;
+  // escondido quando não se aplica. Chamada sempre que o motivo muda
+  // (seletor, desmarcação) e ao (re)renderizar a placa do zero
+  // (renderStacks, acima).
+  function _renderBadgeMotivo(id) {
+    const slab = document.querySelector(`.sq-slab[data-id="${id}"]`);
+    const badge = slab?.querySelector('.sq-slab-motivo');
+    if (!badge) return;
+    const exigeMotivo = (slabState[id] || []).some(m => _corExigeMotivo(m.color));
+    const codigo = slabMotivo[id];
+    badge.classList.toggle('sq-slab-motivo-pendente', exigeMotivo && !codigo);
+    if (codigo) {
+      badge.textContent = codigo;
+      badge.title = codigo === 'OT'
+        ? (slabMotivoDescricao[id] || 'Outros (sem descrição)') + ' (clique para editar)'
+        : `${codigo} — ${_MOTIVO_POR_CODIGO[codigo] || ''} (clique para editar)`;
+      badge.style.display = '';
+    } else if (exigeMotivo) {
+      badge.textContent = '?';
+      badge.title = 'Motivo do defeito pendente — clique para escolher';
+      badge.style.display = '';
+    } else {
+      badge.textContent = '';
+      badge.style.display = 'none';
+    }
   }
 
   function renderMarks(slabEl, marks) {
@@ -486,6 +801,14 @@
     const root = getComputedStyle(document.documentElement);
     marks.forEach(m => {
       const el = document.createElement('span');
+      if (m.shape === 'x') {
+        // Sempre cinza fixo — nunca lê m.color (ver COR_NAO_PREENCHIDO):
+        // diferente das outras formas, aqui a cor nunca varia.
+        el.className = 'sq-mark-x';
+        el.textContent = '×';
+        c.appendChild(el);
+        return;
+      }
       el.className = m.shape === 'dash' ? 'sq-mark-dash' : 'sq-mark-circle';
       const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
       el.style.backgroundColor = root.getPropertyValue(varMap[m.color] || '--sq-cor-verde').trim();
@@ -498,11 +821,139 @@
     pushState();
     const id = el.dataset.id;
     if (!slabState[id]) slabState[id] = [];
-    const idx = slabState[id].findIndex(m => m.color === selectedColor && m.shape === selectedShape);
-    if (idx !== -1) slabState[id].splice(idx, 1);
-    else slabState[id].push({ color: selectedColor, shape: selectedShape });
+    const shape = selectedShape;
+    // X nunca usa a cor escolhida na paleta — é sempre cinza fixo
+    // (COR_NAO_PREENCHIDO), ver comentário na constante.
+    const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
+    const idx = slabState[id].findIndex(m => m.color === color && m.shape === shape);
+    if (idx !== -1) {
+      slabState[id].splice(idx, 1);
+      _atualizarMotivoAposDesmarcar(id);
+    } else {
+      // X é sempre sozinho: marcar X apaga qualquer marca real que já
+      // existisse na placa; e marcar uma marca real remove um X que já
+      // estivesse lá (não faz sentido as duas coexistirem — X significa
+      // justamente que não há nenhuma marcação real).
+      slabState[id] = shape === 'x' ? [] : slabState[id].filter(m => m.shape !== 'x');
+      slabState[id].push({ color, shape });
+      _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+    }
     renderMarks(el, slabState[id]);
     validateAllSlabs();
+    if (idx === -1 && _corExigeMotivo(color)) _abrirSeletorMotivo(id);
+  }
+
+  // Desmarcar uma cor azul/vermelho pode deixar o painel sem NENHUMA marca
+  // que ainda exija motivo (ex: era só um círculo vermelho, foi removido)
+  // — nesse caso o motivo salvo não faz mais sentido e é limpo junto. Se
+  // ainda sobrar outra marca azul/vermelho (raro, mas possível numa
+  // combinação círculo+traço onde as duas contam status — não é o caso
+  // hoje, mas não custa checar), mantém o motivo como estava.
+  function _atualizarMotivoAposDesmarcar(id) {
+    const aindaExigeMotivo = (slabState[id] || []).some(m => _corExigeMotivo(m.color));
+    if (!aindaExigeMotivo) { delete slabMotivo[id]; delete slabMotivoDescricao[id]; }
+    _renderBadgeMotivo(id);
+  }
+
+  // Seletor de motivo — popover flutuante com os 14 códigos (ver
+  // MOTIVOS_DEFEITO). 2 modos, conforme os argumentos:
+  //   - _abrirSeletorMotivo(id) — 1 placa só (clique direto na placa ou no
+  //     badge "?"/código dela). Ancorado na placa.
+  //   - _abrirSeletorMotivo(null, stackId) — pallet inteiro (depois de
+  //     "Marcar Tudo"/cor no cabeçalho do pallet, ver applyMarksToPallet).
+  //     Aplica o motivo escolhido em TODA placa do pallet que estiver
+  //     exigindo motivo agora. Ancorado no cabeçalho do pallet.
+  // Sem opção de "pular" de propósito (só ✕ fecha sem escolher, deixando
+  // o badge "?" — a pessoa pode reabrir clicando nele quando quiser
+  // terminar; não trava o fluxo de marcação, mas também não deixa a
+  // pendência invisível).
+  function _abrirSeletorMotivo(id, stackId) {
+    document.querySelectorAll('.sq-motivo-popover').forEach(el => el.remove());
+
+    const ancora = id
+      ? document.querySelector(`.sq-slab[data-id="${id}"]`)
+      : document.querySelector(`#${stackId} .sq-pallet-header`) || document.getElementById(stackId);
+    if (!ancora) return;
+
+    const pop = document.createElement('div');
+    pop.className = 'sq-motivo-popover';
+    pop.innerHTML = `
+      <div class="sq-motivo-popover-titulo">
+        ${id ? 'Motivo do defeito' : 'Motivo do defeito — pallet inteiro'}
+        <button type="button" class="sq-motivo-popover-fechar" title="Fechar sem escolher">✕</button>
+      </div>
+      <div class="sq-motivo-popover-grid">
+        ${MOTIVOS_DEFEITO.map(m => `
+          <button type="button" class="sq-motivo-popover-item" data-codigo="${m.codigo}" title="${_escaparHtml(m.nome)}">
+            <strong>${m.codigo}</strong><span>${_escaparHtml(m.nome)}</span>
+          </button>`).join('')}
+      </div>`;
+    document.body.appendChild(pop);
+
+    const rect = ancora.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + 6;
+    if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - popRect.width - 8;
+    if (top + popRect.height > window.innerHeight - 8) top = rect.top - popRect.height - 6;
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top = Math.max(8, top) + 'px';
+
+    function fechar() {
+      pop.remove();
+      document.removeEventListener('mousedown', aoClicarFora, true);
+    }
+    function aoClicarFora(e) {
+      if (!pop.contains(e.target)) fechar();
+    }
+    // setTimeout: sem isso, o MESMO clique que abriu o popover (ex: clique
+    // na placa) já contaria como "clique fora" e fecharia na hora.
+    setTimeout(() => document.addEventListener('mousedown', aoClicarFora, true), 0);
+
+    pop.querySelector('.sq-motivo-popover-fechar').addEventListener('click', fechar);
+    // Aplica o motivo escolhido — na PLACA (id) ou em todo o PALLET
+    // (stackId, quando id é null), sempre nas placas que ainda estiverem
+    // exigindo motivo agora (mesmo critério dos 2 modos, ver comentário
+    // da função). Único ponto que de fato grava slabMotivo/slabMotivoDescricao,
+    // usado tanto pro clique direto num código quanto pelo fluxo de "OT"
+    // (que só chama isto DEPOIS do showPrompt confirmado).
+    function aplicar(codigo, descricao) {
+      if (id) {
+        slabMotivo[id] = codigo;
+        if (codigo === 'OT') slabMotivoDescricao[id] = descricao; else delete slabMotivoDescricao[id];
+        _renderBadgeMotivo(id);
+      } else {
+        document.getElementById(stackId).querySelectorAll('.sq-slab').forEach(slab => {
+          const sid = slab.dataset.id;
+          if ((slabState[sid] || []).some(m => _corExigeMotivo(m.color))) {
+            slabMotivo[sid] = codigo;
+            if (codigo === 'OT') slabMotivoDescricao[sid] = descricao; else delete slabMotivoDescricao[sid];
+            _renderBadgeMotivo(sid);
+          }
+        });
+      }
+    }
+    pop.querySelectorAll('.sq-motivo-popover-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const codigo = btn.dataset.codigo;
+        if (codigo === 'OT') {
+          // Descrição livre — fecha o popover de códigos e abre o prompt
+          // de texto (showPrompt, mesmo modal de sempre). Só aplica se a
+          // pessoa confirmar com um texto não-vazio; cancelar ou deixar
+          // em branco não marca nada (placa continua com "?" pendente,
+          // ver _renderBadgeMotivo — igual a fechar o popover sem
+          // escolher nenhum código).
+          const descricaoAtual = id ? (slabMotivoDescricao[id] || '') : '';
+          fechar();
+          showPrompt('Descreva o motivo', 'Descrição curta do defeito — aparece no hover do código "OT".', descricaoAtual, (texto) => {
+            if (texto && texto.trim()) aplicar('OT', texto.trim());
+          });
+          return;
+        }
+        aplicar(codigo, null);
+        fechar();
+      });
+    });
   }
 
   /* ── Seleção de cor / forma ───────────────────────────── */
@@ -517,15 +968,20 @@
     document.querySelectorAll('.sq-btn-shape').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedShape = shape;
+    // X nunca usa cor (é sempre cinza fixo, ver COR_NAO_PREENCHIDO) —
+    // desabilita a paleta visualmente pra não sugerir que a cor
+    // escolhida ali vai valer pra ele. Some outra forma é escolhida de
+    // novo, a paleta volta a funcionar normalmente.
+    document.querySelectorAll('.sq-btn-color').forEach(b => b.classList.toggle('sq-btn-color-disabled', shape === 'x'));
   }
 
   // ── Atalhos de teclado: nº = cor, Ctrl+nº = forma ───────────────────
   // Numeração segue a ORDEM que os botões aparecem na tela (mesma ordem
   // do DOM — ver querySelectorAll abaixo), não uma lista fixa aqui: hoje
   // são 5 cores e 2 formas, mas adicionar uma 6ª cor ou uma 3ª forma no
-  // HTML (public/setor-qualidade-app.html) já funciona sozinho, sem
-  // tocar neste código — a tecla "6" ou "Ctrl+3" simplesmente passam a
-  // existir. Os badges numerados nos próprios botões (ver CSS,
+  // HTML (public/partials/page-setor-qualidade.html) já funciona
+  // sozinho, sem tocar neste código — a tecla "6" ou "Ctrl+3" simplesmente
+  // passam a existir. Os badges numerados nos próprios botões (ver CSS,
   // counter-increment em .sq-btn-color/.sq-btn-shape) seguem a MESMA
   // ordem, então o que a pessoa vê no botão é sempre a tecla certa.
   // "Ctrl+nº" no Windows/Linux e "Cmd+nº" no Mac (metaKey) fazem a mesma
@@ -557,56 +1013,34 @@
   }
   document.addEventListener('keydown', _sqAtalhoTeclado);
 
-  // ── Repassa atalhos de NAVEGAÇÃO ENTRE PÁGINAS (Alt+dígito, Alt+P,
-  //    Alt+Q, Alt+seta) pro documento PAI ─────────────────────────────
-  // Setor de Qualidade roda dentro de um <iframe> (ver public/index.html,
-  // #setor-qualidade-frame) — um documento à parte, com foco próprio.
-  // Os atalhos de "viagem entre páginas" (Alt+1..0, Alt+P/Q, Alt+←/→)
-  // são tratados só no documento PAI (ver keyboard-shortcuts.js, que só
-  // é carregado no index.html, nunca aqui dentro) — e evento de teclado
-  // NUNCA atravessa a fronteira de um iframe sozinho. Resultado: assim
-  // que a pessoa clica em QUALQUER coisa aqui dentro (o que move o foco
-  // do navegador pra dentro do iframe), o documento pai para de receber
-  // esses eventos e os atalhos de navegação somem — exatamente o
-  // comportamento reportado. Como o iframe é da MESMA origem (mesmo
-  // servidor), dá pra repassar o evento manualmente pro `document` do
-  // pai, onde o listener de verdade mora, e ele reage normalmente.
-  // Só repassa combos com Alt — são os ÚNICOS usados pra navegação entre
-  // páginas; nunca colide com os atalhos de cor/forma daqui em cima
-  // (_sqAtalhoTeclado, dígito puro ou Ctrl+dígito, nunca Alt).
-  document.addEventListener('keydown', function (e) {
-    if (!e.altKey) return; // só o que é atalho de navegação
-    if (window.parent === window) return; // aberto direto, fora de um iframe — nada a repassar
-    // Mesma cautela do keyboard-shortcuts.js no pai: não repassa
-    // enquanto a pessoa está digitando em algum campo AQUI dentro.
-    const alvo = document.activeElement;
-    const tag = (alvo?.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select' || alvo?.isContentEditable) return;
-    try {
-      window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: e.key, code: e.code, keyCode: e.keyCode, which: e.which,
-        ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
-        bubbles: true, cancelable: true,
-      }));
-    } catch (err) {
-      // Mesma origem devia sempre permitir isto — se por algum motivo
-      // falhar, só ignora; um atalho de navegação que não repassou não
-      // pode quebrar o resto da página.
-    }
-  });
-
   /* ── Ações em lote (pallet inteiro) ──────────────────── */
   function applyMarksToPallet(stackId, color, shape) {
     if (viewMode) return;
     pushState();
+    // Mesma regra de toggleMark: X nunca usa a cor recebida (sempre
+    // cinza fixo) e é sempre sozinho na placa.
+    const corFinal = shape === 'x' ? COR_NAO_PREENCHIDO : color;
     document.getElementById(stackId).querySelectorAll('.sq-slab').forEach(slab => {
       const id = slab.dataset.id;
       if (!slabState[id]) slabState[id] = [];
-      if (!slabState[id].find(m => m.color === color && m.shape === shape))
-        slabState[id].push({ color, shape });
+      if (shape === 'x') {
+        slabState[id] = [{ color: corFinal, shape: 'x' }];
+      } else {
+        slabState[id] = slabState[id].filter(m => m.shape !== 'x');
+        if (!slabState[id].find(m => m.color === corFinal && m.shape === shape))
+          slabState[id].push({ color: corFinal, shape });
+      }
       renderMarks(slab, slabState[id]);
+      _renderBadgeMotivo(id);
     });
     validateAllSlabs();
+    // 1 seletor só pro pallet inteiro (não 1 por placa) — quem marca em
+    // lote normalmente está registrando o MESMO defeito pra todas
+    // (ex: "esse pallet inteiro veio com falha de traço"). Aplica o
+    // motivo escolhido em toda placa do pallet que ficou exigindo motivo
+    // (sobrescreve qualquer motivo individual anterior — é uma ação em
+    // lote deliberada).
+    if (_corExigeMotivo(corFinal)) _abrirSeletorMotivo(null, stackId);
   }
   function selectAllPallet(sid) { applyMarksToPallet(sid, selectedColor, selectedShape); }
   function applyColorToPallet(sid, color) { closeAllDropdowns(); applyMarksToPallet(sid, color, selectedShape); }
@@ -659,13 +1093,12 @@
     if (!wasActive) {
       el.classList.add('active');
       // O popover de Referência mostra "Tipos sem marcação definida",
-      // calculado a partir de config.json (tipos_montagem/marcadores_
-      // qualidade) — SEM isto, quem cadastra um tipo novo em
+      // calculado a partir de config.json (tipos_montagem.opcoes, campo
+      // combinacaoAvaliacao) — SEM isto, quem cadastra um tipo novo em
       // Configurações enquanto esta página já está aberta (ou só sem dar
       // F5) não via o tipo novo aparecer aqui: o cache
-      // (_montagemOpcoesCache/_marcadoresQualidadeCache) só era
-      // atualizado 1 vez, no carregamento inicial da página. Recarregar
-      // toda vez que este popover específico abre é barato (só acontece
+      // (_montagemOpcoesCache) só era atualizado 1 vez, no carregamento
+      // inicial da página. Recarregar toda vez que este popover específico abre é barato (só acontece
       // no clique da pessoa) e garante que a lista sempre reflete o
       // config.json mais recente.
       if (id === 'popover-sq-referencia') _carregarOpcoesMontagem();
@@ -679,7 +1112,14 @@
 
   /* ── Histórico de ações (desfazer) ───────────────────── */
   function pushState() {
-    actionHistory.push(JSON.parse(JSON.stringify(slabState)));
+    // slabMotivo snapshotado JUNTO — desfazer uma marcação precisa
+    // desfazer o motivo associado também, senão um "?"/código ficava
+    // "grudado" numa placa que o undo já tinha desmarcado.
+    actionHistory.push({
+      slabState:  JSON.parse(JSON.stringify(slabState)),
+      slabMotivo: JSON.parse(JSON.stringify(slabMotivo)),
+      slabMotivoDescricao: JSON.parse(JSON.stringify(slabMotivoDescricao)),
+    });
     if (actionHistory.length > 30) actionHistory.shift();
   }
 
@@ -746,6 +1186,11 @@
   /* ── Navegação interna ────────────────────────────────── */
   function navigateTo(section) {
     if (viewMode && section !== 'form') exitViewMode();
+    if (_editandoAvaliacaoId && section !== 'form') {
+      _editandoAvaliacaoId = null;
+      _editandoRegistradoEm = null;
+      _editandoLinkedOperacaoId = null;
+    }
     document.querySelectorAll('.sq-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sq-nav-btn').forEach(el => el.classList.remove('active'));
     const sec = document.getElementById('sq-' + section);
@@ -763,13 +1208,53 @@
   function goBack() { if (viewMode) exitViewMode(); navigateTo(viewSource); }
 
   // Aba "🧪 Avaliação" (topbar) chama isto direto — abre o formulário em
-  // branco (avaliação avulsa, sem vincular a nenhuma operação ainda) já
-  // COM a fila de baterias pendentes visível acima do cabeçalho do
-  // formulário (ver carregarFilaNaoAvaliadas, abaixo). Clicar num item da
-  // fila vincula e preenche; não precisa mais de um botão "Nova
-  // Avaliação" separado nem de nenhum passo intermediário.
+  // branco, já COM a fila de baterias pendentes visível acima do
+  // cabeçalho (ver carregarFilaNaoAvaliadas, abaixo). Clicar num item da
+  // fila vincula e preenche o formulário.
+  //
+  // IMPORTANTE — avaliação AVULSA (registrar sem nunca ter clicado num
+  // item da fila) NÃO é mais permitida (ver bloqueio em
+  // registerEvaluation(), abaixo, e a trava definitiva em
+  // POST /registrar-avaliacao-qualidade, server.js): dava pra registrar
+  // uma avaliação livre, digitando só o ID da bateria, e esse era
+  // exatamente o cenário que fazia a Análise Focada não encontrar o
+  // resultado (a operação real nunca ficava vinculada). O formulário
+  // continua abrindo em branco aqui (pra mostrar a fila e permitir
+  // rascunho), mas "Registrar" fica desabilitado até a pessoa escolher
+  // uma bateria da fila (ver _aplicarModoBotoesForm).
   function startNew() {
     _iniciarForm(null);
+  }
+
+  // Campos que vêm PRONTOS da operação real escolhida na fila (ver
+  // _prefillFromOperacao) — quem preenche o valor de verdade é o
+  // Registro de Operação, não a Qualidade. Ficam travados pra não deixar
+  // o lançamento da Qualidade divergir do que realmente aconteceu na
+  // operação; tudo que NÃO está preenchido automaticamente (temperatura,
+  // data/hora de montagem e desmoldagem, observações, e a marcação
+  // propriamente dita das placas) continua livre. A Espessura de cada
+  // pallet (grade "Medição") é um caso à parte — não é um <select>/
+  // <input> do formulário, é span com lápis (ver editField) — por isso
+  // é tratada separadamente aqui, via classe .sq-info-edit-locked.
+  const CAMPOS_AUTO_PREENCHIDOS = ['sq-batteryId', 'sq-mountType', 'sq-turno', 'sq-dtEnchimento'];
+
+  // bloquear=true trava. SEMPRE travado enquanto a tela de avaliação está
+  // aberta — mesmo em branco, antes de escolher a bateria: como avulsa não
+  // é mais permitida (ver registerEvaluation), esses 5 campos só têm valor
+  // de verdade depois de vir de uma operação real (fila/rascunho/correção,
+  // ver _prefillFromOperacao/loadDraft/editarAvaliacaoDoEspelho) — não faz
+  // sentido digitar neles antes disso, então ficam travados desde já.
+  // Desabilitar o <select>/<input> não impede o JS de setar .value por
+  // código (só bloqueia teclado/mouse do usuário), então prefill continua
+  // funcionando normalmente com o campo já travado.
+  function _bloquearCamposAutoPreenchidos(bloquear) {
+    CAMPOS_AUTO_PREENCHIDOS.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = bloquear;
+    });
+    document.querySelectorAll('.sq-info-edit[data-field="espessura"]').forEach(btn => {
+      btn.classList.toggle('sq-info-edit-locked', bloquear);
+    });
   }
 
   function _iniciarForm(operacaoVinculada) {
@@ -784,6 +1269,8 @@
       autoSetThickness();
     }
     setEditable(true);
+    _bloquearCamposAutoPreenchidos(true); // sempre travado — ver comentário na função, acima
+    _aplicarModoBotoesForm(); // reflete no botão "Registrar" se ficou sem operação vinculada (ver comentário lá)
   }
 
   // Pré-preenche ID da Bateria, Turno, Tipo de Montagem e — se a operação
@@ -821,6 +1308,26 @@
       }
     }
 
+    // ── Data/Hora de Enchimento ──────────────────────────────────────
+    // Data = op.data (o dia em que a OPERAÇÃO começou — ver dataLocal em
+    // operacao.js: state.inicio.split('T')[0] — sempre a data de
+    // referência da operação, usada em todo o resto do sistema pra
+    // agrupar/filtrar). Hora = extraída de op.fim (timestamp completo de
+    // quando a operação foi finalizada — ver state.fim em operacao.js).
+    // Não usa op.fim inteiro direto: um turno que passa da meia-noite
+    // teria o "dia" de op.fim já no dia seguinte, e aqui queremos o dia
+    // da operação, não o do relógio no instante exato do fim.
+    // .toISOString() (não getHours/getMinutes locais) pelo mesmo motivo
+    // de fmtDTL, acima — mesma convenção usada em todo o resto deste
+    // arquivo pra ler/escrever os campos datetime-local daqui.
+    if (op.data && op.fim) {
+      const horaFim = new Date(op.fim);
+      if (!isNaN(horaFim)) {
+        document.getElementById('sq-dtEnchimento').value = `${op.data}T${horaFim.toISOString().slice(11, 16)}`;
+        calculateCureTime();
+      }
+    }
+
     // ── Espessura/pallet (nº de placas por pallet) ──────────────────────
     // autoSetThickness() adivinha isso a partir do ID da Bateria (só 3
     // valores fixos: 11/10/8) — mas usa o MESMO id com risco de
@@ -831,6 +1338,12 @@
     autoSetThickness();
     const capacidadeReal = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
     if (capacidadeReal > 0) _definirThicknessReal(capacidadeReal);
+
+    // ── Espessura: corrige o palpite por bateria (autoSetThickness →
+    // refreshPalletInfos, acima) com a dimensão REAL gravada na operação
+    // — pode ter sido ajustada manualmente em Registrar Operação, então
+    // não necessariamente bate com o padrão cadastrado da bateria. ──────
+    if (op.dimensao) _definirEspessuraReal(op.dimensao);
 
     // ── Tipo de Montagem (+ grade Personalizada) ────────────────────────
     if (op.tipo_montagem === 'PERSONALIZADA') {
@@ -1266,6 +1779,8 @@
       observations: document.getElementById('sq-obs').value,
       slabsPerPallet: parseInt(document.getElementById('sq-thickness').value),
       slabState,
+      slabMotivo,
+      slabMotivoDescricao,
       palletInfos: {}
     };
     for (let p = 1; p <= 4; p++) {
@@ -1292,14 +1807,17 @@
     const raw = localStorage.getItem(`sq_draft_${id}`);
     if (!raw) { showAlert('Erro', 'Rascunho não encontrado.'); return; }
     const d = JSON.parse(raw);
-    applyFormData(d);
+    applyFormData(d); // já seta linkedOperacaoId = d.linkedOperacaoId — ver applyFormData
     currentDraftId = d.id;
     navigateTo('form');
     autoSetThickness();
     calculateCureTime();
     setEditable(true);
+    // Sempre travado — ver comentário em _bloquearCamposAutoPreenchidos.
+    _bloquearCamposAutoPreenchidos(true);
     validateAllSlabs();
     closeAllCollapsibles();
+    _aplicarModoBotoesForm(); // reflete no botão "Registrar" se este rascunho não tem operação vinculada
   }
 
   function deleteDraft(id) {
@@ -1308,37 +1826,89 @@
     renderDrafts();
   }
 
-  /* ── Registrar avaliação definitiva ───────────────────── */
+  /* ── Registrar avaliação definitiva (ou salvar correção) ── */
   function registerEvaluation() {
     if (viewMode) return;
     if (!document.getElementById('sq-batteryId').value) { showAlert('Erro','Selecione o ID da Bateria.'); return; }
-    showConfirm('Registrar','Ao registrar, a avaliação vai para o histórico. Continuar?', () => {
-      const evId = 'ev_' + Date.now();
+    const editando = !!_editandoAvaliacaoId;
+    // Avaliação AVULSA não é mais permitida (ver bloqueio espelhado — e
+    // definitivo — em POST /registrar-avaliacao-qualidade, server.js):
+    // só dá pra registrar uma avaliação NOVA se ela veio de um clique na
+    // fila (linkedOperacaoId setado por iniciarAvaliacaoDaFila/
+    // iniciarAvaliacaoDoSelect). Uma CORREÇÃO (editando) nunca cai aqui —
+    // ela já tem um id existente, então não é bloqueada mesmo que o
+    // registro original (legado) não tenha vínculo.
+    if (!editando && !linkedOperacaoId) {
+      showAlert('Selecione uma bateria da fila', 'Avaliação avulsa não é mais permitida — abra "Ordem de Previsão de Desemplaque" acima e escolha a bateria que você está avaliando antes de registrar.');
+      return;
+    }
+    // Antes dependia de um checkbox marcado à mão ("confirmo que avaliei
+    // todos os painéis") — só um lembrete, não impedia registrar uma
+    // bateria com placas de fato esquecidas. Agora verifica de verdade:
+    // toda placa (stack1..stack4 × espessura) precisa ter pelo menos uma
+    // marca — real (círculo/traço) ou X ("painel não preenchido", pra
+    // quem conscientemente não deu pra avaliar). Destaca as que faltam
+    // (mesmo visual de placa com tipo incompatível, ver validateAllSlabs)
+    // e recusa registrar enquanto sobrar alguma.
+    document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
+    const faltando = _paineisNaoMarcados();
+    if (faltando.length) {
+      faltando.forEach(id => document.querySelector(`.sq-slab[data-id="${id}"]`)?.classList.add('invalid'));
+      showAlert('Faltam painéis', `Ainda ${faltando.length === 1 ? 'há 1 painel' : `há ${faltando.length} painéis`} sem nenhuma marcação (destacado${faltando.length === 1 ? '' : 's'} em vermelho) — marque todos antes de registrar. Painéis que não puderam ser avaliados usam o X (Painel não preenchido).`);
+      return;
+    }
+    showConfirm(
+      editando ? 'Salvar Correção' : 'Registrar',
+      editando
+        ? 'Confirma salvar a correção desta avaliação? O registro original será substituído.'
+        : 'Ao registrar, a avaliação vai para o histórico. Continuar?',
+      () => {
+      const evId = editando ? _editandoAvaliacaoId : ('ev_' + Date.now());
       const evalObj = {
         id: evId, schemaVersion: 2,
         batteryId: document.getElementById('sq-batteryId').value,
-        linkedOperacaoId: linkedOperacaoId || null,
+        linkedOperacaoId: editando ? _editandoLinkedOperacaoId : (linkedOperacaoId || null),
         montagem: { pallet1: palletTypes[0], pallet2: palletTypes[1], pallet3: palletTypes[2], pallet4: palletTypes[3] },
         turno:    document.getElementById('sq-turno').value,
         tempInput: parseFloat(document.getElementById('sq-temp').value) || 0,
         dtMontagem:    toISO(document.getElementById('sq-dtMontagem').value),
         dtEnchimento:  toISO(document.getElementById('sq-dtEnchimento').value),
         dtDesmoldagem: toISO(document.getElementById('sq-dtDesmoldagem').value),
-        registeredAt: new Date().toISOString(),
+        // Numa correção, preserva a data em que a avaliação REALMENTE
+        // aconteceu (registeredAt) — é o que ordena o Histórico/Dashboard;
+        // sem isso, corrigir um erro de digitação faria o registro "pular"
+        // pra hoje na lista, como se tivesse sido avaliado agora. A data
+        // do conserto em si fica em editadoEm, só como rastro auditável.
+        registeredAt: editando ? _editandoRegistradoEm : new Date().toISOString(),
         totalSlabs: parseInt(document.getElementById('sq-thickness').value) * 4,
+        // Dimensão real da operação (ver _definirEspessuraReal, mais
+        // acima) — gravada na própria avaliação pra sobreviver ao reabrir
+        // uma já registrada (ver _carregarAvaliacaoNoFormulario), sem
+        // depender da operação ainda estar na fila (ela já não está mais,
+        // nesse ponto).
+        dimensaoOperacao: dimensaoOperacaoAtual || null,
         observations: document.getElementById('sq-obs').value,
+        ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
       // Painéis embutidos na própria avaliação — 1 linha no banco pra
       // avaliação inteira (ver db.salvarAvaliacaoQualidade, db.js),
       // "avaliacaoId" mantido em cada painel só por compatibilidade com
       // quem já filtra por ele (ver getData()/carregarAvaliacoesQualidade).
+      // "motivo" (código, ver MOTIVOS_DEFEITO) só existe pra painéis 2ª
+      // linha/reprovados — null nos demais (slabMotivo[id] nunca é
+      // preenchido pra placa aprovada 1ª linha, ver _corExigeMotivo).
+      // "motivoDescricao" só existe quando motivo === 'OT' — descrição
+      // livre digitada na hora (ver showPrompt em _abrirSeletorMotivo).
       evalObj.paineis = Object.entries(slabState).map(([id, marks]) => {
         const parts = id.split('-');
         const info  = getClassifiedInfo(marks);
-        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks };
+        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null };
       });
 
-      const opIdParaMarcar = linkedOperacaoId;
+      // Numa correção, a bateria já saiu da fila há muito tempo (foi por
+      // isso que virou avaliação) — não faz sentido tentar marcar a
+      // operação como avaliada de novo.
+      const opIdParaMarcar = editando ? null : linkedOperacaoId;
       const btnRegistrar = document.getElementById('sq-btn-register');
       if (btnRegistrar) btnRegistrar.disabled = true;
 
@@ -1358,10 +1928,11 @@
           // a pessoa continua na tela, com os dados intactos, e pode
           // tentar "Registrar" de novo.
           if (currentDraftId) LS.del('draft_' + currentDraftId);
+          const destino = editando ? 'dashboard' : 'form';
           clearForm();
           currentDraftId = null;
-          showAlert('Concluído', 'Avaliação registrada com sucesso!');
-          navigateTo('form');
+          showAlert('Concluído', editando ? 'Correção salva com sucesso!' : 'Avaliação registrada com sucesso!');
+          navigateTo(destino);
           carregarAvaliacoesQualidade();
 
           if (opIdParaMarcar) {
@@ -1402,12 +1973,19 @@
     closeAllCollapsibles();
   }
 
-  function viewHistoryRecord(evId) {
-    const d    = getData();
-    const item = d.avaliacoes.find(e => e.id === evId);
-    if (!item) { showAlert('Erro','Não encontrado.'); return; }
-    viewSource = 'history';
-    palletTypes = [item.montagem.pallet1, item.montagem.pallet2, item.montagem.pallet3, item.montagem.pallet4];
+  // Preenche o formulário inteiro (cabeçalho + grade de painéis) a partir
+  // de uma avaliação já salva — usado tanto por viewHistoryRecord (modo
+  // só-leitura) quanto por editarAvaliacaoDoEspelho (modo editável).
+  function _carregarAvaliacaoNoFormulario(item) {
+    const d = getData();
+    // Precisa vir ANTES de qualquer chamada a refreshPalletInfos/
+    // autoSetThickness (mais abaixo) — são elas que de fato escrevem a
+    // Espessura na tela, e dão preferência a dimensaoOperacaoAtual quando
+    // ela já está definida (ver refreshPalletInfos). Avaliação legada
+    // (registrada antes desta mudança) não tem este campo — cai de volta
+    // no palpite por bateria, de propósito.
+    dimensaoOperacaoAtual = item.dimensaoOperacao || null;
+    palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
     document.getElementById('sq-batteryId').value   = item.batteryId || 'B1';
@@ -1419,15 +1997,65 @@
     document.getElementById('sq-obs').value          = item.observations || '';
     refreshPalletInfos();
     const ns = {};
-    d.paineis.filter(p => p.avaliacaoId === evId).forEach(p => { ns[`stack${p.pallet}-${p.posicao}`] = p.marcas; });
+    const nm = {};
+    const nd = {};
+    d.paineis.filter(p => p.avaliacaoId === item.id).forEach(p => {
+      ns[`stack${p.pallet}-${p.posicao}`] = p.marcas;
+      if (p.motivo) nm[`stack${p.pallet}-${p.posicao}`] = p.motivo;
+      if (p.motivo === 'OT' && p.motivoDescricao) nd[`stack${p.pallet}-${p.posicao}`] = p.motivoDescricao;
+    });
     slabState     = ns;
+    slabMotivo    = nm;
+    slabMotivoDescricao = nd;
     actionHistory = [];
     document.getElementById('sq-thickness').value = item.totalSlabs / 4;
     autoSetThickness();
     calculateCureTime();
+  }
+
+  function viewHistoryRecord(evId) {
+    const d    = getData();
+    const item = d.avaliacoes.find(e => e.id === evId);
+    if (!item) { showAlert('Erro','Não encontrado.'); return; }
+    viewSource = 'history';
+    _carregarAvaliacaoNoFormulario(item);
     setEditable(false);
     viewMode = true;
     navigateTo('form');
+  }
+
+  // Abre a mesma avaliação mostrada no Espelho Visual, EDITÁVEL, pra
+  // corrigir algum erro de lançamento — só Administrador (mesma trava
+  // usada em Editar Operação, app-core.js). Ao "Registrar" de novo,
+  // registerEvaluation() detecta _editandoAvaliacaoId e SALVA POR CIMA
+  // do mesmo registro (mesmo id), em vez de criar um novo — mantendo a
+  // data original de registro (só a correção fica marcada em
+  // "editadoEm", pro histórico continuar ordenado pela data real do
+  // evento, não pela data do conserto).
+  function editarAvaliacaoDoEspelho() {
+    if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+    const item = dashboardEvals[mirrorIndex];
+    if (!item) return;
+    showConfirm(
+      'Editar Avaliação',
+      `Isso abre a avaliação de "${item.batteryId || 'N/I'}" para correção. Ao salvar, o registro original é substituído. Continuar?`,
+      () => {
+        _carregarAvaliacaoNoFormulario(item);
+        viewSource = 'dashboard';
+        _editandoAvaliacaoId      = item.id;
+        _editandoRegistradoEm     = item.registeredAt || null;
+        _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
+        setEditable(true);
+        // Mesma trava do lançamento novo: os dados vieram da operação
+        // real na hora do registro original, corrigir aqui não deveria
+        // divergir deles — só o que a Qualidade de fato controla
+        // (temperatura, datas de montagem/desmoldagem, observações,
+        // marcação das placas) fica editável na correção.
+        _bloquearCamposAutoPreenchidos(true);
+        _aplicarModoBotoesForm();
+        navigateTo('form');
+      }
+    );
   }
 
   function exitViewMode()  { viewMode = false; setEditable(true); }
@@ -1449,6 +2077,7 @@
     const search  = (document.getElementById('sq-hist-search').value || '').toLowerCase();
     const turno   = document.getElementById('sq-hist-turno').value;
     const filtered = d.avaliacoes.filter(item =>
+      !item.excluidaDaFila &&
       (item.batteryId||'').toLowerCase().includes(search) &&
       (!turno || item.turno === turno)
     ).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt));
@@ -1469,10 +2098,10 @@
       tr.innerHTML = `
         <td>${new Date(item.registeredAt).toLocaleString('pt-BR')}</td>
         <td><strong>${item.batteryId||'N/I'}</strong></td>
-        <td style="color:#66bb6a;font-weight:700;">${item.montagem.pallet1||'—'}</td>
-        <td style="color:#42a5f5;font-weight:700;">${item.montagem.pallet2||'—'}</td>
-        <td style="color:#ab47bc;font-weight:700;">${item.montagem.pallet3||'—'}</td>
-        <td style="color:#ffa726;font-weight:700;">${item.montagem.pallet4||'—'}</td>
+        <td style="color:#66bb6a;font-weight:700;">${item.montagem?.pallet1||'—'}</td>
+        <td style="color:#42a5f5;font-weight:700;">${item.montagem?.pallet2||'—'}</td>
+        <td style="color:#ab47bc;font-weight:700;">${item.montagem?.pallet3||'—'}</td>
+        <td style="color:#ffa726;font-weight:700;">${item.montagem?.pallet4||'—'}</td>
         <td>${item.turno||'—'}</td>
         <td>${item.tempInput?item.tempInput+'°C':'—'}</td>
         <td>${item.totalSlabs||'—'}</td>
@@ -1506,6 +2135,14 @@
     if (!panel?.marcas?.length)
       return `<span class="sq-mini-mark sq-mini-mark-vazia" title="Sem marcação"></span>`;
     return panel.marcas.map(m => {
+      // "Painel não preenchido" (marca X, ver COR_NAO_PREENCHIDO) — sempre
+      // sozinha, sempre cinza fixo. Visualmente diferente do × de "Não
+      // avaliado no sistema" (sq-mini-mark-nao-avaliado, acima: texto solto,
+      // sem fundo) de propósito — são conceitos diferentes (aqui é uma
+      // marcação real feita pelo avaliador, lá é a bateria inteira que
+      // nunca chegou a ser avaliada) e o hover/title já deixa isso explícito.
+      if (m.shape === 'x')
+        return `<span class="sq-mini-mark sq-mini-mark-x" title="Painel não preenchido">×</span>`;
       const w = m.shape==='dash' ? '12px' : '6px', h = m.shape==='dash' ? '2px' : '6px';
       const r = m.shape==='circle' ? '50%' : '2px';
       const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
@@ -1516,12 +2153,14 @@
   function renderMirror(index) {
     const container = document.getElementById('sq-mirror-container');
     const counter   = document.getElementById('sq-mirror-counter');
+    const btnEditar = document.getElementById('sq-mirror-btn-editar');
     if (!dashboardEvals.length) {
       container.innerHTML = `<div class="sq-empty" style="padding:20px;"><i class="fas fa-inbox"></i>Nenhuma avaliação.</div>`;
       ['sq-mirror-battery','sq-mirror-turno','sq-mirror-desmoldagem'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='---'; });
       document.getElementById('sq-mirror-prev').disabled = true;
       document.getElementById('sq-mirror-next').disabled = true;
       counter.textContent = '0 / 0';
+      if (btnEditar) btnEditar.style.display = 'none';
       return;
     }
     const item   = dashboardEvals[index];
@@ -1533,6 +2172,7 @@
     counter.textContent = `${index+1} / ${dashboardEvals.length}`;
     document.getElementById('sq-mirror-prev').disabled = index === 0;
     document.getElementById('sq-mirror-next').disabled = index === dashboardEvals.length - 1;
+    if (btnEditar) btnEditar.style.display = sessionStorage.getItem('lw_role') === 'Administrador' ? 'inline-flex' : 'none';
 
     const n = getSlabCount(item.batteryId);
     const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
@@ -1551,7 +2191,13 @@
         // cai nisso quando não há painel — mantém a cor/identificação
         // mesmo em placas sem nenhuma marca.
         const tipo = panel?.tipoEsperado || item.montagem?.['pallet'+p] || '';
-        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${i}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
+        const tituloMotivo = panel?.motivo === 'OT'
+          ? (panel.motivoDescricao || 'Outros (sem descrição)')
+          : (_MOTIVO_POR_CODIGO[panel?.motivo] || panel?.motivo);
+        const motivoHtml = panel?.motivo
+          ? `<span class="sq-mini-slab-motivo" title="${_escaparHtml(tituloMotivo)}">${_escaparHtml(panel.motivo)}</span>`
+          : '';
+        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${i}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
       }
       html += '</div>';
     }
@@ -1582,14 +2228,20 @@
      html2canvas tem dificuldade justamente com <canvas> aninhado,
      melhor com SVG/HTML puro). Os gráficos abaixo são só string SVG/HTML
      montada aqui e jogada via innerHTML — sem canvas, sem instância pra
-     destruir, sem dependência externa nenhuma. Tooltip vem do <title>
-     nativo do SVG (o navegador mostra sozinho ao passar o mouse). */
+     destruir, sem dependência externa nenhuma. Tooltip vem de
+     data-tooltip (mesmo balão estilizado do resto do sistema — ver
+     tooltip.js — funciona em <circle>/<rect> normalmente, não só em
+     elementos HTML) — ANTES usava <title> nativo do SVG, mas esse é o
+     tooltip cinza sem estilo do próprio navegador, sem contraste
+     garantido com o tema e sem funcionar em toque. */
 
   const SVG_W = 600, SVG_H = 220; // viewBox de referência — os containers são <div>, escalam via width="100%".
 
-  // "2026-01-05" → "05/01" — só pro eixo X de datas, sem depender de LW
-  // (que não existe neste documento — é um <iframe> à parte, ver
-  // _escaparHtml/togglePopover mais acima pro mesmo motivo).
+  // "2026-01-05" → "05/01" — só pro eixo X de datas, sem depender de LW.
+  // Não é por causa do iframe (não roda mais num) — é porque esta função
+  // também é embutida via toString() no HTML standalone exportado (ver
+  // exportDashboardHTML/_gerarHtmlDashboardStandalone, mais abaixo), que
+  // continua sendo um arquivo à parte, sem acesso a LW nenhum.
   function _fmtDataEixo(iso) {
     const p = String(iso).split('-');
     return p.length === 3 ? `${p[2]}/${p[1]}` : String(iso);
@@ -1619,8 +2271,8 @@
       return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>` +
         `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(max * f)}</text>`;
     }).join('');
-    const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)"><title>${_escaparHtml(_fmtDataEixo(p.label))}: ${p.v}</title></circle>`).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)" style="cursor:help" data-tooltip="${_escaparAtributo(_fmtDataEixo(p.label))}: ${p.v}"/>`).join('');
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       ${gridLines}
       <path d="${areaPath}" fill="rgba(59,130,246,0.12)" stroke="none"/>
       <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -1635,26 +2287,26 @@
   // sem calcular arco/path à mão) + legenda em HTML logo abaixo.
   function _svgDonutChart(items) {
     const total = items.reduce((s, it) => s + it.value, 0) || 1;
-    const r = 62, cx = 100, cy = 100, strokeW = 34, circ = 2 * Math.PI * r;
+    const r = 78, cx = 120, cy = 120, strokeW = 40, circ = 2 * Math.PI * r;
     let acc = 0;
     const arcs = items.map(it => {
       const frac = it.value / total;
       const dash = frac * circ;
       const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="${strokeW}"
         stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" stroke-dashoffset="${(-acc * circ).toFixed(2)}"
-        transform="rotate(-90 ${cx} ${cy})"><title>${_escaparHtml(it.label)}: ${it.value} (${(frac * 100).toFixed(1)}%)</title></circle>`;
+        transform="rotate(-90 ${cx} ${cy})" style="cursor:help" data-tooltip="${_escaparAtributo(it.label)}: ${it.value} (${(frac * 100).toFixed(1)}%)"/>`;
       acc += frac;
       return el;
     }).join('');
     const legenda = items.map(it => `
-      <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text-2)">
-        <span style="width:10px;height:10px;border-radius:50%;background:${it.color};display:inline-block;flex-shrink:0"></span>
+      <div style="display:flex;align-items:center;gap:7px;font-size:.85rem;color:var(--text-2)">
+        <span style="width:12px;height:12px;border-radius:50%;background:${it.color};display:inline-block;flex-shrink:0"></span>
         ${_escaparHtml(it.label)} <span style="color:var(--text-3)">(${it.value})</span>
       </div>`).join('');
     return `
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">
-        <svg viewBox="0 0 200 200" width="150" height="150">${arcs}</svg>
-        <div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:120px">${legenda}</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center">
+        <svg viewBox="0 0 240 240" width="210" height="210">${arcs}</svg>
+        <div style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:140px">${legenda}</div>
       </div>`;
   }
 
@@ -1672,11 +2324,11 @@
       const x = padL + i * (plotW / n) + gap / 2;
       const y = padT + plotH - bh;
       const color = (colors && colors[i]) || 'var(--blue)';
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}</title></rect>
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}"/>
         <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)" text-anchor="middle">${v}</text>
         <text x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
       ${bars}
     </svg>`;
@@ -1687,7 +2339,7 @@
   // isso, usa o maior valor da própria lista. opts.suffix só decora o
   // rótulo (ex: '%'), não afeta a escala.
   function _svgHBarChart(labels, values, opts = {}) {
-    const w = SVG_W, rowH = 26, padL = 90, padR = 46, padT = 8;
+    const w = SVG_W, rowH = 34, padL = 100, padR = 50, padT = 8;
     const n = labels.length || 1;
     const h = padT * 2 + rowH * n;
     const plotW = w - padL - padR;
@@ -1699,11 +2351,11 @@
       const bw = Math.max(0, (v / max) * plotW);
       const y = padT + i * rowH;
       return `
-        <text x="${padL - 8}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
-        <rect x="${padL}" y="${(y + 4).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 8}" rx="3" fill="${color}"><title>${_escaparHtml(String(lb))}: ${v}${suffix}</title></rect>
-        <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
+        <text x="${padL - 8}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="13" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
+        <rect x="${padL}" y="${(y + 5).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 10}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}${suffix}"/>
+        <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="13" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 220)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 320)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
   }
 
   // Dispersão (scatter) + linha de tendência opcional — "⏳ Tempo de
@@ -1725,12 +2377,12 @@
       return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
         <text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(minY + (maxY - minY) * f)}</text>`;
     }).join('');
-    const dots = points.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="5" fill="var(--blue)" fill-opacity="0.8"><title>${_escaparHtml(p.label || '')}</title></circle>`).join('');
+    const dots = points.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="5" fill="var(--blue)" fill-opacity="0.8" style="cursor:help" data-tooltip="${_escaparAtributo(p.label || '')}"/>`).join('');
     const trend = (trendPoints && trendPoints.length === 2)
       ? `<line x1="${sx(trendPoints[0].x).toFixed(1)}" y1="${sy(trendPoints[0].y).toFixed(1)}" x2="${sx(trendPoints[1].x).toFixed(1)}" y2="${sy(trendPoints[1].y).toFixed(1)}" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`
       : '';
     const xTicks = [minX, (minX + maxX) / 2, maxX].map(x => `<text x="${sx(x).toFixed(1)}" y="${h - 18}" font-size="9" fill="var(--text-3)" text-anchor="middle">${x.toFixed(1)}h</text>`).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       ${gridY}
       <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
       ${trend}
@@ -1757,14 +2409,14 @@
         const bh = (v / max) * plotH;
         const x = gx + si * (barW + barGap);
         const y = padT + plotH - bh;
-        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${s.color}"><title>${_escaparHtml(String(lb))} — ${_escaparHtml(s.name)}: ${v}</title></rect>`;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${s.color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))} — ${_escaparAtributo(s.name)}: ${v}"/>`;
       }).join('');
       return `${barsHtml}<text x="${(gx + (groupW - sideMargin * 2) / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
-    const legenda = series.map(s => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block"></span><span style="font-size:.7rem;color:var(--text-3)">${_escaparHtml(s.name)}</span></span>`).join('');
+    const legenda = series.map(s => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px"><span style="width:11px;height:11px;border-radius:2px;background:${s.color};display:inline-block"></span><span style="font-size:.85rem;color:var(--text-3)">${_escaparHtml(s.name)}</span></span>`).join('');
     return `
-      <div style="text-align:center;margin-bottom:4px">${legenda}</div>
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="190" preserveAspectRatio="xMidYMid meet">
+      <div style="text-align:center;margin-bottom:6px">${legenda}</div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="260" preserveAspectRatio="xMidYMid meet">
         <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
         ${bars}
       </svg>`;
@@ -1777,7 +2429,23 @@
     const ed   = document.getElementById('sq-dash-end').value;
     const bf   = document.getElementById('sq-dash-bat').value;
 
+    // "Excluída da fila" (ver _excluirOperacaoDaFila) grava uma avaliação
+    // de verdade só pra deixar rastro auditável no banco — TODOS os
+    // painéis dela vêm com resultado 'nao_avaliado_no_sistema', nunca
+    // aprovado/reprovado. O Dashboard é sobre o que FOI avaliado (KPIs,
+    // produção, classificações) — por isso essas entram fora daqui desde
+    // o filtro inicial (marcador `excluidaDaFila`, gravado só nesse
+    // evento), como se não existissem no período: sem isso, "Painéis
+    // Avaliados"/"Total Registros" ficavam inflados com painéis que a
+    // própria avaliação diz que NUNCA foram avaliados, "Evolução Diária"
+    // contava produção que não existiu, e "Distribuição das
+    // Classificações" ganhava uma fatia solta "null nao_avaliado_no_
+    // sistema" (tipoObtido é sempre null nesses painéis). Registros (aba
+    // separada) usa o MESMO filtro (ver renderHistory) — esses itens não
+    // são avaliações de verdade (não têm nem "montagem"), só um marcador
+    // interno de que a bateria saiu da fila sem ser avaliada.
     const fe = d.avaliacoes.filter(item => {
+      if (item.excluidaDaFila) return false;
       const dt = new Date(item.registeredAt);
       return (!sd || dt >= new Date(sd)) &&
              (!ed || dt <= new Date(ed + 'T23:59:59')) &&
@@ -1885,19 +2553,385 @@
     document.getElementById('sq-dash-summary').innerHTML = summ;
   }
 
-  /* ── Exportar PDF ─────────────────────────────────────── */
+  // Descreve o período/filtro aplicado no momento — usado tanto no
+  // cabeçalho impresso do PDF quanto no subtítulo do dashboard exportado
+  // em HTML, pra o arquivo se explicar sozinho sem depender da tela.
+  function _descricaoPeriodoAtual() {
+    const sd = document.getElementById('sq-dash-start').value;
+    const ed = document.getElementById('sq-dash-end').value;
+    const bf = document.getElementById('sq-dash-bat').value;
+    const periodo = (sd || ed)
+      ? `${sd ? new Date(sd + 'T00:00:00').toLocaleDateString('pt-BR') : 'início'} até ${ed ? new Date(ed + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje'}`
+      : 'Todos os registros';
+    return `Período: ${periodo}${bf ? ' · Bateria: ' + bf : ''}`;
+  }
+
+  /* ── Exportar PDF ─────────────────────────────────────────
+     Ajustado pra virar um relatório de verdade, não uma captura de tela
+     crua: os controles interativos (filtros + os próprios botões de
+     exportar) somem da captura — não fazem sentido dentro de um PDF
+     estático, só poluíam a imagem — e ganha um cabeçalho impresso
+     (título + período aplicado + data de geração) que só existe durante
+     a captura, pro arquivo final se explicar sozinho. */
   async function exportDashboardPDF() {
-    const btn = document.getElementById('sq-btn-pdf');
+    const btn     = document.getElementById('sq-btn-pdf');
+    const acoes   = document.getElementById('sq-dash-acoes');
+    const filtros = document.getElementById('sq-dash-filtros');
+    const dash    = document.getElementById('sq-dashboard');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
+
+    const cabecalho = document.createElement('div');
+    cabecalho.style.cssText = 'padding:0 0 14px;margin-bottom:14px;border-bottom:2px solid var(--blue);';
+    cabecalho.innerHTML = `
+      <div style="font-size:1.3rem;font-weight:700;color:var(--text);">📋 Relatório de Qualidade — Avaliação de Baterias</div>
+      <div style="font-size:.8rem;color:var(--text-3);margin-top:4px;">${_escaparHtml(_descricaoPeriodoAtual())} · Gerado em ${new Date().toLocaleString('pt-BR')}</div>`;
+
+    if (acoes)   acoes.style.display   = 'none';
+    if (filtros) filtros.style.display = 'none';
+    dash.insertBefore(cabecalho, dash.firstChild);
+
     try {
-      const canvas = await html2canvas(document.getElementById('sq-dashboard'), { scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, scrollX:0, scrollY:-window.scrollY });
+      const canvas = await html2canvas(dash, { scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, scrollX:0, scrollY:-window.scrollY });
       const { jsPDF } = window.jspdf;
       const w = 297, h = Math.ceil((canvas.height * w) / canvas.width);
       const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:[w,h] });
       pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
-      pdf.save(`avaliacao_baterias_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.pdf`);
-    } catch (err) { console.error(err); showAlert('Erro','Falha ao gerar PDF.'); }
-    finally { btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false; }
+      pdf.save(`relatorio_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.pdf`);
+    } catch (err) {
+      console.error(err); showAlert('Erro','Falha ao gerar PDF.');
+    } finally {
+      cabecalho.remove();
+      if (acoes)   acoes.style.display   = '';
+      if (filtros) filtros.style.display = '';
+      btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false;
+    }
+  }
+
+  /* ── Exportar Dashboard Interativo (HTML standalone) ───────
+     Diferente do PDF (imagem estática), gera 1 arquivo .html AUTOSSU-
+     FICIENTE: dados (avaliações + painéis já embutidos, cada avaliação
+     com sua lista de painéis, mesmo formato de /avaliacoes-qualidade),
+     as mesmas funções de gráfico SVG puro (cópia fiel de _svgLineChart/
+     _svgDonutChart/_svgBarChart/_svgHBarChart/_svgScatterChart/
+     _svgGroupedBarChart, sem nenhuma dependência externa) e os mesmos
+     filtros (Data Inicial/Final, Bateria) — tudo recalculado no
+     JavaScript do PRÓPRIO arquivo exportado, sem precisar do servidor.
+     Quem abrir esse .html em qualquer navegador consegue trocar o
+     período/bateria e ver os gráficos recalcularem na hora, exatamente
+     como na tela ao vivo — só não leva "Espelho Visual" (é sobre revisar
+     UMA avaliação específica, não faz sentido fora do contexto do
+     formulário) nem os botões de exportar (um export não reexporta a
+     si mesmo).
+
+     Exclui avaliações "excluídaDaFila" (ver renderDashboard — mesmo
+     critério: painéis marcados 'nao_avaliado_no_sistema' não contam
+     como avaliados) ANTES de embutir, pra não precisar duplicar essa
+     regra dentro do script exportado. */
+  async function exportDashboardHTML() {
+    const btn = document.getElementById('sq-btn-html');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
+    try {
+      await carregarAvaliacoesQualidade(); // garante dataset atualizado antes de embutir
+      // MESMO filtro que está valendo no dashboard na tela agora (ver
+      // renderDashboard, acima) — período (sq-dash-start/end) e bateria
+      // (sq-dash-bat) — não mais TODAS as avaliações. Exclui
+      // "excluídaDaFila" pelo mesmo motivo de sempre (não são avaliações
+      // de verdade).
+      const sd = document.getElementById('sq-dash-start').value;
+      const ed = document.getElementById('sq-dash-end').value;
+      const bf = document.getElementById('sq-dash-bat').value;
+      const avaliacoes = getData().avaliacoes.filter(item => {
+        if (item.excluidaDaFila) return false;
+        const dt = new Date(item.registeredAt);
+        return (!sd || dt >= new Date(sd)) &&
+               (!ed || dt <= new Date(ed + 'T23:59:59')) &&
+               (!bf || item.batteryId === bf);
+      });
+      const html = _gerarHtmlDashboardStandalone(avaliacoes, _descricaoPeriodoAtual());
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `dashboard_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo:', err);
+      showAlert('Erro', 'Não consegui gerar o dashboard interativo agora.');
+    } finally {
+      btn.innerHTML = '<i class="fas fa-file-code"></i> Exportar Interativo'; btn.disabled = false;
+    }
+  }
+
+  // Cópia standalone da parte de "hover em elemento [data-tooltip]" de
+  // tooltip.js (delegação no document, desktop + toque) — os gráficos SVG
+  // deste dashboard (_svgLineChart/_svgDonutChart/etc.) marcam cada ponto/
+  // fatia/barra com data-tooltip="texto", mas esse atributo sozinho não
+  // mostra nada sem ALGUÉM ouvindo hover/toque em [data-tooltip] e
+  // desenhando o balão — é o que tooltip.js faz na tela ao vivo. Sem
+  // embutir isso aqui, o arquivo exportado tinha os atributos mas nenhum
+  // tooltip aparecia de verdade ao passar o mouse. Só a parte de
+  // [data-tooltip] (não a de canvas — ligarHoverCanvas — que esta tela
+  // não usa, é só SVG).
+  const _TOOLTIP_DATA_ATTR_JS = `
+  (function () {
+    let tooltipEl = null, alvoAtivo = null, ultimoToque = 0;
+    function _el() {
+      if (tooltipEl) return tooltipEl;
+      tooltipEl = document.createElement('div');
+      tooltipEl.className = 'lw-tooltip';
+      document.body.appendChild(tooltipEl);
+      return tooltipEl;
+    }
+    function _posicionar(x, y) {
+      const tt = _el();
+      const margem = 12;
+      let left = x + margem, top = y + margem;
+      const w = tt.offsetWidth, h = tt.offsetHeight;
+      if (left + w > window.innerWidth - 8) left = x - margem - w;
+      if (top + h > window.innerHeight - 8) top = y - margem - h;
+      if (left < 8) left = 8;
+      if (top < 8) top = 8;
+      tt.style.left = left + 'px';
+      tt.style.top = top + 'px';
+    }
+    function mostrarTexto(texto, x, y) {
+      if (!texto) { esconder(); return; }
+      const tt = _el();
+      tt.textContent = texto;
+      tt.style.display = 'block';
+      _posicionar(x, y);
+    }
+    function _mostrarDoElemento(alvo, x, y) {
+      const texto = alvo.getAttribute('data-tooltip');
+      if (!texto) return;
+      mostrarTexto(texto, x, y);
+      alvoAtivo = alvo;
+    }
+    function esconder() {
+      if (tooltipEl) tooltipEl.style.display = 'none';
+      alvoAtivo = null;
+    }
+    document.addEventListener('mouseover', (e) => {
+      if (Date.now() - ultimoToque < 700) return;
+      const alvo = e.target.closest('[data-tooltip]');
+      if (alvo) _mostrarDoElemento(alvo, e.clientX, e.clientY);
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!alvoAtivo) return;
+      if (e.target.closest('[data-tooltip]') === alvoAtivo) _posicionar(e.clientX, e.clientY);
+    });
+    document.addEventListener('mouseout', (e) => {
+      if (alvoAtivo && e.target.closest('[data-tooltip]') === alvoAtivo) esconder();
+    });
+    document.addEventListener('touchstart', (e) => {
+      ultimoToque = Date.now();
+      const alvo = e.target.closest('[data-tooltip]');
+      if (!alvo) { esconder(); return; }
+      if (alvoAtivo === alvo) { esconder(); return; }
+      const t = e.touches[0];
+      _mostrarDoElemento(alvo, t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-tooltip]')) esconder();
+    });
+    window.addEventListener('scroll', esconder, true);
+    window.addEventListener('resize', esconder);
+  })();
+`;
+
+  // Monta o HTML standalone inteiro (string) — ver comentário de
+  // exportDashboardHTML, acima. `avaliacoes` já vem filtrado (mesmo
+  // período/bateria da tela, sem excluídas da fila) — RETRATO fixo do que
+  // estava na tela no momento da exportação, não tem mais campos de
+  // filtro pra reaplicar depois (ver comentário abaixo, onde o antigo
+  // bloco ".filtros" com inputs foi trocado por um chip só de leitura).
+  // Cada item mantém sua própria lista `.paineis` (mesmo formato salvo em
+  // avaliacoes_qualidade.dados, db.js), então não precisa embutir uma 2ª
+  // lista de painéis separada — o script exportado usa flatMap nelas,
+  // igual a este arquivo faz em carregarAvaliacoesQualidade().
+  function _gerarHtmlDashboardStandalone(avaliacoes, descricaoPeriodo) {
+    // "</script" dentro de uma string do JSON quebraria o parser de HTML
+    // no meio do <script> — escapa a barra pra nunca fechar a tag sem
+    // querer (a barra invertida é removida de novo pelo JSON.parse no
+    // próprio navegador que abrir o arquivo, então o dado continua
+    // idêntico ao original).
+    const dadosJson = JSON.stringify(avaliacoes).replace(/<\/script/gi, '<\\/script');
+    const geradoEm  = new Date().toISOString();
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de Qualidade — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  /* 3 cores específicas desta tela, sem equivalente no restante do app
+     (ver mesma lista em css/setor-qualidade.css) — kpi-grid, chart-box,
+     filtro-aplicado, .lw-tooltip etc. já vêm todos prontos do bloco
+     acima (mesmo CSS-base compartilhado com os outros dashboards
+     exportáveis, ver LW.gerarCssExportPadrao em data.js). */
+  :root { --sq-orange:#f5821f; --sq-yellow:#f1c40f; --sq-purple:#8b5cf6;
+    --sq-cor-verde:var(--green); --sq-cor-vermelho:var(--red); --sq-cor-azul:var(--blue); }
+</style>
+</head>
+<body>
+  <h1>📋 Relatório de Qualidade — Avaliação de Baterias</h1>
+  <div class="sub" id="exp-sub">Gerado em ${new Date(geradoEm).toLocaleString('pt-BR')}</div>
+  <div class="filtro-aplicado">📅 Filtro aplicado: <b>${_escaparHtml(descricaoPeriodo)}</b></div>
+
+  <div class="kpi-grid" id="exp-kpi"></div>
+
+  <div class="charts-grid">
+    <div class="chart-box"><h4>🏷️ Painéis por Tipo</h4><div id="exp-chart-tipo"></div></div>
+    <div class="chart-box"><h4>📈 Evolução da Produção</h4><div id="exp-chart-producao"></div></div>
+    <div class="chart-box"><h4>📊 Distribuição das Classificações</h4><div id="exp-chart-qualidade"></div></div>
+    <div class="chart-box"><h4>🎯 Defeitos por Posição</h4><div id="exp-chart-posicao"></div></div>
+    <div class="chart-box"><h4>🏭 Baterias com Mais Refugo</h4><div id="exp-chart-refugo-bat"></div></div>
+    <div class="chart-box"><h4>🔴 Taxa de Refugo por Tipo (%)</h4><div id="exp-chart-refugo-tipo"></div></div>
+    <div class="chart-box"><h4>⏳ Tempo de Pega × Refugo</h4><div id="exp-chart-tempo-pega"></div></div>
+    <div class="chart-box"><h4>✅ Aprovação vs Reprovação por Bateria</h4><div id="exp-chart-aprov-bat"></div></div>
+  </div>
+
+  <div class="summary-box"><strong>Resumo &amp; Insights</strong><p id="exp-summary" style="margin:8px 0 0"></p></div>
+  <div class="rodape">Exportado do Setor de Qualidade — Lightwall SC · retrato do filtro aplicado no momento da exportação, dados embutidos neste arquivo, funciona offline.</div>
+
+<script>${_TOOLTIP_DATA_ATTR_JS}</script>
+<script>
+(function () {
+  'use strict';
+  const DADOS      = ${dadosJson};
+
+  function _escaparHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+  }
+  function _fmtDataEixo(iso) {
+    const p = String(iso).split('-');
+    return p.length === 3 ? \`\${p[2]}/\${p[1]}\` : String(iso);
+  }
+  function _linhaDoAprovado(marks) {
+    const circles = marks.filter(m => m.shape === 'circle');
+    const dashes  = marks.filter(m => m.shape === 'dash');
+    const corAprovacao = circles.length ? circles[0].color : (dashes.length ? dashes[0].color : null);
+    if (corAprovacao === 'verde') return '1ª';
+    if (corAprovacao === 'azul')  return '2ª';
+    return null;
+  }
+  function _linhaDoPainel(p) {
+    if (p.linha !== undefined) return p.linha;
+    return p.marcas ? _linhaDoAprovado(p.marcas) : null;
+  }
+
+  const SVG_W = 600, SVG_H = 220;
+
+  ${_escaparAtributo}
+  ${_svgLineChart}
+  ${_svgDonutChart}
+  ${_svgBarChart}
+  ${_svgHBarChart}
+  ${_svgScatterChart}
+  ${_svgGroupedBarChart}
+
+  function atualizar() {
+    const fe = DADOS;
+    const fp = fe.flatMap(e => e.paineis || []);
+
+    const apr = fp.filter(p => p.resultado==='aprovado').length;
+    const rep = fp.filter(p => p.resultado==='reprovado').length;
+    const seg = fp.filter(p => _linhaDoPainel(p)==='2ª').length;
+    const tt  = apr + rep;
+    const ar  = tt ? ((apr/tt)*100).toFixed(1) : 0;
+    const rr  = tt ? ((rep/tt)*100).toFixed(1) : 0;
+
+    document.getElementById('exp-kpi').innerHTML = \`
+      <div class="kpi-card"><div class="kpi-label">Total Registros</div><div class="kpi-value">\${fe.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Painéis Avaliados</div><div class="kpi-value green">\${fp.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Painéis 2ª Linha</div><div class="kpi-value" style="color:var(--sq-cor-azul)">\${seg}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de Aprovação</div><div class="kpi-value accent">\${ar}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de Reprovação</div><div class="kpi-value red">\${rr}%</div></div>\`;
+
+    const dp = {};
+    fe.forEach(e => { const dk = new Date(e.dtMontagem||e.registeredAt).toISOString().slice(0,10); dp[dk]=(dp[dk]||0)+(e.paineis||[]).length; });
+    const pl = Object.keys(dp).sort(), pv = pl.map(k => dp[k]);
+    document.getElementById('exp-chart-producao').innerHTML = _svgLineChart(pl.length ? pl : ['Sem dados'], pl.length ? pv : [0]);
+
+    const cc = {}; fp.forEach(p => { const k = \`\${p.tipoObtido} \${p.resultado}\${_linhaDoPainel(p) === '2ª' ? ' (2ª linha)' : ''}\`; cc[k]=(cc[k]||0)+1; });
+    const ql = Object.keys(cc), qv = Object.values(cc);
+    const cmap = { 'SP aprovado':'#4d8dff','SP reprovado':'#ff6b6b','2P aprovado':'#a78bfa','2P reprovado':'#d45d79','3T aprovado':'#f1c40f','3T reprovado':'#f39c12','1T aprovado':'#2ed3a3','1T reprovado':'#d35400' };
+    const corSegunda = 'var(--sq-cor-azul)';
+    const donutItems = ql.length
+      ? ql.map((l, i) => ({ label: l, value: qv[i], color: l.includes('2ª linha') ? corSegunda : (cmap[l] || 'var(--border-2)') }))
+      : [{ label: 'Sem dados', value: 1, color: 'var(--border-2)' }];
+    document.getElementById('exp-chart-qualidade').innerHTML = _svgDonutChart(donutItems);
+
+    const tt2={SP:0,'2P':0,'3T':0,'1T':0}, tr2={SP:0,'2P':0,'3T':0,'1T':0};
+    fp.forEach(p => { if (p.tipoEsperado && tt2[p.tipoEsperado]!==undefined) { tt2[p.tipoEsperado]++; if(p.resultado==='reprovado') tr2[p.tipoEsperado]++; } });
+    const vtl = Object.keys(tt2).filter(k=>tt2[k]>0);
+    document.getElementById('exp-chart-refugo-tipo').innerHTML = _svgHBarChart(
+      vtl.length ? vtl : ['Nenhum'],
+      vtl.length ? vtl.map(k => Number(((tr2[k]/tt2[k])*100).toFixed(1))) : [0],
+      { max: 100, suffix: '%', color: 'var(--red)' }
+    );
+
+    const tc={SP:0,'2P':0,'3T':0,'1T':0}; fp.forEach(p=>{if(p.tipoEsperado&&tc[p.tipoEsperado]!==undefined)tc[p.tipoEsperado]++;});
+    document.getElementById('exp-chart-tipo').innerHTML = _svgBarChart(
+      Object.keys(tc), Object.values(tc), ['var(--blue)','var(--sq-purple)','var(--sq-yellow)','var(--sq-orange)']
+    );
+
+    const bec={};fe.forEach(e=>{bec[e.batteryId]=(bec[e.batteryId]||0)+1;});
+    const dm={};
+    fp.forEach(p=>{if(p.resultado==='reprovado'){const ev=fe.find(e=>(e.paineis||[]).includes(p));if(ev){const k=\`\${ev.batteryId}|P\${p.pallet}|Pos\${p.posicao}\`;if(!dm[k])dm[k]={batteryId:ev.batteryId,pallet:p.pallet,posicao:p.posicao,d:0};dm[k].d++;}}});
+    const rnk=Object.values(dm).map(r=>({...r,N:bec[r.batteryId]||0,taxa:bec[r.batteryId]?(r.d/bec[r.batteryId])*100:0})).filter(r=>r.d>=3&&r.taxa>=30).sort((a,b)=>b.taxa-a.taxa||b.d-a.d).slice(0,10);
+    const pc = document.getElementById('exp-chart-posicao');
+    pc.innerHTML = rnk.length ? '<div style="display:flex;flex-direction:column;gap:8px;">' + rnk.map(r=>{
+      const cor = r.taxa>=40?'var(--red)':r.taxa>=20?'var(--accent)':'var(--green)';
+      return \`<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;">
+        <span><strong>\${r.batteryId}</strong> · P\${r.pallet} · Pos \${r.posicao}</span>
+        <span style="font-family:var(--font-mono);color:\${cor};font-weight:700;">\${r.taxa.toFixed(0)}% <span style="color:var(--text-3);font-weight:400;">(\${r.d}/\${r.N})</span></span></div>\`;
+    }).join('') + '</div>' : '<div style="color:var(--text-3);text-align:center;padding:20px;font-size:.82rem;">Nenhum ponto de recorrência significativo (D≥3 e taxa≥30%).</div>';
+
+    const br={};fe.forEach(e=>{const n=(e.paineis||[]).filter(p=>p.resultado==='reprovado').length;if(n)br[e.batteryId]=(br[e.batteryId]||0)+n;});
+    const sb=Object.keys(br).sort((a,b)=>br[b]-br[a]).slice(0,10);
+    document.getElementById('exp-chart-refugo-bat').innerHTML = _svgHBarChart(
+      sb.length ? sb : ['Nenhuma'],
+      sb.length ? sb.map(k => br[k]) : [0],
+      { color: 'var(--sq-orange)' }
+    );
+
+    const sc=[];
+    fe.forEach(e=>{if(e.dtEnchimento&&e.dtDesmoldagem){const diff=new Date(e.dtDesmoldagem)-new Date(e.dtEnchimento);if(diff>0){const h=diff/3600000,refs=(e.paineis||[]).filter(p=>p.resultado==='reprovado').length;sc.push({x:h,y:refs,label:\`Bat:\${e.batteryId} | \${h.toFixed(1)}h | \${refs} refugos\`});}}});
+    let trd=[];
+    if(sc.length>1){const n=sc.length,sx=sc.reduce((a,b)=>a+b.x,0),sy=sc.reduce((a,b)=>a+b.y,0),sxy=sc.reduce((a,b)=>a+b.x*b.y,0),sx2=sc.reduce((a,b)=>a+b.x*b.x,0),den=n*sx2-sx*sx,m=(n*sxy-sx*sy)/den,b=(sy-m*sx)/n,maxX=Math.max(...sc.map(pt=>pt.x)),minX=Math.min(...sc.map(pt=>pt.x));trd=[{x:minX,y:m*minX+b},{x:maxX,y:m*maxX+b}];}
+    document.getElementById('exp-chart-tempo-pega').innerHTML = _svgScatterChart(sc, trd.length ? trd : null);
+
+    const bd={};fe.forEach(e=>{if(!bd[e.batteryId])bd[e.batteryId]={a:0,r:0};(e.paineis||[]).forEach(p=>{if(p.resultado==='aprovado')bd[e.batteryId].a++;else if(p.resultado==='reprovado')bd[e.batteryId].r++;});});
+    const bl=Object.keys(bd);
+    document.getElementById('exp-chart-aprov-bat').innerHTML = _svgGroupedBarChart(
+      bl.length ? bl : ['Sem dados'],
+      [
+        { name: 'Aprovados', color: 'var(--green)', values: bl.length ? bl.map(k => bd[k].a) : [0] },
+        { name: 'Reprovados', color: 'var(--red)', values: bl.length ? bl.map(k => bd[k].r) : [0] },
+      ]
+    );
+
+    let summ=\`Avaliados <b>\${fp.length}</b> painéis em <b>\${fe.length}</b> registros. \`;
+    if(seg) summ+=\`<b>\${seg}</b> aprovado\${seg>1?'s':''} de 2ª linha. \`;
+    if(rnk.length){const rx=rnk[0];summ+=\`Maior recorrência: <b>\${rx.batteryId} · Pallet \${rx.pallet} · Posição \${rx.posicao}</b> (\${rx.d}/\${rx.N}, \${rx.taxa.toFixed(0)}%).\`;}
+    else if(fe.length) summ+='Nenhum ponto de recorrência significativo detectado.';
+    else summ='Nenhum dado disponível para o período.';
+    document.getElementById('exp-summary').innerHTML = summ;
+  }
+
+  atualizar();
+})();
+</script>
+</body>
+</html>`;
   }
 
   /* ── Utilitários do formulário ────────────────────────── */
@@ -1928,6 +2962,8 @@
     }
     document.getElementById('sq-thickness').value = d.slabsPerPallet || 10;
     slabState     = d.slabState || {};
+    slabMotivo    = d.slabMotivo || {};
+    slabMotivoDescricao = d.slabMotivoDescricao || {};
     actionHistory = [];
   }
 
@@ -1935,13 +2971,67 @@
     const bid = document.getElementById('sq-batteryId')?.value || '';
     if (field === 'comprimento') return '3m';
     if (field === 'largura')     return '61cm';
-    if (field === 'espessura')   return bid==='B5-7.5'?'7,5 cm':bid==='B6-12'?'12 cm':'9 cm';
+    if (field === 'espessura')   return dimensaoOperacaoAtual || _espessuraDaBateria(bid);
     return 'ok';
   }
 
+  // Ajusta os botões de ação do formulário conforme está ou não editando
+  // uma avaliação já registrada (ver editarAvaliacaoDoEspelho): esconde
+  // "Salvar" (rascunho — não faz sentido pra uma correção), troca o
+  // texto de "Registrar" pra "Salvar Alteração", e mostra "Cancelar".
+  //
+  // Também desabilita "Registrar" (com título explicando o motivo)
+  // quando NÃO está editando e não há operação vinculada — reforço
+  // visual da trava de avaliação avulsa (a trava de verdade é no
+  // servidor, ver POST /registrar-avaliacao-qualidade; isto aqui só
+  // evita a pessoa preencher a bateria inteira pra só então descobrir,
+  // no "Registrar", que precisava ter escolhido da fila).
+  function _aplicarModoBotoesForm() {
+    const editando  = !!_editandoAvaliacaoId;
+    const btnSalvar = document.getElementById('sq-btn-save');
+    const btnReg    = document.getElementById('sq-btn-register');
+    const btnCancel = document.getElementById('sq-btn-cancelar-edicao');
+    if (btnSalvar) btnSalvar.style.display = editando ? 'none' : '';
+    if (btnReg)    btnReg.innerHTML = editando
+      ? '<i class="fas fa-check-circle"></i> Salvar Alteração'
+      : '<i class="fas fa-check-circle"></i> Registrar';
+    if (btnCancel) btnCancel.style.display = editando ? '' : 'none';
+
+    const semFila = !editando && !linkedOperacaoId;
+    if (btnReg) {
+      btnReg.disabled = semFila;
+      btnReg.title = semFila
+        ? 'Selecione uma bateria em "Ordem de Previsão de Desemplaque" antes de registrar — avaliação avulsa não é mais permitida.'
+        : '';
+    }
+  }
+
+
+  // Sai da edição SEM salvar nada — o registro original no banco nunca
+  // chegou a ser tocado (só foi lido, pra preencher o formulário), então
+  // não precisa desfazer nada no servidor: só descarta o que está na
+  // tela e volta pra onde a edição foi aberta (Dashboard).
+  function cancelarEdicaoAvaliacao() {
+    if (!_editandoAvaliacaoId) { navigateTo(viewSource); return; }
+    showConfirm(
+      'Cancelar Edição',
+      'Sair sem salvar? As alterações feitas nesta tela serão descartadas — o registro original continua exatamente como estava.',
+      () => {
+        const destino = viewSource;
+        clearForm();
+        navigateTo(destino);
+      }
+    );
+  }
+
   function clearForm() {
-    slabState = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
+    slabState = {}; slabMotivo = {}; slabMotivoDescricao = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
     linkedOperacaoId = null;
+    dimensaoOperacaoAtual = null;
+    _editandoAvaliacaoId = null;
+    _editandoRegistradoEm = null;
+    _editandoLinkedOperacaoId = null;
+    _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';
     document.getElementById('sq-dailySeq').value     = '1';
@@ -1956,6 +3046,7 @@
     autoSetThickness();
     calculateCureTime();
     setEditable(true);
+    _bloquearCamposAutoPreenchidos(true); // sempre travado — ver comentário na função, acima
     validateAllSlabs();
   }
 
@@ -1976,6 +3067,60 @@
     else out.value = diff === 0 ? '0h 0min' : 'Data inválida';
   }
 
+  // Espessura real da operação sendo avaliada — vem de op.dimensao (a
+  // dimensão de verdade gravada na OPERAÇÃO, ver coluna operacoes.dimensao,
+  // db.js — pode ter sido corrigida manualmente ali via "✏️ Definir uma
+  // dimensão específica pra esta operação", em Registrar Operação, então
+  // não necessariamente bate com o padrão cadastrado da bateria).
+  // null enquanto nenhuma operação real foi carregada ainda (ex: avaliação
+  // avulsa legada, ou form recém-limpo) — nesse caso quem preenche a
+  // Espessura é só o palpite de _espessuraDaBateria (abaixo), até a
+  // operação de verdade ser carregada e corrigir com o valor real (mesmo
+  // padrão de "palpite, depois corrige com o real" já usado pro nº de
+  // placas por pallet — ver _definirThicknessReal/_prefillFromOperacao).
+  let dimensaoOperacaoAtual = null;
+
+  // Aceita tanto "15cm" (sem espaço — formato de bateria.label, ver
+  // cfgAdicionarBateria, app-core.js) quanto "9,5 cm" (com espaço —
+  // formato de dimensão manual da operação, ver _formatarDimensaoLive,
+  // operacao.js) e sempre devolve normalizado como "X cm".
+  function _normalizarEspessuraTexto(txt) {
+    if (!txt) return null;
+    const numero = String(txt).replace(/cm/i, '').trim();
+    return numero ? `${numero} cm` : null;
+  }
+
+  // Grava a dimensão real da operação carregada e já atualiza a Espessura
+  // dos 4 pallets com ela — chamada assim que a operação de verdade é
+  // conhecida (ver _prefillFromOperacao) ou ao reabrir uma avaliação já
+  // registrada (ver _carregarAvaliacaoNoFormulario, que usa o valor salvo
+  // na própria avaliação, evalObj.dimensaoOperacao).
+  function _definirEspessuraReal(dimensaoTexto) {
+    const esp = _normalizarEspessuraTexto(dimensaoTexto);
+    if (!esp) return;
+    dimensaoOperacaoAtual = esp;
+    for (let p = 1; p <= 4; p++) {
+      const el = document.getElementById(`sq-p${p}-espessura`);
+      if (el) el.innerText = esp;
+    }
+  }
+
+  // Palpite de reserva, usado só ENQUANTO a operação real ainda não foi
+  // carregada (ex: form recém-aberto, antes de escolher uma bateria da
+  // fila) — nunca é a fonte de verdade quando dimensaoOperacaoAtual já
+  // está definida (ver refreshPalletInfos/defaultPalletInfo, abaixo).
+  function _espessuraDaBateria(bid) {
+    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === bid);
+    if (bateria?.label) {
+      const esp = _normalizarEspessuraTexto(bateria.label);
+      if (esp) return esp;
+    }
+    // Sem cadastro encontrado (instalação antiga, ou ID ainda não
+    // sincronizado) — reserva pros 2 IDs legados de dimensão fixa que
+    // existiam antes de "Dimensão (em cm)" virar campo editável.
+    return bid === 'B5-7.5' ? '7,5 cm' : bid === 'B6-12' ? '12 cm' : '9 cm';
+  }
+
   function autoSetThickness() {
     const id  = document.getElementById('sq-batteryId').value;
     const sel = document.getElementById('sq-thickness');
@@ -1988,7 +3133,7 @@
 
   function refreshPalletInfos() {
     const bid = document.getElementById('sq-batteryId').value;
-    const esp = bid==='B5-7.5'?'7,5 cm':bid==='B6-12'?'12 cm':'9 cm';
+    const esp = dimensaoOperacaoAtual || _espessuraDaBateria(bid);
     for (let p = 1; p <= 4; p++) {
       const set = (f, v) => { const el = document.getElementById(`sq-p${p}-${f}`); if (el) el.innerText = v; };
       set('comprimento','3m'); set('largura','61cm'); set('linearidade','ok');
@@ -1998,6 +3143,7 @@
 
   function editField(btn) {
     if (viewMode) return;
+    if (btn.classList.contains('sq-info-edit-locked')) return; // Espessura travada — ver _bloquearCamposAutoPreenchidos
     const pid = btn.dataset.pallet, fk = btn.dataset.field;
     const el  = document.getElementById(`sq-p${pid}-${fk}`);
     const labels = { comprimento:'Comprimento', largura:'Largura', linearidade:'Linearidade', espessura:'Espessura', esquadro:'Esquadro' };
@@ -2011,14 +3157,23 @@
     showConfirm('Limpar', 'Apagar todas as marcações?', () => {
       pushState();
       slabState = {};
+      slabMotivo = {};
+      slabMotivoDescricao = {};
       document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
+      document.querySelectorAll('.sq-slab-motivo').forEach(b => { b.textContent = ''; b.style.display = 'none'; });
       validateAllSlabs();
     });
   }
 
   function undoLastAction() {
     if (viewMode) return;
-    if (actionHistory.length) { slabState = actionHistory.pop(); renderStacks(); validateAllSlabs(); }
+    if (actionHistory.length) {
+      const anterior = actionHistory.pop();
+      slabState  = anterior.slabState;
+      slabMotivo = anterior.slabMotivo;
+      slabMotivoDescricao = anterior.slabMotivoDescricao || {};
+      renderStacks(); validateAllSlabs();
+    }
     else showAlert('Desfazer', 'Nada para desfazer.');
   }
 
@@ -2057,13 +3212,16 @@
   /* ── API pública ──────────────────────────────────────── */
   window.SQ = {
     navigateTo, goBack, startNew,
+    editarAvaliacaoDoEspelho, cancelarEdicaoAvaliacao,
     iniciarAvaliacaoDaFila, iniciarAvaliacaoDoSelect,
     excluirDaFila, excluirDoSelect,
+    carregarFilaNaoAvaliadas,
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
     renderDashboard, renderHistory,
     prevMirror, nextMirror,
     exportDashboardPDF,
+    exportDashboardHTML,
     selectColor, selectShape,
     selectAllPallet, applyColorToPallet,
     toggleDropdown,
@@ -2080,6 +3238,7 @@
     init() {
       _carregarOpcoesMontagem();
       carregarAvaliacoesQualidade();
+      _renderReferenciaMotivos();
       startNew();
     },
   };

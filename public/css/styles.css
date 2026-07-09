@@ -782,12 +782,6 @@ h4 {
   color: var(--red);
 }
 
-.kpi-sub {
-  font-size: .72rem;
-  color: var(--text-3);
-  margin-top: 5px;
-}
-
 /* ---- Tables ---- */
 .table-wrap {
   position: relative;
@@ -901,6 +895,16 @@ td.mono {
 #relatorio-bercos-table th,
 #relatorio-bercos-table td {
   padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+/* .table-wrap já desenha uma borda ao redor de toda a tabela — sem isso,
+   a borda direita/inferior da última coluna/linha ficaria dobrada (a da
+   célula + a do wrapper, mais grossa/escura que o resto da grade). */
+#relatorio-bercos-table {
+  border-collapse: collapse;
+}
+#relatorio-bercos-table tr:last-child td {
+  border-bottom: 1px solid var(--border);
 }
 #relatorio-bercos-table th.rb-sub {
   padding: 5px 10px;
@@ -908,9 +912,21 @@ td.mono {
 }
 #relatorio-bercos-table thead th {
   position: static;
+  text-align: center;
 }
 #relatorio-bercos-table td.rb-vazio {
   color: var(--text-3);
+}
+/* Tonalidade alternada por Bx (as 2 colunas E/D daquele berço, cabeçalho
+   e corpo) — só pra ficar fácil ver de relance onde um berço termina e o
+   próximo começa, já que agora a tabela toda tem borda em cada célula
+   (acima). rb-grupo-a fica no tom normal (sem overlay); rb-grupo-b leva
+   um overlay cinza neutro e sutil — funciona nos 3 temas (Escuro, Claro,
+   Lightwall) sem precisar de uma cor diferente pra cada um, porque não é
+   uma cor fixa: cinza a baixa opacidade escurece um pouco fundo claro e
+   clareia um pouco fundo escuro. */
+#relatorio-bercos-table .rb-grupo-b {
+  background: rgba(127, 127, 127, .09);
 }
 
 /* Popover de hover/toque do Relatório de Berços — mostra a grade completa
@@ -1242,46 +1258,6 @@ td.mono {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 16px;
-}
-
-.grid-4 {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-/* ---- Alerts / Info boxes ---- */
-.alert {
-  display: flex;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  font-size: .85rem;
-  border: 1px solid;
-}
-
-.alert-warn {
-  background: rgba(245, 158, 11, .08);
-  border-color: var(--accent-dim);
-  color: #fbbf24;
-}
-
-.alert-error {
-  background: rgba(239, 68, 68, .08);
-  border-color: var(--red-dim);
-  color: var(--red);
-}
-
-.alert-ok {
-  background: rgba(16, 185, 129, .08);
-  border-color: var(--green-dim);
-  color: var(--green);
-}
-
-.alert-info {
-  background: rgba(59, 130, 246, .08);
-  border-color: var(--blue-dim);
-  color: var(--blue);
 }
 
 /* ---- Timer display ---- */
@@ -1617,27 +1593,6 @@ td.mono {
   background: rgba(245, 158, 11, .04);
 }
 
-/* ---- Progress bar ---- */
-.progress-bar {
-  height: 4px;
-  background: var(--bg-3);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width .4s ease;
-}
-
-/* ---- Chart container ---- */
-.chart-container {
-  position: relative;
-  height: 220px;
-}
-
 /* ---- Divider ---- */
 .divider {
   border: none;
@@ -1719,8 +1674,7 @@ td.mono {
   }
 
   .grid-2,
-  .grid-3,
-  .grid-4 {
+  .grid-3 {
     grid-template-columns: 1fr;
   }
 
@@ -1754,32 +1708,12 @@ td.mono {
 }
 
 /* ---- Misc ---- */
-.gap-2 {
-  gap: 8px;
-}
-
-.gap-3 {
-  gap: 12px;
-}
-
-.gap-4 {
-  gap: 16px;
-}
-
-.gap-6 {
-  gap: 24px;
-}
-
-.mt-2 {
-  margin-top: 8px;
-}
-
 .mt-4 {
   margin-top: 16px;
 }
 
-.mt-6 {
-  margin-top: 24px;
+.mb-3 {
+  margin-bottom: 12px;
 }
 
 .mb-4 {
@@ -1790,41 +1724,10 @@ td.mono {
   display: flex;
 }
 
-.items-center {
-  align-items: center;
-}
-
-.justify-between {
-  justify-content: space-between;
-}
-
 .wrap {
   flex-wrap: wrap;
 }
 
-.text-mono {
-  font-family: var(--font-mono);
-  font-size: .85rem;
-}
-
-.separator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-3);
-  font-size: .72rem;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  margin: 20px 0;
-}
-
-.separator::before,
-.separator::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
 /* ============================================================
    AJUSTES DE INSUMOS
    ============================================================ */
@@ -1843,34 +1746,6 @@ td.mono {
 .insumo-input-row .form-input {
   flex: 1;
   min-width: 0;
-}
-
-/* Botão "+" de ajuste */
-.btn-ajuste {
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent, #3b82f6);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  transition: background .15s, transform .1s;
-}
-
-.btn-ajuste:hover {
-  background: var(--accent-dark, #2563eb);
-  transform: scale(1.08);
-}
-
-.btn-ajuste:active {
-  transform: scale(.95);
 }
 
 /* Exibição da fórmula de ajustes abaixo do campo */
@@ -1899,40 +1774,9 @@ td.mono {
   width: fit-content;
 }
 
-/* Painel de ajuste (inline, abaixo do campo) */
-.ajuste-painel {
-  margin-top: 8px;
-  background: var(--surface-2, #1e293b);
-  border: 1px solid var(--border, #334155);
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.3);
-  animation: fadeInDown .15s ease;
-  z-index: 10;
-}
-
 @keyframes fadeInDown {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-
-.ajuste-painel-titulo {
-  font-size: .75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: var(--text-2, #94a3b8);
-  margin-bottom: 8px;
-}
-
-.ajuste-qty-input {
-  margin-bottom: 8px;
-  width: 100%;
-}
-
-.ajuste-painel-btns {
-  display: flex;
-  gap: 8px;
 }
 
 .btn-sm {
@@ -2062,65 +1906,6 @@ td.mono {
   font-weight: 400;
 }
 
-.dur-ajuste-painel {
-  margin-top: 8px;
-}
-
-.btn-ajuste-tempo {
-  margin-top: 6px;
-  background: transparent;
-  border: 1px dashed var(--border-2);
-  color: var(--text-3);
-  font-size: .72rem;
-  padding: 3px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  width: 100%;
-  text-align: center;
-  transition: border-color .15s, color .15s;
-}
-
-.btn-ajuste-tempo:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* ---- Collapsible Cards ---- */
-.collapsible-card .card-content {
-  transition: max-height 0.3s ease-out, opacity 0.2s;
-  max-height: 800px;
-  opacity: 1;
-  overflow: hidden;
-}
-
-.collapsible-card.collapsed .card-content {
-  max-height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.collapsible-card .toggle-icon {
-  font-size: 0.8rem;
-  transition: transform 0.3s;
-  opacity: 0.6;
-}
-
-.collapsible-card.collapsed .toggle-icon {
-  transform: rotate(-90deg);
-}
-
-.collapsible-card.collapsed .card-title {
-  margin-bottom: 0;
-}
-
-.collapsible-card .show-collapsed-only {
-  display: none;
-}
-
-.collapsible-card.collapsed .show-collapsed-only {
-  display: inline;
-}
-
 /* ---- Popovers de Operação ---- */
 .ao-popover {
   display: none;
@@ -2154,11 +1939,6 @@ td.mono {
    ============================================================ */
 
 /* Indicador visual no cabeçalho do card */
-.readonly-reaproveitado-wrapper .form-label {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
 .traco-reaproveitado-badge {
   display: flex;
   align-items: center;
@@ -2186,7 +1966,6 @@ td.mono {
 }
 
 /* Estilos para campos bloqueados (readonly/disabled) */
-.form-group.readonly-reaproveitado-wrapper .form-input,
 .form-input.readonly-reaproveitado,
 .form-select.readonly-reaproveitado,
 .form-textarea.readonly-reaproveitado {
@@ -2200,18 +1979,6 @@ td.mono {
 .form-select.readonly-reaproveitado:focus,
 .form-textarea.readonly-reaproveitado:focus {
   box-shadow: none;
-  border-color: var(--border-2);
-}
-
-.form-group.readonly-reaproveitado-wrapper .btn-ajuste,
-/* Botões de ajuste desabilitados */
-.btn-ajuste.readonly-reaproveitado,
-.btn-ajuste-tempo.readonly-reaproveitado {
-  opacity: 0.4;
-  cursor: not-allowed;
-  pointer-events: none; /* Impede cliques */
-  background: var(--bg-3); /* Cor de fundo para indicar desabilitação */
-  background-color: var(--bg-3); /* Cor de fundo para indicar desabilitação */
   border-color: var(--border-2);
 }
 
@@ -2231,114 +1998,6 @@ td.mono {
   cursor: not-allowed;
   pointer-events: none;
   background: var(--bg-3);
-}
-
-/* ── Copiloto IA (botão flutuante + painel de chat) ─────────────────────── */
-#copiloto-btn {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
-  z-index: 998;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform .15s ease;
-}
-
-#copiloto-btn:hover {
-  transform: scale(1.06);
-}
-
-#copiloto-panel {
-  display: none;
-  position: fixed;
-  bottom: 92px;
-  right: 24px;
-  width: 380px;
-  max-width: 92vw;
-  height: 520px;
-  max-height: 75vh;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 60px rgba(0, 0, 0, .5);
-  z-index: 998;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-#copiloto-panel.active {
-  display: flex;
-}
-
-.copiloto-header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg-2);
-  flex-shrink: 0;
-}
-
-.copiloto-mensagens {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.copiloto-msg {
-  max-width: 85%;
-  padding: 8px 12px;
-  font-size: .85rem;
-  line-height: 1.4;
-  white-space: pre-wrap;
-}
-
-.copiloto-msg-user {
-  align-self: flex-end;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 12px 12px 2px 12px;
-}
-
-.copiloto-msg-bot {
-  align-self: flex-start;
-  background: var(--bg-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 12px 12px 12px 2px;
-}
-
-.copiloto-msg-carregando {
-  align-self: flex-start;
-  color: var(--text-3);
-  font-size: .82rem;
-  font-style: italic;
-}
-
-.copiloto-input-row {
-  padding: 10px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.copiloto-input-row .form-input {
-  flex: 1;
 }
 
 /* ── Product Tour (overlay + spotlight + balão) ─────────────────────────── */
@@ -2632,11 +2291,6 @@ td.mono {
   border-radius: var(--radius-lg);
   padding: 10px 6px;
   text-align: center;
-}
-
-.dbf-stat-icon {
-  font-size: .95rem;
-  margin-bottom: 2px;
 }
 
 .dbf-stat-val {
@@ -2954,7 +2608,6 @@ td.mono {
 .ba-dot.ba-dot-marcado {
   opacity: 1;
   color: var(--red);
-  background: var(--red-dim);
   text-shadow: 0 0 6px var(--red);
 }
 
@@ -2962,6 +2615,25 @@ td.mono {
   color: var(--text-3);
   font-style: italic;
   font-size: .82rem;
+}
+
+/* Estado bloqueado — este dispositivo não é o dono da operação em
+   andamento (ver _podeMarcarVazamento, bateria-atual.js): os indicadores
+   continuam visíveis (mostram o que já foi marcado por quem é o dono),
+   só deixam de reagir a clique/hover — sem listener nenhum atrelado
+   (ver _renderBateriaAtual), isto aqui é só a aparência condizente. */
+.ba-grid-bloqueada .ba-dot {
+  cursor: not-allowed;
+}
+
+.ba-grid-bloqueada .ba-dot:hover {
+  opacity: .55;
+  transform: none;
+}
+
+.ba-grid-bloqueada .ba-dot.ba-dot-marcado:hover {
+  opacity: 1;
+  transform: none;
 }
 
 /* ============================================================

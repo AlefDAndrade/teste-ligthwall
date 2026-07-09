@@ -73,7 +73,7 @@
     },
     {
       id: 'acao_debriefing',
-      comboPadrao: 'Ctrl+Shift+D',
+      comboPadrao: 'Alt+D',
       description: 'Abrir Debriefing do Dia',
       icon: '📓',
       handler: () => _toggleDebriefing(),
@@ -98,6 +98,41 @@
       description: 'Registrar operação',
       icon: '✓',
       handler: () => _registerOperation(),
+    },
+    {
+      id: 'acao_config',
+      comboPadrao: 'Alt+C',
+      description: 'Abrir Configurações',
+      icon: '⚙',
+      handler: () => _openConfig(),
+    },
+    {
+      id: 'acao_modo_visual_bercos',
+      comboPadrao: 'Alt+V',
+      description: 'Alternar Berços: Tabela ↔ Modo Visual',
+      icon: '🎨',
+      handler: () => _toggleModoVisualBercos(),
+    },
+    {
+      id: 'acao_sair',
+      comboPadrao: 'Alt+E',
+      description: 'Sair (logout)',
+      icon: '🚪',
+      handler: () => _logout(),
+    },
+    {
+      id: 'acao_sq_registrar',
+      comboPadrao: '', // sem atalho de fábrica de propósito — ver _sqRegistrarAvaliacao
+      description: 'Setor de Qualidade: Registrar Avaliação',
+      icon: '✓',
+      handler: () => _sqRegistrarAvaliacao(),
+    },
+    {
+      id: 'acao_sq_desfazer',
+      comboPadrao: '', // sem atalho de fábrica de propósito — ver _sqDesfazerMarca
+      description: 'Setor de Qualidade: Desfazer Última Marca',
+      icon: '↺',
+      handler: () => _sqDesfazerMarca(),
     },
   ];
 
@@ -263,14 +298,33 @@
    * 3. UTILITÁRIOS
    * ────────────────────────────────────────────────────────── */
 
-  /** Retorna true se o foco está em um campo de texto */
+  /**
+   * Retorna true se o foco está num campo onde os atalhos devem ficar
+   * desligados — de propósito, só campos de TEXTO livre (onde digitar uma
+   * letra comum poderia disparar um atalho sem querer): input[type=text],
+   * textarea (mesmo raciocínio — texto livre, só que multi-linha, ex.:
+   * "Observações") e qualquer elemento contentEditable.
+   *
+   * Antes, QUALQUER <input> (exceto button/checkbox/radio/submit/reset) e
+   * qualquer <select> bloqueavam os atalhos — isso incluía date, number,
+   * color, file, password, o que fazia os atalhos de navegação (mudar de
+   * página) pararem de funcionar o tempo todo que o operador estivesse
+   * preenchendo uma data ou uma quantidade, por exemplo, mesmo sem estar
+   * digitando texto nenhum. Pedido explícito: exceção é só type="text".
+   *
+   * Tipos de input "texto livre por natureza" mas que não são
+   * type="text" (search/email/tel/url/password) não existem hoje neste
+   * app (ver grep em todos os partials) — se algum for adicionado no
+   * futuro e também precisar bloquear atalhos, incluir aqui.
+   */
   function _isFocusedOnInput() {
-    const tag = document.activeElement?.tagName?.toLowerCase();
-    const type = (document.activeElement?.type || '').toLowerCase();
-    const editable = document.activeElement?.isContentEditable;
+    const el = document.activeElement;
+    const tag = el?.tagName?.toLowerCase();
+    const type = (el?.type || '').toLowerCase();
+    const editable = el?.isContentEditable;
     if (editable) return true;
-    if (['textarea', 'select'].includes(tag)) return true;
-    if (tag === 'input' && !['button', 'checkbox', 'radio', 'submit', 'reset'].includes(type)) return true;
+    if (tag === 'textarea') return true;
+    if (tag === 'input' && type === 'text') return true;
     return false;
   }
 
@@ -372,8 +426,20 @@
     }
   }
 
+  /**
+   * Checa se a sub-aba "Dashboard" do Setor de Qualidade está ativa —
+   * essa tela tem 3 sub-abas internas (Avaliação/Dashboard/Registros,
+   * ver .sq-section.active) DENTRO da mesma página; "Atualizar"/
+   * "Exportar" só fazem sentido na do Dashboard, não nas outras 2.
+   */
+  function _sqDashboardAtivo() {
+    return !!document.getElementById('sq-dashboard')?.classList.contains('active');
+  }
+
   function _refreshData() {
-    // Chama o init da página ativa, se disponível
+    // Chama o init/render da página ativa, se disponível — cobre TODA
+    // página que tem algum tipo de "recarregar dados" (a maioria dos
+    // relatórios/dashboards do sistema).
     const active = document.querySelector('.main.active');
     const pageId = active?.id?.replace('page-', '');
 
@@ -383,23 +449,57 @@
       turnos: () => typeof LWDash !== 'undefined' && LWDash.initTurnos?.(),
       registro: () => typeof LWDash !== 'undefined' && LWDash.initRegistro?.(),
       relatorio: () => typeof LWDash !== 'undefined' && LWDash.initRelatorio?.(),
+      'relatorio-bercos': () => typeof LWBercos !== 'undefined' && LWBercos.render?.(),
+      'analise-bercos': () => typeof ABercos !== 'undefined' && ABercos.render?.(),
+      'analise-focada': () => typeof LWFocada !== 'undefined' && LWFocada.render?.(),
       'analise-operacional': () => typeof AOp !== 'undefined' && AOp.render?.(),
       'qualidade-tracos': () => typeof LWQualidade !== 'undefined' && LWQualidade.render?.(),
+      oee: () => typeof LWOee !== 'undefined' && LWOee.render?.(),
+      paradas: () => typeof LWParadas !== 'undefined' && LWParadas.aplicarFiltros?.(),
+      'setor-qualidade': () => {
+        if (!_sqDashboardAtivo() || typeof SQ === 'undefined' || typeof SQ.renderDashboard !== 'function') return false;
+        SQ.renderDashboard();
+      },
     };
 
     const fn = refreshMap[pageId];
-    if (fn) { fn(); _showToast('↺', 'Dados atualizados'); }
-    else { _showToast('↺', 'Atualização não disponível'); }
+    const resultado = fn ? fn() : false;
+    if (fn && resultado !== false) { _showToast('↺', 'Dados atualizados'); }
+    else { _showToast('↺', 'Atualização não disponível nesta tela'); }
   }
 
   function _exportReport() {
-    // Tenta abrir o modal de exportação via LWDash
-    if (typeof LWDash !== 'undefined' && typeof LWDash.abrirExportModal === 'function') {
-      LWDash.abrirExportModal();
-      _showToast('⬇', 'Exportar relatório');
-    } else {
-      _showToast('⬇', 'Exportação não disponível nesta tela');
-    }
+    // Cada página exporta de um jeito diferente (modal de Excel, HTML
+    // interativo standalone, ou nem tem exportação) — mapeia pra função
+    // certa de cada uma. Cobre tanto os "⬇ Exportar Excel (.xlsx)"
+    // (Registro/Relatório de Injeção) quanto os "🌐 Exportar Interativo"
+    // espalhados pelos dashboards (Turnos, Berços, Focada, Traços, OEE,
+    // Operacional, Setor de Qualidade).
+    const active = document.querySelector('.main.active');
+    const pageId = active?.id?.replace('page-', '');
+
+    const exportMap = {
+      registro: () => typeof LWDash !== 'undefined' && LWDash.abrirExportModal?.(),
+      relatorio: () => typeof LWDash !== 'undefined' && LWDash.abrirExportModalRelatorio?.(),
+      turnos: () => typeof LWDash !== 'undefined' && LWDash.exportarTurnosInterativo?.(),
+      'analise-bercos': () => typeof ABercos !== 'undefined' && ABercos.exportarInterativo?.(),
+      'analise-focada': () => typeof LWFocada !== 'undefined' && LWFocada.exportarInterativo?.(),
+      'qualidade-tracos': () => typeof LWQualidade !== 'undefined' && LWQualidade.exportarInterativo?.(),
+      oee: () => typeof LWOee !== 'undefined' && LWOee.exportarInterativo?.(),
+      'analise-operacional': () => typeof AOp !== 'undefined' && AOp.exportarInterativo?.(),
+      'setor-qualidade': () => {
+        if (!_sqDashboardAtivo() || typeof SQ === 'undefined' || typeof SQ.exportDashboardHTML !== 'function') return false;
+        SQ.exportDashboardHTML();
+      },
+      // Relatório de Berços e Registro de Paradas não têm exportação
+      // nenhuma hoje — de propósito fora deste mapa, cai no "não
+      // disponível" abaixo.
+    };
+
+    const fn = exportMap[pageId];
+    const resultado = fn ? fn() : false;
+    if (fn && resultado !== false) { _showToast('⬇', 'Exportar relatório'); }
+    else { _showToast('⬇', 'Exportação não disponível nesta tela'); }
   }
 
   function _addNewTraco() {
@@ -420,6 +520,7 @@
     }
   }
 
+
   /**
    * Abre/fecha o Debriefing do Dia. Diferente da maioria dos outros atalhos
    * de ação, este funciona em QUALQUER página — o Debriefing vive na topbar,
@@ -432,6 +533,101 @@
     } else {
       _showToast('📓', 'Debriefing não disponível');
     }
+  }
+
+  /**
+   * Abre a tela de Configurações — funciona em QUALQUER página (o botão
+   * vive na topbar, compartilhada por todas as telas). abrirConfig() já
+   * checa sozinha se a pessoa é Administrador (só ela pode abrir, ver
+   * app-core.js) — o atalho não precisa duplicar essa checagem, só não
+   * faz nada se a pessoa não for admin (mesmo comportamento do botão).
+   */
+  function _openConfig() {
+    if (typeof abrirConfig === 'function') {
+      abrirConfig();
+    } else {
+      _showToast('⚙', 'Configurações não disponível');
+    }
+  }
+
+  /**
+   * Alterna entre Tabela e Modo Visual no Relatório de Berços — mesmo
+   * padrão de _resetOperation/_registerOperation: só funciona se a pessoa
+   * já estiver na página certa (o botão #btn-rb-modo-visual só existe
+   * dentro dela).
+   */
+  function _toggleModoVisualBercos() {
+    const active = document.querySelector('.main.active');
+    const pageId = active?.id?.replace('page-', '');
+
+    if (pageId !== 'relatorio-bercos') {
+      _showToast('🎨', 'Atalho disponível apenas na página de Relatório de Berços');
+      return;
+    }
+
+    const btn = document.getElementById('btn-rb-modo-visual');
+    if (btn) {
+      btn.click();
+      _showToast('🎨', 'Modo Visual alternado');
+    } else {
+      _showToast('🎨', 'Alternância não disponível');
+    }
+  }
+
+  /**
+   * Sai da sessão de Administrador — funciona em QUALQUER página (o
+   * botão "Sair" vive na topbar). AdminAuth.logout() já redireciona pra
+   * login.html sozinho, então não precisa de toast (a página muda antes
+   * de qualquer aviso aparecer).
+   */
+  function _logout() {
+    if (typeof AdminAuth !== 'undefined' && typeof AdminAuth.logout === 'function') {
+      AdminAuth.logout();
+    } else {
+      _showToast('🚪', 'Sair não disponível');
+    }
+  }
+
+  /**
+   * Checa se o Setor de Qualidade está na sub-aba "Avaliação" (formulário
+   * de marcação) — só lá "Registrar" e "Desfazer" fazem sentido, não nas
+   * sub-abas Dashboard/Registros.
+   */
+  function _sqFormularioAtivo() {
+    const active = document.querySelector('.main.active');
+    const pageId = active?.id?.replace('page-', '');
+    return pageId === 'setor-qualidade' && !!document.getElementById('sq-form')?.classList.contains('active');
+  }
+
+  /**
+   * "Registrar avaliação" (Setor de Qualidade → Avaliação). Sem combo
+   * padrão de fábrica (ver ACTION_CONFIG, comboPadrao: '') — fica "Sem
+   * atalho" até a própria pessoa definir um em Configurações → Atalhos
+   * de Teclado, já que é uma ação DESTRUTIVA/definitiva (mesmo que passe
+   * por confirmação) demais pra vir pré-ligada a uma tecla de fábrica.
+   * SQ.registerEvaluation() já abre seu próprio modal de confirmação —
+   * o atalho só dispara o mesmo fluxo que o botão "✓ Registrar" dispara,
+   * nenhum toast de sucesso aqui (o modal já é o feedback).
+   */
+  function _sqRegistrarAvaliacao() {
+    if (!_sqFormularioAtivo() || typeof SQ === 'undefined' || typeof SQ.registerEvaluation !== 'function') {
+      _showToast('✓', 'Atalho disponível apenas no formulário de Avaliação do Setor de Qualidade');
+      return;
+    }
+    SQ.registerEvaluation();
+  }
+
+  /**
+   * "Desfazer última marca" (Setor de Qualidade → Avaliação). Mesmo
+   * motivo do atalho acima: sem combo padrão de fábrica.
+   */
+  function _sqDesfazerMarca() {
+    if (!_sqFormularioAtivo() || typeof SQ === 'undefined' || typeof SQ.undoLastAction !== 'function') {
+      _showToast('↺', 'Atalho disponível apenas no formulário de Avaliação do Setor de Qualidade');
+      return;
+    }
+    SQ.undoLastAction();
+    _showToast('↺', 'Última marca desfeita');
   }
 
   async function _startInjectionTimer() {

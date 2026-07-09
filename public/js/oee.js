@@ -286,7 +286,12 @@
     let paradas = await fetch('db/paradas.json').then(r => r.ok ? r.json() : []).catch(() => []);
     if (!Array.isArray(paradas)) paradas = [];
     paradas = paradas.filter(p => {
-      const data = (p.inicio || '').slice(0, 10);
+      // p.inicio é ISO em UTC — slice(0,10) cru pegava a data em UTC, não
+      // em Brasília, e fazia paradas registradas à noite sumirem do
+      // relatório (ver dataBrasiliaDeISO em data.js).
+      const data = typeof dataBrasiliaDeISO === 'function'
+        ? dataBrasiliaDeISO(p.inicio)
+        : (p.inicio || '').slice(0, 10);
       if (filtros.dataInicio && data < filtros.dataInicio) return false;
       if (filtros.dataFim && data > filtros.dataFim) return false;
       return true;
@@ -591,12 +596,197 @@
 
     const porTurno = calcularPorTurnoInstancia(historico, tracos, paradas);
     const labels = porTurno.map(t => `${t.data.slice(5).split('-').reverse().join('/')} ${t.turno.replace(' TURNO', 'T')}`);
+    // Mesmo padrão de _renderParadasBreakdown/oee-paradas-vazio, acima:
+    // _renderBarChartHTML só limpa o container e sai quando não há turnos
+    // no período — sem isso, o gráfico "OEE por Turno" ficava em branco,
+    // sem nenhuma explicação, quando o período filtrado não tinha dados.
+    const elTurnosVazio = document.getElementById('oee-turnos-vazio');
+    if (elTurnosVazio) elTurnosVazio.style.display = porTurno.length ? 'none' : 'block';
     _renderBarChartHTML('oee-chart-turnos', labels, porTurno.map(t => t.oeePct));
     _renderTabelaTurnos(porTurno);
 
     _renderTabelaGrupo('oee-tabela-bateria', calcularPorGrupo(historico, tracos, 'id_bateria'), 'Bateria');
     _renderTabelaGrupo('oee-tabela-montagem', calcularPorGrupo(historico, tracos, 'tipo_montagem'), 'Tipo de Montagem');
   }
+
+  // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
+  // Retrato FIXO do que está na tela no momento do clique — busca com os
+  // MESMOS filtros ativos agora (_lerFiltros(): período, bateria, turno),
+  // não mais o histórico inteiro com uma UI de filtro pra reaplicar
+  // depois. Reaproveita as MESMAS funções de cálculo e de render deste
+  // arquivo via toString() (cópia fiel do código-fonte, sem reescrever
+  // nada à mão) — só a orquestração (render()) é reescrita pra ler do
+  // objeto já filtrado embutido, sem precisar do servidor depois de gerado.
+  async function exportarInterativo() {
+    const btn = document.getElementById('btn-oee-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const filtros = _lerFiltros();
+      const { historico, tracos, paradas } = await _buscarDados(filtros);
+      // Set não é serializável em JSON — converte pra array; o script
+      // exportado reconstrói o Set na hora de usar (ver calcularPorGrupo).
+      const tracosSerializaveis = tracos.map(t => ({ ...t, _baterias: [...(t._baterias || [])] }));
+
+      const descricaoFiltro = [
+        (filtros.dataInicio || filtros.dataFim)
+          ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+          : 'Todos os períodos',
+        filtros.bateria ? `Bateria ${filtros.bateria}` : null,
+        filtros.turno || null,
+      ].filter(Boolean).join(' · ');
+
+      const html = _gerarHtmlOeeStandalone({ historico, tracos: tracosSerializaveis, paradas }, descricaoFiltro);
+      LW.baixarArquivoTexto(
+        `oee_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar dashboard interativo (OEE):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  function _gerarHtmlOeeStandalone(dados, descricaoFiltro) {
+    const dadosJson = JSON.stringify(dados).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OEE — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  .waterfall-row { margin-bottom:14px; }
+</style>
+</head>
+<body>
+  <h1>⚙️ Análise de OEE</h1>
+  <div class="sub" id="exp-sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  <div class="filtro-aplicado">📅 Filtro aplicado: <b>${LW.escaparHtml(descricaoFiltro)}</b></div>
+
+  <div id="oee-empty" style="display:none;text-align:center;padding:40px;color:var(--text-3)">Nenhum registro no período selecionado.</div>
+
+  <div id="oee-content">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Disponibilidade</div><div class="kpi-value" id="oee-kpi-disp">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Performance</div><div class="kpi-value" id="oee-kpi-perf">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Qualidade</div><div class="kpi-value" id="oee-kpi-qual">—</div></div>
+      <div class="kpi-card" style="border-color:var(--accent)"><div class="kpi-label accent">OEE Geral</div><div class="kpi-value accent" id="oee-kpi-geral">—</div></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px">
+      <h4>Composição do OEE</h4>
+      <div id="oee-waterfall"></div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px">
+      <h4>🛑 De onde vem o tempo sem produção</h4>
+      <div id="oee-paradas-bar" style="display:flex;height:18px;border-radius:6px;overflow:hidden;background:var(--border);margin-bottom:14px"></div>
+      <div id="oee-paradas-legenda" style="display:flex;flex-wrap:wrap;gap:12px 22px"></div>
+      <div id="oee-paradas-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0">Sem tempo planejado no período pra detalhar.</div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px">
+      <h4>📈 OEE por Turno</h4>
+      <div id="oee-chart-turnos"></div>
+      <div id="oee-turnos-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:20px 0">Sem dados suficientes no período.</div>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px;overflow-x:auto">
+      <h4>Detalhe por Turno</h4>
+      <table><thead><tr><th>Data</th><th>Turno</th><th>Operações</th><th>Tempo Produzindo</th><th>Disponibilidade</th><th>Performance</th><th>Qualidade</th><th>OEE</th></tr></thead><tbody id="oee-tabela-turnos"></tbody></table>
+    </div>
+
+    <div class="chart-box" style="margin-bottom:14px;overflow-x:auto">
+      <h4>Performance e Qualidade por Bateria</h4>
+      <table><thead><tr><th>Bateria</th><th>Operações</th><th>Performance</th><th>Traços</th><th>Qualidade</th></tr></thead><tbody id="oee-tabela-bateria"></tbody></table>
+    </div>
+
+    <div class="chart-box" style="overflow-x:auto">
+      <h4>Performance e Qualidade por Tipo de Montagem</h4>
+      <table><thead><tr><th>Tipo de Montagem</th><th>Operações</th><th>Performance</th><th>Traços</th><th>Qualidade</th></tr></thead><tbody id="oee-tabela-montagem"></tbody></table>
+    </div>
+  </div>
+  <div class="rodape">Exportado da Análise de OEE — Lightwall SC · retrato do filtro aplicado no momento da exportação, dados embutidos neste arquivo, funciona offline.</div>
+
+<script>
+(function () {
+  'use strict';
+  const DADOS = ${dadosJson};
+  const C = { accent:'#f59e0b', blue:'#3b82f6', green:'#10b981', red:'#ef4444', purple:'#8b5cf6', cyan:'#06b6d4', text2:'#8b93a5', text3:'#5c6475', border:'#353c4a', bg3:'#2e3441' };
+  const MINUTOS_TURNO_PLANEJADO = ${MINUTOS_TURNO_PLANEJADO};
+  const CICLO_IDEAL_MIN = ${CICLO_IDEAL_MIN};
+  const CAMPOS_INSUMO = ${JSON.stringify(CAMPOS_INSUMO)};
+  const LW = { escaparHtml: s => { const d=document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; } };
+
+  ${_normalizarInsumo}
+  ${_tracoTemAjuste}
+  ${_tempoMin}
+  ${_minutosParadaNaoPlanejadaNaJanela}
+  ${_tempoProduzindoReal}
+  ${_agruparPorTurnoInstancia}
+  ${calcularDisponibilidade}
+  ${calcularPerformance}
+  ${calcularQualidade}
+  ${calcularPorTurnoInstancia}
+  ${calcularPorGrupo}
+  ${_resumoParadas}
+  ${_setText}
+  ${_fmtPct}
+  ${_fmtMin}
+  ${_corPct}
+  ${_renderKPIs}
+  ${_renderWaterfall}
+  ${_renderBarChartHTML}
+  ${_renderTabelaTurnos}
+  ${_renderTabelaGrupo}
+  ${_renderParadasBreakdown}
+
+  const ALTURA_CHART_TURNOS_PX = ${ALTURA_CHART_TURNOS_PX}, PAD_TOP_CHART_TURNOS_PX = ${PAD_TOP_CHART_TURNOS_PX}, PAD_BOTTOM_CHART_TURNOS_PX = ${PAD_BOTTOM_CHART_TURNOS_PX};
+
+  function render() {
+    const historico = DADOS.historico;
+    const tracos = DADOS.tracos.map(t => ({ ...t, _baterias: new Set(t._baterias || []) }));
+    const paradas = DADOS.paradas;
+    const empty = document.getElementById('oee-empty');
+    const content = document.getElementById('oee-content');
+
+    if (!historico.length) {
+      empty.style.display = 'block';
+      content.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    content.style.display = 'block';
+
+    const disp = calcularDisponibilidade(historico, paradas);
+    const perf = calcularPerformance(historico);
+    const qual = calcularQualidade(tracos);
+
+    _renderKPIs(disp, perf, qual);
+    _renderWaterfall(disp, perf, qual);
+    _renderParadasBreakdown(disp, _resumoParadas(paradas));
+
+    const porTurno = calcularPorTurnoInstancia(historico, tracos, paradas);
+    const labels = porTurno.map(t => \`\${t.data.slice(5).split('-').reverse().join('/')} \${t.turno.replace(' TURNO', 'T')}\`);
+    const elTurnosVazio = document.getElementById('oee-turnos-vazio');
+    if (elTurnosVazio) elTurnosVazio.style.display = porTurno.length ? 'none' : 'block';
+    _renderBarChartHTML('oee-chart-turnos', labels, porTurno.map(t => t.oeePct));
+    _renderTabelaTurnos(porTurno);
+
+    _renderTabelaGrupo('oee-tabela-bateria', calcularPorGrupo(historico, tracos, 'id_bateria'), 'Bateria');
+    _renderTabelaGrupo('oee-tabela-montagem', calcularPorGrupo(historico, tracos, 'tipo_montagem'), 'Tipo de Montagem');
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>`;
+  }
+
 
   function init() {
     const today = (typeof todayBrasilia === 'function') ? todayBrasilia() : new Date().toISOString().split('T')[0];
@@ -607,13 +797,14 @@
     if (fim && !fim.value) fim.value = today;
 
     document.getElementById('btn-oee-filtrar')?.addEventListener('click', render);
+    document.getElementById('btn-oee-exportar')?.addEventListener('click', exportarInterativo);
 
     _popularFiltroBateria().then(() => render());
   }
 
   // Exposto também pra fins de teste/depuração.
   window.LWOee = {
-    init, render,
+    init, render, exportarInterativo,
     _calcularDisponibilidade: calcularDisponibilidade,
     _calcularPerformance: calcularPerformance,
     _calcularQualidade: calcularQualidade,

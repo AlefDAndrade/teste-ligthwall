@@ -18,6 +18,38 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
+// ── Configurações → Dados SQL: tabelas do SQLite expostas na tela de
+// administração pra consulta e exclusão manual de linha (ver GET
+// /admin/sql-tabelas, GET /admin/sql-linhas e POST /admin/sql-excluir-linha,
+// abaixo). SQL não permite parametrizar nome de tabela/coluna (só valores),
+// então nome de tabela e coluna usados nas queries dessas rotas SEMPRE vêm
+// deste whitelist — nunca são montados a partir do que o cliente manda.
+// "pk" é a coluna que identifica uma linha sozinha (a PRIMARY KEY de
+// verdade da tabela, ver CREATE TABLE em db.js) — é o valor usado pra
+// excluir exatamente uma linha, nunca o índice dela na lista.
+const TABELAS_SQL_ADMIN = {
+  operacoes:            { pk: 'id',           label: 'Operações (Registro de Baterias)' },
+  edicoes_operacao:     { pk: 'id',           label: 'Auditoria de Edições — Operações' },
+  tracos:                { pk: 'id_traco',     label: 'Traços (Relatório de Injeção)' },
+  traco_usos:            { pk: 'id',           label: 'Usos de Traço' },
+  ajustes:                { pk: 'id',           label: 'Ajustes de Receita' },
+  leituras_resultado:     { pk: 'id',           label: 'Leituras de Densidade/Flow' },
+  edicoes_traco:          { pk: 'id',           label: 'Auditoria de Edições — Traços' },
+  contador_tracos:        { pk: 'data',         label: 'Contador de Traços do Dia' },
+  paradas:                { pk: 'id',           label: 'Paradas' },
+  sobra:                  { pk: 'id',           label: 'Sobra' },
+  bercos_visuais:         { pk: 'id_operacao',  label: 'Berços Visuais' },
+  avaliacoes_qualidade:   { pk: 'id',           label: 'Avaliações de Qualidade' },
+  avaliacao_paineis:      { pk: 'id_avaliacao', label: 'Painéis de Avaliação' },
+  operacoes_avaliadas:    { pk: 'id_operacao',  label: 'Operações Avaliadas (Setor de Qualidade)' },
+};
+
+// Teto de linhas devolvidas por GET /admin/sql-linhas — telas de
+// administração desse tipo não precisam paginar de verdade (o sistema é de
+// uso interno, volume baixo); um teto evita só travar o navegador se uma
+// tabela crescer muito. Sempre as mais recentes primeiro (rowid DESC).
+const SQL_ADMIN_LIMITE_LINHAS = 1000;
+
 const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
@@ -195,6 +227,19 @@ const VALIDADORES_BACKUP_DADOS = {
   // GET /db/<nome> mais abaixo, que reconstrói o JSON a partir do banco).
   'bercos_visuais.json':       v => Array.isArray(v),
   'avaliacoes_qualidade.json': v => Array.isArray(v),
+  // Adicionado: sem isso, "quem já foi avaliado" (ver CREATE TABLE
+  // operacoes_avaliadas, db.js) nunca saía no Backup de Dados — restaurar
+  // um backup fazia toda bateria já avaliada voltar a aparecer na fila
+  // de "não avaliadas" do Setor de Qualidade, mesmo já tendo sido avaliada
+  // de verdade antes do backup.
+  'operacoes_avaliadas.json':  v => Array.isArray(v),
+  // Adicionado: agora que "não avaliadas" é a fila DE VERDADE (não mais
+  // calculada na hora — ver OPERACOES_NAO_AVALIADAS_PATH, mais abaixo),
+  // sem isso, restaurar um backup deixaria esse arquivo desatualizado em
+  // relação às tabelas SQL recém-substituídas (ver recalcularFilaNaoAvaliadasApartirDoSql,
+  // chamada como rede de segurança logo depois da restauração quando este
+  // arquivo específico não vier no backup enviado).
+  'operacoes_nao_avaliadas.json': v => Array.isArray(v),
 };
 
 // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -214,6 +259,8 @@ const DEFAULT_SE_VAZIO_BACKUP_DADOS = {
   'ajustes_tracos.json': [],
   'bercos_visuais.json': [],
   'avaliacoes_qualidade.json': [],
+  'operacoes_avaliadas.json': [],
+  'operacoes_nao_avaliadas.json': [],
 };
 
 function parseArquivoBackupDados(nome, texto) {
@@ -279,6 +326,8 @@ async function gerarZipDadosServidor() {
         zip.file(nome, JSON.stringify(db.todosOsBercosVisuais(), null, 2));
       } else if (nome === 'avaliacoes_qualidade.json') {
         zip.file(nome, JSON.stringify(db.listarAvaliacoesQualidade(), null, 2));
+      } else if (nome === 'operacoes_avaliadas.json') {
+        zip.file(nome, JSON.stringify(db.todosOsOperacoesAvaliadas(), null, 2));
       } else {
         zip.file(nome, fs.readFileSync(caminhoArquivoDb(nome)));
       }
@@ -450,6 +499,99 @@ function salvarOperacaoAndamentoNoDisco(dados) {
   fs.writeFileSync(tmp, JSON.stringify(dados, null, 2), 'utf8');
   fs.renameSync(tmp, OPERACAO_ANDAMENTO_PATH);
 }
+
+// ─── FILA DE AVALIAÇÃO (Setor de Qualidade): "não avaliadas" ──────────────
+// Antes, GET /operacoes-nao-avaliadas CALCULAVA a fila toda vez (SELECT ...
+// WHERE id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)) — nunca
+// existia como lista própria, só como diferença entre duas outras coisas.
+// Agora é o CONTRÁRIO: um arquivo próprio (JSON simples — cresce a cada
+// operação registrada, encolhe a cada avaliação, e nunca chega perto do
+// tamanho de "operacoes"/"operacoes_avaliadas", que só crescem) é a fonte
+// de verdade — guarda só os IDs pendentes, na ordem em que entraram. GET
+// /operacoes-nao-avaliadas lê esta lista e busca os detalhes de cada
+// operação no SQL só pra exibir (não pra decidir QUEM está na fila).
+//
+// Mantido em sincronia em 2 pontos (nunca em mais nenhum outro lugar):
+//   - adicionarNaFilaNaoAvaliadas(id) — POST /registrar-operacao, depois do
+//     INSERT em "operacoes" (nunca em Modo de Teste — mesma regra de
+//     sempre, essas operações nunca entram na fila do Setor de Qualidade).
+//   - removerDaFilaNaoAvaliadas(id) — sempre que uma operação é marcada
+//     avaliada (POST /marcar-operacao-avaliada, e dentro de
+//     db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada, pro caso de
+//     avaliação avulsa — ver os 2 call sites, mais abaixo).
+const OPERACOES_NAO_AVALIADAS_PATH = path.join(DB_DIR, 'operacoes_nao_avaliadas.json');
+
+function lerOperacoesNaoAvaliadas() {
+  try {
+    const texto = fs.readFileSync(OPERACOES_NAO_AVALIADAS_PATH, 'utf8').trim();
+    return texto ? JSON.parse(texto) : [];
+  } catch (_) {
+    return []; // arquivo ainda não existe/corrompido — ver migrarFilaNaoAvaliadasSeNecessario, que cobre a 1ª vez
+  }
+}
+
+function salvarOperacoesNaoAvaliadasNoDisco(lista) {
+  const tmp = OPERACOES_NAO_AVALIADAS_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(lista, null, 2), 'utf8');
+  fs.renameSync(tmp, OPERACOES_NAO_AVALIADAS_PATH);
+}
+
+function adicionarNaFilaNaoAvaliadas(idOperacao) {
+  const lista = lerOperacoesNaoAvaliadas();
+  if (!lista.includes(idOperacao)) {
+    lista.push(idOperacao);
+    salvarOperacoesNaoAvaliadasNoDisco(lista);
+  }
+}
+
+function removerDaFilaNaoAvaliadas(idOperacao) {
+  const lista = lerOperacoesNaoAvaliadas();
+  const idx = lista.indexOf(idOperacao);
+  if (idx !== -1) {
+    lista.splice(idx, 1);
+    salvarOperacoesNaoAvaliadasNoDisco(lista);
+  }
+}
+
+// Recalcula a fila do ZERO a partir do SQL (mesmo critério de sempre: toda
+// operação real, fora de Modo de Teste, que ainda não tem linha em
+// "operacoes_avaliadas") — usada só em 2 situações, nunca no dia a dia:
+//   1) 1ª vez que o servidor sobe com este arquivo ainda inexistente (ver
+//      migrarFilaNaoAvaliadasSeNecessario, chamada no boot, abaixo) —
+//      instalação já em uso antes desta mudança existir.
+//   2) Depois de restaurar um backup que trouxe historico.json e/ou
+//      operacoes_avaliadas.json mas NÃO trouxe operacoes_nao_avaliadas.json
+//      (backup mais antigo, de antes deste arquivo existir) — sem isso, o
+//      arquivo antigo (se já existisse aqui) ficaria fora de sincronia com
+//      as tabelas SQL recém-substituídas (ver POST /restaurar-backup-dados).
+function recalcularFilaNaoAvaliadasApartirDoSql() {
+  const rows = db.prepare(`
+    SELECT id FROM operacoes
+    WHERE modo_teste = 0
+      AND id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)
+    ORDER BY data ASC, fim ASC
+  `).all();
+  salvarOperacoesNaoAvaliadasNoDisco(rows.map(r => r.id));
+  return rows.length;
+}
+
+function migrarFilaNaoAvaliadasSeNecessario() {
+  if (fs.existsSync(OPERACOES_NAO_AVALIADAS_PATH)) return; // já existe — não é a 1ª vez, nada a fazer
+  try {
+    const qtd = recalcularFilaNaoAvaliadasApartirDoSql();
+    console.log(`[migração] operacoes_nao_avaliadas.json criado com ${qtd} operação(ões) pendente(s) (calculado a partir do estado atual do banco).`);
+  } catch (e) {
+    console.error('[migração] Falha ao criar operacoes_nao_avaliadas.json — seguindo com fila vazia:', e.message);
+    try { salvarOperacoesNaoAvaliadasNoDisco([]); } catch (_) { /* pior caso: arquivo continua ausente, lerOperacoesNaoAvaliadas() já trata isso como fila vazia */ }
+  }
+}
+// Chamada AQUI mesmo (logo depois das funções/consts acima, não lá em cima
+// junto das outras "Fase N" — ver caminhoArquivoDb, no topo do arquivo):
+// depende de OPERACOES_NAO_AVALIADAS_PATH (const, sem hoisting de valor) e
+// de "db" já com "operacoes"/"operacoes_avaliadas" prontas (migração de
+// histórico já rodou lá em cima) — chamar antes desta linha do arquivo ser
+// executada lançaria ReferenceError (TDZ) na const.
+migrarFilaNaoAvaliadasSeNecessario();
 
 // ─── BERÇOS DA OPERAÇÃO EM ANDAMENTO: "baixou/vazou" marcado ao vivo ──────
 // Snapshot separado de operacao_andamento.json de propósito: aquele arquivo
@@ -857,6 +999,233 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  Configurações → Dados SQL — consulta e exclusão manual de linha do
+  //  SQLite (ver TABELAS_SQL_ADMIN, acima, e a aba "🗄️ Dados SQL" em
+  //  modal-config.html). As 3 rotas abaixo exigem sessão de Administrador
+  //  válida (mesma exigência de GET /db/security.json) — dados de produção
+  //  inteiros e exclusão permanente não podem ficar atrás só do "abrir
+  //  Configurações" do lado do navegador.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── GET /admin/sql-tabelas: lista as tabelas do whitelist com a
+  // contagem atual de linhas — popula o <select> da aba.
+  if (req.method === 'GET' && urlPath === '/admin/sql-tabelas') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const tabelas = Object.entries(TABELAS_SQL_ADMIN).map(([tabela, info]) => {
+        const { total } = db.prepare(`SELECT COUNT(*) AS total FROM "${tabela}"`).get();
+        return { tabela, label: info.label, pk: info.pk, linhas: total };
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, tabelas }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /admin/sql-linhas?tabela=xxx: colunas + linhas (mais recentes
+  // primeiro) de UMA tabela do whitelist — nunca a tabela crua vinda do
+  // cliente, sempre a chave já validada contra TABELAS_SQL_ADMIN.
+  if (req.method === 'GET' && urlPath === '/admin/sql-linhas') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const tabela = queryParams.get('tabela') || '';
+      const info = TABELAS_SQL_ADMIN[tabela];
+      if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
+
+      const colunas = db.prepare(`PRAGMA table_info("${tabela}")`).all().map(c => c.name);
+      const linhas = db.prepare(`SELECT * FROM "${tabela}" ORDER BY rowid DESC LIMIT ?`).all(SQL_ADMIN_LIMITE_LINHAS);
+
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, tabela, pk: info.pk, colunas, linhas, limite: SQL_ADMIN_LIMITE_LINHAS }));
+    } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── POST /admin/sql-excluir-linha: apaga UMA linha, pelo valor da PK
+  // real da tabela (ver TABELAS_SQL_ADMIN) — nunca por índice/posição na
+  // lista, que pode mudar a qualquer novo registro. Se a tabela tiver
+  // FOREIGN KEY apontando pra ela (ex.: bercos_visuais → operacoes) e
+  // ainda existir linha dependente, o SQLite recusa o DELETE sozinho
+  // (foreign_keys = ON, ver topo de db.js) — devolvemos isso como erro
+  // 400 de validação, não como falha de servidor.
+  //
+  // CASO ESPECIAL — "operacoes_avaliadas": excluir uma linha aqui não é
+  // um DELETE avulso — significa "desfazer a avaliação desta operação
+  // por completo". Por isso usa db.desfazerAvaliacaoOperacao(), que
+  // também apaga avaliacao_paineis e avaliacoes_qualidade daquela
+  // operação (senão ficariam órfãs: a avaliação continuaria existindo,
+  // só que de uma operação marcada como pendente de novo) — e, como
+  // consequência natural de tirar o id de operacoes_avaliadas, a
+  // operação volta a aparecer em GET /operacoes-nao-avaliadas (a fila do
+  // Setor de Qualidade), sem nenhum passo extra.
+  if (req.method === 'POST' && urlPath === '/admin/sql-excluir-linha') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { tabela, valor } = JSON.parse(body);
+        const info = TABELAS_SQL_ADMIN[tabela];
+        if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
+        if (valor === undefined || valor === null || valor === '') throw new Error('Valor da chave (' + info.pk + ') não informado.');
+
+        // Mesmo padrão de /registrar-operacao: quem originou a ação manda
+        // seu próprio OP_ANDAMENTO_CLIENT_ID via query string, só pra ELE
+        // ser excluído do broadcast abaixo (essa aba já recarrega sozinha
+        // depois do fetch — ver cfgSqlExcluirLinha, app-core.js).
+        const wsClientId = queryParams.get('wsClientId') || '';
+
+        if (tabela === 'operacoes_avaliadas') {
+          const r = db.desfazerAvaliacaoOperacao(valor);
+          if (!r.avaliacaoPaineis && !r.avaliacoesQualidade && !r.operacoesAvaliadas) {
+            throw new Error('Linha não encontrada (nenhuma alteração feita).');
+          }
+
+          // A fila de "não avaliadas" do Setor de Qualidade NÃO é
+          // recalculada do SQL a cada request — é um arquivo próprio
+          // (operacoes_nao_avaliadas.json, ver "FILA DE AVALIAÇÃO" mais
+          // acima) mantido em sincronia manualmente em cada ponto que
+          // marca/desmarca uma operação como avaliada. Sem esta linha, a
+          // operação sumiria de operacoes_avaliadas no SQL mas NUNCA
+          // voltaria a aparecer na fila visível do Setor de Qualidade.
+          // Mesma regra de sempre: nunca reinsere operação de Modo de
+          // Teste (a fila não tem noção disso).
+          const operacao = db.prepare('SELECT modo_teste FROM operacoes WHERE id = ?').get(valor);
+          if (operacao && !operacao.modo_teste) {
+            adicionarNaFilaNaoAvaliadas(valor);
+          }
+
+          // Avisa TODO MUNDO conectado (qualquer navegador/página — ver
+          // broadcastDadosSqlExcluidos, perto do WebSocket, mais abaixo)
+          // que esses dados mudaram, pra ninguém continuar vendo a
+          // avaliação/painéis já excluídos até um F5 manual.
+          broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            cascata: {
+              avaliacao_paineis: r.avaliacaoPaineis,
+              avaliacoes_qualidade: r.avaliacoesQualidade,
+              operacoes_avaliadas: r.operacoesAvaliadas,
+            },
+          }));
+          return;
+        }
+
+        const resultado = db.prepare(`DELETE FROM "${tabela}" WHERE "${info.pk}" = ?`).run(valor);
+        if (resultado.changes === 0) throw new Error('Linha não encontrada (nenhuma alteração feita).');
+
+        broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        const mensagemAmigavel = /FOREIGN KEY constraint failed/i.test(e.message)
+          ? 'Não é possível excluir: existem outros registros que dependem desta linha (ex.: usos, avaliações ou berços vinculados a esta operação).'
+          : e.message;
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: mensagemAmigavel }));
+      }
+    });
+    return;
+  }
+
+  // ── POST /admin/sql-limpar-tabela: apaga TODAS as linhas de uma tabela
+  // do whitelist de uma vez (botão "🧹 Limpar Todas", ao lado do "↺
+  // Atualizar" — ver cfgSqlLimparTabela, app-core.js). Mesma exigência de
+  // sessão de administrador das rotas acima; a senha de Administrador é
+  // pedida DE NOVO no cliente antes de chamar esta rota (mesmo padrão de
+  // cfgSqlExcluirLinha).
+  //
+  // "operacoes_avaliadas" tem o MESMO caso especial de
+  // /admin/sql-excluir-linha — só que em lote: cada id vira uma chamada de
+  // db.desfazerAvaliacaoOperacao (apaga avaliacao_paineis +
+  // avaliacoes_qualidade + a própria marcação, ver comentário na função,
+  // db.js) e, se a operação não for de Modo de Teste, volta pra fila de
+  // avaliação pendente — exatamente como excluir cada linha uma por uma
+  // pelo botão "✕ Excluir", só que sem precisar clicar em cada uma.
+  //
+  // Mesmo tratamento de FOREIGN KEY constraint da rota de linha única (pra
+  // qualquer OUTRA tabela do whitelist): se ainda houver linha dependente
+  // em outra tabela, o SQLite recusa o DELETE inteiro (nada é apagado —
+  // não é uma exclusão parcial) e devolve mensagem amigável, não erro de
+  // servidor.
+  if (req.method === 'POST' && urlPath === '/admin/sql-limpar-tabela') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { tabela } = JSON.parse(body);
+        const info = TABELAS_SQL_ADMIN[tabela];
+        if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
+
+        const wsClientId = queryParams.get('wsClientId') || '';
+
+        if (tabela === 'operacoes_avaliadas') {
+          const ids = db.prepare('SELECT id_operacao FROM operacoes_avaliadas').all().map(r => r.id_operacao);
+          const cascata = { avaliacao_paineis: 0, avaliacoes_qualidade: 0, operacoes_avaliadas: 0 };
+          ids.forEach(id => {
+            const r = db.desfazerAvaliacaoOperacao(id);
+            cascata.avaliacao_paineis    += r.avaliacaoPaineis;
+            cascata.avaliacoes_qualidade += r.avaliacoesQualidade;
+            cascata.operacoes_avaliadas  += r.operacoesAvaliadas;
+
+            // Mesma regra de sempre (ver POST /admin/sql-excluir-linha,
+            // acima): nunca reinsere operação de Modo de Teste na fila —
+            // ela não tem noção disso.
+            const operacao = db.prepare('SELECT modo_teste FROM operacoes WHERE id = ?').get(id);
+            if (operacao && !operacao.modo_teste) adicionarNaFilaNaoAvaliadas(id);
+          });
+
+          broadcastDadosSqlExcluidos({ tabela, limpezaTotal: true }, wsClientId);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, excluidas: cascata.operacoes_avaliadas, cascata }));
+          return;
+        }
+
+        const resultado = db.prepare(`DELETE FROM "${tabela}"`).run();
+
+        broadcastDadosSqlExcluidos({ tabela, limpezaTotal: true }, wsClientId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, excluidas: resultado.changes }));
+      } catch (e) {
+        const mensagemAmigavel = /FOREIGN KEY constraint failed/i.test(e.message)
+          ? 'Não é possível limpar: existem registros em outras tabelas que dependem de linhas desta (ex.: usos, avaliações ou berços vinculados). Limpe primeiro as tabelas dependentes.'
+          : e.message;
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: mensagemAmigavel }));
+      }
+    });
+    return;
+  }
+
   // ── GET /db/historico_edicoes.json: mesma ideia da rota de historico.json
   // acima — usado pelo "Backup de Dados" gerado no navegador
   // (gerarBackupDados(), em data.js), que ainda faz fetch('db/' + nome)
@@ -955,6 +1324,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ── GET /db/operacoes_avaliadas.json: idem, reconstrói a partir da
+  // tabela "operacoes_avaliadas" (lista de ids de operação já avaliados
+  // pelo Setor de Qualidade — ver CREATE TABLE, db.js) — usado pelo
+  // Backup de Dados.
+  if (req.method === 'GET' && urlPath === '/db/operacoes_avaliadas.json') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(db.todosOsOperacoesAvaliadas()));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
   // ── GET /db/detalhe_operacao.json?id=...: tudo que se liga por
   // id_operacao — operação, berços visuais, receita de cada traço usado
   // (com ajustes) e a avaliação de qualidade vinculada. Usado pela
@@ -1044,7 +1428,9 @@ const server = http.createServer((req, res) => {
   // ── FILA DE BATERIAS NÃO AVALIADAS (Setor de Qualidade): lista enxuta
   // (só os campos necessários pra identificar a bateria na fila E
   // preencher automaticamente a tela de avaliação — ver "Nova Avaliação"
-  // em setor-qualidade.js) das operações com avaliado=0.
+  // em setor-qualidade.js) das operações QUE AINDA NÃO TÊM linha em
+  // operacoes_avaliadas (ver CREATE TABLE, db.js — substitui a antiga
+  // consulta por "avaliado=0" na própria tabela operacoes).
   // Nunca inclui operações de Modo de Teste (modo_teste=0) — o Setor de
   // Qualidade ainda não tem noção de Modo de Teste, então misturar geraria
   // uma bateria "fantasma" na fila de uma instalação de testes.
@@ -1052,13 +1438,26 @@ const server = http.createServer((req, res) => {
   // esperou mais tempo por avaliação aparece primeiro.
   if (req.method === 'GET' && urlPath === '/operacoes-nao-avaliadas') {
     try {
+      const ids = lerOperacoesNaoAvaliadas();
+      if (!ids.length) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('[]');
+        return;
+      }
+      // A LISTA de quem está pendente vem do arquivo (fonte de verdade,
+      // ver comentário em OPERACOES_NAO_AVALIADAS_PATH) — o SQL aqui é só
+      // pra buscar os DETALHES de cada uma pra exibir na tela, nunca pra
+      // decidir quem entra ou sai da fila. Um id que porventura não exista
+      // mais em "operacoes" (não deveria acontecer — nada aqui deleta
+      // operação) simplesmente não aparece no resultado, sem erro.
+      const placeholders = ids.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT id, id_bateria, tipo_montagem, data, fim, turno, capacidade,
-               bercos_reais, bercos_personalizados
+               dimensao, bercos_reais, bercos_personalizados
         FROM operacoes
-        WHERE avaliado = 0 AND modo_teste = 0
+        WHERE id IN (${placeholders})
         ORDER BY data ASC, fim ASC
-      `).all();
+      `).all(...ids);
       // bercos_personalizados vem serializado (TEXT) — desserializa aqui
       // pra já entregar um array pronto (ou null) pro front, em vez de
       // cada consumidor ter que fazer o próprio JSON.parse.
@@ -1084,10 +1483,13 @@ const server = http.createServer((req, res) => {
       if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
       try {
         const record = JSON.parse(body);
-        // Toda operação nasce não avaliada — ignora qualquer valor vindo do
-        // front pra este campo (não é algo que o operador preenche; só
-        // muda depois, pelo Setor de Qualidade). Vale pros dois caminhos
-        // abaixo (Modo de Teste em JSON e SQLite).
+        // Campo LEGADO (coluna "operacoes.avaliado" — ver db.js): mantido
+        // só como default seguro (sempre 0/false na criação), mas quem
+        // decide "esta operação já foi avaliada?" a partir de agora é a
+        // tabela "operacoes_avaliadas" (ver db.marcarOperacaoAvaliada /
+        // marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada). Ignora
+        // qualquer valor vindo do front pra este campo. Vale pros dois
+        // caminhos abaixo (Modo de Teste em JSON e SQLite).
         record.avaliado = false;
 
         if (modoTeste) {
@@ -1115,6 +1517,12 @@ const server = http.createServer((req, res) => {
           const qtdBercos = parseInt(record.bercos_reais) || parseInt(record.capacidade) || 0;
           db.criarBercosVisuaisIniciais(record.id, qtdBercos, lerBercosAndamento());
           salvarBercosAndamentoNoDisco({});
+
+          // Entra na fila de avaliação do Setor de Qualidade — ver
+          // comentário em OPERACOES_NAO_AVALIADAS_PATH, acima. Nunca em
+          // Modo de Teste (esse ramo nem chega aqui — ver `if (modoTeste)`
+          // logo acima; mesma regra de sempre pra essa fila).
+          adicionarNaFilaNaoAvaliadas(record.id);
 
           // Avisa todo mundo conectado agora (exceto quem registrou) —
           // dinâmica de "dono" da operação chegou ao fim. Nunca em modo de
@@ -1229,6 +1637,9 @@ const server = http.createServer((req, res) => {
   // fila. Ação do Setor de Qualidade, não do Administrador: de propósito
   // sem exigir sessão de admin (diferente de /editar-operacao), mesmo
   // nível de fricção das outras rotas internas do dia a dia.
+  // Grava em "operacoes_avaliadas" (INSERT), não mais um UPDATE na
+  // própria linha de "operacoes" — ver db.marcarOperacaoAvaliada e a
+  // CREATE TABLE correspondente em db.js.
   if (req.method === 'POST' && urlPath === '/marcar-operacao-avaliada') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -1237,8 +1648,10 @@ const server = http.createServer((req, res) => {
         const { id } = JSON.parse(body);
         if (!id || typeof id !== 'string') throw new Error('ID da operação ausente.');
 
-        const info = db.prepare('UPDATE operacoes SET avaliado = 1 WHERE id = ?').run(id);
-        if (info.changes === 0) throw new Error('Operação não encontrada (id: ' + id + ').');
+        const existe = db.prepare('SELECT 1 FROM operacoes WHERE id = ?').get(id);
+        if (!existe) throw new Error('Operação não encontrada (id: ' + id + ').');
+        db.marcarOperacaoAvaliada(id); // idempotente — repetir a chamada não faz nada além de confirmar
+        removerDaFilaNaoAvaliadas(id); // idempotente também — id que já não está na lista, não faz nada
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -1266,7 +1679,59 @@ const server = http.createServer((req, res) => {
         if (!avaliacao || typeof avaliacao !== 'object' || !avaliacao.id) {
           throw new Error('Avaliação inválida — falta o id.');
         }
+
+        // ── BLOQUEIO DE AVALIAÇÃO AVULSA (2ª camada de prevenção) ──
+        // Avaliação avulsa (sem vir da fila, linkedOperacaoId ausente)
+        // era o que causava a Análise Focada não encontrar o resultado
+        // (ver correção em db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada,
+        // que resolve os casos que já existiam) — daqui pra frente, uma
+        // avaliação NOVA só é aceita se já vier vinculada a uma operação
+        // real da fila. O front (setor-qualidade.js) já trava isso na
+        // tela (botão "Registrar" desabilitado sem selecionar da fila),
+        // mas a validação de verdade é aqui — quem manda direto pra rota
+        // (sem passar pela tela) não consegue burlar.
+        //
+        // "jaExistiaAntes" distingue registro NOVO de CORREÇÃO (mesmo id
+        // já existente): uma correção de um registro legado que ainda
+        // não tenha vínculo (de antes desta trava existir) continua
+        // podendo ser salva — não trava quem só está editando algo que
+        // já estava assim.
+        const jaExistiaAntes = !!db.prepare('SELECT 1 FROM avaliacoes_qualidade WHERE id = ?').get(avaliacao.id);
+        if (!jaExistiaAntes) {
+          if (!avaliacao.linkedOperacaoId || typeof avaliacao.linkedOperacaoId !== 'string') {
+            throw new Error('Avaliação avulsa não é mais permitida — selecione uma bateria da fila (Ordem de Previsão de Desemplaque) antes de avaliar.');
+          }
+          const operacaoExiste = db.prepare('SELECT 1 FROM operacoes WHERE id = ?').get(avaliacao.linkedOperacaoId);
+          if (!operacaoExiste) {
+            throw new Error('Operação vinculada não encontrada — atualize a fila e tente novamente.');
+          }
+        }
+
         db.salvarAvaliacaoQualidade(avaliacao);
+
+        // Classificação da operação como avaliada/não avaliada (ver
+        // db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada, db.js):
+        // avaliação vinda da fila já é marcada por uma chamada separada do
+        // front a /marcar-operacao-avaliada (com o id_operacao exato).
+        // O bloqueio acima impede QUALQUER avaliação nova sem
+        // linkedOperacaoId — este branch só continua existindo pra
+        // permitir salvar uma CORREÇÃO de um registro legado (de antes
+        // desta trava) que ainda não tinha vínculo, casando pela bateria
+        // + mais antiga pendente (FIFO). Nunca mexe numa avaliação que já
+        // veio vinculada.
+        if (!avaliacao.linkedOperacaoId && avaliacao.batteryId) {
+          // Passa o id da própria avaliação (avaliacao.id) pra também
+          // retro-vincular id_operacao nela, não só tirar a operação da
+          // fila — ver comentário de marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada
+          // (db.js) sobre o bug que isso corrige (Análise Focada não
+          // encontrava avaliações avulsas).
+          try {
+            const idMarcado = db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada(avaliacao.batteryId, avaliacao.id);
+            if (idMarcado) removerDaFilaNaoAvaliadas(idMarcado); // idem: tira da fila em arquivo também (ver OPERACOES_NAO_AVALIADAS_PATH)
+          }
+          catch (e) { console.error('Falha ao classificar operação (avaliação avulsa) como avaliada:', e); }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {
@@ -1951,11 +2416,14 @@ const server = http.createServer((req, res) => {
   // de UM berço da operação em andamento — 'okay' -> 'baixou' -> 'okay'
   // de novo a cada clique naquele indicador específico (● ou •, ver
   // "Bateria Atual", bateria-atual.js). Os 2 lados de um mesmo berço são
-  // independentes — marcar um não afeta o outro. Sem exigir dispositivo
-  // autorizado nem "dono" da operação de propósito: é uma marcação de
-  // observação (quem estiver olhando "Bateria Atual" em qualquer tela),
-  // não um controle da operação em si — mesmo espírito de baixa fricção
-  // de outras rotas internas do dia a dia.
+  // independentes — marcar um não afeta o outro.
+  //
+  // Exige dispositivo autorizado + ser o "dono" da operação em andamento
+  // (mesma dupla checagem de POST /salvar-operacao-andamento, acima) —
+  // antes QUALQUER UM olhando essa tela podia marcar vazamento, de
+  // propósito, por ser "só uma observação". Isso mudou: só quem está no
+  // controle da operação (o dono) marca os vazamentos dela, mesma trava
+  // do resto do formulário de Registrar Operação.
   if (req.method === 'POST' && urlPath === '/marcar-berco-andamento') {
     let body = '';
     req.on('data', chunk => body += chunk);
@@ -1970,8 +2438,27 @@ const server = http.createServer((req, res) => {
         if (lado !== 'esquerda' && lado !== 'direita') {
           throw new Error('Lado inválido — precisa ser "esquerda" ou "direita".');
         }
-        if (!lerOperacaoAndamento()) {
+
+        const atual = lerOperacaoAndamento();
+        if (!atual) {
           throw new Error('Nenhuma operação em andamento agora.');
+        }
+
+        if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
+
+        // Mesmo critério de "dono" de POST /salvar-operacao-andamento —
+        // ver comentário lá. Sem operação vazia aqui pra "virar dono": a
+        // essa altura ela já existe (checado acima), então só quem já é
+        // o dono (ou nenhum dono foi definido ainda, caso raro) marca.
+        const donoAtual = (typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
+        const souODono = !donoAtual || donoAtual === deviceId;
+        if (!souODono) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: false,
+            erro: 'Esta operação está sendo controlada por outro computador autorizado — só ele pode marcar os vazamentos.',
+          }));
+          return;
         }
 
         const mapa = lerBercosAndamento();
@@ -2380,12 +2867,37 @@ const server = http.createServer((req, res) => {
           throw new Error('Payload inválido: "arquivos" ausente.');
         }
         const esperados = Object.keys(VALIDADORES_BACKUP_DADOS);
-        const faltando = esperados.filter(nome => typeof arquivos[nome] !== 'string');
+        // Arquivos adicionados DEPOIS do lançamento (bercos_visuais.json,
+        // avaliacoes_qualidade.json, operacoes_avaliadas.json — tabelas
+        // que só passaram a existir/ser exportadas em versões mais novas;
+        // operacoes_nao_avaliadas.json — arquivo literal, mas pelo mesmo
+        // motivo: só passou a existir depois) são OPCIONAIS aqui: um
+        // backup ANTIGO, gerado antes de existirem, nunca vai ter esses
+        // arquivos dentro do .zip — e isso é normal, não motivo pra
+        // recusar a restauração inteira. Sem essa lista, TODO backup feito
+        // antes de qualquer um desses recursos existir ficava impossível
+        // de restaurar (sempre "Backup incompleto — faltam: ..."), mesmo
+        // sendo, fora isso, um backup perfeitamente válido. Se o arquivo
+        // VIER no backup, continua sendo validado normalmente (nem
+        // opcional nem obrigatório muda a validação em si) — só não trava
+        // tudo se estiver faltando. Pra operacoes_nao_avaliadas.json
+        // especificamente, faltando + (historico.json OU
+        // operacoes_avaliadas.json presentes) dispara o recálculo
+        // automático a partir do SQL — ver recalcularFilaNaoAvaliadasApartirDoSql,
+        // chamada mais abaixo, depois de todas as tabelas restauradas.
+        const OPCIONAIS_BACKUP_DADOS = ['bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json', 'operacoes_nao_avaliadas.json'];
+        const obrigatorios = esperados.filter(n => !OPCIONAIS_BACKUP_DADOS.includes(n));
+        const faltando = obrigatorios.filter(nome => typeof arquivos[nome] !== 'string');
         if (faltando.length) {
           throw new Error('Backup incompleto — faltam: ' + faltando.join(', '));
         }
+        // Só os arquivos que REALMENTE vieram no payload — um opcional
+        // ausente simplesmente não entra aqui, e as tabelas dele (ver
+        // "presentes.includes(...)" mais abaixo) ficam como estão, sem
+        // apagar nem perder o que já existia antes da restauração.
+        const presentes = esperados.filter(nome => typeof arquivos[nome] === 'string');
         const textosValidados = {};
-        for (const nome of esperados) {
+        for (const nome of presentes) {
           let valor;
           try {
             valor = parseArquivoBackupDados(nome, arquivos[nome]);
@@ -2434,6 +2946,8 @@ const server = http.createServer((req, res) => {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsBercosVisuais(), null, 2), 'utf8');
             } else if (nome === 'avaliacoes_qualidade.json') {
               fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.listarAvaliacoesQualidade(), null, 2), 'utf8');
+            } else if (nome === 'operacoes_avaliadas.json') {
+              fs.writeFileSync(path.join(dirSeguranca, nome), JSON.stringify(db.todosOsOperacoesAvaliadas(), null, 2), 'utf8');
             } else {
               fs.copyFileSync(caminhoArquivoDb(nome), path.join(dirSeguranca, nome));
             }
@@ -2451,10 +2965,22 @@ const server = http.createServer((req, res) => {
         // tabelas SQL direto (também só depois que TODOS os outros
         // arquivos .tmp já foram validados e gravados, pra manter a mesma
         // garantia de "tudo ou nada").
+        //
+        // BUG CORRIGIDO: filtra também por "presentes" — antes, um arquivo
+        // LITERAL (não-SQL) que fosse OPCIONAL (ver OPCIONAIS_BACKUP_DADOS,
+        // acima) e estivesse ausente deste backup específico ainda assim
+        // entrava aqui (só não estava na lista de exclusão SQL), e
+        // `textosValidados[nome]` vinha `undefined` — fs.writeFileSync
+        // quebrava com "Received undefined" e a restauração INTEIRA
+        // falhava, mesmo com todo o resto do backup válido. Não dava pra
+        // notar antes porque todo arquivo literal, até aqui, também era
+        // sempre obrigatório — operacoes_nao_avaliadas.json é o 1º caso de
+        // "literal E opcional" ao mesmo tempo.
         const nomesArquivo = esperados.filter(n =>
+          presentes.includes(n) &&
           !['historico.json', 'historico_edicoes.json', 'paradas.json', 'sobra.json', 'contador_tracos.json',
             'relatorio_injecao.json', 'ajustes_tracos.json', 'relatorio_edicoes.json',
-            'bercos_visuais.json', 'avaliacoes_qualidade.json'].includes(n));
+            'bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json'].includes(n));
         const pendentes = nomesArquivo.map(nome => ({
           tmp: caminhoArquivoDb(nome) + '.tmp',
           destino: caminhoArquivoDb(nome),
@@ -2463,7 +2989,33 @@ const server = http.createServer((req, res) => {
         pendentes.forEach(p => fs.writeFileSync(p.tmp, p.texto, 'utf8'));
         pendentes.forEach(p => fs.renameSync(p.tmp, p.destino));
 
-        if (esperados.includes('historico.json')) {
+        // ATENÇÃO — ordem crítica: várias tabelas têm FK pra "operacoes(id)"
+        // com PRAGMA foreign_keys=ON sempre ligado (bercos_visuais,
+        // avaliacoes_qualidade, avaliacao_paineis, operacoes_avaliadas —
+        // ver CREATE TABLE de cada uma, db.js). Sem limpar essas ANTES,
+        // o "DELETE FROM operacoes" do bloco historico.json, logo abaixo,
+        // falha com "FOREIGN KEY constraint failed" sempre que alguma
+        // delas tiver QUALQUER linha apontando pra uma operação existente
+        // — ou seja, em qualquer instalação já usada de verdade (todo
+        // registro de operação já cria uma linha em bercos_visuais na
+        // hora). Isso derrubava a restauração inteira (nada era escrito,
+        // o catch mais abaixo só devolvia o erro), silenciosamente exceto
+        // pela mensagem de erro — nenhum dado chegava a ser perdido, mas
+        // "Restaurar Dados" simplesmente nunca funcionava.
+        // avaliacao_paineis primeiro (referencia avaliacoes_qualidade
+        // TAMBÉM, mesmo problema em cascata — ver substituirAvaliacoes
+        // Qualidade, db.js, que já tinha essa ordem certa só pra ELA
+        // mesma). Os dados novos de cada uma são reinseridos mais abaixo
+        // (bercos_visuais.json/avaliacoes_qualidade.json/operacoes_
+        // avaliadas.json) — limpar aqui não perde nada, só resolve a ordem.
+        db.transaction(() => {
+          db.prepare('DELETE FROM avaliacao_paineis').run();
+          db.prepare('DELETE FROM avaliacoes_qualidade').run();
+          db.prepare('DELETE FROM bercos_visuais').run();
+          db.prepare('DELETE FROM operacoes_avaliadas').run();
+        })();
+
+        if (presentes.includes('historico.json')) {
           const novoHistorico = JSON.parse(textosValidados['historico.json']);
           const inserirOperacao = db.prepare(db.SQL_INSERIR_OPERACAO);
           db.transaction(() => {
@@ -2473,7 +3025,7 @@ const server = http.createServer((req, res) => {
             }
           })();
         }
-        if (esperados.includes('historico_edicoes.json')) {
+        if (presentes.includes('historico_edicoes.json')) {
           const novasEdicoes = JSON.parse(textosValidados['historico_edicoes.json']);
           const inserirEdicao = db.prepare('INSERT INTO edicoes_operacao (id_operacao, data_edicao, campos_alterados) VALUES (?, ?, ?)');
           db.transaction(() => {
@@ -2483,7 +3035,7 @@ const server = http.createServer((req, res) => {
             }
           })();
         }
-        if (esperados.includes('relatorio_edicoes.json')) {
+        if (presentes.includes('relatorio_edicoes.json')) {
           // Faltava completamente — o arquivo já era validado (formato
           // certo), mas nunca era de fato usado pra repor nada: restaurar
           // um backup sempre deixava o histórico de edição de traço como
@@ -2497,7 +3049,7 @@ const server = http.createServer((req, res) => {
             }
           })();
         }
-        if (esperados.includes('paradas.json')) {
+        if (presentes.includes('paradas.json')) {
           const novasParadas = JSON.parse(textosValidados['paradas.json']);
           const inserirParada = db.prepare(db.SQL_INSERIR_PARADA);
           db.transaction(() => {
@@ -2505,7 +3057,7 @@ const server = http.createServer((req, res) => {
             for (const p of novasParadas) inserirParada.run(db.paradaParaRow(p));
           })();
         }
-        if (esperados.includes('sobra.json')) {
+        if (presentes.includes('sobra.json')) {
           const novaSobra = JSON.parse(textosValidados['sobra.json']);
           if (novaSobra && Object.keys(novaSobra).length) {
             db.prepare(db.SQL_UPSERT_SOBRA).run(db.sobraParaRow(novaSobra));
@@ -2513,7 +3065,7 @@ const server = http.createServer((req, res) => {
             db.prepare('DELETE FROM sobra').run();
           }
         }
-        if (esperados.includes('contador_tracos.json')) {
+        if (presentes.includes('contador_tracos.json')) {
           const novoContador = JSON.parse(textosValidados['contador_tracos.json']);
           if (novoContador && novoContador.data) {
             db.prepare(`
@@ -2522,26 +3074,43 @@ const server = http.createServer((req, res) => {
             `).run(novoContador.data, novoContador.total || 0, novoContador.total || 0);
           }
         }
-        if (esperados.includes('relatorio_injecao.json')) {
+        if (presentes.includes('relatorio_injecao.json')) {
           const novoRelatorio = JSON.parse(textosValidados['relatorio_injecao.json']);
-          const novosAjustes = esperados.includes('ajustes_tracos.json')
+          const novosAjustes = presentes.includes('ajustes_tracos.json')
             ? JSON.parse(textosValidados['ajustes_tracos.json'])
             : db.todosOsAjustesTracosJSON(); // não fazia parte deste backup — preserva os ajustes atuais
           db.transaction(() => db.substituirTracosEAjustes(novoRelatorio, novosAjustes))();
-        } else if (esperados.includes('ajustes_tracos.json')) {
+        } else if (presentes.includes('ajustes_tracos.json')) {
           // Raro (backup só com ajustes, sem o relatório) — ainda assim
           // substitui só os ajustes, preservando os traços como estão.
           const novoRelatorioAtual = db.todosOsTracos();
           const novosAjustes = JSON.parse(textosValidados['ajustes_tracos.json']);
           db.transaction(() => db.substituirTracosEAjustes(novoRelatorioAtual, novosAjustes))();
         }
-        if (esperados.includes('bercos_visuais.json')) {
+        if (presentes.includes('bercos_visuais.json')) {
           const novosBercosVisuais = JSON.parse(textosValidados['bercos_visuais.json']);
           db.transaction(() => db.substituirBercosVisuais(novosBercosVisuais))();
         }
-        if (esperados.includes('avaliacoes_qualidade.json')) {
+        if (presentes.includes('avaliacoes_qualidade.json')) {
           const novasAvaliacoes = JSON.parse(textosValidados['avaliacoes_qualidade.json']);
           db.transaction(() => db.substituirAvaliacoesQualidade(novasAvaliacoes))();
+        }
+        if (presentes.includes('operacoes_avaliadas.json')) {
+          const novasOperacoesAvaliadas = JSON.parse(textosValidados['operacoes_avaliadas.json']);
+          db.transaction(() => db.substituirOperacoesAvaliadas(novasOperacoesAvaliadas))();
+        }
+        // Rede de segurança: operacoes_nao_avaliadas.json já foi escrito
+        // (arquivo literal, ver "nomesArquivo" acima) SE ele veio no
+        // backup enviado. Mas se veio um backup ANTIGO (de antes deste
+        // arquivo existir) que trouxe historico.json e/ou
+        // operacoes_avaliadas.json — SEM trazer este —, o que já estava
+        // em disco ficaria fora de sincronia com as tabelas SQL recém-
+        // substituídas. Recalcula do zero nesse caso específico (ver
+        // recalcularFilaNaoAvaliadasApartirDoSql, acima).
+        if (!presentes.includes('operacoes_nao_avaliadas.json')
+          && (presentes.includes('historico.json') || presentes.includes('operacoes_avaliadas.json'))) {
+          try { recalcularFilaNaoAvaliadasApartirDoSql(); }
+          catch (e) { console.error('Falha ao recalcular a fila de avaliação depois da restauração:', e.message); }
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2763,6 +3332,18 @@ function broadcastOperacaoFinalizada(resumo, origemClientId) {
 // TCP lendo o CLP WAGO) ainda não existe — ver README, "Modo Automático".
 function broadcastLeituraAutomatica(leitura) {
   _enviarWsParaTodos({ tipo: 'leitura_automatica', leitura });
+}
+
+// Avisa TODO MUNDO conectado (qualquer página, não só quem tem "Registrar
+// Operação" aberta — ver conectarOperacaoAndamento() em data.js, chamada
+// uma vez só no boot do app, independente da tela visível) que uma linha
+// foi excluída em Configurações → Dados SQL. Quem originou a exclusão já
+// recarrega a própria página sozinho (ver cfgSqlExcluirLinha, app-core.js)
+// — por isso `origemClientId` (mesmo padrão de broadcastOperacaoFinalizada,
+// via wsClientId na query string) evita mandar essa mesma pessoa recarregar
+// 2 vezes.
+function broadcastDadosSqlExcluidos(info, origemClientId) {
+  _enviarWsParaTodos({ tipo: 'dados_sql_excluidos', ...info, origemClientId });
 }
 
 server.listen(PORT, () => {

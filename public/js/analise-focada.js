@@ -111,14 +111,13 @@
     el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
       const dirMarcado = b.estado_direita === 'baixou';
       const esqMarcado = b.estado_esquerda === 'baixou';
-      const algumMarcado = dirMarcado || esqMarcado;
       const numero = String(b.ordem).padStart(2, '0');
       const tipoBerco = ehPersonalizada ? (gradePersonalizada[b.ordem - 1] || null) : (op ? op.tipo_montagem : null);
       const cor = _corPorTipoBerco(ehPersonalizada, tipoBerco);
       return `
         <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
           <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
-          <span class="ba-numero">B${numero}${algumMarcado ? ' ⚠️' : ''}</span>
+          <span class="ba-numero">B${numero}</span>
           <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
         </div>`;
     }).join('')}</div>`;
@@ -262,9 +261,134 @@
     _renderAvaliacao(detalhe.avaliacao);
   }
 
+  // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
+  // Diferente dos outros dashboards (sem período/filtro aqui — é sobre UMA
+  // operação só): embute o detalhe já carregado (LW.getDetalheOperacao) e
+  // as mesmas funções de render via toString(), virando um retrato
+  // autossuficiente dessa operação específica — sem filtro pra aplicar,
+  // "interativo" aqui significa só "abre em qualquer navegador, offline,
+  // com a mesma formatação".
+  async function exportarInterativo() {
+    if (!_idAtual) return;
+    const btn = document.getElementById('btn-af-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const detalhe = await LW.getDetalheOperacao(_idAtual);
+      if (!detalhe) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados desta operação.', { tipo: 'erro' }); return; }
+      const html = _gerarHtmlAfStandalone(detalhe);
+      LW.baixarArquivoTexto(
+        `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar Análise Focada:', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // Cor determinística (hash simples) por tipo de montagem — simplificação
+  // assumida aqui: sem a cor REAL configurada em Configurações → Montagem
+  // embutida (exigiria embutir MONTAGEM_OPCOES inteiro), cada tipo distinto
+  // ganha uma cor fixa e consistente dentro do próprio arquivo exportado
+  // (mesmo tipo = mesma cor sempre, só não é a mesma cor da tela ao vivo).
+  const _PALETA_TIPO = ['#4d8dff', '#2ecc71', '#8b5cf6', '#f5821f', '#06b6d4', '#e5484d', '#f1c40f'];
+  function _corPorTipoSimplificada(tipo) {
+    if (!tipo) return null;
+    let hash = 0;
+    for (let i = 0; i < tipo.length; i++) hash = (hash * 31 + tipo.charCodeAt(i)) >>> 0;
+    const cor = _PALETA_TIPO[hash % _PALETA_TIPO.length];
+    return { cor: '#fff', bg: cor, borda: cor };
+  }
+
+  function _gerarHtmlAfStandalone(detalhe) {
+    const detalheJson = JSON.stringify(detalhe).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise Focada — ${LW.escaparHtml(String(detalhe.operacao?.id || ''))} — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  .af-cabecalho-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; }
+  .af-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:4px; }
+  .af-valor { font-size:.95rem; color:var(--text); font-weight:600; }
+  .sq-empty-af { text-align:center; padding:30px 10px; color:var(--text-3); font-size:.85rem; }
+  .af-traco-card { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 16px; margin-bottom:12px; }
+  .af-traco-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .af-traco-bercos { font-size:.78rem; color:var(--text-3); }
+  .af-receita-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; font-size:.82rem; }
+  .af-traco-obs { margin-top:10px; font-size:.8rem; color:var(--text-2); }
+  .af-sem-ajuste { margin-top:10px; font-size:.8rem; color:var(--text-3); font-style:italic; }
+  .af-ajustes-wrap { margin-top:12px; }
+  .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
+  .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
+  .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+  .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
+  .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
+  .af-pallet-tipo { font-size:.66rem; font-weight:600; background:var(--border); color:var(--text-3); padding:2px 8px; border-radius:999px; }
+  .af-pallet-slabs { display:flex; flex-direction:column; gap:4px; }
+  .af-slab { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 8px; border:1px solid var(--border); border-left-width:3px; border-radius:4px; font-size:.78rem; background:var(--bg-card); }
+  .af-slab-num { color:var(--text-3); font-family:var(--font-mono); }
+  .af-slab-resultado { font-weight:700; text-align:right; }
+  .ba-grid { display:flex; flex-direction:row-reverse; flex-wrap:nowrap; justify-content:center; gap:4px; }
+  .ba-celula { display:flex; flex-direction:column; align-items:center; justify-content:space-between; flex:1 1 0; min-width:0; padding:6px 2px; border-radius:var(--radius); }
+  .ba-numero { text-align:center; white-space:nowrap; font-size:.72rem; }
+  .ba-dot { font-size:.95rem; line-height:1; padding:3px 5px; opacity:.55; border-radius:50%; }
+  .ba-dot.ba-dot-marcado { opacity:1; color:var(--red); background:rgba(229,72,77,.15); }
+  .mono { font-family:var(--font-mono); }
+</style>
+</head>
+<body>
+  <h1>🔎 Análise Focada — Operação ${LW.escaparHtml(String(detalhe.operacao?.id || ''))}</h1>
+  <div class="sub" id="exp-sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+
+  <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div id="af-cabecalho" class="af-cabecalho-grid"></div></div>
+  <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div id="af-bercos"></div></div>
+  <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div id="af-receita"></div></div>
+  <div class="chart-box"><h4>✅ Avaliação de Qualidade</h4><div id="af-avaliacao"></div></div>
+
+  <div class="rodape">Exportado da Análise Focada — Lightwall SC · dados embutidos neste arquivo, funciona offline. Cores de tipo de montagem são aproximadas (não refletem necessariamente a cor configurada na tela ao vivo).</div>
+
+<script>
+(function () {
+  'use strict';
+  const DETALHE = ${detalheJson};
+  const LW = {
+    escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
+    TIPO_MONTAGEM_PERSONALIZADA: 'PERSONALIZADA',
+    corPorTipoSimples: ${_corPorTipoSimplificada},
+    corMontagemPorLabel: ${_corPorTipoSimplificada},
+  };
+  const _PALETA_TIPO = ${JSON.stringify(_PALETA_TIPO)};
+
+  ${_fmtData}
+  ${_fmtHora}
+  ${_fmtTempoBatidaOriginal}
+  ${_fmtKg}
+  ${_renderCabecalho}
+  ${_corPorTipoBerco}
+  ${_renderBercos}
+  ${_renderReceita}
+  ${_labelPainel}
+  ${_corPainel}
+  ${_renderAvaliacao}
+
+  _renderCabecalho(DETALHE.operacao || {});
+  _renderBercos(DETALHE.bercosVisuais, DETALHE.operacao);
+  _renderReceita(DETALHE.tracos);
+  _renderAvaliacao(DETALHE.avaliacao);
+})();
+</script>
+</body>
+</html>`;
+  }
+
   function init() {
     render();
   }
 
-  window.LWFocada = { abrir, voltar, init, render };
+  window.LWFocada = { abrir, voltar, init, render, exportarInterativo };
 })();
