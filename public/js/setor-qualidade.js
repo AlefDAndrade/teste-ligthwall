@@ -671,6 +671,25 @@
   }
 
   /* ── Validação de consistência ────────────────────────── */
+  // Todas as placas do formulário atual (stack1..stack4 × espessura) que
+  // ainda NÃO têm nenhuma marca em slabState — nem uma marca real
+  // (círculo/traço) nem o X de "painel não preenchido". Usada só na hora
+  // de registrar (ver registerEvaluation) pra impedir de fato o registro
+  // enquanto sobrar alguma — substitui o antigo checkbox de confirmação
+  // manual ("confirmo que avaliei todos os painéis"), que dependia da
+  // pessoa lembrar de marcar e não impedia nada por si só.
+  function _paineisNaoMarcados() {
+    const n = parseInt(document.getElementById('sq-thickness').value) || 0;
+    const faltando = [];
+    ['stack1', 'stack2', 'stack3', 'stack4'].forEach(sid => {
+      for (let i = 1; i <= n; i++) {
+        const id = `${sid}-${i}`;
+        if (!slabState[id] || !slabState[id].length) faltando.push(id);
+      }
+    });
+    return faltando;
+  }
+
   function validateAllSlabs() {
     document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
     let hasError = false, msgs = [];
@@ -1783,8 +1802,19 @@
       showAlert('Selecione uma bateria da fila', 'Avaliação avulsa não é mais permitida — abra "Ordem de Previsão de Desemplaque" acima e escolha a bateria que você está avaliando antes de registrar.');
       return;
     }
-    if (!document.getElementById('sq-confirma-avaliacao').checked) {
-      showAlert('Erro', 'Marque a confirmação de que avaliou todos os painéis desta bateria antes de registrar.');
+    // Antes dependia de um checkbox marcado à mão ("confirmo que avaliei
+    // todos os painéis") — só um lembrete, não impedia registrar uma
+    // bateria com placas de fato esquecidas. Agora verifica de verdade:
+    // toda placa (stack1..stack4 × espessura) precisa ter pelo menos uma
+    // marca — real (círculo/traço) ou X ("painel não preenchido", pra
+    // quem conscientemente não deu pra avaliar). Destaca as que faltam
+    // (mesmo visual de placa com tipo incompatível, ver validateAllSlabs)
+    // e recusa registrar enquanto sobrar alguma.
+    document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
+    const faltando = _paineisNaoMarcados();
+    if (faltando.length) {
+      faltando.forEach(id => document.querySelector(`.sq-slab[data-id="${id}"]`)?.classList.add('invalid'));
+      showAlert('Faltam painéis', `Ainda ${faltando.length === 1 ? 'há 1 painel' : `há ${faltando.length} painéis`} sem nenhuma marcação (destacado${faltando.length === 1 ? '' : 's'} em vermelho) — marque todos antes de registrar. Painéis que não puderam ser avaliados usam o X (Painel não preenchido).`);
       return;
     }
     showConfirm(
@@ -1902,8 +1932,6 @@
   // só-leitura) quanto por editarAvaliacaoDoEspelho (modo editável).
   function _carregarAvaliacaoNoFormulario(item) {
     const d = getData();
-    const chkConfirma = document.getElementById('sq-confirma-avaliacao');
-    if (chkConfirma) chkConfirma.checked = false;
     palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
@@ -2185,7 +2213,7 @@
         `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">${Math.round(max * f)}</text>`;
     }).join('');
     const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--blue)" style="cursor:help" data-tooltip="${_escaparAtributo(_fmtDataEixo(p.label))}: ${p.v}"/>`).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       ${gridLines}
       <path d="${areaPath}" fill="rgba(59,130,246,0.12)" stroke="none"/>
       <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -2200,7 +2228,7 @@
   // sem calcular arco/path à mão) + legenda em HTML logo abaixo.
   function _svgDonutChart(items) {
     const total = items.reduce((s, it) => s + it.value, 0) || 1;
-    const r = 62, cx = 100, cy = 100, strokeW = 34, circ = 2 * Math.PI * r;
+    const r = 78, cx = 120, cy = 120, strokeW = 40, circ = 2 * Math.PI * r;
     let acc = 0;
     const arcs = items.map(it => {
       const frac = it.value / total;
@@ -2212,14 +2240,14 @@
       return el;
     }).join('');
     const legenda = items.map(it => `
-      <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text-2)">
-        <span style="width:10px;height:10px;border-radius:50%;background:${it.color};display:inline-block;flex-shrink:0"></span>
+      <div style="display:flex;align-items:center;gap:7px;font-size:.85rem;color:var(--text-2)">
+        <span style="width:12px;height:12px;border-radius:50%;background:${it.color};display:inline-block;flex-shrink:0"></span>
         ${_escaparHtml(it.label)} <span style="color:var(--text-3)">(${it.value})</span>
       </div>`).join('');
     return `
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">
-        <svg viewBox="0 0 200 200" width="150" height="150">${arcs}</svg>
-        <div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:120px">${legenda}</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:center">
+        <svg viewBox="0 0 240 240" width="210" height="210">${arcs}</svg>
+        <div style="display:flex;flex-direction:column;gap:7px;flex:1;min-width:140px">${legenda}</div>
       </div>`;
   }
 
@@ -2241,7 +2269,7 @@
         <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)" text-anchor="middle">${v}</text>
         <text x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
       ${bars}
     </svg>`;
@@ -2252,7 +2280,7 @@
   // isso, usa o maior valor da própria lista. opts.suffix só decora o
   // rótulo (ex: '%'), não afeta a escala.
   function _svgHBarChart(labels, values, opts = {}) {
-    const w = SVG_W, rowH = 26, padL = 90, padR = 46, padT = 8;
+    const w = SVG_W, rowH = 34, padL = 100, padR = 50, padT = 8;
     const n = labels.length || 1;
     const h = padT * 2 + rowH * n;
     const plotW = w - padL - padR;
@@ -2264,11 +2292,11 @@
       const bw = Math.max(0, (v / max) * plotW);
       const y = padT + i * rowH;
       return `
-        <text x="${padL - 8}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
-        <rect x="${padL}" y="${(y + 4).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 8}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}${suffix}"/>
-        <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 3.5).toFixed(1)}" font-size="10" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
+        <text x="${padL - 8}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="13" fill="var(--text-2)" text-anchor="end">${_escaparHtml(String(lb))}</text>
+        <rect x="${padL}" y="${(y + 5).toFixed(1)}" width="${bw.toFixed(1)}" height="${rowH - 10}" rx="3" fill="${color}" style="cursor:help" data-tooltip="${_escaparAtributo(String(lb))}: ${v}${suffix}"/>
+        <text x="${(padL + bw + 6).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" font-size="13" font-weight="700" fill="var(--text-2)">${v}${suffix}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 220)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${Math.min(h, 320)}" preserveAspectRatio="xMidYMid meet">${rows}</svg>`;
   }
 
   // Dispersão (scatter) + linha de tendência opcional — "⏳ Tempo de
@@ -2295,7 +2323,7 @@
       ? `<line x1="${sx(trendPoints[0].x).toFixed(1)}" y1="${sy(trendPoints[0].y).toFixed(1)}" x2="${sx(trendPoints[1].x).toFixed(1)}" y2="${sy(trendPoints[1].y).toFixed(1)}" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4"/>`
       : '';
     const xTicks = [minX, (minX + maxX) / 2, maxX].map(x => `<text x="${sx(x).toFixed(1)}" y="${h - 18}" font-size="9" fill="var(--text-3)" text-anchor="middle">${x.toFixed(1)}h</text>`).join('');
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="200" preserveAspectRatio="xMidYMid meet">
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="280" preserveAspectRatio="xMidYMid meet">
       ${gridY}
       <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
       ${trend}
@@ -2326,10 +2354,10 @@
       }).join('');
       return `${barsHtml}<text x="${(gx + (groupW - sideMargin * 2) / 2).toFixed(1)}" y="${h - 8}" font-size="9" fill="var(--text-3)" text-anchor="middle">${_escaparHtml(String(lb))}</text>`;
     }).join('');
-    const legenda = series.map(s => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block"></span><span style="font-size:.7rem;color:var(--text-3)">${_escaparHtml(s.name)}</span></span>`).join('');
+    const legenda = series.map(s => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:14px"><span style="width:11px;height:11px;border-radius:2px;background:${s.color};display:inline-block"></span><span style="font-size:.85rem;color:var(--text-3)">${_escaparHtml(s.name)}</span></span>`).join('');
     return `
-      <div style="text-align:center;margin-bottom:4px">${legenda}</div>
-      <svg viewBox="0 0 ${w} ${h}" width="100%" height="190" preserveAspectRatio="xMidYMid meet">
+      <div style="text-align:center;margin-bottom:6px">${legenda}</div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="260" preserveAspectRatio="xMidYMid meet">
         <line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${w - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
         ${bars}
       </svg>`;
@@ -2943,8 +2971,6 @@
     _editandoAvaliacaoId = null;
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
-    const chkConfirma = document.getElementById('sq-confirma-avaliacao');
-    if (chkConfirma) chkConfirma.checked = false;
     _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';

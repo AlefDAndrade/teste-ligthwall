@@ -474,19 +474,6 @@
               <label class="sq-obs-label"><i class="fas fa-sticky-note"></i> Observações</label>
               <textarea class="form-input form-textarea" id="sq-obs" rows="3" placeholder="Observações adicionais sobre a avaliação desta bateria…"></textarea>
             </div>
-
-            <!-- Confirmação obrigatória antes de registrar/salvar — ver
-                 registerEvaluation() (js/setor-qualidade.js): sem isso
-                 marcado, o botão Registrar/Salvar Alteração recusa salvar.
-                 Escondida em modo só-leitura (sq-hide-view — mesma classe dos
-                 botões Salvar/Registrar), já que só faz sentido antes de um
-                 registro/correção de verdade, não pra quem só está revendo. -->
-            <div class="sq-obs-area sq-hide-view" id="sq-confirma-avaliacao-wrap" style="margin-top:10px;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;cursor:pointer;color:var(--text-2);">
-                <input type="checkbox" id="sq-confirma-avaliacao" style="width:16px;height:16px;">
-                Confirmo que avaliei todos os painéis desta bateria
-              </label>
-            </div>
           </div>
         </div>
 

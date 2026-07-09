@@ -50,16 +50,22 @@
    outras — ver public/partials/page-setor-qualidade.html), esses
    estilos precisam ficar presos ao CONTAINER desta tela, não vazar pro
    <body> compartilhado (que quebraria o layout de todas as outras
-   páginas). max-width/margin:auto reproduz o mesmo "coluna centralizada"
-   de antes (era display:flex;justify-content:center no body). */
+   páginas).
+   max-width era 1280px — bem mais estreito que as outras páginas do
+   sistema (que usam .page-body full-bleed, sem limite — ver .page-body
+   em styles.css), o que deixava sobra grande dos dois lados em
+   monitores largos e espremia Dashboard/Espelho Visual numa faixa
+   central pequena. 1800px aproxima esta tela do comportamento das
+   demais, sem ficar largo demais a ponto dos gráficos/pallets
+   esticarem de forma estranha em telas ultra-wide. */
 .sq-container {
-  max-width: 1280px;
+  max-width: 1800px;
   width: 100%;
   margin: 0 auto;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  padding: 20px 28px;
+  padding: 20px 32px;
 }
 
 /* ── "Em Andamento" e Fila de baterias pendentes de avaliação — vivem
@@ -392,10 +398,20 @@
 }
 
 /* ── Charts grid ──────────────────────────────────────────── */
+/* Era repeat(4,1fr) — com 8 gráficos na tela, cada caixa ficava
+   estreita demais. Como os gráficos são SVG com viewBox fixo (ver
+   SVG_W/SVG_H em setor-qualidade.js) escalado proporcionalmente
+   (preserveAspectRatio="xMidYMid meet"), quem realmente limitava o
+   tamanho de tudo — inclusive o texto — não era a altura (já ajustada
+   antes), e sim essa LARGURA estreita: o fator de escala final é o
+   MENOR entre largura-disponível/600 e altura-disponível/220, e com 4
+   colunas a largura sempre perdia. 2 colunas dá o dobro de largura por
+   caixa, o que finalmente deixa a altura maior (280/300px) fazer
+   diferença de verdade. */
 .sq-charts-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
   margin-bottom: 20px;
 }
 /* Reutiliza .card do Lightwall para as caixas */
@@ -409,8 +425,8 @@
   border-color: var(--blue);
   box-shadow: 0 8px 24px rgba(59, 130, 246, .15);
 }
-.sq-chart-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.sq-chart-box svg { max-height: 200px; max-width: 100%; display: block; margin: 0 auto; }
+.sq-chart-box h4 { color: var(--text-2); font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.sq-chart-box svg { max-height: 300px; max-width: 100%; display: block; margin: 0 auto; }
 
 /* ── Resumo executivo ─────────────────────────────────────── */
 .sq-summary-box {
@@ -463,13 +479,13 @@
 .sq-mirror-nav button:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
 .sq-mirror-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
-.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
-.sq-mini-pallet-header { font-size: .52rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 4px; border-bottom: 1px solid var(--border); padding-bottom: 2px; text-transform: uppercase; }
-.sq-mini-slab { height: 16px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 2px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
-.sq-mini-slab-number { font-size: .42rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
-.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 1px; flex: 1; }
-.sq-mini-slab-type { font-size: .42rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
+.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
+.sq-mini-pallet-header { font-size: .68rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 5px; border-bottom: 1px solid var(--border); padding-bottom: 3px; text-transform: uppercase; }
+.sq-mini-slab { height: 24px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 3px; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
+.sq-mini-slab-number { font-size: .58rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
+.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 2px; flex: 1; }
+.sq-mini-slab-type { font-size: .58rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
 .sq-mini-slab-type.sp { color: var(--sq-tipo-sp-text); }
 .sq-mini-slab-type.p2 { color: var(--sq-tipo-p2-text); }
 .sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
@@ -478,9 +494,9 @@
    clique — o espelho é a visão consolidada, editar motivo é lá no
    formulário, ver editarAvaliacaoDoEspelho). */
 .sq-mini-slab-motivo {
-  font-size: .4rem; font-weight: 700; font-family: var(--font-mono);
+  font-size: .55rem; font-weight: 700; font-family: var(--font-mono);
   color: #fff; background: var(--sq-cor-vermelho);
-  border-radius: 2px; padding: 0 2px; line-height: 1.3;
+  border-radius: 3px; padding: 1px 4px; line-height: 1.4;
 }
 .sq-mini-mark { display: inline-block; }
 /* "Sem marcação" (a imensa maioria das placas) — círculo VAZADO (sem
@@ -489,7 +505,7 @@
    setor-qualidade.js). Antes era uma barrinha sólida do mesmo tamanho
    do traço de SP, o que fazia parecer marcação onde não havia nenhuma. */
 .sq-mini-mark-vazia {
-  width: 6px; height: 6px;
+  width: 9px; height: 9px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid var(--sq-placa-borda);
@@ -498,7 +514,7 @@
    Setor de Qualidade de verdade; precisa ser óbvio que é OUTRA coisa,
    não "sem marcação" nem uma marca real. */
 .sq-mini-mark-nao-avaliado {
-  font-size: .6rem;
+  font-size: .78rem;
   line-height: 1;
   font-weight: 700;
   color: var(--text-3);
@@ -510,12 +526,12 @@
    (aqui é uma marcação real; lá é a bateria inteira nunca avaliada) e
    não podem ficar visualmente iguais no Espelho. */
 .sq-mini-mark-x {
-  width: 6px; height: 6px;
+  width: 9px; height: 9px;
   border-radius: 1px;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--sq-cor-cinza);
   color: #fff;
-  font-size: .4rem;
+  font-size: .58rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -975,11 +991,13 @@
 /* ── Responsivo ───────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .sq-container { padding: 14px 18px; }
-  .sq-charts-grid { grid-template-columns: repeat(2, 1fr); }
+  /* Base já é 2 colunas — abaixo de 1024px cada gráfico ficaria
+     estreito de novo (mesmo problema que motivou reduzir de 4 pra 2,
+     ver .sq-charts-grid acima), então cai direto pra 1 coluna larga. */
+  .sq-charts-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .sq-container { padding: 8px 10px; }
-  .sq-charts-grid { grid-template-columns: 1fr; }
   .sq-kpi-grid { grid-template-columns: 1fr 1fr; }
   .sq-topbar, .sq-nav { flex-wrap: wrap; justify-content: center; }
   .sq-stacks, .sq-pallet-info-grid, .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }
