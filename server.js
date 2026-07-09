@@ -1453,7 +1453,7 @@ const server = http.createServer((req, res) => {
       const placeholders = ids.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT id, id_bateria, tipo_montagem, data, fim, turno, capacidade,
-               bercos_reais, bercos_personalizados
+               dimensao, bercos_reais, bercos_personalizados
         FROM operacoes
         WHERE id IN (${placeholders})
         ORDER BY data ASC, fim ASC

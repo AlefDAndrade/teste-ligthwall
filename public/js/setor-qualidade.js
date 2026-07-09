@@ -1307,6 +1307,12 @@
     const capacidadeReal = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
     if (capacidadeReal > 0) _definirThicknessReal(capacidadeReal);
 
+    // ── Espessura: corrige o palpite por bateria (autoSetThickness →
+    // refreshPalletInfos, acima) com a dimensão REAL gravada na operação
+    // — pode ter sido ajustada manualmente em Registrar Operação, então
+    // não necessariamente bate com o padrão cadastrado da bateria. ──────
+    if (op.dimensao) _definirEspessuraReal(op.dimensao);
+
     // ── Tipo de Montagem (+ grade Personalizada) ────────────────────────
     if (op.tipo_montagem === 'PERSONALIZADA') {
       document.getElementById('sq-mountType').value = 'Personalizada';
@@ -1841,6 +1847,12 @@
         // do conserto em si fica em editadoEm, só como rastro auditável.
         registeredAt: editando ? _editandoRegistradoEm : new Date().toISOString(),
         totalSlabs: parseInt(document.getElementById('sq-thickness').value) * 4,
+        // Dimensão real da operação (ver _definirEspessuraReal, mais
+        // acima) — gravada na própria avaliação pra sobreviver ao reabrir
+        // uma já registrada (ver _carregarAvaliacaoNoFormulario), sem
+        // depender da operação ainda estar na fila (ela já não está mais,
+        // nesse ponto).
+        dimensaoOperacao: dimensaoOperacaoAtual || null,
         observations: document.getElementById('sq-obs').value,
         ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
@@ -1932,6 +1944,13 @@
   // só-leitura) quanto por editarAvaliacaoDoEspelho (modo editável).
   function _carregarAvaliacaoNoFormulario(item) {
     const d = getData();
+    // Precisa vir ANTES de qualquer chamada a refreshPalletInfos/
+    // autoSetThickness (mais abaixo) — são elas que de fato escrevem a
+    // Espessura na tela, e dão preferência a dimensaoOperacaoAtual quando
+    // ela já está definida (ver refreshPalletInfos). Avaliação legada
+    // (registrada antes desta mudança) não tem este campo — cai de volta
+    // no palpite por bateria, de propósito.
+    dimensaoOperacaoAtual = item.dimensaoOperacao || null;
     palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
@@ -2912,7 +2931,7 @@
     const bid = document.getElementById('sq-batteryId')?.value || '';
     if (field === 'comprimento') return '3m';
     if (field === 'largura')     return '61cm';
-    if (field === 'espessura')   return bid==='B5-7.5'?'7,5 cm':bid==='B6-12'?'12 cm':'9 cm';
+    if (field === 'espessura')   return dimensaoOperacaoAtual || _espessuraDaBateria(bid);
     return 'ok';
   }
 
@@ -2968,6 +2987,7 @@
   function clearForm() {
     slabState = {}; slabMotivo = {}; slabMotivoDescricao = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
     linkedOperacaoId = null;
+    dimensaoOperacaoAtual = null;
     _editandoAvaliacaoId = null;
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
@@ -3006,6 +3026,60 @@
     else out.value = diff === 0 ? '0h 0min' : 'Data inválida';
   }
 
+  // Espessura real da operação sendo avaliada — vem de op.dimensao (a
+  // dimensão de verdade gravada na OPERAÇÃO, ver coluna operacoes.dimensao,
+  // db.js — pode ter sido corrigida manualmente ali via "✏️ Definir uma
+  // dimensão específica pra esta operação", em Registrar Operação, então
+  // não necessariamente bate com o padrão cadastrado da bateria).
+  // null enquanto nenhuma operação real foi carregada ainda (ex: avaliação
+  // avulsa legada, ou form recém-limpo) — nesse caso quem preenche a
+  // Espessura é só o palpite de _espessuraDaBateria (abaixo), até a
+  // operação de verdade ser carregada e corrigir com o valor real (mesmo
+  // padrão de "palpite, depois corrige com o real" já usado pro nº de
+  // placas por pallet — ver _definirThicknessReal/_prefillFromOperacao).
+  let dimensaoOperacaoAtual = null;
+
+  // Aceita tanto "15cm" (sem espaço — formato de bateria.label, ver
+  // cfgAdicionarBateria, app-core.js) quanto "9,5 cm" (com espaço —
+  // formato de dimensão manual da operação, ver _formatarDimensaoLive,
+  // operacao.js) e sempre devolve normalizado como "X cm".
+  function _normalizarEspessuraTexto(txt) {
+    if (!txt) return null;
+    const numero = String(txt).replace(/cm/i, '').trim();
+    return numero ? `${numero} cm` : null;
+  }
+
+  // Grava a dimensão real da operação carregada e já atualiza a Espessura
+  // dos 4 pallets com ela — chamada assim que a operação de verdade é
+  // conhecida (ver _prefillFromOperacao) ou ao reabrir uma avaliação já
+  // registrada (ver _carregarAvaliacaoNoFormulario, que usa o valor salvo
+  // na própria avaliação, evalObj.dimensaoOperacao).
+  function _definirEspessuraReal(dimensaoTexto) {
+    const esp = _normalizarEspessuraTexto(dimensaoTexto);
+    if (!esp) return;
+    dimensaoOperacaoAtual = esp;
+    for (let p = 1; p <= 4; p++) {
+      const el = document.getElementById(`sq-p${p}-espessura`);
+      if (el) el.innerText = esp;
+    }
+  }
+
+  // Palpite de reserva, usado só ENQUANTO a operação real ainda não foi
+  // carregada (ex: form recém-aberto, antes de escolher uma bateria da
+  // fila) — nunca é a fonte de verdade quando dimensaoOperacaoAtual já
+  // está definida (ver refreshPalletInfos/defaultPalletInfo, abaixo).
+  function _espessuraDaBateria(bid) {
+    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === bid);
+    if (bateria?.label) {
+      const esp = _normalizarEspessuraTexto(bateria.label);
+      if (esp) return esp;
+    }
+    // Sem cadastro encontrado (instalação antiga, ou ID ainda não
+    // sincronizado) — reserva pros 2 IDs legados de dimensão fixa que
+    // existiam antes de "Dimensão (em cm)" virar campo editável.
+    return bid === 'B5-7.5' ? '7,5 cm' : bid === 'B6-12' ? '12 cm' : '9 cm';
+  }
+
   function autoSetThickness() {
     const id  = document.getElementById('sq-batteryId').value;
     const sel = document.getElementById('sq-thickness');
@@ -3018,7 +3092,7 @@
 
   function refreshPalletInfos() {
     const bid = document.getElementById('sq-batteryId').value;
-    const esp = bid==='B5-7.5'?'7,5 cm':bid==='B6-12'?'12 cm':'9 cm';
+    const esp = dimensaoOperacaoAtual || _espessuraDaBateria(bid);
     for (let p = 1; p <= 4; p++) {
       const set = (f, v) => { const el = document.getElementById(`sq-p${p}-${f}`); if (el) el.innerText = v; };
       set('comprimento','3m'); set('largura','61cm'); set('linearidade','ok');
