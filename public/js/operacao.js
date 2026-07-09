@@ -2448,6 +2448,12 @@
   // ---- Public API ----
   window.LWOp = {
     init,
+    // Usado por app-core.js (ver _aoReceberDadosSqlExcluidosDeOutroDispositivo)
+    // pra saber se é seguro recarregar a página agora ou se precisa
+    // esperar — true só quando o cronômetro está de fato rodando (uma
+    // operação foi INICIADA e ainda não foi finalizada/zerada), nunca
+    // com a tela só "aberta" sem nada em andamento.
+    operacaoEmAndamento: () => state.status === 'running',
     iniciarInjecao,
     finalizarInjecao,
     resetarOperacao,

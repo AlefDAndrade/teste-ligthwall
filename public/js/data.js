@@ -558,6 +558,16 @@ let _opAndamentoReconectarTimeout = null;
 let _opAndamentoEnviarTimeout = null;
 let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
 
+// Callback pra "uma linha foi excluída em Configurações → Dados SQL, em
+// QUALQUER dispositivo" — ver broadcastDadosSqlExcluidos, server.js.
+// Registrado à parte de conectarOperacaoAndamento (abaixo) de propósito:
+// esse evento não tem nada a ver com a tela de Registrar Operação, é
+// global ao app inteiro — só usa o MESMO canal WebSocket (já aberto uma
+// vez só, no boot, independente de qual página está visível) porque criar
+// uma 2ª conexão só pra isso seria desperdício. Ver
+// LW.aoReceberDadosSqlExcluidos, registrado no boot em app-core.js.
+let _opAndamentoOnDadosSqlExcluidos = null;
+
 /**
  * Abre a conexão WebSocket com o servidor pra acompanhar, em tempo real,
  * qualquer mudança feita em OUTRA aba/computador na operação em andamento
@@ -578,6 +588,19 @@ function conectarOperacaoAndamento(onAtualizacao, onFinalizadaPorOutro) {
   _abrirWsOperacaoAndamento();
 }
 
+/**
+ * Registra o callback pra "uma linha do banco foi excluída em
+ * Configurações → Dados SQL, em QUALQUER dispositivo" — ver
+ * broadcastDadosSqlExcluidos, server.js. Chamado uma vez no boot do app
+ * (app-core.js), sem depender de conectarOperacaoAndamento já ter sido
+ * chamado antes ou depois — é só uma variável lida quando a mensagem
+ * chegar (ver _abrirWsOperacaoAndamento, acima), então a ordem entre os
+ * dois registros não importa. `callback(msg)` recebe `{ tabela, valor }`.
+ */
+function aoReceberDadosSqlExcluidos(callback) {
+  _opAndamentoOnDadosSqlExcluidos = callback;
+}
+
 function _abrirWsOperacaoAndamento() {
   if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
   try {
@@ -588,12 +611,14 @@ function _abrirWsOperacaoAndamento() {
     ws.addEventListener('message', (event) => {
       let msg;
       try { msg = JSON.parse(event.data); } catch (_) { return; }
-      if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, nos dois tipos de mensagem
+      if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, em todos os tipos de mensagem
 
       if (msg.tipo === 'estado') {
         if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
       } else if (msg.tipo === 'operacao_finalizada') {
         if (_opAndamentoOnFinalizadaPorOutro) _opAndamentoOnFinalizadaPorOutro(msg.resumo);
+      } else if (msg.tipo === 'dados_sql_excluidos') {
+        if (_opAndamentoOnDadosSqlExcluidos) _opAndamentoOnDadosSqlExcluidos(msg);
       }
     });
 
@@ -1898,6 +1923,7 @@ window.LW = {
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+  aoReceberDadosSqlExcluidos,
   get OP_ANDAMENTO_CLIENT_ID() { return OP_ANDAMENTO_CLIENT_ID; },
 
   // Log de Acesso

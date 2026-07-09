@@ -1149,6 +1149,46 @@ function marcarOperacaoAvaliada(idOperacao) {
 }
 
 /**
+ * Desfaz COMPLETAMENTE a avaliação de qualidade de uma operação — usada
+ * por POST /admin/sql-excluir-linha (Configurações → Dados SQL) quando a
+ * linha excluída é de "operacoes_avaliadas": em vez de só tirar a
+ * operação da lista de avaliadas (o que deixaria avaliacoes_qualidade e
+ * avaliacao_paineis "órfãs" — a avaliação continuaria existindo, só que
+ * de uma operação que voltou a aparecer como pendente), remove os 3
+ * rastros da avaliação de uma vez, numa transação só:
+ *
+ *   1) avaliacao_paineis   (referencia avaliacoes_qualidade via FK — por
+ *                            isso sai PRIMEIRO, senão o DELETE de
+ *                            avaliacoes_qualidade seria bloqueado)
+ *   2) avaliacoes_qualidade (a avaliação em si, com o JSON completo)
+ *   3) operacoes_avaliadas  (a marcação "esta operação já foi avaliada")
+ *
+ * Depois disso, a operação passa a aparecer de novo em
+ * GET /operacoes-nao-avaliadas (a fila do Setor de Qualidade) — não por
+ * nenhuma ação extra aqui, mas porque essa fila já é definida como "toda
+ * operação cujo id NÃO esteja em operacoes_avaliadas" (ver comentário na
+ * CREATE TABLE operacoes_avaliadas, acima).
+ *
+ * @returns {{avaliacaoPaineis:number, avaliacoesQualidade:number, operacoesAvaliadas:number}}
+ *   nº de linhas removidas em cada tabela (todos 0 se o id_operacao não
+ *   tinha avaliação nenhuma).
+ */
+function desfazerAvaliacaoOperacao(idOperacao) {
+  const excluirTudo = db.transaction(() => {
+    const r1 = db.prepare('DELETE FROM avaliacao_paineis WHERE id_operacao = ?').run(idOperacao);
+    const r2 = db.prepare('DELETE FROM avaliacoes_qualidade WHERE id_operacao = ?').run(idOperacao);
+    const r3 = db.prepare('DELETE FROM operacoes_avaliadas WHERE id_operacao = ?').run(idOperacao);
+    return {
+      avaliacaoPaineis: r1.changes,
+      avaliacoesQualidade: r2.changes,
+      operacoesAvaliadas: r3.changes,
+    };
+  });
+  return excluirTudo();
+}
+module.exports.desfazerAvaliacaoOperacao = desfazerAvaliacaoOperacao;
+
+/**
  * Marca como avaliada a operação PENDENTE mais antiga de uma bateria —
  * usada quando uma avaliação de qualidade é registrada SEM vir vinculada
  * a uma operação da fila (linkedOperacaoId ausente, ver

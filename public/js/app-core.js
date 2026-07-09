@@ -304,6 +304,90 @@
       _aplicarTema(TEMAS.find(t => t.id === temaSalvo) ? temaSalvo : 'lightwall');
     })();
 
+    // ── "Dados SQL foram excluídos em outro dispositivo/aba" ────────────
+    // Registrada em LW.aoReceberDadosSqlExcluidos (ver DOMContentLoaded,
+    // abaixo) — dispara em QUALQUER página do app, não só quem está com
+    // Configurações → Dados SQL aberta, porque a exclusão pode ter
+    // afetado dados que aparecem em dashboards/relatórios que essa pessoa
+    // esteja vendo agora.
+    //
+    // EXCEÇÃO: se houver uma operação REALMENTE em andamento (cronômetro
+    // rodando — ver LWOp.operacaoEmAndamento, operacao.js) nesta aba, um
+    // modal travando a tela + reload forçado atrapalharia quem está no
+    // meio de registrar os traços — a exclusão quase sempre não tem nada
+    // a ver com a operação dela. Nesse caso, só um toast discreto (não
+    // bloqueia nada) avisa que existe uma atualização pendente; o reload
+    // de verdade só acontece depois que a operação parar de estar
+    // "running" (ver _agendarVerificacaoPosOperacao, abaixo) — os dados
+    // da própria operação não se perdem nesse meio-tempo: são
+    // sincronizados com o servidor (LW.getOperacaoAndamento), não só
+    // locais, então o reload adiado continua de onde parou normalmente.
+    let _sqlExcluidoPendente = null; // guarda a última msg recebida enquanto uma operação está rodando
+    let _sqlExcluidoVerificandoPendencia = false; // evita empilhar vários setInterval concorrentes
+
+    async function _aoReceberDadosSqlExcluidosDeOutroDispositivo(msg) {
+      const emAndamento = (typeof LWOp !== 'undefined' && typeof LWOp.operacaoEmAndamento === 'function')
+        ? LWOp.operacaoEmAndamento()
+        : false;
+
+      if (emAndamento) {
+        _sqlExcluidoPendente = msg;
+        _mostrarToastDadosSqlPendente(msg);
+        _agendarVerificacaoPosOperacao();
+        return;
+      }
+
+      await _confirmarEReceberDadosSqlExcluidos(msg);
+    }
+
+    // Modal de verdade (bloqueia até o OK) + reload — usado quando é
+    // seguro interromper na hora (nenhuma operação rodando nesta aba).
+    async function _confirmarEReceberDadosSqlExcluidos(msg) {
+      const nomeTabela = (msg && msg.tabela) || 'dados do sistema';
+      await LW.mostrarAlerta(
+        `Um administrador excluiu dados de "${nomeTabela}" nesta instalação (em outro dispositivo/aba). A página será recarregada agora para atualizar as informações.`,
+        { tipo: 'info', titulo: 'Dados atualizados' }
+      );
+      window.location.reload();
+    }
+
+    // Toast discreto (não-bloqueante, mesmo padrão de
+    // _mostrarToastSincronizacao acima) — só avisa, não interrompe quem
+    // está no meio de registrar uma operação.
+    function _mostrarToastDadosSqlPendente(msg) {
+      const nomeTabela = (msg && msg.tabela) || 'dados do sistema';
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:70px;right:24px;max-width:380px;z-index:1200;padding:14px 18px;border-radius:8px;font-size:.85rem;line-height:1.45;box-shadow:0 12px 32px rgba(0,0,0,.4);background:rgba(245,158,11,.15);border:1px solid var(--accent-dim);color:var(--accent);transition:opacity .3s';
+      el.textContent = `ℹ️ Um administrador excluiu dados de "${nomeTabela}" em outro dispositivo. A página será atualizada automaticamente assim que esta operação for finalizada.`;
+      document.body.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 350);
+      }, 8000);
+    }
+
+    // Fica checando (a cada 3s) se a operação desta aba já deixou de
+    // estar "running" — assim que isso acontecer, mostra o modal de
+    // verdade e recarrega. Só existe 1 verificação ativa por vez
+    // (_sqlExcluidoVerificandoPendencia evita duplicar o setInterval se
+    // chegar mais de um broadcast enquanto ainda está rodando).
+    function _agendarVerificacaoPosOperacao() {
+      if (_sqlExcluidoVerificandoPendencia) return;
+      _sqlExcluidoVerificandoPendencia = true;
+      const intervalo = setInterval(() => {
+        const aindaRodando = (typeof LWOp !== 'undefined' && typeof LWOp.operacaoEmAndamento === 'function')
+          ? LWOp.operacaoEmAndamento()
+          : false;
+        if (aindaRodando) return;
+
+        clearInterval(intervalo);
+        _sqlExcluidoVerificandoPendencia = false;
+        const msg = _sqlExcluidoPendente;
+        _sqlExcluidoPendente = null;
+        if (msg) _confirmarEReceberDadosSqlExcluidos(msg);
+      }, 3000);
+    }
+
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
       // Set date in topbar and op form
@@ -316,6 +400,17 @@
 
       // Init operation page
       LWOp.init();
+
+      // ---- "Dados SQL foram excluídos em outro dispositivo" ────────────
+      // Reusa o MESMO canal WebSocket que LWOp.init() acabou de abrir
+      // (aberto uma vez só, aqui no boot, independente de qual página
+      // está visível — ver conectarOperacaoAndamento, data.js) — só
+      // registra o callback à parte, porque esse evento não é específico
+      // da tela de Registrar Operação (ver aoReceberDadosSqlExcluidos,
+      // data.js). Dispara em QUALQUER página/aba/computador que esteja
+      // com o site aberto (exceto quem originou a exclusão, que já
+      // recarrega sozinho — ver cfgSqlExcluirLinha, mais abaixo).
+      LW.aoReceberDadosSqlExcluidos(_aoReceberDadosSqlExcluidosDeOutroDispositivo);
 
       // ---- Indicador global de operações pendentes (registro offline) ----
       // Fica visível em qualquer página, já que a sincronização pode
@@ -1555,10 +1650,12 @@
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
+      const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
+      if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
@@ -1566,14 +1663,17 @@
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
+      const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'autorizados') cfgRenderAutorizados();
       if (secao === 'automacao') cfgRenderAutomacao();
+      if (secao === 'sql') cfgSqlAoAbrirSecao();
     }
 
     // ---- Automação (Configurações → Automação) ────────────────────────
@@ -1632,6 +1732,169 @@
       });
       // Se cancelar o modal de senha, o checkbox já foi revertido acima —
       // nada mais precisa acontecer.
+    }
+
+    // ---- Dados SQL (Configurações → Dados SQL) ─────────────────────────
+    // Consulta/exclusão manual de linha do SQLite, direto da tela de
+    // administração — ver TABELAS_SQL_ADMIN e as 3 rotas /admin/sql-*
+    // em server.js (a lista de tabelas permitidas vive SÓ lá; aqui é
+    // só exibição/interação com o que o servidor devolve).
+    let _cfgSqlTabelas = [];       // [{tabela, label, pk, linhas}, ...] — vem de GET /admin/sql-tabelas
+    let _cfgSqlDadosAtuais = null; // {tabela, pk, colunas, linhas} da tabela selecionada agora
+
+    // Chamado toda vez que a seção é mostrada (ver cfgMostrarSecao) — só
+    // busca a LISTA de tabelas (rápido); as linhas de uma tabela só são
+    // buscadas quando o usuário escolhe uma no <select> (cfgSqlCarregarLinhas).
+    async function cfgSqlAoAbrirSecao() {
+      const select = document.getElementById('cfg-sql-tabela');
+      const status = document.getElementById('cfg-sql-status');
+      if (!select) return;
+      const selecaoAnterior = select.value;
+      try {
+        const res = await fetch('/admin/sql-tabelas', { cache: 'no-store' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível carregar a lista de tabelas.');
+        _cfgSqlTabelas = json.tabelas;
+        select.innerHTML = '<option value="">Selecione uma tabela…</option>' +
+          _cfgSqlTabelas.map(t => `<option value="${t.tabela}">${t.label} (${t.linhas} linha${t.linhas === 1 ? '' : 's'})</option>`).join('');
+        if (selecaoAnterior && _cfgSqlTabelas.some(t => t.tabela === selecaoAnterior)) {
+          select.value = selecaoAnterior;
+          cfgSqlCarregarLinhas();
+        } else {
+          if (status) status.textContent = '';
+          document.getElementById('cfg-sql-thead').innerHTML = '';
+          document.getElementById('cfg-sql-tbody').innerHTML = '';
+          _cfgSqlDadosAtuais = null;
+        }
+      } catch (e) {
+        if (status) status.textContent = '⚠ ' + e.message;
+      }
+    }
+
+    // Busca colunas + linhas da tabela escolhida no <select> e desenha a
+    // tabela HTML (via cfgSqlRenderLinhas, que também cuida do filtro de busca).
+    async function cfgSqlCarregarLinhas() {
+      const select = document.getElementById('cfg-sql-tabela');
+      const status = document.getElementById('cfg-sql-status');
+      const thead = document.getElementById('cfg-sql-thead');
+      const tbody = document.getElementById('cfg-sql-tbody');
+      const tabela = select?.value || '';
+
+      _cfgSqlDadosAtuais = null;
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      if (!tabela) { if (status) status.textContent = ''; return; }
+
+      if (status) status.textContent = 'Carregando…';
+      try {
+        const res = await fetch('/admin/sql-linhas?tabela=' + encodeURIComponent(tabela), { cache: 'no-store' });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível carregar as linhas desta tabela.');
+        _cfgSqlDadosAtuais = json;
+        cfgSqlRenderLinhas();
+      } catch (e) {
+        if (status) status.textContent = '⚠ ' + e.message;
+      }
+    }
+
+    // Redesenha a tabela HTML a partir de _cfgSqlDadosAtuais, aplicando o
+    // filtro de texto (busca simples: alguma coluna contém o termo,
+    // sem diferenciar maiúsculas/minúsculas) — chamado a cada tecla
+    // digitada em "Buscar nas linhas carregadas", sem ir ao servidor de
+    // novo (as linhas já estão carregadas no navegador).
+    function cfgSqlRenderLinhas() {
+      const status = document.getElementById('cfg-sql-status');
+      const thead = document.getElementById('cfg-sql-thead');
+      const tbody = document.getElementById('cfg-sql-tbody');
+      if (!_cfgSqlDadosAtuais) return;
+
+      const { tabela, pk, colunas, linhas, limite } = _cfgSqlDadosAtuais;
+      const termo = (document.getElementById('cfg-sql-busca')?.value || '').trim().toLowerCase();
+      const linhasFiltradas = termo
+        ? linhas.filter(linha => colunas.some(c => String(linha[c] ?? '').toLowerCase().includes(termo)))
+        : linhas;
+
+      thead.innerHTML = `<tr>${colunas.map(c => `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-3);font-weight:600;white-space:nowrap">${c}${c === pk ? ' 🔑' : ''}</th>`).join('')}<th style="padding:8px 10px;border-bottom:1px solid var(--border)"></th></tr>`;
+
+      tbody.innerHTML = linhasFiltradas.map(linha => `
+        <tr style="border-bottom:1px solid var(--border)">
+          ${colunas.map(c => {
+            let valor = linha[c];
+            if (valor === null || valor === undefined) valor = '';
+            valor = String(valor);
+            const truncado = valor.length > 80 ? valor.slice(0, 80) + '…' : valor;
+            return `<td style="padding:6px 10px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;color:var(--text-2)" title="${valor.replace(/"/g, '&quot;')}">${truncado || '<span style="color:var(--text-3)">—</span>'}</td>`;
+          }).join('')}
+          <td style="padding:6px 10px;white-space:nowrap">
+            <button onclick='cfgSqlExcluirLinha(${JSON.stringify(tabela)}, ${JSON.stringify(String(linha[pk]))})'
+              style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem">✕ Excluir</button>
+          </td>
+        </tr>
+      `).join('') || `<tr><td colspan="${colunas.length + 1}" style="padding:14px;text-align:center;color:var(--text-3)">Nenhuma linha encontrada.</td></tr>`;
+
+      if (status) {
+        status.textContent = termo
+          ? `${linhasFiltradas.length} de ${linhas.length} linha(s) carregada(s)${linhas.length >= limite ? ' (mostrando só as ' + limite + ' mais recentes)' : ''}.`
+          : `${linhas.length} linha(s) carregada(s)${linhas.length >= limite ? ' — mostrando só as ' + limite + ' mais recentes' : ''}.`;
+      }
+    }
+
+    // Exclui UMA linha pelo valor da PK (coluna real, ver TABELAS_SQL_ADMIN
+    // no servidor) — pede confirmação normal e, por ser uma exclusão
+    // permanente e fora do fluxo comum de edição, pede a senha de
+    // Administrador DE NOVO (mesmo padrão de cfgToggleModoAutomatico, acima).
+    //
+    // "operacoes_avaliadas" é um caso especial: excluir uma linha aqui
+    // desfaz a avaliação de qualidade inteira daquela operação (apaga
+    // também avaliacoes_qualidade e avaliacao_paineis, no servidor — ver
+    // db.desfazerAvaliacaoOperacao) e a operação volta a aparecer na fila
+    // de avaliação pendente do Setor de Qualidade. O aviso de confirmação
+    // deixa isso explícito ANTES de excluir, pra não ser uma surpresa.
+    async function cfgSqlExcluirLinha(tabela, valorPk) {
+      const ehDesfazerAvaliacao = tabela === 'operacoes_avaliadas';
+      const mensagemConfirmacao = ehDesfazerAvaliacao
+        ? `Isto vai desfazer TODA a avaliação de qualidade da operação "${valorPk}" — a avaliação e os painéis vinculados também serão apagados, e a operação volta a aparecer como pendente na fila do Setor de Qualidade. Esta ação não pode ser desfeita. Continuar?`
+        : `Excluir permanentemente esta linha de "${tabela}"? Esta ação não pode ser desfeita.`;
+
+      const confirmou = await LW.mostrarConfirmacao(
+        mensagemConfirmacao,
+        { titulo: ehDesfazerAvaliacao ? 'Desfazer avaliação de qualidade' : 'Excluir linha do banco', textoConfirmar: 'Excluir', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/admin/sql-excluir-linha?wsClientId=' + encodeURIComponent(LW.OP_ANDAMENTO_CLIENT_ID), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tabela, valor: valorPk }),
+          });
+          const json = await res.json().catch(() => null);
+          if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível excluir. Tente novamente.');
+
+          const mensagemSucesso = (ehDesfazerAvaliacao && json.cascata)
+            ? `Avaliação desfeita: ${json.cascata.avaliacoes_qualidade} avaliação(ões), ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. A operação volta pra fila de avaliação pendente. A página será recarregada.`
+            : 'Linha excluída com sucesso. A página será recarregada para atualizar todas as telas.';
+
+          // Recarrega a página inteira depois de excluir — mesmo motivo de
+          // cfgSalvar(), acima: várias telas (dashboards, relatórios,
+          // Registrar Operação etc.) carregam os dados UMA VEZ, na
+          // inicialização, e guardam em variáveis JS (ver data.js) — sem
+          // recarregar, o navegador continuaria mostrando a linha já
+          // apagada do banco até um F5 manual. Um reload garante que TODO
+          // o site passe a refletir a exclusão, não só a própria aba.
+          await LW.mostrarAlerta(mensagemSucesso, { tipo: 'sucesso' });
+          window.location.reload();
+        } catch (e) {
+          LW.mostrarAlerta(e.message, { tipo: 'erro' });
+        }
+      });
     }
 
     // ---- Atalhos de Teclado (Configurações → Atalhos) ----

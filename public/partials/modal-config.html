@@ -31,6 +31,9 @@
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
+          <button type="button" id="cfg-nav-sql" onclick="cfgMostrarSecao('sql')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🗄️ Dados SQL</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -267,6 +270,42 @@
             </p>
           </div>
           <!-- ========== /SEÇÃO: Automação ========== -->
+
+          <!-- ========== SEÇÃO: Dados SQL ========== -->
+          <div id="cfg-secao-sql" style="display:none">
+            <div class="card-title">🗄️ Dados SQL</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Consulta direta às tabelas do banco (SQLite), pra apagar uma linha específica manualmente —
+              use com cuidado: a exclusão é <strong>permanente</strong> e não passa pelo fluxo normal de edição
+              do sistema. Prefira sempre as telas normais (Editar Operação, Editar Traço etc.) quando possível;
+              use isto só pra corrigir um registro de teste, duplicado ou corrompido que não dá pra remover de
+              outro jeito.
+            </p>
+
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+              <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
+                <label class="form-label">Arquivo / Tabela</label>
+                <select class="form-select" id="cfg-sql-tabela" onchange="cfgSqlCarregarLinhas()">
+                  <option value="">Selecione uma tabela…</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;flex:2;min-width:220px">
+                <label class="form-label">Buscar nas linhas carregadas</label>
+                <input class="form-input" id="cfg-sql-busca" placeholder="Digite pra filtrar…" oninput="cfgSqlRenderLinhas()">
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="cfgSqlCarregarLinhas()" title="Recarregar">↺ Atualizar</button>
+            </div>
+
+            <div id="cfg-sql-status" style="font-size:.75rem;color:var(--text-3);margin-bottom:10px"></div>
+
+            <div id="cfg-sql-tabela-wrap" style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);max-height:44vh;overflow-y:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:.76rem">
+                <thead id="cfg-sql-thead" style="position:sticky;top:0;background:var(--bg-2);z-index:1"></thead>
+                <tbody id="cfg-sql-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Dados SQL ========== -->
 
         </div>
       </div>

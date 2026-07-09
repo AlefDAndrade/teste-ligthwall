@@ -18,6 +18,38 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
+// ── Configurações → Dados SQL: tabelas do SQLite expostas na tela de
+// administração pra consulta e exclusão manual de linha (ver GET
+// /admin/sql-tabelas, GET /admin/sql-linhas e POST /admin/sql-excluir-linha,
+// abaixo). SQL não permite parametrizar nome de tabela/coluna (só valores),
+// então nome de tabela e coluna usados nas queries dessas rotas SEMPRE vêm
+// deste whitelist — nunca são montados a partir do que o cliente manda.
+// "pk" é a coluna que identifica uma linha sozinha (a PRIMARY KEY de
+// verdade da tabela, ver CREATE TABLE em db.js) — é o valor usado pra
+// excluir exatamente uma linha, nunca o índice dela na lista.
+const TABELAS_SQL_ADMIN = {
+  operacoes:            { pk: 'id',           label: 'Operações (Registro de Baterias)' },
+  edicoes_operacao:     { pk: 'id',           label: 'Auditoria de Edições — Operações' },
+  tracos:                { pk: 'id_traco',     label: 'Traços (Relatório de Injeção)' },
+  traco_usos:            { pk: 'id',           label: 'Usos de Traço' },
+  ajustes:                { pk: 'id',           label: 'Ajustes de Receita' },
+  leituras_resultado:     { pk: 'id',           label: 'Leituras de Densidade/Flow' },
+  edicoes_traco:          { pk: 'id',           label: 'Auditoria de Edições — Traços' },
+  contador_tracos:        { pk: 'data',         label: 'Contador de Traços do Dia' },
+  paradas:                { pk: 'id',           label: 'Paradas' },
+  sobra:                  { pk: 'id',           label: 'Sobra' },
+  bercos_visuais:         { pk: 'id_operacao',  label: 'Berços Visuais' },
+  avaliacoes_qualidade:   { pk: 'id',           label: 'Avaliações de Qualidade' },
+  avaliacao_paineis:      { pk: 'id_avaliacao', label: 'Painéis de Avaliação' },
+  operacoes_avaliadas:    { pk: 'id_operacao',  label: 'Operações Avaliadas (Setor de Qualidade)' },
+};
+
+// Teto de linhas devolvidas por GET /admin/sql-linhas — telas de
+// administração desse tipo não precisam paginar de verdade (o sistema é de
+// uso interno, volume baixo); um teto evita só travar o navegador se uma
+// tabela crescer muito. Sempre as mais recentes primeiro (rowid DESC).
+const SQL_ADMIN_LIMITE_LINHAS = 1000;
+
 const PORT = process.env.PORT || 3000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
@@ -964,6 +996,157 @@ const server = http.createServer((req, res) => {
     sessao.logout(req);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': sessao.cookieDeLogout() });
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  Configurações → Dados SQL — consulta e exclusão manual de linha do
+  //  SQLite (ver TABELAS_SQL_ADMIN, acima, e a aba "🗄️ Dados SQL" em
+  //  modal-config.html). As 3 rotas abaixo exigem sessão de Administrador
+  //  válida (mesma exigência de GET /db/security.json) — dados de produção
+  //  inteiros e exclusão permanente não podem ficar atrás só do "abrir
+  //  Configurações" do lado do navegador.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── GET /admin/sql-tabelas: lista as tabelas do whitelist com a
+  // contagem atual de linhas — popula o <select> da aba.
+  if (req.method === 'GET' && urlPath === '/admin/sql-tabelas') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const tabelas = Object.entries(TABELAS_SQL_ADMIN).map(([tabela, info]) => {
+        const { total } = db.prepare(`SELECT COUNT(*) AS total FROM "${tabela}"`).get();
+        return { tabela, label: info.label, pk: info.pk, linhas: total };
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, tabelas }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── GET /admin/sql-linhas?tabela=xxx: colunas + linhas (mais recentes
+  // primeiro) de UMA tabela do whitelist — nunca a tabela crua vinda do
+  // cliente, sempre a chave já validada contra TABELAS_SQL_ADMIN.
+  if (req.method === 'GET' && urlPath === '/admin/sql-linhas') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    try {
+      const tabela = queryParams.get('tabela') || '';
+      const info = TABELAS_SQL_ADMIN[tabela];
+      if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
+
+      const colunas = db.prepare(`PRAGMA table_info("${tabela}")`).all().map(c => c.name);
+      const linhas = db.prepare(`SELECT * FROM "${tabela}" ORDER BY rowid DESC LIMIT ?`).all(SQL_ADMIN_LIMITE_LINHAS);
+
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, tabela, pk: info.pk, colunas, linhas, limite: SQL_ADMIN_LIMITE_LINHAS }));
+    } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: e.message }));
+    }
+    return;
+  }
+
+  // ── POST /admin/sql-excluir-linha: apaga UMA linha, pelo valor da PK
+  // real da tabela (ver TABELAS_SQL_ADMIN) — nunca por índice/posição na
+  // lista, que pode mudar a qualquer novo registro. Se a tabela tiver
+  // FOREIGN KEY apontando pra ela (ex.: bercos_visuais → operacoes) e
+  // ainda existir linha dependente, o SQLite recusa o DELETE sozinho
+  // (foreign_keys = ON, ver topo de db.js) — devolvemos isso como erro
+  // 400 de validação, não como falha de servidor.
+  //
+  // CASO ESPECIAL — "operacoes_avaliadas": excluir uma linha aqui não é
+  // um DELETE avulso — significa "desfazer a avaliação desta operação
+  // por completo". Por isso usa db.desfazerAvaliacaoOperacao(), que
+  // também apaga avaliacao_paineis e avaliacoes_qualidade daquela
+  // operação (senão ficariam órfãs: a avaliação continuaria existindo,
+  // só que de uma operação marcada como pendente de novo) — e, como
+  // consequência natural de tirar o id de operacoes_avaliadas, a
+  // operação volta a aparecer em GET /operacoes-nao-avaliadas (a fila do
+  // Setor de Qualidade), sem nenhum passo extra.
+  if (req.method === 'POST' && urlPath === '/admin/sql-excluir-linha') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { tabela, valor } = JSON.parse(body);
+        const info = TABELAS_SQL_ADMIN[tabela];
+        if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
+        if (valor === undefined || valor === null || valor === '') throw new Error('Valor da chave (' + info.pk + ') não informado.');
+
+        // Mesmo padrão de /registrar-operacao: quem originou a ação manda
+        // seu próprio OP_ANDAMENTO_CLIENT_ID via query string, só pra ELE
+        // ser excluído do broadcast abaixo (essa aba já recarrega sozinha
+        // depois do fetch — ver cfgSqlExcluirLinha, app-core.js).
+        const wsClientId = queryParams.get('wsClientId') || '';
+
+        if (tabela === 'operacoes_avaliadas') {
+          const r = db.desfazerAvaliacaoOperacao(valor);
+          if (!r.avaliacaoPaineis && !r.avaliacoesQualidade && !r.operacoesAvaliadas) {
+            throw new Error('Linha não encontrada (nenhuma alteração feita).');
+          }
+
+          // A fila de "não avaliadas" do Setor de Qualidade NÃO é
+          // recalculada do SQL a cada request — é um arquivo próprio
+          // (operacoes_nao_avaliadas.json, ver "FILA DE AVALIAÇÃO" mais
+          // acima) mantido em sincronia manualmente em cada ponto que
+          // marca/desmarca uma operação como avaliada. Sem esta linha, a
+          // operação sumiria de operacoes_avaliadas no SQL mas NUNCA
+          // voltaria a aparecer na fila visível do Setor de Qualidade.
+          // Mesma regra de sempre: nunca reinsere operação de Modo de
+          // Teste (a fila não tem noção disso).
+          const operacao = db.prepare('SELECT modo_teste FROM operacoes WHERE id = ?').get(valor);
+          if (operacao && !operacao.modo_teste) {
+            adicionarNaFilaNaoAvaliadas(valor);
+          }
+
+          // Avisa TODO MUNDO conectado (qualquer navegador/página — ver
+          // broadcastDadosSqlExcluidos, perto do WebSocket, mais abaixo)
+          // que esses dados mudaram, pra ninguém continuar vendo a
+          // avaliação/painéis já excluídos até um F5 manual.
+          broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            ok: true,
+            cascata: {
+              avaliacao_paineis: r.avaliacaoPaineis,
+              avaliacoes_qualidade: r.avaliacoesQualidade,
+              operacoes_avaliadas: r.operacoesAvaliadas,
+            },
+          }));
+          return;
+        }
+
+        const resultado = db.prepare(`DELETE FROM "${tabela}" WHERE "${info.pk}" = ?`).run(valor);
+        if (resultado.changes === 0) throw new Error('Linha não encontrada (nenhuma alteração feita).');
+
+        broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        const mensagemAmigavel = /FOREIGN KEY constraint failed/i.test(e.message)
+          ? 'Não é possível excluir: existem outros registros que dependem desta linha (ex.: usos, avaliações ou berços vinculados a esta operação).'
+          : e.message;
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: mensagemAmigavel }));
+      }
+    });
     return;
   }
 
@@ -3073,6 +3256,18 @@ function broadcastOperacaoFinalizada(resumo, origemClientId) {
 // TCP lendo o CLP WAGO) ainda não existe — ver README, "Modo Automático".
 function broadcastLeituraAutomatica(leitura) {
   _enviarWsParaTodos({ tipo: 'leitura_automatica', leitura });
+}
+
+// Avisa TODO MUNDO conectado (qualquer página, não só quem tem "Registrar
+// Operação" aberta — ver conectarOperacaoAndamento() em data.js, chamada
+// uma vez só no boot do app, independente da tela visível) que uma linha
+// foi excluída em Configurações → Dados SQL. Quem originou a exclusão já
+// recarrega a própria página sozinho (ver cfgSqlExcluirLinha, app-core.js)
+// — por isso `origemClientId` (mesmo padrão de broadcastOperacaoFinalizada,
+// via wsClientId na query string) evita mandar essa mesma pessoa recarregar
+// 2 vezes.
+function broadcastDadosSqlExcluidos(info, origemClientId) {
+  _enviarWsParaTodos({ tipo: 'dados_sql_excluidos', ...info, origemClientId });
 }
 
 server.listen(PORT, () => {
