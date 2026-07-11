@@ -33,6 +33,7 @@
     { id: 'nav_analise_bercos', comboPadrao: 'Alt+0', page: 'analise-bercos', label: 'Análise de Berços', icon: '💧' },
     { id: 'nav_paradas', comboPadrao: 'Alt+P', page: 'paradas', label: 'Registro de Paradas', icon: '⏸' },
     { id: 'nav_setor_qualidade', comboPadrao: 'Alt+Q', page: 'setor-qualidade', label: 'Setor de Qualidade', icon: '🛡' },
+    { id: 'nav_metas', comboPadrao: 'Alt+M', page: 'metas', label: 'Metas', icon: '🏁' },
   ];
 
   /**

@@ -1452,7 +1452,13 @@ const ARQUIVOS_BACKUP_DB = [
   'ajustes_tracos.json',
   'relatorio_injecao.json',
   'security.json',
+  // Identidade Leve de Operador — mesmo motivo de segurança de
+  // security.json (ver caminhoArquivoDb, server.js).
+  'operadores.json',
   'sobra.json',
+  // Metas de produção (Página de Metas) — arquivo simples, mesmo padrão
+  // de config.json (ver POST /salvar-metas, server.js).
+  'metas.json',
   // Adicionados: Berços Visuais e Avaliações do Setor de Qualidade — antes
   // ficavam de fora deste backup (só entravam no "Backup Geral"). Vêm de
   // tabela SQL — a rota GET /db/<nome> reconstrói o JSON a partir do banco.
@@ -1941,6 +1947,9 @@ window.LW = {
 
   // Formatação
   formatTime, diffMinutes, formatDuration, formatDateTime,
+
+  // Períodos (presets de filtro de data — Hoje/Semana/Mês/etc.)
+  calcularPeriodoPreset,
 
   // Desemplaque (tempo de cura)
   TEMPO_CURA_HORAS, calcularDesemplaque,

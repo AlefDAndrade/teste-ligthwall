@@ -82,14 +82,30 @@ package.json
 
 ## Fatiamento de server.js
 
-`server.js` era um arquivo único que cresceu bastante; está sendo fatiado por fases pra `lib/`, extraindo um pedaço autocontido por vez (sem mudar lógica nenhuma — só onde o código mora):
+`server.js` era um arquivo único que cresceu bastante (3.607 linhas, ~60 rotas, tudo dentro de uma única função de callback do `http.createServer`); está sendo fatiado por fases pra `lib/`, extraindo um domínio autocontido por vez (sem mudar lógica nenhuma — só onde o código mora, com o comportamento validado de novo depois de cada fase, tanto pela suíte automatizada quanto por chamadas HTTP reais reproduzindo o fluxo de cada rota).
+
+**Padrão seguido a partir da Fase 3** (`lib/rotas/`): cada módulo exporta uma *factory* que recebe só as dependências que aquele domínio usa (nunca um `ctx` genérico gigante) e devolve uma função `tentar(req, res, urlPath, queryParams)` — tenta casar as rotas daquele domínio e devolve `true` se já respondeu (o dispatcher em `server.js` para por ali) ou `false`/nada se a requisição não é dele (segue tentando o próximo módulo, e por fim as rotas ainda não extraídas). Helpers usados por MAIS de um domínio (ex.: `dispositivoAutorizado`, `lerOperacaoAndamento`, os helpers da fila de avaliação) continuam definidos em `server.js` e são injetados via `ctx` em quem precisar — evita duplicar lógica ou criar dependência de um módulo extraído de volta pra outro.
 
 | Fase | O que saiu | Pra onde |
 |---|---|---|
 | 1 | Hash de senha (scrypt + compat. legado) e rate limiting de tentativas | `lib/auth.js` |
 | 2 | Sessão de Administrador | `lib/sessao.js` |
+| 3 | Identidade Leve de Operador (cadastro, verificação de PIN) | `lib/rotas/operadores.js` |
+| 4 | Registro de Paradas | `lib/rotas/paradas.js` |
+| 5 | Setor de Qualidade / Avaliações (fila, avaliação, marcação) | `lib/rotas/qualidade.js` |
+| 6 | Dados SQL (Configurações → 🗄️ Dados SQL) | `lib/rotas/sql-admin.js` |
+| 7 | Views somente-leitura derivadas do SQLite (historico, relatório de injeção, berços visuais, etc.) | `lib/rotas/consultas.js` |
+| 8 | Sobra de material | `lib/rotas/sobra.js` |
+| 9 | Contador de Traços do Dia | `lib/rotas/contador-tracos.js` |
+| 10 | Log de Acesso | `lib/rotas/log-acesso.js` |
+| 11 | Operação em Andamento (estado ao vivo + berços marcados, WebSocket) | `lib/rotas/operacao-andamento.js` |
 
-Ainda por fazer: validação de path/restauração de backup, geração/restauração dos `.zip` de Backup de Dados, e o canal WebSocket da Operação em Andamento — são os próximos candidatos, mas ainda vivem em `server.js`.
+`server.js` caiu de 3.607 para ~2.450 linhas (-32%) com essas 11 fases — 37 das ~60 rotas originais já vivem fora do arquivo principal.
+
+**Ainda por fazer** (por ordem de risco, do menor pro maior):
+- Rotas centrais de operação: `registrar-operacao`, `editar-operacao`, `registrar-relatorio-injecao`, `editar-traco-relatorio`, `registrar-ajuste-traco`, `leitura-automatica` — são as maiores e mais tocadas do sistema, cada uma tem bastante lógica de negócio embutida.
+- Autenticação/config: `verificar-senha`, `verificar-recovery`, `gerar-hash`, `salvar-config`, `config/modo-automatico`, `salvar-security`, `db/security.json`, `logout-admin`.
+- **Backup & Restauração** (`backup-geral`, `backups-automaticos`, `mesclar-backup-dados`, `restaurar-backup-dados`, `restaurar-backup-geral`) — deixado por último de propósito: é o domínio de maior risco do sistema, já que `restaurar-backup-geral` pode sobrescrever o próprio código do servidor. Só deve ser fatiado com o padrão já bem validado nos domínios mais simples primeiro (o que já é o caso).
 
 ## Fatiamento de index.html
 
@@ -187,10 +203,19 @@ A sessão (`sessionStorage`) dura enquanto a aba estiver aberta. Um F5 dentro do
 - **Relatório de Injeção** — traços por operação (inclusive reaproveitamentos, exibidos como uma linha por uso).
 - **Qualidade dos Traços (CEP)** — estabilidade de receitas, frequência de ajuste por insumo, alertas.
 - **Análise Operacional** — produção, atrasos, ranking de baterias, correlações.
+- **Rastreabilidade** — busca por ID de Bateria/Operação/Traço; mostra a cadeia completa de reaproveitamento de um traço (origem e reaproveitamentos futuros) e as paradas que caíram na janela daquela operação. Estende a Análise Focada existente.
+- **Metas** — progresso do mês (traços, m², OEE) contra alvos definidos pelo Administrador.
 - **OEE** — ver seção dedicada abaixo.
+- **Modo TV** (`tv.html`, fora da SPA principal) — painel fullscreen pra telão da fábrica: operação ao vivo, traços do dia, OEE, últimas paradas. Não exige login.
 - **Menu Principal** — atalhos rápidos + (admin) Backup, Restauração e Importação.
 
 Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
+
+O app também funciona como **PWA** (manifest + service worker, cobrindo só a casca estática — HTML/CSS/JS/ícones, nunca dado de produção): dá pra "Adicionar à tela inicial" num tablet e abrir sem barra de endereço, com alguma tolerância a queda rápida de rede.
+
+## Identidade Leve de Operador
+
+Cadastro opcional (Configurações → Operadores) pra saber **quem registrou o quê** em Registrar Operação e Registro de Paradas — não é login nem controle de acesso, é só um rótulo de auditoria. Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador (guardado em `sessionStorage`, nunca em cookie/sessão do servidor) e anexado ao registro como `operador_nome`. Enquanto ninguém estiver cadastrado, o sistema funciona exatamente como antes, sem perguntar nada a ninguém — é totalmente opt-in.
 
 ## Ajuste de Receita (Registrar Operação)
 
@@ -476,13 +501,12 @@ A senha do Administrador é guardada com hash **scrypt** (nativo do Node — sem
 - O arquivo físico não existe mais em `public/db/` (migração automática no boot, se uma instalação antiga ainda tiver o arquivo no lugar velho — renomeia, nunca apaga).
 - `GET /db/security.json` (mesma URL de sempre — o front continua usando ela) e `POST /salvar-security` agora exigem uma **sessão de Administrador** válida: um cookie `HttpOnly`, emitido depois de uma senha ou chave de recuperação confirmada com sucesso, válido por 30 minutos, destruído em `/logout-admin` (chamado automaticamente pelo botão de logout). Em memória, igual ao rate limiting.
 
-Essa sessão **não substitui** a re-verificação de senha das rotas de restauração/mesclagem (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade pra ações destrutivas). A sessão cobre especificamente as 2 rotas que não tinham proteção própria nenhuma antes.
-
-**Limitação conhecida**: ainda não há um conceito de sessão pra rotas administrativas em geral (config, backup) — continuam pedindo senha a cada chamada sensível, e a sessão acima é deliberadamente restrita a 2 rotas. Extender pra mais rotas é possível, mas não foi feito ainda.
+Essa sessão **não substitui** a re-verificação de senha das rotas mais destrutivas (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade: mesmo um cookie de sessão vazado/sequestrado de uma aba esquecida aberta não basta pra restaurar dados ou sobrescrever o servidor sozinho). Fora essas 3, a sessão hoje cobre a maior parte das rotas administrativas — `salvar-config`, `salvar-metas`, `config/modo-automatico`, `importar-relatorio-injecao`, `importar-historico`, `backup-geral`, `backups-automaticos` (listagem e download), toda a aba "🗄️ Dados SQL", `admin/resetar-operacao`, e o cadastro de Identidade Leve de Operador (`salvar-operadores`) — além das 2 originais (`db/security.json`, `salvar-security`).
 
 ## Limitações conhecidas
 
-- **Sessão real só pra 2 rotas**: `GET /db/security.json` e `POST /salvar-security` agora exigem sessão de Administrador (ver *Autenticação e Sessão*, acima) — mas o resto das rotas administrativas sensíveis (config, backup, restauração) continua exigindo senha re-verificada a cada chamada, sem token de sessão. Quem tiver a senha do admin ainda pode chamar essas outras rotas diretamente.
+- **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever o próprio código do servidor) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.
 - Backups de segurança (`backups-seguranca/`) não têm rotina de limpeza automática.
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
-- Testes automatizados (`test/`) cobrem só autenticação/sessão por enquanto — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste nenhum.
+- Testes automatizados (`test/`) cobrem autenticação/sessão e Setor de Qualidade — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste automatizado formal, só validação manual (via chamadas HTTP reais) a cada mudança.
+- Identidade Leve de Operador é só rótulo de auditoria — não é login nem controle de acesso; qualquer PIN correto de qualquer operador cadastrado funciona pra qualquer registro, sem vínculo a permissões específicas.

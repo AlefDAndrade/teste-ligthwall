@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modo TV — Lightwall SC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="css/tv.css">
+</head>
+
+<body>
+
+  <!-- ============ TOPO: logo, relógio, status de conexão ============ -->
+  <header class="tv-topbar">
+    <div class="tv-logo">⬡ Lightwall <span class="tv-logo-sub">Modo TV</span></div>
+    <div class="tv-status" id="tv-status">
+      <span class="tv-status-dot" id="tv-status-dot"></span>
+      <span id="tv-status-texto">Conectando…</span>
+    </div>
+    <div class="tv-clock">
+      <div class="tv-clock-hora" id="tv-hora">--:--:--</div>
+      <div class="tv-clock-data" id="tv-data">—</div>
+    </div>
+  </header>
+
+  <!-- ============ GRID PRINCIPAL ============ -->
+  <main class="tv-grid">
+
+    <!-- Operação em andamento (ao vivo, via WebSocket) -->
+    <section class="tv-card tv-card-operacao" id="tv-card-operacao">
+      <div class="tv-card-header">
+        <span class="tv-card-title">🏭 Operação em Andamento</span>
+      </div>
+      <div class="tv-operacao-corpo" id="tv-operacao-corpo">
+        <div class="tv-operacao-vazio">Nenhuma operação em andamento no momento.</div>
+      </div>
+    </section>
+
+    <!-- Traços confirmados hoje -->
+    <section class="tv-card tv-card-metrica">
+      <div class="tv-card-header"><span class="tv-card-title">🧪 Traços Hoje</span></div>
+      <div class="tv-metrica-valor" id="tv-tracos-hoje">—</div>
+      <div class="tv-metrica-legenda">confirmados no turno de hoje</div>
+    </section>
+
+    <!-- Produção do dia (m² e nº de baterias) -->
+    <section class="tv-card tv-card-metrica">
+      <div class="tv-card-header"><span class="tv-card-title">📐 Produção Hoje</span></div>
+      <div class="tv-metrica-valor" id="tv-m2-hoje">—</div>
+      <div class="tv-metrica-legenda"><span id="tv-baterias-hoje">0</span> bateria(s) finalizada(s)</div>
+    </section>
+
+    <!-- Fila de avaliação de qualidade pendente -->
+    <section class="tv-card tv-card-metrica">
+      <div class="tv-card-header"><span class="tv-card-title">🔍 Fila de Avaliação</span></div>
+      <div class="tv-metrica-valor" id="tv-fila-qualidade">—</div>
+      <div class="tv-metrica-legenda">bateria(s) aguardando avaliação</div>
+    </section>
+
+    <!-- OEE do turno atual -->
+    <section class="tv-card tv-card-oee">
+      <div class="tv-card-header">
+        <span class="tv-card-title">🎯 OEE — Hoje</span>
+        <span class="tv-card-sub" id="tv-oee-turno">—</span>
+      </div>
+      <div class="tv-oee-grid">
+        <div class="tv-oee-item">
+          <div class="tv-oee-label">Disponibilidade</div>
+          <div class="tv-oee-valor" id="tv-oee-disp">—</div>
+        </div>
+        <div class="tv-oee-item">
+          <div class="tv-oee-label">Performance</div>
+          <div class="tv-oee-valor" id="tv-oee-perf">—</div>
+        </div>
+        <div class="tv-oee-item">
+          <div class="tv-oee-label">Qualidade</div>
+          <div class="tv-oee-valor" id="tv-oee-qual">—</div>
+        </div>
+        <div class="tv-oee-item tv-oee-item-final">
+          <div class="tv-oee-label">OEE</div>
+          <div class="tv-oee-valor tv-oee-valor-final" id="tv-oee-final">—</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Últimas paradas -->
+    <section class="tv-card tv-card-paradas">
+      <div class="tv-card-header"><span class="tv-card-title">🛑 Últimas Paradas</span></div>
+      <div class="tv-paradas-lista" id="tv-paradas-lista">
+        <div class="tv-paradas-vazio">Nenhuma parada registrada hoje.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="js/tv.js"></script>
+</body>
+
+</html>

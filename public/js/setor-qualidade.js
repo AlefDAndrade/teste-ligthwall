@@ -1057,12 +1057,14 @@
   /* ── Render das pilhas de placas ──────────────────────── */
   function renderStacks() {
     _sincronizarColunasExtras(); // garante que as colunas dos pallets extras existem no DOM antes de preenchê-las
+    _atualizarSubtitulosPallets(); // faixa de berços de cada palete-base (ver função) — nunca muda a marcação em si, só o rótulo
     _stackIds().forEach((sid) => {
       const stack = document.getElementById(sid);
       if (!stack) return;
       _ativarDropZone(stack, sid); // liga o "soltar" — idempotente, ver função
       stack.innerHTML = '';
       const total = stackCounts[sid] || 0;
+      const palleteBase = parseInt(sid.replace('stack', '')); // 1-4 nos originais; extras (5+) nunca têm berço de origem
       for (let i = 1; i <= total; i++) {
         const slab = document.createElement('div');
         slab.className = 'sq-slab';
@@ -1071,7 +1073,13 @@
 
         const num = document.createElement('span');
         num.className = 'sq-slab-number';
-        num.textContent = i;
+        // Mostra o berço de ORIGEM (ver _bercoDoSlot) em vez de um índice
+        // solto 1..N, sempre que a capacidade da operação for conhecida
+        // — cai de volta pro índice simples de sempre quando não for
+        // (avaliação avulsa legada, palete extra, ou rascunho reaberto
+        // sem a operação recarregada — ver capacidadeOperacaoAtual).
+        const berco = palleteBase <= 4 ? _bercoDoSlot(palleteBase, i, capacidadeOperacaoAtual) : null;
+        num.textContent = berco ? ('B' + berco) : i;
         slab.appendChild(num);
 
         const tp = document.createElement('span');
@@ -1722,6 +1730,19 @@
     const capacidadeReal = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
     if (capacidadeReal > 0) _definirThicknessReal(capacidadeReal);
 
+    // ── Direcionamento de painéis por palete (ver _paleteDoBerco/
+    // _bercoDoSlot, abaixo): SEMPRE a capacidade configurada da bateria,
+    // NUNCA bercos_reais — diferente de capacidadeReal (acima), que
+    // prioriza bercos_reais de propósito pra "nº de placas por pallet"
+    // (uma operação parcial tem menos painéis de verdade pra avaliar).
+    // O direcionamento é sobre ONDE FISICAMENTE cada berço empilha (a
+    // grade do molde), que não muda numa operação parcial — só a
+    // quantidade de painéis muda, não o layout. Sem capacidade
+    // conhecida, fica null e a grade volta a numerar 1..N sem
+    // referência a berço nenhum (mesmo comportamento de antes desta
+    // mudança).
+    capacidadeOperacaoAtual = parseInt(op.capacidade) || null;
+
     // ── Espessura: corrige o palpite por bateria (autoSetThickness →
     // refreshPalletInfos, acima) com a dimensão REAL gravada na operação
     // — pode ter sido ajustada manualmente em Registrar Operação, então
@@ -1770,30 +1791,96 @@
     sel.value = String(n);
   }
 
+  // ── Direcionamento de painéis por palete ──────────────────────────────
+  // Cada berço da bateria enche 2 painéis — um do lado ESQUERDO, um do
+  // lado DIREITO. A capacidade (nº de berços configurado, nunca
+  // bercos_reais — ver capacidadeOperacaoAtual) é dividida em duas
+  // metades; qual metade + qual lado determina o palete de destino:
+  //   Esquerdo, 1ª metade  (berço 1..metade)            → Palete 3
+  //   Esquerdo, 2ª metade  (berço metade+1..capacidade)  → Palete 1
+  //   Direito,  1ª metade  (berço 1..metade)             → Palete 4
+  //   Direito,  2ª metade  (berço metade+1..capacidade)  → Palete 2
+  // Capacidade ímpar: a 1ª metade fica com o berço extra (Math.ceil) —
+  // convenção simples, não especificada à parte pelo pedido original.
+  const PALETE_POR_METADE_E_LADO = {
+    esquerdo: { primeira: 3, segunda: 1 },
+    direito:  { primeira: 4, segunda: 2 },
+  };
+
+  // Berço + lado -> { pallet, posicao } (posição É o número mostrado
+  // dentro daquele palete, sempre 1..metade).
+  function _paleteDoBerco(bercoNum, lado, capacidade) {
+    if (!capacidade || capacidade <= 0) return null;
+    const metade = Math.ceil(capacidade / 2);
+    const primeiraMetade = bercoNum <= metade;
+    const pallet = PALETE_POR_METADE_E_LADO[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
+    if (!pallet) return null;
+    const posicao = primeiraMetade ? bercoNum : bercoNum - metade;
+    return { pallet, posicao };
+  }
+
+  // Caminho inverso: dado um dos 4 paletes BASE (1-4) e uma posição
+  // dentro dele, devolve o nº do berço de origem — usado por
+  // renderStacks() pra rotular cada painel da grade com o berço real,
+  // em vez de um índice solto 1..N sem relação com o berço físico.
+  // Paletes extras (5+, ver adicionarPalletExtra) não têm berço de
+  // origem definido — devolve null, a chamada volta a numerar 1..N.
+  function _bercoDoSlot(pallet, posicao, capacidade) {
+    if (!capacidade || capacidade <= 0) return null;
+    const metade = Math.ceil(capacidade / 2);
+    if (pallet === 3 || pallet === 4) return posicao;       // 1ª metade — numeração direta
+    if (pallet === 1 || pallet === 2) return metade + posicao; // 2ª metade
+    return null;
+  }
+
+  // Atualiza o subtítulo de cada palete-base (ex.: "Berços 1–10 · Esq.")
+  // com a faixa de berços que ele recebe — só aparece quando a
+  // capacidade da operação já é conhecida (ver capacidadeOperacaoAtual);
+  // fica em branco (mesmo texto de sempre, sem subtítulo) enquanto não
+  // for, pra não mostrar uma faixa errada antes da operação carregar.
+  function _atualizarSubtitulosPallets() {
+    const cap = capacidadeOperacaoAtual;
+    const metade = cap ? Math.ceil(cap / 2) : null;
+    const faixas = cap ? {
+      3: `Berços 1–${metade} · Esq.`,
+      4: `Berços 1–${metade} · Dir.`,
+      1: `Berços ${metade + 1}–${cap} · Esq.`,
+      2: `Berços ${metade + 1}–${cap} · Dir.`,
+    } : { 1: '', 2: '', 3: '', 4: '' };
+    Object.entries(faixas).forEach(([n, texto]) => {
+      const el = document.getElementById('sq-pallet-sub-' + n);
+      if (el) el.textContent = texto;
+    });
+  }
+
   // Monta o slabConfig (mesmo formato usado pelo modal de Configuração
   // Personalizada — ver confirmPalletModal) a partir de
   // bercos_personalizados de uma operação real: 1 item por berço (tipo
-  // curto — 'sp'/'2p'/'3t' — ou null). Cada berço = 2 painéis
-  // CONSECUTIVOS (ver README/db.js, "Berços Visuais") — daí o
-  // paineis.push(cod, cod) — e os painéis são distribuídos sequencialmente
-  // pelos 4 pallets, #sq-thickness posições cada (a mesma conta que já
-  // bate pra 9cm/7,5cm — ver _definirThicknessReal pra quando não bate).
+  // curto — 'sp'/'2p'/'3t' — ou null). Cada berço enche 2 painéis — um
+  // ESQUERDO, um DIREITO — que vão pra PALETES DIFERENTES (ver
+  // _paleteDoBerco/_bercoDoSlot, e o pedido original de "direcionar os
+  // painéis pros paletes certos"). Reaproveita a MESMA função que
+  // decide os rótulos da grade (renderStacks) pra decidir onde o tipo
+  // de cada berço cai — evita exatamente o bug que já aconteceu uma vez
+  // aqui: rótulo (qual berço) e tipo (SP/2P/3T daquele berço) vinham de
+  // duas contas DIFERENTES, e podiam apontar pra berços diferentes.
   function _montarSlabConfigDeBercos(bercosPersonalizados) {
     const bercos = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
-    const n = parseInt(document.getElementById('sq-thickness').value) || 10;
-    const paineis = [];
-    bercos.forEach(tipo => {
-      const cod = tipo ? String(tipo).toUpperCase() : ''; // 'sp' -> 'SP', '2p' -> '2P', '3t' -> '3T'
-      paineis.push(cod, cod);
-    });
+    // Sempre a capacidade CONFIGURADA da bateria (nunca o tamanho do
+    // array recebido) — mesma regra usada em todo o resto do
+    // direcionamento; cai pro tamanho do array só se a operação ainda
+    // não tiver sido carregada (capacidadeOperacaoAtual nulo).
+    const capacidade = capacidadeOperacaoAtual || bercos.length;
     const novo = {};
-    for (let p = 0; p < 4; p++) {
-      for (let i = 1; i <= n; i++) {
-        const idx = p * n + (i - 1);
-        const tipo = paineis[idx];
-        if (tipo) novo[`stack${p + 1}-${i}`] = tipo;
-      }
-    }
+    bercos.forEach((tipoBerco, idx) => {
+      const cod = tipoBerco ? String(tipoBerco).toUpperCase() : ''; // 'sp' -> 'SP', '2p' -> '2P', '3t' -> '3T'
+      if (!cod) return;
+      const bercoNum = idx + 1;
+      ['esquerdo', 'direito'].forEach(lado => {
+        const destino = _paleteDoBerco(bercoNum, lado, capacidade);
+        if (destino) novo[`stack${destino.pallet}-${destino.posicao}`] = cod;
+      });
+    });
     return novo;
   }
 
@@ -1841,7 +1928,7 @@
     return isNaN(d) ? '--' : d.toISOString().slice(11, 16);
   }
   function _filaTipoLabel(tipoMontagem) {
-    return tipoMontagem === 'PERSONALIZADA' ? 'Personalizada' : (tipoMontagem || '--');
+    return tipoMontagem === 'PERSONALIZADA' ? 'Personalizada' : _escaparHtml(tipoMontagem || '--');
   }
   // Destaca (classe .sq-fila-item-ativa) o item vinculado à avaliação
   // que está sendo preenchida NESTE momento (linkedOperacaoId) — assim
@@ -1865,7 +1952,7 @@
       <div class="sq-fila-item${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
-          <strong>${op.id_bateria || 'N/I'}</strong>
+          <strong>${_escaparHtml(op.id_bateria || 'N/I')}</strong>
           <span>${_filaData(op.fim)} · ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
         ${_filaExcluirBtn(op)}
@@ -1876,7 +1963,7 @@
       <div class="sq-fila-item sq-fila-item-principal${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
-          <strong>${op.id_bateria || 'N/I'}</strong>
+          <strong>${_escaparHtml(op.id_bateria || 'N/I')}</strong>
           <span>${_filaData(op.fim)} · ${_filaHora(op.fim)} (fim da operação) · Montagem: ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
         <i class="fas fa-play"></i>
@@ -1926,7 +2013,7 @@
           sel.innerHTML = outras.map((op, i) => {
             const posicao = i + 4;
             const dt = op.fim ? `${_filaData(op.fim)} ${_filaHora(op.fim)}` : '--';
-            return `<option value="${op.id}">${_filaOrdinal(posicao)} · ${op.id_bateria || 'N/I'} · ${_filaTipoLabel(op.tipo_montagem)} · ${dt}</option>`;
+            return `<option value="${op.id}">${_filaOrdinal(posicao)} · ${_escaparHtml(op.id_bateria || 'N/I')} · ${_filaTipoLabel(op.tipo_montagem)} · ${dt}</option>`;
           }).join('');
           outrasWrap.style.display = 'flex';
           // "X" aplicado ao item ATUALMENTE selecionado no <select> — não
@@ -2287,6 +2374,7 @@
         // depender da operação ainda estar na fila (ela já não está mais,
         // nesse ponto).
         dimensaoOperacao: dimensaoOperacaoAtual || null,
+        capacidadeOperacao: capacidadeOperacaoAtual || null,
         observations: document.getElementById('sq-obs').value,
         ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
@@ -2386,6 +2474,10 @@
     // (registrada antes desta mudança) não tem este campo — cai de volta
     // no palpite por bateria, de propósito.
     dimensaoOperacaoAtual = item.dimensaoOperacao || null;
+    // Avaliação legada (registrada antes desta mudança) não tem este
+    // campo — cai de volta pra sem numeração por berço (mesma regra de
+    // dimensaoOperacaoAtual, acima).
+    capacidadeOperacaoAtual = item.capacidadeOperacao || null;
     palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
@@ -2622,7 +2714,14 @@
         const motivoHtml = panel?.motivo
           ? `<span class="sq-mini-slab-motivo" title="${_escaparHtml(tituloMotivo)}">${_escaparHtml(panel.motivo)}</span>`
           : '';
-        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${i}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
+        // Mesmo raciocínio de renderStacks (grade principal) — mostra o
+        // berço de origem quando a avaliação salva tem
+        // capacidadeOperacao gravado (ver registerEvaluation);
+        // avaliação legada, sem esse campo, cai de volta no índice
+        // simples de sempre.
+        const berco = _bercoDoSlot(p, i, item.capacidadeOperacao);
+        const rotulo = berco ? ('B' + berco) : i;
+        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${rotulo}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
       }
       html += '</div>';
     }
@@ -3478,6 +3577,7 @@
     extraStacks = []; stackCounts = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 }; proximoNumeroPalletExtra = 5;
     linkedOperacaoId = null;
     dimensaoOperacaoAtual = null;
+    capacidadeOperacaoAtual = null;
     _editandoAvaliacaoId = null;
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
@@ -3529,6 +3629,19 @@
   // padrão de "palpite, depois corrige com o real" já usado pro nº de
   // placas por pallet — ver _definirThicknessReal/_prefillFromOperacao).
   let dimensaoOperacaoAtual = null;
+
+  // Capacidade (nº de berços CONFIGURADO da bateria, nunca bercos_reais)
+  // usada só pra determinar em qual palete cada painel cai — ver
+  // _paleteDoBerco/_bercoDoSlot, mais abaixo. Segue o MESMO padrão de
+  // dimensaoOperacaoAtual, acima: null até uma operação real ser
+  // carregada (_prefillFromOperacao) ou uma avaliação salva ser reaberta
+  // (_carregarAvaliacaoNoFormulario, que restaura de
+  // item.capacidadeOperacao — gravado no momento do registro, ver
+  // registerEvaluation). Rascunhos (localStorage) NÃO preservam este
+  // valor entre sessões — mesma limitação já existente pra
+  // dimensaoOperacaoAtual (não é regressão desta mudança); a grade só
+  // volta a numerar por berço quando a operação é recarregada.
+  let capacidadeOperacaoAtual = null;
 
   // Aceita tanto "15cm" (sem espaço — formato de bateria.label, ver
   // cfgAdicionarBateria, app-core.js) quanto "9,5 cm" (com espaço —

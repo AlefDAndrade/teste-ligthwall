@@ -13,6 +13,11 @@
         📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
       </span>
 
+      <span id="topbar-operador-atual" title="Clique para trocar quem está identificado nesta aba"
+        onclick="LWOperador.trocar()"
+        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap;cursor:pointer">
+      </span>
+
       <div style="position:relative">
         <button class="btn btn-ghost btn-sm" onclick="LWDebriefing.toggle(event)">
           📓 Debriefing do Dia

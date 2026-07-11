@@ -156,6 +156,12 @@
       if (pageId === 'oee') {
         LWOee.render();
       }
+      if (pageId === 'metas' && !window._metasInit) {
+        window._metasInit = true;
+        LWMetas.init();
+      } else if (pageId === 'metas') {
+        LWMetas.render();
+      }
       if (pageId === 'paradas' && !window._paradasInit) {
         window._paradasInit = true;
         LWParadas.init();
@@ -562,30 +568,44 @@
     // todo fim de dia — ver server.js). Só leitura/download aqui; a criação
     // e a rotação (manter só os últimos 3) são feitas no servidor, sem
     // depender de ninguém com essa tela aberta.
-    async function _carregarBackupsAutomaticos() {
+    // GET /backups-automaticos agora exige sessão de Administrador (ver
+    // lib/sessao.js) — pede a senha já ao abrir este painel (em vez de só
+    // na hora de um download específico), já que tudo aqui dentro lida
+    // com backups que incluem security.json.
+    function _carregarBackupsAutomaticos() {
       const el = document.getElementById('backup-hub-automaticos');
       if (!el) return;
       el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
-      try {
-        const res = await fetch('/backups-automaticos');
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.erro || 'Erro ao listar backups automáticos.');
 
-        if (!json.backups.length) {
-          el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Nenhum backup automático ainda — o primeiro é gerado no fim do dia de hoje.</span>';
-          return;
-        }
-
-        el.innerHTML = json.backups.map(b => `
-          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px">
-            <span style="font-size:.84rem;color:var(--text-2)">📅 ${b.data.split('-').reverse().join('/')}
-              <span style="color:var(--text-3);font-size:.74rem">(${(b.tamanho / 1024).toFixed(0)} KB)</span></span>
-            <a href="/backups-automaticos/${encodeURIComponent(b.nome)}" style="color:var(--accent);font-size:.82rem;text-decoration:none">⬇ Baixar</a>
-          </div>
-        `).join('');
-      } catch (e) {
-        el.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
+      if (typeof AdminAuth === 'undefined') {
+        el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Não foi possível confirmar a senha de administrador nesta tela.</span>';
+        return;
       }
+
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const res = await fetch('/backups-automaticos');
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.erro || 'Erro ao listar backups automáticos.');
+
+          if (!json.backups.length) {
+            el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Nenhum backup automático ainda — o primeiro é gerado no fim do dia de hoje.</span>';
+            return;
+          }
+
+          el.innerHTML = json.backups.map(b => `
+            <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px">
+              <span style="font-size:.84rem;color:var(--text-2)">📅 ${b.data.split('-').reverse().join('/')}
+                <span style="color:var(--text-3);font-size:.74rem">(${(b.tamanho / 1024).toFixed(0)} KB)</span></span>
+              <a href="/backups-automaticos/${encodeURIComponent(b.nome)}" style="color:var(--accent);font-size:.82rem;text-decoration:none">⬇ Baixar</a>
+            </div>
+          `).join('');
+        } catch (e) {
+          el.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
+        }
+      }, function onCancel() {
+        el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Cancelado — feche e reabra este painel pra tentar de novo.</span>';
+      });
     }
 
     // ---- Backup de Dados (admin) ----
@@ -616,41 +636,50 @@
     // Diferente do Backup de Dados, este .zip é montado no PRÓPRIO SERVIDOR
     // (rota GET /backup-geral) — ele varre o projeto inteiro (código + dados),
     // então não precisa que o front-end conheça cada arquivo de antemão.
-    async function fazerBackupGeral() {
+    // GET /backup-geral agora exige sessão de Administrador (ver
+    // lib/sessao.js) — pede a senha aqui, antes de gerar/baixar o zip do
+    // projeto inteiro (que inclui security.json).
+    function fazerBackupGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
 
       const card = document.getElementById('backup-hub-card-geral');
 
-      try {
-        if (card) card.style.pointerEvents = 'none';
-        _statusBackupHub('Gerando backup geral... pode levar alguns segundos.');
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          if (card) card.style.pointerEvents = 'none';
+          _statusBackupHub('Gerando backup geral... pode levar alguns segundos.');
 
-        const res = await fetch('/backup-geral');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+          const res = await fetch('/backup-geral');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
 
-        // Tenta usar o nome de arquivo sugerido pelo servidor; se não vier,
-        // usa um nome padrão como fallback.
-        const cd = res.headers.get('Content-Disposition') || '';
-        const match = cd.match(/filename="(.+?)"/);
-        const nomeArquivo = match ? match[1] : `lightwall_backup_geral_${todayBrasilia()}.zip`;
+          // Tenta usar o nome de arquivo sugerido pelo servidor; se não vier,
+          // usa um nome padrão como fallback.
+          const cd = res.headers.get('Content-Disposition') || '';
+          const match = cd.match(/filename="(.+?)"/);
+          const nomeArquivo = match ? match[1] : `lightwall_backup_geral_${todayBrasilia()}.zip`;
 
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = nomeArquivo;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nomeArquivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
 
-        fecharBackupHub();
-      } catch (e) {
-        LW.mostrarAlerta('Erro ao gerar backup geral: ' + e.message, { tipo: 'erro' });
-      } finally {
-        if (card) card.style.pointerEvents = '';
-        _statusBackupHub(null);
-      }
+          fecharBackupHub();
+        } catch (e) {
+          LW.mostrarAlerta('Erro ao gerar backup geral: ' + e.message, { tipo: 'erro' });
+        } finally {
+          if (card) card.style.pointerEvents = '';
+          _statusBackupHub(null);
+        }
+      });
     }
 
     // ---- Restaurar Backup de Dados (admin) ----
@@ -666,9 +695,12 @@
       'relatorio_injecao.json': v => Array.isArray(v),
       'relatorio_edicoes.json': v => Array.isArray(v),
       'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
+      'operadores.json':         v => Array.isArray(v),
       'sobra.json':              v => v && typeof v === 'object',
       'paradas.json':            v => Array.isArray(v),
       'ajustes_tracos.json':    v => Array.isArray(v),
+      // Metas de produção (Página de Metas) — mesma lista do servidor.
+      'metas.json':              v => v && typeof v === 'object' && !Array.isArray(v),
       // Adicionados junto com Berços Visuais e Avaliações do Setor de
       // Qualidade no Backup de Dados — mesma lista do servidor
       // (VALIDADORES_BACKUP_DADOS, em server.js).
@@ -1472,40 +1504,53 @@
       document.getElementById('import-step-2').style.display = 'block';
     }
 
-    async function confirmarImportacao() {
+    // POST /importar-relatorio-injecao e /importar-historico agora exigem
+    // sessão de Administrador (ver lib/sessao.js) — pede a senha aqui, no
+    // clique de "Importar", em vez de logo ao abrir o modal (que qualquer
+    // um com sessionStorage.lw_role='Administrador' já conseguia abrir).
+    function confirmarImportacao() {
       const btn = document.getElementById('btn-confirmar-import');
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
       btn.disabled = true;
       btn.textContent = 'Importando...';
-      try {
-        const rota = _importDestino === 'relatorio_injecao'
-          ? '/importar-relatorio-injecao'
-          : '/importar-historico';
-        const res = await fetch(rota, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(_importRegistros),
-        });
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.erro || 'Erro desconhecido');
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          const rota = _importDestino === 'relatorio_injecao'
+            ? '/importar-relatorio-injecao'
+            : '/importar-historico';
+          const res = await fetch(rota, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(_importRegistros),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.erro || 'Erro desconhecido');
 
-        document.getElementById('import-step-2').style.display = 'none';
-        document.getElementById('import-step-3').style.display = 'block';
-        document.getElementById('import-result-icon').textContent = '✅';
-        const destLabel = _importDestino === 'relatorio_injecao' ? 'Relatório de Injeção' : 'Relatorio de Baterias';
-        document.getElementById('import-result-msg').textContent = json.inseridos + ' registros importados para ' + destLabel + '!';
-        document.getElementById('import-result-sub').textContent = json.duplicatas
-          ? json.duplicatas + ' duplicatas ignoradas.'
-          : 'Nenhuma duplicata encontrada.';
-      } catch (err) {
-        document.getElementById('import-step-2').style.display = 'none';
-        document.getElementById('import-step-3').style.display = 'block';
-        document.getElementById('import-result-icon').textContent = '❌';
-        document.getElementById('import-result-msg').textContent = 'Erro ao importar';
-        document.getElementById('import-result-sub').textContent = err.message;
-      } finally {
+          document.getElementById('import-step-2').style.display = 'none';
+          document.getElementById('import-step-3').style.display = 'block';
+          document.getElementById('import-result-icon').textContent = '✅';
+          const destLabel = _importDestino === 'relatorio_injecao' ? 'Relatório de Injeção' : 'Relatorio de Baterias';
+          document.getElementById('import-result-msg').textContent = json.inseridos + ' registros importados para ' + destLabel + '!';
+          document.getElementById('import-result-sub').textContent = json.duplicatas
+            ? json.duplicatas + ' duplicatas ignoradas.'
+            : 'Nenhuma duplicata encontrada.';
+        } catch (err) {
+          document.getElementById('import-step-2').style.display = 'none';
+          document.getElementById('import-step-3').style.display = 'block';
+          document.getElementById('import-result-icon').textContent = '❌';
+          document.getElementById('import-result-msg').textContent = 'Erro ao importar';
+          document.getElementById('import-result-sub').textContent = err.message;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '✓ Importar Registros';
+        }
+      }, function onCancel() {
         btn.disabled = false;
         btn.textContent = '✓ Importar Registros';
-      }
+      });
     }
 
     // ---- Config Modal ----
@@ -1649,11 +1694,13 @@
       const elDados = document.getElementById('cfg-secao-dados');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
+      const elOperadores = document.getElementById('cfg-secao-operadores');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
+      if (elOperadores) elOperadores.style.display = secao === 'operadores' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
 
@@ -1662,16 +1709,19 @@
       const navDados = document.getElementById('cfg-nav-dados');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
+      const navOperadores = document.getElementById('cfg-nav-operadores');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navOperadores) navOperadores.style.cssText = secao === 'operadores' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'autorizados') cfgRenderAutorizados();
+      if (secao === 'operadores') cfgRenderOperadores();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
     }
@@ -2328,6 +2378,7 @@
 
       const novasOpcoesMontagem = _cfgDados.montagens.map(_montagemDaUIParaConfig);
 
+      let cfg;
       try {
         // IMPORTANTE: busca o config.json de verdade do servidor ANTES de
         // salvar, em vez de reconstruir do zero só com o que esta tela
@@ -2348,7 +2399,7 @@
         const resAtual = await fetch('/db/config.json');
         const cfgAtual = resAtual.ok ? await resAtual.json() : {};
 
-        const cfg = {
+        cfg = {
           ...cfgAtual,
           baterias: { ids: _cfgDados.baterias },
           dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
@@ -2359,18 +2410,39 @@
           volume_por_placa: cfgAtual.volume_por_placa || LW.VOLUME_POR_PLACA,
           dispositivosAutorizados: cfgAtual.dispositivosAutorizados || LW.DISPOSITIVOS_AUTORIZADOS,
         };
-
-        const res = await fetch('/salvar-config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cfg)
-        });
-        const result = await res.json();
-        if (!result.ok) throw new Error(result.erro);
       } catch (e) {
         LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
         return;
       }
+
+      // POST /salvar-config agora exige sessão de Administrador válida (ver
+      // lib/sessao.js, server.js) — pede a senha aqui, na hora de salvar de
+      // verdade, em vez de logo ao abrir Configurações (que qualquer um com
+      // sessionStorage.lw_role='Administrador' já conseguia abrir, sem
+      // senha nenhuma — ver comentário em abrirConfiguracoes/abrirBackupHub).
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
+
+      const salvouComSucesso = await new Promise((resolve) => {
+        AdminAuth.abrirModal(async function onSuccess() {
+          try {
+            const res = await fetch('/salvar-config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cfg)
+            });
+            const result = await res.json();
+            if (!result.ok) throw new Error(result.erro);
+            resolve(true);
+          } catch (e) {
+            LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
+            resolve(false);
+          }
+        }, function onCancel() { resolve(false); });
+      });
+      if (!salvouComSucesso) return;
 
       // Recarrega a página depois de salvar — assim os selects de bateria e
       // tipo de montagem na tela de Registrar Operação (preenchidos só na
@@ -2412,17 +2484,42 @@
       };
     }
 
-    async function _cfgSalvarAutorizados(novaLista) {
-      const cfg = _configAtualBaseParaSalvar();
-      cfg.dispositivosAutorizados = novaLista;
-      const res = await fetch('/salvar-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
+    // POST /salvar-config agora exige sessão de Administrador (ver
+    // lib/sessao.js) — pede a senha aqui (se ainda não houver sessão
+    // válida) antes de autorizar/remover um dispositivo. Mantém o mesmo
+    // contrato de antes pros dois chamadores (cfgAdicionarAutorizado/
+    // cfgRemoverAutorizado): retorna uma Promise que resolve quando salvo
+    // com sucesso, e rejeita em erro real OU cancelamento — nesse 2º caso
+    // com `.silencioso = true`, pra quem chama saber que não deve mostrar
+    // um alerta de "erro" (o usuário só desistiu, não é uma falha).
+    function _cfgSalvarAutorizados(novaLista) {
+      return new Promise((resolve, reject) => {
+        if (typeof AdminAuth === 'undefined') {
+          reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
+          return;
+        }
+        AdminAuth.abrirModal(async function onSuccess() {
+          try {
+            const cfg = _configAtualBaseParaSalvar();
+            cfg.dispositivosAutorizados = novaLista;
+            const res = await fetch('/salvar-config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cfg),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
+            LW.atualizarDispositivosAutorizados(novaLista);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }, function onCancel() {
+          const err = new Error('Cancelado.');
+          err.silencioso = true;
+          reject(err);
+        });
       });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
-      LW.atualizarDispositivosAutorizados(novaLista);
     }
 
     async function cfgRenderAutorizados() {
@@ -2533,6 +2630,123 @@
       return div.innerHTML;
     }
 
+    // ---- Operadores (Configurações → Operadores — Identidade Leve) ----
+    // Mesmo raciocínio de Autorizados, acima, mas a lista em si NUNCA é
+    // guardada num global tipo LW.DISPOSITIVOS_AUTORIZADOS — vem sempre
+    // fresca de GET /operadores (nunca inclui pinHash, só {id, nome}),
+    // porque só é consultada aqui, dentro de Configurações.
+    let _operadoresCache = [];
+
+    async function cfgRenderOperadores() {
+      const elStatus = document.getElementById('cfg-operadores-status');
+      const elLista = document.getElementById('cfg-operadores-lista');
+      elLista.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
+      try {
+        const res = await fetch('/operadores');
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao listar operadores.');
+        _operadoresCache = json.operadores;
+      } catch (e) {
+        elLista.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
+        return;
+      }
+
+      elStatus.innerHTML = _operadoresCache.length
+        ? `<span class="badge badge-green">✓ ${_operadoresCache.length} operador(es) cadastrado(s)</span>`
+        : `<span class="badge badge-gray">⬤ Nenhum operador cadastrado — recurso desligado (nada muda pra quem registra)</span>`;
+
+      elLista.innerHTML = _operadoresCache.map(o => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
+      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(o.nome)}</span>
+      <button onclick="cfgRemoverOperador('${_escaparHtmlLocal(o.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum operador cadastrado ainda.</span>';
+    }
+
+    // POST /salvar-operadores exige sessão de Administrador (ver
+    // lib/sessao.js) — mesmo contrato de _cfgSalvarAutorizados (Promise
+    // que resolve/rejeita, rejeição de cancelamento marcada como
+    // `.silencioso`). `listaParaEnviar` já deve vir no formato esperado
+    // pelo servidor ([{id?, nome, pin?}] — ver comentário na rota).
+    function _cfgSalvarOperadores(listaParaEnviar) {
+      return new Promise((resolve, reject) => {
+        if (typeof AdminAuth === 'undefined') {
+          reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
+          return;
+        }
+        AdminAuth.abrirModal(async function onSuccess() {
+          try {
+            const res = await fetch('/salvar-operadores', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(listaParaEnviar),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }, function onCancel() {
+          const err = new Error('Cancelado.');
+          err.silencioso = true;
+          reject(err);
+        });
+      });
+    }
+
+    async function cfgAdicionarOperador() {
+      const inputNome = document.getElementById('cfg-operador-nome');
+      const inputPin = document.getElementById('cfg-operador-pin');
+      const nome = inputNome.value.trim();
+      const pin = inputPin.value.trim();
+
+      if (!nome) { LW.mostrarAlerta('Digite o nome do operador.', { tipo: 'aviso' }); return; }
+      if (!/^\d{4,8}$/.test(pin)) { LW.mostrarAlerta('O PIN precisa ter de 4 a 8 dígitos numéricos.', { tipo: 'aviso' }); return; }
+
+      // Reenvia todo mundo que já existia SEM "pin" (preserva o hash de
+      // cada um no servidor — ver comentário em POST /salvar-operadores)
+      // + o novo, com o PIN em texto puro só nesta chamada (o servidor
+      // faz o hash antes de gravar; nunca fica em texto puro em disco).
+      const listaParaEnviar = [
+        ..._operadoresCache.map(o => ({ id: o.id, nome: o.nome })),
+        { nome, pin },
+      ];
+
+      try {
+        await _cfgSalvarOperadores(listaParaEnviar);
+      } catch (e) {
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao adicionar: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      inputNome.value = '';
+      inputPin.value = '';
+      cfgRenderOperadores();
+    }
+
+    async function cfgRemoverOperador(id) {
+      const operador = _operadoresCache.find(o => o.id === id);
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover "${operador?.nome || id}" do cadastro de operadores? Registros já feitos por essa pessoa continuam com o nome dela — isto só afeta registros novos.`,
+        { titulo: 'Remover operador', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+
+      const listaParaEnviar = _operadoresCache
+        .filter(o => o.id !== id)
+        .map(o => ({ id: o.id, nome: o.nome }));
+
+      try {
+        await _cfgSalvarOperadores(listaParaEnviar);
+      } catch (e) {
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      cfgRenderOperadores();
+    }
+
     async function cfgAdicionarAutorizado() {
       const inputNome = document.getElementById('cfg-autorizado-nome');
       const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
@@ -2554,7 +2768,7 @@
       try {
         await _cfgSalvarAutorizados(novaLista);
       } catch (e) {
-        LW.mostrarAlerta('Erro ao autorizar: ' + e.message, { tipo: 'erro' });
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao autorizar: ' + e.message, { tipo: 'erro' });
         return;
       }
 
@@ -2576,7 +2790,7 @@
       try {
         await _cfgSalvarAutorizados(novaLista);
       } catch (e) {
-        LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
         return;
       }
 

@@ -711,6 +711,15 @@
   border-radius: 12px;
   border: 1px solid var(--border);
 }
+/* Faixa de berços de cada palete-base (ex: "Berços 1–10 · Esq.") — ver
+   _atualizarSubtitulosPallets, setor-qualidade.js. flex-basis:100% joga
+   pra uma linha própria, abaixo do rótulo (o header já é flex-wrap). */
+.sq-pallet-sub {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: .62rem;
+  color: var(--text-3);
+}
 .sq-pallet-actions { display: flex; align-items: center; gap: 3px; }
 
 .sq-btn-select-all {

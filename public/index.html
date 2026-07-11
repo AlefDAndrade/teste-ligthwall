@@ -5,6 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Injeção — Lightwall SC</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#0a1626">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Lightwall">
   <link rel="stylesheet" href="css/styles.css">
   <!-- CSS do Setor de Qualidade — antes só carregado dentro do iframe
        próprio (setor-qualidade-app.html); agora que a tela roda como
@@ -27,12 +34,17 @@
           ☰
         </button>
       </div>
-      <div class="topbar-logo">⬡ Lightwall</div>
-      <div class="topbar-sub">Sistema de Injeção V1.0</div>
+      <div class="topbar-logo">⬡ teste testes teste</div>
+      <div class="topbar-sub">teste</div>
 
       <span id="topbar-fila-pendentes" title="Operações salvas localmente, aguardando conexão para serem registradas de verdade"
         style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:rgba(245,158,11,.15);border:1px solid var(--accent-dim);color:var(--accent);font-size:.78rem;font-weight:600;white-space:nowrap">
         📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
+      </span>
+
+      <span id="topbar-operador-atual" title="Clique para trocar quem está identificado nesta aba"
+        onclick="LWOperador.trocar()"
+        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap;cursor:pointer">
       </span>
 
       <div style="position:relative">
@@ -74,7 +86,7 @@
     </header>
 <!-- ============ SIDEBAR ============ -->
     <nav class="sidebar">
-      <div class="sidebar-label">Principal</div>
+      <div class="sidebar-label">teste</div>
       <button class="nav-item active" data-page="menu" onclick="showPage('menu',this)">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="7" height="7" />
@@ -150,6 +162,15 @@
         <span class="nav-text">OEE</span>
       </button>
 
+      <button class="nav-item" data-page="metas" onclick="showPage('metas',this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="6" />
+          <circle cx="12" cy="12" r="2" />
+        </svg>
+        <span class="nav-text">Metas</span>
+      </button>
+
       <button class="nav-item" data-page="paradas" onclick="showPage('paradas',this)">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -159,6 +180,14 @@
           <line x1="3" y1="15" x2="21" y2="15"/>
         </svg>
         <span class="nav-text">Registro de Paradas</span>
+      </button>
+
+      <button class="nav-item" data-page="analise-focada" onclick="LWFocada.abrirBusca(); showPage('analise-focada',this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <span class="nav-text">Rastreabilidade</span>
       </button>
 
       <button class="nav-item" data-page="setor-qualidade" onclick="showPage('setor-qualidade',this)">
@@ -220,6 +249,11 @@
             <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
             </div>
           </div>
+          <div class="menu-card" onclick="showPage('metas')">
+            <div class="menu-card-icon">🏁</div>
+            <div class="menu-card-title">Metas</div>
+            <div class="menu-card-desc">Progresso do mês contra as metas de traços, m² e OEE definidas pelo Administrador.</div>
+          </div>
           <div class="menu-card" onclick="showPage('paradas')">
             <div class="menu-card-icon">🛑</div>
             <div class="menu-card-title">Registro de Paradas</div>
@@ -229,6 +263,11 @@
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
             <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
+          </div>
+          <div class="menu-card" onclick="window.open('tv.html', '_blank')">
+            <div class="menu-card-icon">📺</div>
+            <div class="menu-card-title">Modo TV</div>
+            <div class="menu-card-desc">Painel para telão da fábrica: operação ao vivo, traços do dia, OEE e últimas paradas — atualiza sozinho, sem precisar de login.</div>
           </div>
           <div class="menu-card" data-admin-only onclick="abrirImportacao()">
             <div class="menu-card-icon">📥</div>
@@ -314,7 +353,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -1187,18 +1226,32 @@
     <main class="main" id="page-analise-focada">
       <div class="page-header">
         <h1 class="page-title">Análise <span>Focada</span></h1>
-        <p class="page-desc">Berços, receita e avaliação de uma única operação — tudo ligado pelo ID da operação</p>
+        <p class="page-desc">Berços, receita, avaliação e rastreabilidade de uma única operação — tudo ligado pelo ID da operação, bateria ou traço</p>
       </div>
 
       <div class="page-body">
 
-        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
           <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
         </div>
 
+        <!-- ═══ BUSCA — sempre visível, pra achar outra operação sem voltar ═══ -->
+        <div class="card mb-4" style="padding:14px 20px">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:.85rem;color:var(--text-2);white-space:nowrap">🔎 Buscar por</span>
+            <input class="form-input" id="af-busca-input" placeholder="ID da Bateria, da Operação ou do Traço…"
+              style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')LWFocada.buscar(this.value)">
+            <button class="btn btn-accent btn-sm" onclick="LWFocada.buscar(document.getElementById('af-busca-input').value)">Buscar</button>
+          </div>
+          <div id="af-busca-resultados" style="margin-top:10px;display:none"></div>
+        </div>
+
         <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
         <div id="af-erro" style="display:none;text-align:center;padding:60px;color:var(--red)"></div>
+        <div id="af-vazio" style="display:none;text-align:center;padding:60px;color:var(--text-3)">
+          Digite acima o ID de uma Bateria, Operação ou Traço pra ver os detalhes completos dela.
+        </div>
 
         <div id="af-content">
 
@@ -1214,10 +1267,16 @@
             <div id="af-bercos"></div>
           </div>
 
-          <!-- ═══ RECEITA UTILIZADA ═══ -->
+          <!-- ═══ RECEITA UTILIZADA (com origem/reaproveitamento por traço) ═══ -->
           <div class="card mb-4" style="padding:16px 20px">
             <div class="card-title" style="margin-bottom:12px">🧪 Receita Utilizada</div>
             <div id="af-receita"></div>
+          </div>
+
+          <!-- ═══ PARADAS NESTA JANELA ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">🛑 Paradas Nesta Janela</div>
+            <div id="af-paradas"></div>
           </div>
 
           <!-- ═══ AVALIAÇÃO DE QUALIDADE ═══ -->
@@ -1649,6 +1708,54 @@
         </div>
       </div>
     </main>
+<!-- ============ PAGE: METAS ============ -->
+    <main class="main" id="page-metas">
+      <div class="page-header">
+        <h1 class="page-title">Metas de <span>Produção</span></h1>
+        <p class="page-desc">Progresso do mês corrente — traços, m² e OEE — comparado com os alvos definidos pelo Administrador</p>
+      </div>
+
+      <div class="page-body">
+
+        <div style="margin-bottom:14px;display:flex;justify-content:flex-end" data-admin-only>
+          <button class="btn btn-outline-accent btn-sm" id="btn-metas-editar" onclick="LWMetas.abrirEdicao()">✏️ Editar Metas</button>
+        </div>
+
+        <!-- Formulário de edição (admin) — escondido até "Editar Metas" -->
+        <div class="card mb-4" id="metas-form-card" style="padding:18px 22px;display:none">
+          <div class="card-title" style="margin-bottom:14px">Definir metas do mês</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de Traços (mês)</label>
+              <input class="form-input" type="number" min="0" step="1" id="metas-input-tracos" placeholder="Ex: 500">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de m² (mês)</label>
+              <input class="form-input" type="number" min="0" step="1" id="metas-input-m2" placeholder="Ex: 3000">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de OEE (%)</label>
+              <input class="form-input" type="number" min="0" max="100" step="1" id="metas-input-oee" placeholder="Ex: 65">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="LWMetas.cancelarEdicao()">Cancelar</button>
+            <button class="btn btn-accent btn-sm" id="btn-metas-salvar" onclick="LWMetas.salvar()">Salvar Metas</button>
+          </div>
+        </div>
+
+        <div id="metas-loading" style="text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
+
+        <div id="metas-content" style="display:none">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+            <div class="card" id="metas-card-tracos" style="padding:20px 22px"></div>
+            <div class="card" id="metas-card-m2" style="padding:20px 22px"></div>
+            <div class="card" id="metas-card-oee" style="padding:20px 22px"></div>
+          </div>
+        </div>
+
+      </div><!-- .page-body -->
+    </main>
 <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
@@ -2013,7 +2120,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -2365,6 +2472,7 @@
               <div class="sq-pallet-col">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 1</span>
+                  <span class="sq-pallet-sub" id="sq-pallet-sub-1"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack1')">⚡ Todas</button>
                     <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack1')">🎨</button>
@@ -2383,6 +2491,7 @@
               <div class="sq-pallet-col">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 2</span>
+                  <span class="sq-pallet-sub" id="sq-pallet-sub-2"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack2')">⚡ Todas</button>
                     <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack2')">🎨</button>
@@ -2401,6 +2510,7 @@
               <div class="sq-pallet-col">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 3</span>
+                  <span class="sq-pallet-sub" id="sq-pallet-sub-3"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack3')">⚡ Todas</button>
                     <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack3')">🎨</button>
@@ -2419,6 +2529,7 @@
               <div class="sq-pallet-col">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 4</span>
+                  <span class="sq-pallet-sub" id="sq-pallet-sub-4"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack4')">⚡ Todas</button>
                     <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack4')">🎨</button>
@@ -2673,6 +2784,9 @@
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔒 Autorizados</button>
+          <button type="button" id="cfg-nav-operadores" onclick="cfgMostrarSecao('operadores')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            👤 Operadores</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -2889,6 +3003,40 @@
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
+          <!-- ========== SEÇÃO: Operadores (Identidade Leve) ========== -->
+          <div id="cfg-secao-operadores" style="display:none">
+            <div class="card-title">Operadores</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Cadastro opcional pra saber <strong>quem registrou o quê</strong> (Registrar Operação, Registro de
+              Paradas). Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador — não é
+              login nem trava nada: enquanto ninguém estiver cadastrado aqui, o sistema funciona exatamente como
+              antes, sem perguntar nada a ninguém.
+            </p>
+
+            <div id="cfg-operadores-status" style="margin-bottom:18px"></div>
+
+            <div id="cfg-operadores-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Adicionar Operador</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:2;min-width:160px">
+                  <label class="form-label">Nome</label>
+                  <input class="form-input" id="cfg-operador-nome" placeholder="Ex: João Silva">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
+                  <label class="form-label">PIN (4 a 8 dígitos)</label>
+                  <input class="form-input" id="cfg-operador-pin" type="password" inputmode="numeric" maxlength="8"
+                    style="font-family:var(--font-mono)">
+                </div>
+                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarOperador()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Operadores ========== -->
+
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
             <div class="card-title">🤖 Modo Automático</div>
@@ -2967,6 +3115,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/operador.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
@@ -3233,7 +3382,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -3303,7 +3452,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -3374,7 +3523,7 @@
 
     </div>
   </div>
-
+
 <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -3750,6 +3899,7 @@
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
   <script src="js/oee.js"></script>
+  <script src="js/metas.js"></script>
   <script src="js/relatorio-bercos.js"></script>
   <script src="js/analise-bercos.js"></script>
   <script src="js/analise-focada.js"></script>
@@ -3759,6 +3909,7 @@
   <script src="js/keyboard-shortcuts.js"></script>
   <script src="js/tour.js"></script>
   <script src="js/abrir-nova-aba.js"></script>
+  <script src="js/pwa-register.js"></script>
 </body>
 
 </html>

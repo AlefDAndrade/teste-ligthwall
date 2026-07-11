@@ -208,6 +208,12 @@
       return;
     }
 
+    // "Quem está operando?" (ver operador.js) — só perguntado ao CRIAR
+    // uma parada nova; numa edição, omitir o campo faz o servidor
+    // preservar o autor original (ver POST /salvar-parada, server.js) em
+    // vez de trocar pra quem só corrigiu um detalhe depois.
+    const operador = _modoEdicao ? null : await LWOperador.exigir();
+
     const parada = {
       id:             _modoEdicao || _gerarIdParada(),
       inicio:         new Date(inicio).toISOString(),
@@ -218,6 +224,7 @@
       classificacao,
       obs,
       registrado_em:  new Date().toISOString(),
+      ...(operador ? { operador_nome: operador.nome } : {}),
     };
 
     const btn = document.getElementById('btn-salvar-parada');
