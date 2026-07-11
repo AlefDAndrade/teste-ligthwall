@@ -82,6 +82,15 @@ db.exec(`
     -- com este id_operacao?", nunca mais por esta coluna.
     avaliado              INTEGER NOT NULL DEFAULT 0,
     modo_teste            INTEGER DEFAULT 0,
+    -- Nome de quem registrou (ver "Identidade Leve de Operador",
+    -- public/js/operador.js) — puramente informativo, NUNCA usado como
+    -- controle de acesso: sem operador selecionado, a coluna fica NULL e
+    -- a operação é registrada normalmente (o registro em si nunca é
+    -- bloqueado por falta de identidade). Guardado como o NOME já
+    -- resolvido (não um id/FK) de propósito — sobrevive sozinho mesmo se
+    -- aquele operador for removido do cadastro depois; é rótulo de
+    -- auditoria, não uma referência viva.
+    operador_nome         TEXT,
     criado_em             TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_operacoes_data ON operacoes(data);
@@ -227,7 +236,9 @@ db.exec(`
     equipamento   TEXT,
     classificacao TEXT,
     obs           TEXT,
-    registrado_em TEXT
+    registrado_em TEXT,
+    -- Mesmo campo/mesmo raciocínio de operacoes.operador_nome, acima.
+    operador_nome TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_paradas_inicio ON paradas(inicio);
 
@@ -529,6 +540,21 @@ if (!_colunasOperacoes.includes('avaliado')) {
 }
 
 // ------------------------------------------------------------
+//  Migração leve: coluna "operador_nome" em operacoes E em paradas —
+//  ver "Identidade Leve de Operador" (operacoes.operador_nome, acima,
+//  pro raciocínio completo). Mesmo padrão da migração de "avaliado".
+// ------------------------------------------------------------
+if (!_colunasOperacoes.includes('operador_nome')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN operador_nome TEXT');
+  console.log('[migração] Coluna "operador_nome" adicionada à tabela operacoes.');
+}
+const _colunasParadas = db.prepare("PRAGMA table_info(paradas)").all().map(c => c.name);
+if (!_colunasParadas.includes('operador_nome')) {
+  db.exec('ALTER TABLE paradas ADD COLUMN operador_nome TEXT');
+  console.log('[migração] Coluna "operador_nome" adicionada à tabela paradas.');
+}
+
+// ------------------------------------------------------------
 //  Migração única: popula "operacoes_avaliadas" a partir da coluna
 //  legada "operacoes.avaliado" — sem isso, toda operação que já tivesse
 //  sido marcada avaliado=1 ANTES desta tabela existir voltaria a
@@ -685,6 +711,9 @@ function operacaoParaRow(r) {
     // avaliado, por ex.) — nunca por acidente de um campo truthy qualquer
     // vindo do JSON antigo.
     avaliado: r.avaliado === true || r.avaliado === 1 ? 1 : 0,
+    // Ver "Identidade Leve de Operador" (operacoes.operador_nome,
+    // CREATE TABLE acima) — nunca obrigatório, fica NULL se não vier.
+    operador_nome: r.operador_nome || null,
   };
 }
 
@@ -718,6 +747,7 @@ function rowParaOperacao(row) {
     m2_sp: row.m2_sp,
     tracos: row.tracos_json ? JSON.parse(row.tracos_json) : [],
     avaliado: !!row.avaliado,
+    operador_nome: row.operador_nome || null,
   };
 }
 
@@ -727,13 +757,13 @@ const SQL_INSERIR_OPERACAO = `
     tempo_min, qtd_tracos, houve_atraso, motivo_atraso, tipo_montagem, bercos_reais,
     bercos_personalizados, total_paineis, m2_total, placas_cimenticia,
     paineis_por_tipo, m2_por_tipo, paineis_2p, paineis_sp, m2_2p, m2_sp,
-    tracos_json, avaliado, modo_teste, criado_em
+    tracos_json, avaliado, modo_teste, operador_nome, criado_em
   ) VALUES (
     @id, @data, @turno, @dimensao, @capacidade, @id_bateria, @inicio, @fim, @desemplaque,
     @tempo_min, @qtd_tracos, @houve_atraso, @motivo_atraso, @tipo_montagem, @bercos_reais,
     @bercos_personalizados, @total_paineis, @m2_total, @placas_cimenticia,
     @paineis_por_tipo, @m2_por_tipo, @paineis_2p, @paineis_sp, @m2_2p, @m2_sp,
-    @tracos_json, @avaliado, @modo_teste, @criado_em
+    @tracos_json, @avaliado, @modo_teste, @operador_nome, @criado_em
   )
 `;
 
@@ -1426,6 +1456,9 @@ function paradaParaRow(p) {
     classificacao: p.classificacao ?? null,
     obs: p.obs ?? null,
     registrado_em: p.registrado_em ?? null,
+    // Ver "Identidade Leve de Operador" (paradas.operador_nome, CREATE
+    // TABLE acima).
+    operador_nome: p.operador_nome || null,
   };
 }
 
@@ -1441,12 +1474,13 @@ function rowParaParada(row) {
     classificacao: row.classificacao,
     obs: row.obs,
     registrado_em: row.registrado_em,
+    operador_nome: row.operador_nome || null,
   };
 }
 
 const SQL_INSERIR_PARADA = `
-  INSERT INTO paradas (id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em)
-  VALUES (@id, @inicio, @fim, @duracao_min, @motivo, @equipamento, @classificacao, @obs, @registrado_em)
+  INSERT INTO paradas (id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em, operador_nome)
+  VALUES (@id, @inicio, @fim, @duracao_min, @motivo, @equipamento, @classificacao, @obs, @registrado_em, @operador_nome)
 `;
 
 module.exports.paradaParaRow = paradaParaRow;

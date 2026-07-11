@@ -2000,16 +2000,24 @@
 
   function registrarOperacao() {
     if (_bloqueadoPorAutorizacao()) return;
-    // Montagem Personalizada precisa que "berços reais" bata com a
-    // quantidade de berços com tipo definido na grade — confere (e resolve
-    // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
-    if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
-      _reconciliarMontagemPersonalizada().then(podeSeguir => {
-        if (podeSeguir) _registrarOperacaoInterna();
-      });
-      return;
-    }
-    _registrarOperacaoInterna();
+    // "Quem está operando?" (ver operador.js) — pergunta leve, opcional,
+    // ANTES de seguir com o registro de verdade; exigir() nunca trava o
+    // fluxo (resolve com null se pulado ou se ninguém estiver cadastrado
+    // ainda). O nome (não o PIN) fica em state.operador_nome só até este
+    // registro ser montado, logo abaixo.
+    LWOperador.exigir().then(operador => {
+      state.operador_nome = operador?.nome || null;
+      // Montagem Personalizada precisa que "berços reais" bata com a
+      // quantidade de berços com tipo definido na grade — confere (e resolve
+      // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
+      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        _reconciliarMontagemPersonalizada().then(podeSeguir => {
+          if (podeSeguir) _registrarOperacaoInterna();
+        });
+        return;
+      }
+      _registrarOperacaoInterna();
+    });
   }
 
   function _registrarOperacaoInterna() {
@@ -2039,6 +2047,9 @@
       motivo_atraso: state.motivo_atraso || '',
       tipo_montagem: state.tipo_montagem,
       bercos_reais: bercos,
+      // Ver "Identidade Leve de Operador" — puramente informativo, nunca
+      // obrigatório (ver registrarOperacao(), acima).
+      operador_nome: state.operador_nome || null,
       // Detalhe berço a berço — só presente em Montagem Personalizada; o
       // resto do sistema nunca precisa disso (já usa paineis_por_tipo/
       // m2_por_tipo, vindos de ...calc acima), é só pra exibir/auditar a
