@@ -1,18 +1,51 @@
 // ============================================================
 //  LIGHTWALL SC — SISTEMA DE INJEÇÃO
-//  analise-focada.js — Análise Focada de uma Operação
+//  analise-focada.js — Análise Focada de uma Operação (Rastreabilidade)
 // ============================================================
-// Acessada clicando numa linha do Registro de Baterias com o "modo de
-// foco" ligado (ver LWDash.toggleModoFocoRegistro/onClickLinhaRegistro,
-// dashboard.js). Junta tudo que se liga por id_operacao — o elo comum
-// entre histórico, relatório de injeção e berços visuais — numa página
-// só: identificação da operação, o desenho da bateria (berços visuais),
-// a receita usada (com ajustes, se algum) e a avaliação de qualidade
-// vinculada (ver db.detalheOperacao(), server.js/db.js).
+// Acessada de duas formas:
+//   1) Clicando numa linha do Registro de Baterias com o "modo de foco"
+//      ligado (ver LWDash.toggleModoFocoRegistro/onClickLinhaRegistro,
+//      dashboard.js) — chega já com uma operação escolhida.
+//   2) Pelo item "Rastreabilidade" da sidebar — chega sem operação
+//      nenhuma, com uma busca por ID de Bateria/Operação/Traço (ver
+//      abrirBusca/buscar, abaixo).
+// Junta tudo que se liga por id_operacao — o elo comum entre histórico,
+// relatório de injeção e berços visuais — numa página só: identificação
+// da operação, o desenho da bateria (berços visuais), a receita usada
+// (com ajustes, se algum), de ONDE cada traço veio e se sobrou pra ser
+// reaproveitado depois (ver _anotarOrigemEReaproveitamento, abaixo — usa
+// db.detalheOperacao() pro grosso dos dados, mas a cadeia de
+// reaproveitamento não está lá: é resolvida aqui, cruzando com
+// relatorio_injecao.json, mesma técnica já usada em debriefing.js), as
+// paradas que caíram dentro da janela dela, e a avaliação de qualidade
+// vinculada.
 'use strict';
 
 (function () {
   let _idAtual = null;
+
+  // ── Cache dos dados usados pela BUSCA e pela cadeia de reaproveitamento
+  // — carregados uma vez só (lazy, na 1ª busca ou no 1º render de uma
+  // operação) e reaproveitados nas chamadas seguintes dentro da mesma
+  // sessão de página. Não há invalidação automática de propósito: é
+  // dado histórico que não muda com o tempo que alguém passa olhando
+  // esta tela, e um F5 já recarrega tudo do zero se precisar.
+  let _cacheHistorico = null;   // db/historico.json — pra achar por ID de Bateria/Operação e resolver nomes na cadeia
+  let _cacheTracos = null;      // db/relatorio_injecao.json — pra achar por ID de Traço e resolver a cadeia de reaproveitamento
+  let _cacheParadas = null;     // db/paradas.json
+
+  async function _carregarCaches() {
+    const precisa = !_cacheHistorico || !_cacheTracos || !_cacheParadas;
+    if (!precisa) return;
+    const [historico, tracos, paradas] = await Promise.all([
+      fetch('db/historico.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('db/relatorio_injecao.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('db/paradas.json').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+    _cacheHistorico = Array.isArray(historico) ? historico : [];
+    _cacheTracos = Array.isArray(tracos) ? tracos : [];
+    _cacheParadas = Array.isArray(paradas) ? paradas : [];
+  }
 
   // ── Abre a página focada numa operação específica — chamado de fora
   // (dashboard.js) quando o usuário clica numa linha com o modo de foco
@@ -22,8 +55,103 @@
     showPage('analise-focada');
   }
 
+  // ── Entrada pela sidebar ("Rastreabilidade") — sem operação
+  // pré-escolhida: limpa a seleção atual pra render() mostrar a busca em
+  // vez de reabrir a última operação vista. Chamado ANTES de showPage()
+  // no onclick do nav-item (ver nav-sidebar.html) — showPage() já chama
+  // LWFocada.init()/render() em seguida, então só precisa zerar aqui.
+  function abrirBusca() {
+    _idAtual = null;
+  }
+
   function voltar() {
     showPage('registro');
+  }
+
+  // ============================================================
+  //  BUSCA — ID de Bateria, Operação ou Traço
+  // ============================================================
+
+  // Acha operações candidatas pra uma query de texto — 3 formas de bater,
+  // checadas nesta ordem (a mais específica primeiro, pra não ambiguar
+  // um ID de operação/traço com um pedaço solto de texto):
+  //   1) ID de Operação exato — sempre 1 resultado só.
+  //   2) ID de Traço (id_traco OU num_traco) — resolve pra a operação
+  //      ONDE ELE FOI USADO PELA PRIMEIRA VEZ (usos[0] — ver
+  //      _anotarOrigemEReaproveitamento, mais abaixo, pro raciocínio
+  //      completo da cadeia); se o traço foi reaproveitado depois, dá
+  //      pra navegar pras operações seguintes a partir de lá.
+  //   3) ID de Bateria (parcial, sem diferenciar maiúsc./minúsc.) — pode
+  //      bater em VÁRIAS operações (a mesma bateria física roda muitas
+  //      vezes ao longo do tempo) — mais recente primeiro.
+  function _buscarCandidatos(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const qLower = q.toLocaleLowerCase();
+
+    const porId = _cacheHistorico.find(op => op.id === q);
+    if (porId) return [porId];
+
+    const tracoAchado = _cacheTracos.find(t => t.id_traco === q || String(t.num_traco) === q);
+    if (tracoAchado) {
+      const usos = tracoAchado.ultilizado?.operacao || [];
+      if (usos.length) {
+        const opOrigem = _cacheHistorico.find(op => op.id === usos[0].id_operacao);
+        if (opOrigem) return [opOrigem];
+      }
+    }
+
+    return _cacheHistorico
+      .filter(op => (op.id_bateria || '').toLocaleLowerCase().includes(qLower))
+      .sort((a, b) => (b.data + (b.fim || '')).localeCompare(a.data + (a.fim || '')))
+      .slice(0, 15);
+  }
+
+  // Entrada pública (botão "Buscar"/Enter no campo, ver
+  // page-analise-focada.html). 1 resultado → abre direto; vários → lista
+  // pra escolher; nenhum → avisa.
+  async function buscar(query) {
+    const q = String(query || '').trim();
+    const resultadosEl = document.getElementById('af-busca-resultados');
+    if (!q) { if (resultadosEl) resultadosEl.style.display = 'none'; return; }
+
+    if (resultadosEl) {
+      resultadosEl.style.display = '';
+      resultadosEl.innerHTML = `<div style="color:var(--text-3);font-size:.85rem">Buscando…</div>`;
+    }
+
+    await _carregarCaches();
+    const candidatos = _buscarCandidatos(q);
+
+    if (candidatos.length === 1) {
+      if (resultadosEl) resultadosEl.style.display = 'none';
+      abrir(candidatos[0].id);
+      return;
+    }
+    if (!candidatos.length) {
+      if (resultadosEl) {
+        resultadosEl.innerHTML = `<div style="color:var(--text-3);font-size:.85rem">Nenhuma operação encontrada pra "${LW.escaparHtml(q)}".</div>`;
+      }
+      return;
+    }
+    _renderResultadosBusca(candidatos);
+  }
+
+  function _renderResultadosBusca(candidatos) {
+    const el = document.getElementById('af-busca-resultados');
+    if (!el) return;
+    el.innerHTML = `
+      <div style="font-size:.8rem;color:var(--text-2);margin-bottom:6px">${candidatos.length} operações encontradas — escolha uma:</div>
+      <div style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto">
+        ${candidatos.map(op => `
+          <button class="btn btn-ghost btn-sm" style="justify-content:flex-start;text-align:left"
+            onclick="LWFocada.abrir('${op.id}')">
+            <strong style="margin-right:8px">${LW.escaparHtml(op.id_bateria || '—')}</strong>
+            <span style="color:var(--text-3)">${_fmtData(op.data)} · ${LW.escaparHtml(op.turno || '—')} · ${LW.escaparHtml(op.tipo_montagem || '—')}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
   }
 
   // ── Formatação ────────────────────────────────────────────
@@ -123,6 +251,65 @@
     }).join('')}</div>`;
   }
 
+  // ── Cadeia de reaproveitamento de cada traço ──────────────────
+  // Mesma técnica de detecção de debriefing.js (usoIdx > 0 = reaproveitado
+  // — ver _reaproveitado/origem_bateria/origem_operacao lá), só que olhando
+  // pras DUAS direções: de onde este traço veio (se não foi a 1ª vez que
+  // foi usado) E pra onde ele foi depois (se a sobra dele foi reaproveitada
+  // em uma ou mais operações futuras). t.ultilizado.operacao é a lista
+  // completa de usos de um traço, na ordem em que aconteceram — ver
+  // rowParaTraco()/todosOsTracos() (db.js).
+  //
+  // Anota cada traço de `tracosDetalhe` (o array vindo de
+  // db.detalheOperacao(), já escopado a ESTA operação) com `_origem` e
+  // `_reaproveitadoDepois`, resolvidos a partir de _cacheTracos/
+  // _cacheHistorico (ver _carregarCaches) — sem alterar nenhum campo que
+  // já existia.
+  function _anotarOrigemEReaproveitamento(tracosDetalhe, idOperacaoAtual) {
+    const mapaOperacoes = new Map(_cacheHistorico.map(op => [op.id, op]));
+
+    tracosDetalhe.forEach(t => {
+      t._origem = null;
+      t._reaproveitadoDepois = [];
+
+      const tracoCompleto = _cacheTracos.find(tc => tc.id_traco === t.id_traco);
+      const usos = tracoCompleto?.ultilizado?.operacao || [];
+      if (usos.length < 2) return; // nunca reaproveitado — nada a anotar
+
+      const idxAtual = usos.findIndex(u => u.id_operacao === idOperacaoAtual);
+      if (idxAtual === -1) return; // não deveria acontecer, mas não quebra a tela se acontecer
+
+      if (idxAtual > 0) {
+        t._origem = mapaOperacoes.get(usos[0].id_operacao) || null;
+      }
+      if (idxAtual < usos.length - 1) {
+        t._reaproveitadoDepois = usos.slice(idxAtual + 1)
+          .map(u => mapaOperacoes.get(u.id_operacao))
+          .filter(Boolean);
+      }
+    });
+  }
+
+  // Um badge levando pra outra operação — clicável na tela ao vivo
+  // (chama LWFocada.abrir, definida neste mesmo módulo); no HTML
+  // exportado standalone (ver _gerarHtmlAfStandalone, mais abaixo), esta
+  // mesma função é reembutida via toString() num documento que NÃO tem
+  // LWFocada (é um retrato estático, sem navegação) — por isso checa a
+  // existência antes de gerar o onclick, e cai pra um badge só de texto
+  // nesse caso, em vez de deixar um botão morto no arquivo exportado.
+  // IDs de operação são gerados pelo próprio sistema ('op_' + timestamp
+  // — ver operacao.js), nunca texto digitado por usuário, então entram
+  // direto no onclick sem precisar escapar (mesmo padrão já usado em
+  // setor-qualidade.js/dashboard.js pra este mesmo tipo de ID).
+  function _badgeOperacao(op) {
+    const rotulo = `${LW.escaparHtml(op.id_bateria || op.id)} · ${_fmtData(op.data)}`;
+    if (typeof LWFocada === 'undefined') {
+      return `<span class="af-pallet-tipo" style="padding:2px 10px">${rotulo}</span>`;
+    }
+    return `<button class="btn btn-ghost btn-sm" style="padding:2px 10px;font-size:.78rem"
+      onclick="LWFocada.abrir('${op.id}')">${rotulo}</button>`;
+  }
+
   // ── Receita utilizada (traços + ajustes) ─────────────────────
   function _renderReceita(tracos) {
     const el = document.getElementById('af-receita');
@@ -163,6 +350,13 @@
                </div>`).join('')}
            </div>`;
 
+      const origemHtml = t._origem
+        ? `<div class="af-traco-origem-linha">🔗 Origem: ${_badgeOperacao(t._origem)}</div>`
+        : '';
+      const reaproveitadoHtml = (t._reaproveitadoDepois && t._reaproveitadoDepois.length)
+        ? `<div class="af-traco-origem-linha">➡️ Reaproveitado depois em: ${t._reaproveitadoDepois.map(_badgeOperacao).join(' ')}</div>`
+        : '';
+
       return `
         <div class="af-traco-card">
           <div class="af-traco-header">
@@ -172,6 +366,51 @@
           <div class="af-receita-grid">${receitaHtml}</div>
           ${t.obs ? `<div class="af-traco-obs">📝 ${LW.escaparHtml(t.obs)}</div>` : ''}
           ${ajustesHtml}
+          ${origemHtml}
+          ${reaproveitadoHtml}
+        </div>`;
+    }).join('');
+  }
+
+  // ── Paradas que caíram dentro da janela [início,fim] da operação ──
+  // Mesma técnica de sobreposição de _minutosParadaNaoPlanejadaNaJanela
+  // (oee.js), mas devolvendo a LISTA inteira de paradas sobrepostas (não
+  // só o total de minutos) e sem filtrar por classificação — aqui é pra
+  // mostrar contexto ("o que aconteceu durante esta operação"), não pra
+  // descontar tempo de Disponibilidade.
+  function _paradasNaJanela(paradas, inicioISO, fimISO) {
+    if (!inicioISO || !fimISO || !paradas || !paradas.length) return [];
+    const ini = new Date(inicioISO).getTime();
+    const fim = new Date(fimISO).getTime();
+    if (isNaN(ini) || isNaN(fim) || fim <= ini) return [];
+
+    return paradas.filter(p => {
+      if (!p.inicio || !p.fim) return false;
+      const pIni = new Date(p.inicio).getTime();
+      const pFim = new Date(p.fim).getTime();
+      if (isNaN(pIni) || isNaN(pFim)) return false;
+      return pFim > ini && pIni < fim; // qualquer sobreposição, mesmo parcial
+    }).sort((a, b) => new Date(a.inicio) - new Date(b.inicio));
+  }
+
+  function _renderParadas(paradas) {
+    const el = document.getElementById('af-paradas');
+    if (!el) return;
+    if (!paradas.length) {
+      el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Nenhuma parada registrada durante esta operação.</div>`;
+      return;
+    }
+    el.innerHTML = paradas.map(p => {
+      const planejada = p.classificacao === 'Planejada';
+      const duracaoMin = p.duracao_min != null
+        ? p.duracao_min
+        : (p.inicio && p.fim ? (new Date(p.fim) - new Date(p.inicio)) / 60000 : null);
+      return `
+        <div class="af-traco-card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span class="badge ${planejada ? 'badge-blue' : 'badge-red'}">${planejada ? 'Planejada' : 'Não Planejada'}</span>
+          <strong>${LW.escaparHtml(p.equipamento || p.motivo || '—')}</strong>
+          <span style="color:var(--text-3)">${duracaoMin != null ? Math.round(duracaoMin) + ' min' : '—'}</span>
+          ${p.obs ? `<span style="color:var(--text-2);font-size:.82rem">📝 ${LW.escaparHtml(p.obs)}</span>` : ''}
         </div>`;
     }).join('');
   }
@@ -232,20 +471,26 @@
   async function render() {
     const loading = document.getElementById('af-loading');
     const erro = document.getElementById('af-erro');
+    const vazio = document.getElementById('af-vazio');
     const content = document.getElementById('af-content');
 
     if (!_idAtual) {
       if (loading) loading.style.display = 'none';
       if (content) content.style.display = 'none';
-      if (erro) { erro.style.display = ''; erro.textContent = 'Nenhuma operação selecionada — volte pro Registro de Baterias e clique numa linha com o modo de foco ligado.'; }
+      if (erro) erro.style.display = 'none';
+      if (vazio) vazio.style.display = '';
       return;
     }
 
+    if (vazio) vazio.style.display = 'none';
     if (loading) loading.style.display = '';
     if (content) content.style.display = 'none';
     if (erro) erro.style.display = 'none';
 
-    const detalhe = await LW.getDetalheOperacao(_idAtual);
+    const [detalhe] = await Promise.all([
+      LW.getDetalheOperacao(_idAtual),
+      _carregarCaches(), // pra cadeia de reaproveitamento e paradas, abaixo
+    ]);
 
     if (loading) loading.style.display = 'none';
 
@@ -255,9 +500,13 @@
     }
 
     if (content) content.style.display = '';
+    _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
+    const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
+
     _renderCabecalho(detalhe.operacao);
     _renderBercos(detalhe.bercosVisuais, detalhe.operacao);
     _renderReceita(detalhe.tracos);
+    _renderParadas(paradasDaJanela);
     _renderAvaliacao(detalhe.avaliacao);
   }
 
@@ -273,9 +522,11 @@
     const btn = document.getElementById('btn-af-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      const detalhe = await LW.getDetalheOperacao(_idAtual);
+      const [detalhe] = await Promise.all([LW.getDetalheOperacao(_idAtual), _carregarCaches()]);
       if (!detalhe) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados desta operação.', { tipo: 'erro' }); return; }
-      const html = _gerarHtmlAfStandalone(detalhe);
+      _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
+      const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
+      const html = _gerarHtmlAfStandalone(detalhe, paradasDaJanela);
       LW.baixarArquivoTexto(
         `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
         html
@@ -302,8 +553,9 @@
     return { cor: '#fff', bg: cor, borda: cor };
   }
 
-  function _gerarHtmlAfStandalone(detalhe) {
+  function _gerarHtmlAfStandalone(detalhe, paradasDaJanela = []) {
     const detalheJson = JSON.stringify(detalhe).replace(/<\/script/gi, '<\\/script');
+    const paradasJson = JSON.stringify(paradasDaJanela).replace(/<\/script/gi, '<\\/script');
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -325,6 +577,7 @@
   .af-ajustes-wrap { margin-top:12px; }
   .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
   .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
+  .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
   .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
@@ -338,6 +591,9 @@
   .ba-numero { text-align:center; white-space:nowrap; font-size:.72rem; }
   .ba-dot { font-size:.95rem; line-height:1; padding:3px 5px; opacity:.55; border-radius:50%; }
   .ba-dot.ba-dot-marcado { opacity:1; color:var(--red); background:rgba(229,72,77,.15); }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-size:.72rem; font-weight:700; }
+  .badge-blue { background:rgba(59,130,246,.15); color:#93c5fd; }
+  .badge-red { background:rgba(239,68,68,.15); color:#fecaca; }
   .mono { font-family:var(--font-mono); }
 </style>
 </head>
@@ -348,14 +604,16 @@
   <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div id="af-cabecalho" class="af-cabecalho-grid"></div></div>
   <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div id="af-bercos"></div></div>
   <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div id="af-receita"></div></div>
+  <div class="chart-box" style="margin-bottom:14px"><h4>🛑 Paradas Nesta Janela</h4><div id="af-paradas"></div></div>
   <div class="chart-box"><h4>✅ Avaliação de Qualidade</h4><div id="af-avaliacao"></div></div>
 
-  <div class="rodape">Exportado da Análise Focada — Lightwall SC · dados embutidos neste arquivo, funciona offline. Cores de tipo de montagem são aproximadas (não refletem necessariamente a cor configurada na tela ao vivo).</div>
+  <div class="rodape">Exportado da Análise Focada — Lightwall SC · dados embutidos neste arquivo, funciona offline. Cores de tipo de montagem são aproximadas (não refletem necessariamente a cor configurada na tela ao vivo). Os badges de "Origem"/"Reaproveitado depois em" são só informativos aqui — abrir a outra operação exige a tela ao vivo.</div>
 
 <script>
 (function () {
   'use strict';
   const DETALHE = ${detalheJson};
+  const PARADAS = ${paradasJson};
   const LW = {
     escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
     TIPO_MONTAGEM_PERSONALIZADA: 'PERSONALIZADA',
@@ -371,7 +629,9 @@
   ${_renderCabecalho}
   ${_corPorTipoBerco}
   ${_renderBercos}
+  ${_badgeOperacao}
   ${_renderReceita}
+  ${_renderParadas}
   ${_labelPainel}
   ${_corPainel}
   ${_renderAvaliacao}
@@ -379,6 +639,7 @@
   _renderCabecalho(DETALHE.operacao || {});
   _renderBercos(DETALHE.bercosVisuais, DETALHE.operacao);
   _renderReceita(DETALHE.tracos);
+  _renderParadas(PARADAS);
   _renderAvaliacao(DETALHE.avaliacao);
 })();
 </script>
@@ -390,5 +651,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, voltar, init, render, exportarInterativo };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo };
 })();

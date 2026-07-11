@@ -2,18 +2,32 @@
     <main class="main" id="page-analise-focada">
       <div class="page-header">
         <h1 class="page-title">Análise <span>Focada</span></h1>
-        <p class="page-desc">Berços, receita e avaliação de uma única operação — tudo ligado pelo ID da operação</p>
+        <p class="page-desc">Berços, receita, avaliação e rastreabilidade de uma única operação — tudo ligado pelo ID da operação, bateria ou traço</p>
       </div>
 
       <div class="page-body">
 
-        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
           <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
         </div>
 
+        <!-- ═══ BUSCA — sempre visível, pra achar outra operação sem voltar ═══ -->
+        <div class="card mb-4" style="padding:14px 20px">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:.85rem;color:var(--text-2);white-space:nowrap">🔎 Buscar por</span>
+            <input class="form-input" id="af-busca-input" placeholder="ID da Bateria, da Operação ou do Traço…"
+              style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')LWFocada.buscar(this.value)">
+            <button class="btn btn-accent btn-sm" onclick="LWFocada.buscar(document.getElementById('af-busca-input').value)">Buscar</button>
+          </div>
+          <div id="af-busca-resultados" style="margin-top:10px;display:none"></div>
+        </div>
+
         <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
         <div id="af-erro" style="display:none;text-align:center;padding:60px;color:var(--red)"></div>
+        <div id="af-vazio" style="display:none;text-align:center;padding:60px;color:var(--text-3)">
+          Digite acima o ID de uma Bateria, Operação ou Traço pra ver os detalhes completos dela.
+        </div>
 
         <div id="af-content">
 
@@ -29,10 +43,16 @@
             <div id="af-bercos"></div>
           </div>
 
-          <!-- ═══ RECEITA UTILIZADA ═══ -->
+          <!-- ═══ RECEITA UTILIZADA (com origem/reaproveitamento por traço) ═══ -->
           <div class="card mb-4" style="padding:16px 20px">
             <div class="card-title" style="margin-bottom:12px">🧪 Receita Utilizada</div>
             <div id="af-receita"></div>
+          </div>
+
+          <!-- ═══ PARADAS NESTA JANELA ═══ -->
+          <div class="card mb-4" style="padding:16px 20px">
+            <div class="card-title" style="margin-bottom:12px">🛑 Paradas Nesta Janela</div>
+            <div id="af-paradas"></div>
           </div>
 
           <!-- ═══ AVALIAÇÃO DE QUALIDADE ═══ -->
