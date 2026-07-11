@@ -18,39 +18,7 @@ function numOuNulo(v) {
   return (v === '' || v === null || v === undefined) ? null : Number(v);
 }
 
-// ── Configurações → Dados SQL: tabelas do SQLite expostas na tela de
-// administração pra consulta e exclusão manual de linha (ver GET
-// /admin/sql-tabelas, GET /admin/sql-linhas e POST /admin/sql-excluir-linha,
-// abaixo). SQL não permite parametrizar nome de tabela/coluna (só valores),
-// então nome de tabela e coluna usados nas queries dessas rotas SEMPRE vêm
-// deste whitelist — nunca são montados a partir do que o cliente manda.
-// "pk" é a coluna que identifica uma linha sozinha (a PRIMARY KEY de
-// verdade da tabela, ver CREATE TABLE em db.js) — é o valor usado pra
-// excluir exatamente uma linha, nunca o índice dela na lista.
-const TABELAS_SQL_ADMIN = {
-  operacoes:            { pk: 'id',           label: 'Operações (Registro de Baterias)' },
-  edicoes_operacao:     { pk: 'id',           label: 'Auditoria de Edições — Operações' },
-  tracos:                { pk: 'id_traco',     label: 'Traços (Relatório de Injeção)' },
-  traco_usos:            { pk: 'id',           label: 'Usos de Traço' },
-  ajustes:                { pk: 'id',           label: 'Ajustes de Receita' },
-  leituras_resultado:     { pk: 'id',           label: 'Leituras de Densidade/Flow' },
-  edicoes_traco:          { pk: 'id',           label: 'Auditoria de Edições — Traços' },
-  contador_tracos:        { pk: 'data',         label: 'Contador de Traços do Dia' },
-  paradas:                { pk: 'id',           label: 'Paradas' },
-  sobra:                  { pk: 'id',           label: 'Sobra' },
-  bercos_visuais:         { pk: 'id_operacao',  label: 'Berços Visuais' },
-  avaliacoes_qualidade:   { pk: 'id',           label: 'Avaliações de Qualidade' },
-  avaliacao_paineis:      { pk: 'id_avaliacao', label: 'Painéis de Avaliação' },
-  operacoes_avaliadas:    { pk: 'id_operacao',  label: 'Operações Avaliadas (Setor de Qualidade)' },
-};
-
-// Teto de linhas devolvidas por GET /admin/sql-linhas — telas de
-// administração desse tipo não precisam paginar de verdade (o sistema é de
-// uso interno, volume baixo); um teto evita só travar o navegador se uma
-// tabela crescer muito. Sempre as mais recentes primeiro (rowid DESC).
-const SQL_ADMIN_LIMITE_LINHAS = 1000;
-
-const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
+const PORT = process.env.PORT || 3000; // env var facilita rodar testes numa porta separada
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -65,6 +33,14 @@ const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "ban
 // mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
 const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
 const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
+// Cadastro de Identidade Leve de Operador (ver "Identidade Leve de
+// Operador", db.js) — mesmo motivo de SECURITY_PATH viver fora de
+// public/: contém pinHash por operador, e um arquivo dentro de public/db/
+// seria servido cru pela rota estática genérica pra qualquer um que
+// soubesse a URL (foi exatamente o problema histórico de security.json —
+// ver README, "Limitações conhecidas"). GET /operadores (abaixo) nunca
+// devolve pinHash, só {id, nome}.
+const OPERADORES_PATH = path.join(PRIVATE_DIR, 'operadores.json');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
 // Migração automática, só na 1ª vez que sobe depois desta mudança: se o
@@ -90,13 +66,35 @@ const auth = require('./lib/auth.js')(SECURITY_PATH);
 // antes desta mudança: GET /db/security.json e POST /salvar-security.
 const sessao = require('./lib/sessao.js')();
 
+// ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
+// seguido) — cada uma é uma factory que recebe só as dependências que
+// aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
+// devolve true se já respondeu. Chamadas em sequência dentro do
+// http.createServer, abaixo, antes das rotas que ainda não foram
+// extraídas (ver o loop logo no início do callback).
+const rotasOperadores = require('./lib/rotas/operadores.js')({ fs, path, PRIVATE_DIR, auth, sessao });
+const rotasParadas = require('./lib/rotas/paradas.js')({ db });
+const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
+const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
+const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
+const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste });
+const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, dispositivoAutorizado, negarDispositivoNaoAutorizado });
+const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
+const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
+  sessao, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
+  lerBercosAndamento, salvarBercosAndamentoNoDisco, dispositivoAutorizado, negarDispositivoNaoAutorizado,
+});
+const ROTAS_EXTRAIDAS = [rotasOperadores, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento];
+
 // Resolve o caminho real, no disco, de um arquivo de public/db/ — quase
-// todos vivem em DB_DIR, mas security.json é a única exceção (ver
-// PRIVATE_DIR/SECURITY_PATH, acima). Centralizar essa decisão aqui evita
-// ter que repetir o "if (nome === 'security.json')" em cada rota de
-// backup/restauração que itera a lista de arquivos genericamente.
+// todos vivem em DB_DIR, mas security.json e operadores.json são exceção
+// (ver PRIVATE_DIR/SECURITY_PATH/OPERADORES_PATH, acima). Centralizar
+// essa decisão aqui evita ter que repetir o "if (nome === ...)" em cada
+// rota de backup/restauração que itera a lista de arquivos genericamente.
 function caminhoArquivoDb(nome) {
-  return nome === 'security.json' ? SECURITY_PATH : path.join(DB_DIR, nome);
+  if (nome === 'security.json') return SECURITY_PATH;
+  if (nome === 'operadores.json') return OPERADORES_PATH;
+  return path.join(DB_DIR, nome);
 }
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
@@ -123,6 +121,12 @@ const MIME = {
   '.mp3':  'audio/mpeg',
   '.wav':  'audio/wav',
   '.ogg':  'audio/ogg',
+  // Ícones do PWA (ver public/icons/, manifest.json) — sem isso, o
+  // servidor devolvia qualquer .png como 'text/plain' (fallback,
+  // abaixo), e o navegador não reconhece esses arquivos como ícone.
+  '.png':  'image/png',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
 };
 
 // Retorna a data de hoje em Brasília no formato YYYY-MM-DD (consistente com
@@ -218,9 +222,16 @@ const VALIDADORES_BACKUP_DADOS = {
   'relatorio_edicoes.json':  v => Array.isArray(v),
   'relatorio_injecao.json': v => Array.isArray(v),
   'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
+  // Identidade Leve de Operador (ver OPERADORES_PATH, acima) — mesmo
+  // motivo de viver fora de public/db/ que security.json.
+  'operadores.json':         v => Array.isArray(v),
   'sobra.json':              v => v && typeof v === 'object',
   'paradas.json':            v => Array.isArray(v),
   'ajustes_tracos.json':    v => Array.isArray(v),
+  // Metas de produção (Página de Metas — ver public/js/metas.js). Objeto
+  // simples, mesmo padrão de config.json; campos ausentes/null = meta
+  // não definida pra aquele indicador (nunca um erro de validação).
+  'metas.json':              v => v && typeof v === 'object' && !Array.isArray(v),
   // ─── Adicionados: Berços Visuais e Avaliações do Setor de Qualidade —
   // antes ficavam de fora do Backup de Dados/automático, só entravam no
   // Backup Geral (que zipa o .sqlite inteiro). Ambos são tabelas SQL (ver
@@ -718,6 +729,18 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // ─── Rotas extraídas pra lib/rotas/ (ver ROTAS_EXTRAIDAS, acima) ───────
+  // Tentadas ANTES das rotas ainda inline abaixo — cada módulo devolve
+  // `true` se já respondeu (encerra aqui) ou `false` se essa requisição
+  // não é dele (segue tentando o próximo módulo, e por fim as rotas
+  // ainda-não-extraídas mais abaixo). Corpo grande já foi validado acima
+  // (o teto de 50MB vale pra QUALQUER rota, extraída ou não). queryParams
+  // é passado a todos (mesmo os módulos que não usam — um argumento a
+  // mais que a função não declara é só ignorado pelo JS).
+  for (const modulo of ROTAS_EXTRAIDAS) {
+    if (modulo(req, res, urlPath, queryParams)) return;
+  }
+
   // ── NOVO: Verificar senha admin no servidor ────────────────────────────────
   // POST /verificar-senha  { senha: "texto plano" }
   // Retorna { ok: true } se correta, { ok: false } se incorreta.
@@ -828,44 +851,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura, não incrementa.
-  if (req.method === 'GET' && urlPath === '/total-tracos-hoje') {
-    try {
-      const contador = lerContadorTracosHoje(modoTeste);
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
-    } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // Confirma N traços ao finalizar uma operação
-  if (req.method === 'POST' && urlPath === '/confirmar-tracos-hoje') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      if (!modoTeste && !dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
-      try {
-        const payload = JSON.parse(body);
-        const quantidade = Number(payload.quantidade);
-        if (!Number.isInteger(quantidade) || quantidade < 0) {
-          throw new Error('Quantidade inválida.');
-        }
-        const contador = incrementarContadorTracosHoje(quantidade, modoTeste);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, total: contador.total, data: contador.data }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
   // Salvar config.json via POST
+  // ── Antes desta mudança, esta rota não exigia NADA — nem senha, nem
+  // sessão (README, "Limitações conhecidas") — apesar de controlar
+  // baterias, tipos de montagem e dispositivos autorizados. Agora exige
+  // a mesma sessão de Administrador das demais rotas administrativas
+  // (ver lib/sessao.js) — o front (app-core.js, cfgSalvar) já chama
+  // AdminAuth.abrirModal antes de mandar pra cá.
   if (req.method === 'POST' && urlPath === '/salvar-config') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -875,6 +873,52 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch(e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, erro: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ── POST /salvar-metas: metas de produção do mês (traços/m²/OEE) —
+  // Página de Metas (ver public/js/metas.js). Arquivo PRÓPRIO
+  // (metas.json), separado de config.json de propósito: /salvar-config
+  // (acima) sobrescreve o arquivo INTEIRO — reaproveitar essa rota pra
+  // metas exigiria montar o config.json completo no front toda vez que
+  // salvasse uma meta, com risco real de apagar baterias/tipos de
+  // montagem/dispositivos autorizados se o front esquecesse de incluir
+  // algum bloco (já aconteceu antes com outros campos, ver comentário em
+  // _configAtualBaseParaSalvar, app-core.js). Um arquivo pequeno e
+  // isolado não tem esse risco.
+  // Exige sessão de admin (ver lib/sessao.js), mesma exigência de
+  // /salvar-config, acima — unificado junto com ele.
+  if (req.method === 'POST' && urlPath === '/salvar-metas') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const metas = JSON.parse(body);
+        if (!metas || typeof metas !== 'object' || Array.isArray(metas)) {
+          throw new Error('Payload inválido.');
+        }
+        const CAMPOS_METAS = ['tracosMes', 'm2Mes', 'oeePercentMes'];
+        const metasLimpas = {};
+        CAMPOS_METAS.forEach(campo => {
+          const v = metas[campo];
+          if (v === null || v === undefined || v === '') { metasLimpas[campo] = null; return; }
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < 0) throw new Error(`Campo "${campo}" precisa ser um número positivo ou vazio.`);
+          metasLimpas[campo] = n;
+        });
+        fs.writeFileSync(path.join(DB_DIR, 'metas.json'), JSON.stringify(metasLimpas, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, metas: metasLimpas }));
+      } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
@@ -996,481 +1040,6 @@ const server = http.createServer((req, res) => {
     sessao.logout(req);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': sessao.cookieDeLogout() });
     res.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  Configurações → Dados SQL — consulta e exclusão manual de linha do
-  //  SQLite (ver TABELAS_SQL_ADMIN, acima, e a aba "🗄️ Dados SQL" em
-  //  modal-config.html). As 3 rotas abaixo exigem sessão de Administrador
-  //  válida (mesma exigência de GET /db/security.json) — dados de produção
-  //  inteiros e exclusão permanente não podem ficar atrás só do "abrir
-  //  Configurações" do lado do navegador.
-  // ══════════════════════════════════════════════════════════════════════
-
-  // ── GET /admin/sql-tabelas: lista as tabelas do whitelist com a
-  // contagem atual de linhas — popula o <select> da aba.
-  if (req.method === 'GET' && urlPath === '/admin/sql-tabelas') {
-    if (!sessao.requestTemSessaoValida(req)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
-      return;
-    }
-    try {
-      const tabelas = Object.entries(TABELAS_SQL_ADMIN).map(([tabela, info]) => {
-        const { total } = db.prepare(`SELECT COUNT(*) AS total FROM "${tabela}"`).get();
-        return { tabela, label: info.label, pk: info.pk, linhas: total };
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, tabelas }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /admin/sql-linhas?tabela=xxx: colunas + linhas (mais recentes
-  // primeiro) de UMA tabela do whitelist — nunca a tabela crua vinda do
-  // cliente, sempre a chave já validada contra TABELAS_SQL_ADMIN.
-  if (req.method === 'GET' && urlPath === '/admin/sql-linhas') {
-    if (!sessao.requestTemSessaoValida(req)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
-      return;
-    }
-    try {
-      const tabela = queryParams.get('tabela') || '';
-      const info = TABELAS_SQL_ADMIN[tabela];
-      if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
-
-      const colunas = db.prepare(`PRAGMA table_info("${tabela}")`).all().map(c => c.name);
-      const linhas = db.prepare(`SELECT * FROM "${tabela}" ORDER BY rowid DESC LIMIT ?`).all(SQL_ADMIN_LIMITE_LINHAS);
-
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, tabela, pk: info.pk, colunas, linhas, limite: SQL_ADMIN_LIMITE_LINHAS }));
-    } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── POST /admin/sql-excluir-linha: apaga UMA linha, pelo valor da PK
-  // real da tabela (ver TABELAS_SQL_ADMIN) — nunca por índice/posição na
-  // lista, que pode mudar a qualquer novo registro. Se a tabela tiver
-  // FOREIGN KEY apontando pra ela (ex.: bercos_visuais → operacoes) e
-  // ainda existir linha dependente, o SQLite recusa o DELETE sozinho
-  // (foreign_keys = ON, ver topo de db.js) — devolvemos isso como erro
-  // 400 de validação, não como falha de servidor.
-  //
-  // CASO ESPECIAL — "operacoes_avaliadas": excluir uma linha aqui não é
-  // um DELETE avulso — significa "desfazer a avaliação desta operação
-  // por completo". Por isso usa db.desfazerAvaliacaoOperacao(), que
-  // também apaga avaliacao_paineis e avaliacoes_qualidade daquela
-  // operação (senão ficariam órfãs: a avaliação continuaria existindo,
-  // só que de uma operação marcada como pendente de novo) — e, como
-  // consequência natural de tirar o id de operacoes_avaliadas, a
-  // operação volta a aparecer em GET /operacoes-nao-avaliadas (a fila do
-  // Setor de Qualidade), sem nenhum passo extra.
-  if (req.method === 'POST' && urlPath === '/admin/sql-excluir-linha') {
-    if (!sessao.requestTemSessaoValida(req)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
-      return;
-    }
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const { tabela, valor } = JSON.parse(body);
-        const info = TABELAS_SQL_ADMIN[tabela];
-        if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
-        if (valor === undefined || valor === null || valor === '') throw new Error('Valor da chave (' + info.pk + ') não informado.');
-
-        // Mesmo padrão de /registrar-operacao: quem originou a ação manda
-        // seu próprio OP_ANDAMENTO_CLIENT_ID via query string, só pra ELE
-        // ser excluído do broadcast abaixo (essa aba já recarrega sozinha
-        // depois do fetch — ver cfgSqlExcluirLinha, app-core.js).
-        const wsClientId = queryParams.get('wsClientId') || '';
-
-        if (tabela === 'operacoes_avaliadas') {
-          const r = db.desfazerAvaliacaoOperacao(valor);
-          if (!r.avaliacaoPaineis && !r.avaliacoesQualidade && !r.operacoesAvaliadas) {
-            throw new Error('Linha não encontrada (nenhuma alteração feita).');
-          }
-
-          // A fila de "não avaliadas" do Setor de Qualidade NÃO é
-          // recalculada do SQL a cada request — é um arquivo próprio
-          // (operacoes_nao_avaliadas.json, ver "FILA DE AVALIAÇÃO" mais
-          // acima) mantido em sincronia manualmente em cada ponto que
-          // marca/desmarca uma operação como avaliada. Sem esta linha, a
-          // operação sumiria de operacoes_avaliadas no SQL mas NUNCA
-          // voltaria a aparecer na fila visível do Setor de Qualidade.
-          // Mesma regra de sempre: nunca reinsere operação de Modo de
-          // Teste (a fila não tem noção disso).
-          const operacao = db.prepare('SELECT modo_teste FROM operacoes WHERE id = ?').get(valor);
-          if (operacao && !operacao.modo_teste) {
-            adicionarNaFilaNaoAvaliadas(valor);
-          }
-
-          // Avisa TODO MUNDO conectado (qualquer navegador/página — ver
-          // broadcastDadosSqlExcluidos, perto do WebSocket, mais abaixo)
-          // que esses dados mudaram, pra ninguém continuar vendo a
-          // avaliação/painéis já excluídos até um F5 manual.
-          broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            ok: true,
-            cascata: {
-              avaliacao_paineis: r.avaliacaoPaineis,
-              avaliacoes_qualidade: r.avaliacoesQualidade,
-              operacoes_avaliadas: r.operacoesAvaliadas,
-            },
-          }));
-          return;
-        }
-
-        const resultado = db.prepare(`DELETE FROM "${tabela}" WHERE "${info.pk}" = ?`).run(valor);
-        if (resultado.changes === 0) throw new Error('Linha não encontrada (nenhuma alteração feita).');
-
-        broadcastDadosSqlExcluidos({ tabela, valor }, wsClientId);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        const mensagemAmigavel = /FOREIGN KEY constraint failed/i.test(e.message)
-          ? 'Não é possível excluir: existem outros registros que dependem desta linha (ex.: usos, avaliações ou berços vinculados a esta operação).'
-          : e.message;
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: mensagemAmigavel }));
-      }
-    });
-    return;
-  }
-
-  // ── POST /admin/sql-limpar-tabela: apaga TODAS as linhas de uma tabela
-  // do whitelist de uma vez (botão "🧹 Limpar Todas", ao lado do "↺
-  // Atualizar" — ver cfgSqlLimparTabela, app-core.js). Mesma exigência de
-  // sessão de administrador das rotas acima; a senha de Administrador é
-  // pedida DE NOVO no cliente antes de chamar esta rota (mesmo padrão de
-  // cfgSqlExcluirLinha).
-  //
-  // "operacoes_avaliadas" tem o MESMO caso especial de
-  // /admin/sql-excluir-linha — só que em lote: cada id vira uma chamada de
-  // db.desfazerAvaliacaoOperacao (apaga avaliacao_paineis +
-  // avaliacoes_qualidade + a própria marcação, ver comentário na função,
-  // db.js) e, se a operação não for de Modo de Teste, volta pra fila de
-  // avaliação pendente — exatamente como excluir cada linha uma por uma
-  // pelo botão "✕ Excluir", só que sem precisar clicar em cada uma.
-  //
-  // Mesmo tratamento de FOREIGN KEY constraint da rota de linha única (pra
-  // qualquer OUTRA tabela do whitelist): se ainda houver linha dependente
-  // em outra tabela, o SQLite recusa o DELETE inteiro (nada é apagado —
-  // não é uma exclusão parcial) e devolve mensagem amigável, não erro de
-  // servidor.
-  if (req.method === 'POST' && urlPath === '/admin/sql-limpar-tabela') {
-    if (!sessao.requestTemSessaoValida(req)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
-      return;
-    }
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const { tabela } = JSON.parse(body);
-        const info = TABELAS_SQL_ADMIN[tabela];
-        if (!info) throw new Error('Tabela desconhecida ou não permitida: ' + tabela);
-
-        const wsClientId = queryParams.get('wsClientId') || '';
-
-        if (tabela === 'operacoes_avaliadas') {
-          const ids = db.prepare('SELECT id_operacao FROM operacoes_avaliadas').all().map(r => r.id_operacao);
-          const cascata = { avaliacao_paineis: 0, avaliacoes_qualidade: 0, operacoes_avaliadas: 0 };
-          ids.forEach(id => {
-            const r = db.desfazerAvaliacaoOperacao(id);
-            cascata.avaliacao_paineis    += r.avaliacaoPaineis;
-            cascata.avaliacoes_qualidade += r.avaliacoesQualidade;
-            cascata.operacoes_avaliadas  += r.operacoesAvaliadas;
-
-            // Mesma regra de sempre (ver POST /admin/sql-excluir-linha,
-            // acima): nunca reinsere operação de Modo de Teste na fila —
-            // ela não tem noção disso.
-            const operacao = db.prepare('SELECT modo_teste FROM operacoes WHERE id = ?').get(id);
-            if (operacao && !operacao.modo_teste) adicionarNaFilaNaoAvaliadas(id);
-          });
-
-          broadcastDadosSqlExcluidos({ tabela, limpezaTotal: true }, wsClientId);
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, excluidas: cascata.operacoes_avaliadas, cascata }));
-          return;
-        }
-
-        const resultado = db.prepare(`DELETE FROM "${tabela}"`).run();
-
-        broadcastDadosSqlExcluidos({ tabela, limpezaTotal: true }, wsClientId);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, excluidas: resultado.changes }));
-      } catch (e) {
-        const mensagemAmigavel = /FOREIGN KEY constraint failed/i.test(e.message)
-          ? 'Não é possível limpar: existem registros em outras tabelas que dependem de linhas desta (ex.: usos, avaliações ou berços vinculados). Limpe primeiro as tabelas dependentes.'
-          : e.message;
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: mensagemAmigavel }));
-      }
-    });
-    return;
-  }
-
-  // ── GET /db/historico_edicoes.json: mesma ideia da rota de historico.json
-  // acima — usado pelo "Backup de Dados" gerado no navegador
-  // (gerarBackupDados(), em data.js), que ainda faz fetch('db/' + nome)
-  // genérico pra cada arquivo da lista.
-  if (req.method === 'GET' && urlPath === '/db/historico_edicoes.json') {
-    try {
-      const rows = db.prepare('SELECT id_operacao, data_edicao, campos_alterados FROM edicoes_operacao ORDER BY id ASC').all();
-      const edicoes = rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) }));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(edicoes));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/relatorio_edicoes.json: mesma ideia, pra auditoria de edição
-  // de TRAÇO (edicoes_traco) — essa rota estava faltando (as outras 7
-  // existem desde a migração pra SQLite, esta nunca foi criada). Sem ela,
-  // fetch('db/relatorio_edicoes.json') em gerarBackupDados() caía direto
-  // no servidor de arquivo estático, que dá 404 (o arquivo não existe mais
-  // em disco) — o erro era engolido em silêncio ali, e o arquivo nunca
-  // entrava no .zip do "Backup de Dados". Era exatamente esse o motivo do
-  // restore acusar "está faltando": ele nunca chegou a ser incluído.
-  if (req.method === 'GET' && urlPath === '/db/relatorio_edicoes.json') {
-    try {
-      const rows = db.prepare('SELECT id_traco, id_operacao, data_edicao, campos_alterados FROM edicoes_traco ORDER BY id ASC').all();
-      const edicoes = rows.map(r => ({ ...r, campos_alterados: JSON.parse(r.campos_alterados) }));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(edicoes));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/relatorio_injecao.json: mesma estratégia das outras — desde
-  // a Fase 5, não existe mais como arquivo (caminho real); reconstrói o
-  // mesmo formato de sempre a partir de tracos+traco_usos+ajustes+
-  // leituras_resultado. Cobre LW.getRelatorioInjecao (dashboard.js), o
-  // modal de Editar Traço, e a tela de Backup de Dados — todos já fazem
-  // fetch direto, sem mudança nenhuma necessária.
-  if (req.method === 'GET' && urlPath === '/db/relatorio_injecao.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.todosOsTracos()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/ajustes_tracos.json: idem — usado por LW.getAjustesTracos()
-  // (o modal de Editar Traço carrega a lista de ajustes editável a partir
-  // daqui) e pela tela de Backup de Dados.
-  if (req.method === 'GET' && urlPath === '/db/ajustes_tracos.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.todosOsAjustesTracosJSON()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/bercos_visuais.json: mesma estratégia das outras tabelas —
-  // não existe mais como arquivo, reconstrói a partir da tabela SQL
-  // "bercos_visuais". Usado por gerarBackupDados() (data.js), que faz
-  // fetch('db/'+nome) genérico pra cada arquivo da lista (Backup de Dados).
-  if (req.method === 'GET' && urlPath === '/db/bercos_visuais.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.todosOsBercosVisuais()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/avaliacoes_qualidade.json: idem, reconstrói a partir da
-  // tabela "avaliacoes_qualidade" (avaliações já registradas do Setor de
-  // Qualidade) — usado pelo Backup de Dados.
-  if (req.method === 'GET' && urlPath === '/db/avaliacoes_qualidade.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.listarAvaliacoesQualidade()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/operacoes_avaliadas.json: idem, reconstrói a partir da
-  // tabela "operacoes_avaliadas" (lista de ids de operação já avaliados
-  // pelo Setor de Qualidade — ver CREATE TABLE, db.js) — usado pelo
-  // Backup de Dados.
-  if (req.method === 'GET' && urlPath === '/db/operacoes_avaliadas.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.todosOsOperacoesAvaliadas()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/detalhe_operacao.json?id=...: tudo que se liga por
-  // id_operacao — operação, berços visuais, receita de cada traço usado
-  // (com ajustes) e a avaliação de qualidade vinculada. Usado pela
-  // "Análise Focada" (ver public/js/analise-focada.js). Não é arquivo de
-  // backup — view derivada, sempre recalculada do banco.
-  if (req.method === 'GET' && urlPath === '/db/detalhe_operacao.json') {
-    try {
-      const idOperacao = queryParams.get('id') || '';
-      const detalhe = idOperacao ? db.detalheOperacao(idOperacao) : null;
-      res.writeHead(detalhe ? 200 : 404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(detalhe || { ok: false, erro: 'Operação não encontrada.' }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/avaliacao_paineis.json: painéis da Avaliação de Qualidade
-  // já normalizados numa tabela própria (avaliacao_paineis) — pronta pra
-  // cruzar em SQL com bercos_visuais/tracos/operacoes no futuro (mesmo
-  // padrão de relatorio_bercos.json/correlacao_traco_berco.json). Não é
-  // arquivo de backup — view derivada, sempre reconstruída do banco.
-  if (req.method === 'GET' && urlPath === '/db/avaliacao_paineis.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.listarPaineisAvaliacao()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/correlacao_traco_berco.json: 1 linha por USO de traço, já
-  // com nº de ajustes (instabilidade) e taxa de vazamento dos berços que
-  // aquele traço encheu — usado pelo gráfico de dispersão "Traço Instável
-  // × Vazamento" na Análise de Berços (ver public/js/analise-bercos.js).
-  // Não é arquivo de backup — view derivada, sempre recalculada do banco.
-  if (req.method === 'GET' && urlPath === '/db/correlacao_traco_berco.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.correlacaoTracoBerco()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/relatorio_bercos.json: junta bercos_visuais + operacoes
-  // (ID da bateria, tipo de montagem) — usado pela página "Relatório de
-  // Berços" (ver public/js/relatorio-bercos.js). Não é um arquivo de
-  // backup (não está em VALIDADORES_BACKUP_DADOS) — é só uma view
-  // derivada, sempre reconstruída na hora a partir do banco.
-  if (req.method === 'GET' && urlPath === '/db/relatorio_bercos.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.relatorioBercos()));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/historico.json: intercepta ANTES do fallback de arquivo
-  // estático (mais abaixo) — desde a Fase 2, historico.json não existe
-  // mais como arquivo de verdade; isso reconstrói o mesmo formato/conteúdo
-  // a partir da tabela "operacoes", pra ZERO mudança no navegador (toda
-  // tela que já fazia fetch('db/historico.json') continua funcionando
-  // sem nenhuma alteração — LW.getStats, Análise Operacional, Debriefing,
-  // a tela de Backup de Dados).
-  if (req.method === 'GET' && urlPath === '/db/historico.json') {
-    try {
-      const rows = db.prepare('SELECT * FROM operacoes ORDER BY data ASC, criado_em ASC').all();
-      const historico = rows.map(db.rowParaOperacao);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(historico));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── FILA DE BATERIAS NÃO AVALIADAS (Setor de Qualidade): lista enxuta
-  // (só os campos necessários pra identificar a bateria na fila E
-  // preencher automaticamente a tela de avaliação — ver "Nova Avaliação"
-  // em setor-qualidade.js) das operações QUE AINDA NÃO TÊM linha em
-  // operacoes_avaliadas (ver CREATE TABLE, db.js — substitui a antiga
-  // consulta por "avaliado=0" na própria tabela operacoes).
-  // Nunca inclui operações de Modo de Teste (modo_teste=0) — o Setor de
-  // Qualidade ainda não tem noção de Modo de Teste, então misturar geraria
-  // uma bateria "fantasma" na fila de uma instalação de testes.
-  // Ordenada da mais antiga pra mais nova (fim ASC) — fila FIFO: quem
-  // esperou mais tempo por avaliação aparece primeiro.
-  if (req.method === 'GET' && urlPath === '/operacoes-nao-avaliadas') {
-    try {
-      const ids = lerOperacoesNaoAvaliadas();
-      if (!ids.length) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end('[]');
-        return;
-      }
-      // A LISTA de quem está pendente vem do arquivo (fonte de verdade,
-      // ver comentário em OPERACOES_NAO_AVALIADAS_PATH) — o SQL aqui é só
-      // pra buscar os DETALHES de cada uma pra exibir na tela, nunca pra
-      // decidir quem entra ou sai da fila. Um id que porventura não exista
-      // mais em "operacoes" (não deveria acontecer — nada aqui deleta
-      // operação) simplesmente não aparece no resultado, sem erro.
-      const placeholders = ids.map(() => '?').join(',');
-      const rows = db.prepare(`
-        SELECT id, id_bateria, tipo_montagem, data, fim, turno, capacidade,
-               dimensao, bercos_reais, bercos_personalizados
-        FROM operacoes
-        WHERE id IN (${placeholders})
-        ORDER BY data ASC, fim ASC
-      `).all(...ids);
-      // bercos_personalizados vem serializado (TEXT) — desserializa aqui
-      // pra já entregar um array pronto (ou null) pro front, em vez de
-      // cada consumidor ter que fazer o próprio JSON.parse.
-      const lista = rows.map(r => ({
-        ...r,
-        bercos_personalizados: r.bercos_personalizados ? JSON.parse(r.bercos_personalizados) : null,
-      }));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(lista));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
     return;
   }
 
@@ -1628,132 +1197,6 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: false, erro: e.message }));
       }
     });
-    return;
-  }
-
-  // ── MARCAR OPERAÇÃO COMO AVALIADA (Setor de Qualidade): chamada pelo
-  // front assim que uma avaliação iniciada a partir da fila (ver GET
-  // /operacoes-nao-avaliadas, acima) é registrada — tira a bateria da
-  // fila. Ação do Setor de Qualidade, não do Administrador: de propósito
-  // sem exigir sessão de admin (diferente de /editar-operacao), mesmo
-  // nível de fricção das outras rotas internas do dia a dia.
-  // Grava em "operacoes_avaliadas" (INSERT), não mais um UPDATE na
-  // própria linha de "operacoes" — ver db.marcarOperacaoAvaliada e a
-  // CREATE TABLE correspondente em db.js.
-  if (req.method === 'POST' && urlPath === '/marcar-operacao-avaliada') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const { id } = JSON.parse(body);
-        if (!id || typeof id !== 'string') throw new Error('ID da operação ausente.');
-
-        const existe = db.prepare('SELECT 1 FROM operacoes WHERE id = ?').get(id);
-        if (!existe) throw new Error('Operação não encontrada (id: ' + id + ').');
-        db.marcarOperacaoAvaliada(id); // idempotente — repetir a chamada não faz nada além de confirmar
-        removerDaFilaNaoAvaliadas(id); // idempotente também — id que já não está na lista, não faz nada
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── REGISTRAR AVALIAÇÃO DE QUALIDADE (Setor de Qualidade): grava a
-  // avaliação DEFINITIVA (não rascunho — rascunhos continuam só no
-  // localStorage do navegador, ver setor-qualidade.js) — 1 linha em
-  // avaliacoes_qualidade, painéis inclusos como JSON (ver
-  // db.salvarAvaliacaoQualidade). Sem exigir sessão de admin nem
-  // dispositivo autorizado, de propósito — mesmo nível de fricção baixa
-  // de /marcar-berco-andamento e outras rotas internas do dia a dia.
-  if (req.method === 'POST' && urlPath === '/registrar-avaliacao-qualidade') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const avaliacao = JSON.parse(body);
-        if (!avaliacao || typeof avaliacao !== 'object' || !avaliacao.id) {
-          throw new Error('Avaliação inválida — falta o id.');
-        }
-
-        // ── BLOQUEIO DE AVALIAÇÃO AVULSA (2ª camada de prevenção) ──
-        // Avaliação avulsa (sem vir da fila, linkedOperacaoId ausente)
-        // era o que causava a Análise Focada não encontrar o resultado
-        // (ver correção em db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada,
-        // que resolve os casos que já existiam) — daqui pra frente, uma
-        // avaliação NOVA só é aceita se já vier vinculada a uma operação
-        // real da fila. O front (setor-qualidade.js) já trava isso na
-        // tela (botão "Registrar" desabilitado sem selecionar da fila),
-        // mas a validação de verdade é aqui — quem manda direto pra rota
-        // (sem passar pela tela) não consegue burlar.
-        //
-        // "jaExistiaAntes" distingue registro NOVO de CORREÇÃO (mesmo id
-        // já existente): uma correção de um registro legado que ainda
-        // não tenha vínculo (de antes desta trava existir) continua
-        // podendo ser salva — não trava quem só está editando algo que
-        // já estava assim.
-        const jaExistiaAntes = !!db.prepare('SELECT 1 FROM avaliacoes_qualidade WHERE id = ?').get(avaliacao.id);
-        if (!jaExistiaAntes) {
-          if (!avaliacao.linkedOperacaoId || typeof avaliacao.linkedOperacaoId !== 'string') {
-            throw new Error('Avaliação avulsa não é mais permitida — selecione uma bateria da fila (Ordem de Previsão de Desemplaque) antes de avaliar.');
-          }
-          const operacaoExiste = db.prepare('SELECT 1 FROM operacoes WHERE id = ?').get(avaliacao.linkedOperacaoId);
-          if (!operacaoExiste) {
-            throw new Error('Operação vinculada não encontrada — atualize a fila e tente novamente.');
-          }
-        }
-
-        db.salvarAvaliacaoQualidade(avaliacao);
-
-        // Classificação da operação como avaliada/não avaliada (ver
-        // db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada, db.js):
-        // avaliação vinda da fila já é marcada por uma chamada separada do
-        // front a /marcar-operacao-avaliada (com o id_operacao exato).
-        // O bloqueio acima impede QUALQUER avaliação nova sem
-        // linkedOperacaoId — este branch só continua existindo pra
-        // permitir salvar uma CORREÇÃO de um registro legado (de antes
-        // desta trava) que ainda não tinha vínculo, casando pela bateria
-        // + mais antiga pendente (FIFO). Nunca mexe numa avaliação que já
-        // veio vinculada.
-        if (!avaliacao.linkedOperacaoId && avaliacao.batteryId) {
-          // Passa o id da própria avaliação (avaliacao.id) pra também
-          // retro-vincular id_operacao nela, não só tirar a operação da
-          // fila — ver comentário de marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada
-          // (db.js) sobre o bug que isso corrige (Análise Focada não
-          // encontrava avaliações avulsas).
-          try {
-            const idMarcado = db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada(avaliacao.batteryId, avaliacao.id);
-            if (idMarcado) removerDaFilaNaoAvaliadas(idMarcado); // idem: tira da fila em arquivo também (ver OPERACOES_NAO_AVALIADAS_PATH)
-          }
-          catch (e) { console.error('Falha ao classificar operação (avaliação avulsa) como avaliada:', e); }
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── LISTAR AVALIAÇÕES DE QUALIDADE: alimenta o Dashboard e os
-  // Registros do Setor de Qualidade — cada item já vem com os painéis
-  // embutidos (ver db.listarAvaliacoesQualidade), mais recente primeiro.
-  if (req.method === 'GET' && urlPath === '/avaliacoes-qualidade') {
-    try {
-      const lista = db.listarAvaliacoesQualidade();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(lista));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
     return;
   }
 
@@ -2018,7 +1461,16 @@ const server = http.createServer((req, res) => {
   // então gera um id_traco sintético por linha e cria um traco_usos com o
   // id_operacao sintético que o navegador já mandou (sem FK pra
   // "operacoes" de propósito — ver schema em db.js).
+  // Antes desta mudança, importar dados em massa não exigia NADA (nem
+  // senha, nem sessão) — só a UI escondia o botão pra quem não fosse
+  // Administrador. Agora exige a mesma sessão das demais rotas
+  // administrativas (ver lib/sessao.js).
   if (req.method === 'POST' && urlPath === '/importar-relatorio-injecao') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -2080,7 +1532,13 @@ const server = http.createServer((req, res) => {
   // Importar lote de registros — insere na tabela operacoes, com a mesma
   // deduplicação de sempre (por id, ou por data+bateria+turno pra
   // registros antigos sem id).
+  // Mesma exigência de /importar-relatorio-injecao, acima.
   if (req.method === 'POST' && urlPath === '/importar-historico') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
@@ -2249,238 +1707,6 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  // ── SOBRA: salvar sobra (real -> tabela sobra; Modo de Teste -> JSON isolado) ──
-  if (req.method === 'POST' && urlPath === '/salvar-sobra') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const sobra = JSON.parse(body);
-        if (modoTeste) {
-          const sobraPath = path.join(dirParaModoTeste(true), 'sobra.json');
-          fs.writeFileSync(sobraPath, JSON.stringify(sobra, null, 2), 'utf8');
-        } else {
-          db.prepare(db.SQL_UPSERT_SOBRA).run(db.sobraParaRow(sobra));
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch(e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── OPERAÇÃO EM ANDAMENTO: recebe o rascunho atual da tela "Registrar
-  // Operação" e propaga na hora pra quem mais estiver com essa mesma tela
-  // aberta, via WebSocket (ver broadcastOperacaoAndamento, perto do final
-  // do arquivo). "dados" é sempre o objeto inteiro do estado atual, ou
-  // null — quando a operação termina, é cancelada/resetada, ou ainda não
-  // foi iniciada (ver regra equivalente em persist(), no operacao.js).
-  if (req.method === 'POST' && urlPath === '/admin/resetar-operacao') {
-    // Rota exclusiva para o Administrador cancelar/resetar a operação em
-    // andamento pela tela de Configurações → Autorizados, sem depender do
-    // deviceId de quem está clicando ser um dispositivo autorizado.
-    // Diferença em relação a POST /salvar-operacao-andamento com forcar=true:
-    // - Aquela rota exige que o deviceId da requisição esteja na lista de
-    //   autorizados (ver dispositivoAutorizado(), linha 1515 acima), então
-    //   falha quando o Administrador está em um computador não autorizado.
-    // - Esta rota ignora a lista de autorizados e exige apenas uma SESSÃO
-    //   válida do Administrador (lib/sessao.js), criada em /verificar-senha.
-    // Produz exatamente o mesmo efeito: null no disco + broadcast para todos
-    // os clientes WebSocket conectados, que atualizam a tela em tempo real.
-    if (!sessao.requestTemSessaoValida(req)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: 'Sessão de Administrador necessária. Faça login como Administrador antes de cancelar a operação.' }));
-      return;
-    }
-    try {
-      salvarOperacaoAndamentoNoDisco(null);
-      broadcastOperacaoAndamento(null, null);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-
-  if (req.method === 'POST' && urlPath === '/salvar-operacao-andamento') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body);
-        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-          throw new Error('Payload inválido.');
-        }
-        const dados = payload.dados;
-        if (dados !== null && dados !== undefined && (typeof dados !== 'object' || Array.isArray(dados))) {
-          throw new Error('Payload inválido: "dados" precisa ser um objeto ou null.');
-        }
-        const clientId = typeof payload.clientId === 'string' ? payload.clientId : null;
-        const ehLimpeza = dados === null || dados === undefined;
-        // "forcar" só existe pro botão "🗑️ Limpar Tudo" (ver resetarOperacao()
-        // em operacao.js) — é o jeito de qualquer dispositivo autorizado
-        // recuperar uma operação travada por outro computador que travou,
-        // ficou offline, ou simplesmente esqueceu de encerrar.
-        const forcar = payload.forcar === true && ehLimpeza;
-
-        const atual = lerOperacaoAndamento();
-
-        // Não-operação: já não tinha nada em andamento e o pedido é só pra
-        // "limpar" — não muda NADA no servidor. Acontece, por exemplo, ao
-        // desativar o Modo de Teste com a tela ociosa: persist() manda
-        // null pro servidor mesmo sem nunca ter existido uma operação real
-        // pra esse dispositivo controlar (o Modo de Teste nunca chega a
-        // avisar o servidor enquanto ligado — ver persist(), operacao.js).
-        // Responde OK sem checar autorização nem gravar nada: não tem o
-        // que proteger quando nada muda — checar autorização aqui só
-        // produziria um "não autorizado" confuso por uma ação que nunca
-        // tentou controlar operação real nenhuma.
-        if (ehLimpeza && !atual) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true }));
-          return;
-        }
-
-        if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
-
-        // ── Dono da operação ──────────────────────────────────────────────
-        // Só existe UMA operação em andamento por vez (ver seção dedicada no
-        // README), mas a lista de Autorizados pode ter mais de um
-        // dispositivo. Quem inicia (primeiro push não-nulo depois de uma
-        // operação vazia) se torna o "dono" — só ele pode mandar mais
-        // mudanças, até a operação ser limpa (registrada, resetada, ou
-        // "forçada" por outro autorizado). Isso evita dois computadores
-        // autorizados brigando pela mesma operação ao mesmo tempo.
-        const donoAtual = (atual && typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
-        const souODono = !donoAtual || donoAtual === deviceId;
-
-        if (!souODono && !forcar) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            ok: false,
-            erro: 'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
-          }));
-          return;
-        }
-
-        // Nunca confia no donoDeviceId que o cliente mandou (se mandou) —
-        // sempre recalculado aqui: mantém o dono atual, ou assume este
-        // deviceId como novo dono se a operação estava vazia.
-        let dadosFinal;
-        if (ehLimpeza) {
-          dadosFinal = null; // limpa o dono junto
-        } else {
-          const { donoDeviceId: _ignorarDoCliente, ...resto } = dados;
-          dadosFinal = { ...resto, donoDeviceId: donoAtual || deviceId };
-        }
-
-        salvarOperacaoAndamentoNoDisco(dadosFinal);
-        broadcastOperacaoAndamento(dadosFinal, clientId);
-
-        // Berços marcados (baixou/vazou) só fazem sentido enquanto ESSA
-        // operação existe — ao limpar (fim normal, "🗑️ Limpar Tudo", ou
-        // reset), reseta junto pra próxima operação começar sem marcação
-        // nenhuma. Quando a limpeza é porque a operação foi REGISTRADA de
-        // verdade, o conteúdo já foi transferido pra bercos_visuais antes
-        // (ver POST /registrar-operacao, que já reseta por conta própria —
-        // resetar de novo aqui é inofensivo, só redundante).
-        if (ehLimpeza) salvarBercosAndamentoNoDisco({});
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── GET /bercos-andamento: mapa esparso aninhado por lado —
-  // { 'B1': { esquerda: 'baixou' }, 'B7': { direita: 'baixou' } } — dos
-  // berços marcados na operação em andamento agora (ver "Bateria Atual",
-  // bateria-atual.js). Lado ausente do mapa = 'okay' implicitamente.
-  if (req.method === 'GET' && urlPath === '/bercos-andamento') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(lerBercosAndamento()));
-    return;
-  }
-
-  // ── POST /marcar-berco-andamento: alterna (toggle) o estado de UM LADO
-  // de UM berço da operação em andamento — 'okay' -> 'baixou' -> 'okay'
-  // de novo a cada clique naquele indicador específico (● ou •, ver
-  // "Bateria Atual", bateria-atual.js). Os 2 lados de um mesmo berço são
-  // independentes — marcar um não afeta o outro.
-  //
-  // Exige dispositivo autorizado + ser o "dono" da operação em andamento
-  // (mesma dupla checagem de POST /salvar-operacao-andamento, acima) —
-  // antes QUALQUER UM olhando essa tela podia marcar vazamento, de
-  // propósito, por ser "só uma observação". Isso mudou: só quem está no
-  // controle da operação (o dono) marca os vazamentos dela, mesma trava
-  // do resto do formulário de Registrar Operação.
-  if (req.method === 'POST' && urlPath === '/marcar-berco-andamento') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body);
-        const berco = payload && payload.berco;
-        const lado = payload && payload.lado;
-        if (!berco || typeof berco !== 'string' || !/^B\d+$/.test(berco)) {
-          throw new Error('Berço inválido.');
-        }
-        if (lado !== 'esquerda' && lado !== 'direita') {
-          throw new Error('Lado inválido — precisa ser "esquerda" ou "direita".');
-        }
-
-        const atual = lerOperacaoAndamento();
-        if (!atual) {
-          throw new Error('Nenhuma operação em andamento agora.');
-        }
-
-        if (!dispositivoAutorizado(deviceId)) { negarDispositivoNaoAutorizado(res); return; }
-
-        // Mesmo critério de "dono" de POST /salvar-operacao-andamento —
-        // ver comentário lá. Sem operação vazia aqui pra "virar dono": a
-        // essa altura ela já existe (checado acima), então só quem já é
-        // o dono (ou nenhum dono foi definido ainda, caso raro) marca.
-        const donoAtual = (typeof atual === 'object') ? (atual.donoDeviceId || null) : null;
-        const souODono = !donoAtual || donoAtual === deviceId;
-        if (!souODono) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            ok: false,
-            erro: 'Esta operação está sendo controlada por outro computador autorizado — só ele pode marcar os vazamentos.',
-          }));
-          return;
-        }
-
-        const mapa = lerBercosAndamento();
-        const doBerco = mapa[berco] || {};
-        if (doBerco[lado] === 'baixou') {
-          delete doBerco[lado]; // reversível: clicar de novo volta pra 'okay' (ausência do lado no mapa)
-        } else {
-          doBerco[lado] = 'baixou';
-        }
-        if (Object.keys(doBerco).length) mapa[berco] = doBerco;
-        else delete mapa[berco]; // nenhum lado marcado -> nem precisa a chave do berço
-        salvarBercosAndamentoNoDisco(mapa);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, estado: doBerco[lado] || 'okay' }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
 
   // ── POST /leitura-automatica: recebe UMA leitura vinda de fora (hoje só
   // via teste manual — a fonte real seria um coletor Modbus TCP lendo o
@@ -2537,58 +1763,6 @@ const server = http.createServer((req, res) => {
         }
 
         broadcastLeituraAutomatica(leitura);
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── LOG DE ACESSO: registra ip + user-agent (do próprio request,
-  // confiáveis) + deviceId (mandado pelo navegador) toda vez que a rota
-  // informada é acessada. "rota" é livre (ex: '/operacao'), mas por
-  // enquanto só a tela "Registrar Operação" chama isso (ver showPage() em
-  // index.html) — é o primeiro passo pra, no futuro, restringir essa tela
-  // a um único computador.
-  if (req.method === 'POST' && urlPath === '/registrar-acesso') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body);
-        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-          throw new Error('Payload inválido.');
-        }
-        const rota = typeof payload.rota === 'string' ? payload.rota : '';
-        if (!rota) throw new Error('Payload inválido: "rota" obrigatória.');
-        const deviceId = typeof payload.deviceId === 'string' ? payload.deviceId : '';
-
-        // IPv4 mapeado em IPv6 (ex: "::ffff:192.168.1.10") vem assim por
-        // padrão do Node — remove o prefixo pra guardar só o IP "puro".
-        const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-        const userAgent = req.headers['user-agent'] || '';
-
-        const entrada = {
-          ip,
-          deviceId,
-          data: new Date().toISOString(),
-          rota,
-          userAgent,
-        };
-
-        let acessos = [];
-        try { acessos = JSON.parse(fs.readFileSync(ACESSOS_PATH, 'utf8') || '[]'); } catch (_) {}
-        if (!Array.isArray(acessos)) acessos = [];
-        acessos.push(entrada);
-
-        fs.mkdirSync(DIR_LOGS, { recursive: true });
-        const tmp = ACESSOS_PATH + '.tmp';
-        fs.writeFileSync(tmp, JSON.stringify(acessos, null, 2), 'utf8');
-        fs.renameSync(tmp, ACESSOS_PATH);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
@@ -2674,110 +1848,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── GET /db/paradas.json: mesma estratégia de historico.json — desde a
-  // Fase 3, paradas.json não existe mais como arquivo; reconstrói o
-  // mesmo formato a partir da tabela "paradas", pra paradas.js e oee.js
-  // (que já fazem fetch('db/paradas.json') direto) continuarem sem
-  // nenhuma mudança.
-  if (req.method === 'GET' && urlPath === '/db/paradas.json') {
-    try {
-      const rows = db.prepare('SELECT * FROM paradas ORDER BY inicio ASC').all();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(rows.map(db.rowParaParada)));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/sobra.json: mesma estratégia das outras — desde a Fase 4,
-  // sobra.json não existe mais como arquivo (caminho real); reconstrói o
-  // mesmo objeto de sempre (camelCase) a partir da tabela "sobra". Modo de
-  // Teste continua sendo arquivo estático de verdade (não intercepta aqui).
-  if (req.method === 'GET' && urlPath === '/db/sobra.json') {
-    try {
-      const row = db.prepare('SELECT * FROM sobra WHERE id = 1').get();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(db.rowParaSobra(row)));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── GET /db/contador_tracos.json: idem — usado só pelo Backup de Dados
-  // gerado no navegador (não tem leitura direta em nenhuma tela; a tela
-  // usa /total-tracos-hoje). Devolve só o dia de HOJE, igual ao arquivo de
-  // sempre (a tabela pode ter mais dias guardados, mas o formato externo
-  // nunca mudou — sempre foi "o contador do dia atual", nunca histórico).
-  if (req.method === 'GET' && urlPath === '/db/contador_tracos.json') {
-    try {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(lerContadorTracosHoje(false)));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, erro: e.message }));
-    }
-    return;
-  }
-
-  // ── PARADAS: salvar (inserir ou atualizar) uma parada ────────────────────
-  if (req.method === 'POST' && urlPath === '/salvar-parada') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const parada = JSON.parse(body);
-        if (!parada || typeof parada !== 'object' || !parada.id) {
-          throw new Error('Payload inválido: "id" obrigatório.');
-        }
-        const atual = db.prepare('SELECT * FROM paradas WHERE id = ?').get(parada.id);
-        const mesclado = atual ? { ...db.rowParaParada(atual), ...parada } : parada;
-
-        db.prepare(`
-          INSERT INTO paradas (id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em)
-          VALUES (@id, @inicio, @fim, @duracao_min, @motivo, @equipamento, @classificacao, @obs, @registrado_em)
-          ON CONFLICT(id) DO UPDATE SET
-            inicio = @inicio, fim = @fim, duracao_min = @duracao_min, motivo = @motivo,
-            equipamento = @equipamento, classificacao = @classificacao, obs = @obs,
-            registrado_em = @registrado_em
-        `).run(db.paradaParaRow(mesclado));
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
-  // ── PARADAS: excluir uma parada pelo id ───────────────────────────────────
-  if (req.method === 'POST' && urlPath === '/excluir-parada') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const { id } = JSON.parse(body);
-        if (!id || typeof id !== 'string') throw new Error('ID inválido.');
-        const resultado = db.prepare('DELETE FROM paradas WHERE id = ?').run(id);
-        if (resultado.changes === 0) throw new Error('Parada não encontrada (id: ' + id + ').');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, erro: e.message }));
-      }
-    });
-    return;
-  }
-
   // ── BACKUP GERAL: zipa o projeto inteiro (código + dados) e envia pra
   // download — usado pelo card "Backup Geral" no menu (admin) ───────────────
+  // Antes desta mudança, esta rota não exigia NADA — e ela baixa o
+  // PROJETO INTEIRO (código + todos os dados), incluindo security.json
+  // (os hashes de senha) — o maior vazamento possível de credenciais do
+  // sistema, se alguém soubesse a URL. Agora exige a mesma sessão de
+  // Administrador das demais rotas administrativas.
   if (req.method === 'GET' && urlPath === '/backup-geral') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     gerarBackupGeral().then(buffer => {
       const nomeArquivo = `lightwall_backup_geral_${todayBrasiliaServer()}.zip`;
       res.writeHead(200, {
@@ -2794,7 +1877,15 @@ const server = http.createServer((req, res) => {
   }
 
   // ── BACKUPS AUTOMÁTICOS: lista os backups diários disponíveis (até 3) ──────
+  // Mesma exigência de sessão — a listagem e o download individual (logo
+  // abaixo) incluem security.json (ver ARQUIVOS_BACKUP_DB, data.js), então
+  // merecem a mesma proteção do Backup Geral, acima.
   if (req.method === 'GET' && urlPath === '/backups-automaticos') {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     try {
       fs.mkdirSync(DIR_BACKUPS_AUTO, { recursive: true });
       const backups = fs.readdirSync(DIR_BACKUPS_AUTO)
@@ -2816,6 +1907,11 @@ const server = http.createServer((req, res) => {
 
   // ── BACKUPS AUTOMÁTICOS: baixa um arquivo específico ────────────────────
   if (req.method === 'GET' && urlPath.startsWith('/backups-automaticos/')) {
+    if (!sessao.requestTemSessaoValida(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, erro: 'Sessão de administrador necessária ou expirada.' }));
+      return;
+    }
     const nome = decodeURIComponent(urlPath.slice('/backups-automaticos/'.length));
     // Nome tem que bater exatamente com o padrão esperado — nada de path
     // traversal ou nome arbitrário chegando ao path.join().

@@ -5,6 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistema de Injeção — Lightwall SC</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#0a1626">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Lightwall">
   <link rel="stylesheet" href="css/styles.css">
   <!-- CSS do Setor de Qualidade — antes só carregado dentro do iframe
        próprio (setor-qualidade-app.html); agora que a tela roda como
@@ -33,6 +39,7 @@
 <!-- INCLUDE:page-analise-focada.html -->
 <!-- INCLUDE:page-qualidade-tracos.html -->
 <!-- INCLUDE:page-oee.html -->
+<!-- INCLUDE:page-metas.html -->
 <!-- INCLUDE:page-analise-operacional.html -->
 <!-- INCLUDE:page-paradas.html -->
 <!-- INCLUDE:page-setor-qualidade.html -->
@@ -50,6 +57,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/operador.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
@@ -67,6 +75,7 @@
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
   <script src="js/oee.js"></script>
+  <script src="js/metas.js"></script>
   <script src="js/relatorio-bercos.js"></script>
   <script src="js/analise-bercos.js"></script>
   <script src="js/analise-focada.js"></script>
@@ -76,6 +85,7 @@
   <script src="js/keyboard-shortcuts.js"></script>
   <script src="js/tour.js"></script>
   <script src="js/abrir-nova-aba.js"></script>
+  <script src="js/pwa-register.js"></script>
 </body>
 
 </html>
