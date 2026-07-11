@@ -1948,6 +1948,9 @@ window.LW = {
   // Formatação
   formatTime, diffMinutes, formatDuration, formatDateTime,
 
+  // Períodos (presets de filtro de data — Hoje/Semana/Mês/etc.)
+  calcularPeriodoPreset,
+
   // Desemplaque (tempo de cura)
   TEMPO_CURA_HORAS, calcularDesemplaque,
 
