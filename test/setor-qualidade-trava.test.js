@@ -9,108 +9,19 @@
 // nas rotas por HTTP), este arquivo testa o SCRIPT DE FRONT-END sozinho:
 // setor-qualidade.js é uma IIFE de navegador (usa document/window/
 // localStorage, não exporta nada via module.exports) — por isso o teste
-// carrega o HTML real da tela (public/partials/page-setor-qualidade.html) e
-// o JS real dentro de um DOM headless (jsdom), e interage com ele exatamente
-// como um navegador faria, através da API pública window.SQ.
+// carrega o HTML real da tela e o JS real dentro de um DOM headless
+// (jsdom), e interage com ele exatamente como um navegador faria, através
+// da API pública window.SQ. O harness (montarTela/tick) fica em
+// test/helpers/setor-qualidade-dom.js — compartilhado com
+// test/setor-qualidade-pallets-extras.test.js.
 //
 // Como rodar: node --test (jsdom é devDependency — já entra com npm install)
 
-const { test, before, after, beforeEach } = require('node:test');
+const { test, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { JSDOM } = require('jsdom');
-
-const RAIZ = path.join(__dirname, '..');
-const HTML_TELA = fs.readFileSync(path.join(RAIZ, 'public/partials/page-setor-qualidade.html'), 'utf8');
-const JS_TELA = fs.readFileSync(path.join(RAIZ, 'public/js/setor-qualidade.js'), 'utf8');
-
-// Uma operação "real" de exemplo, no mesmo formato devolvido por
-// GET /operacoes-nao-avaliadas (server.js) — é a partir dela que
-// _prefillFromOperacao preenche os 5 campos automaticamente.
-const OPERACAO_FILA = {
-  id: 'op-1',
-  id_bateria: 'B3',
-  turno: '2º TURNO',
-  tipo_montagem: 'SP',
-  data: '2026-07-01',
-  fim: '2026-07-01T14:30:00.000Z',
-  dimensao: 9,
-  bercos_reais: 20,
-  capacidade: 20,
-};
-
-// Uma avaliação JÁ REGISTRADA, no mesmo formato de GET /avaliacoes-qualidade
-// — usada só no teste do fluxo de correção (editarAvaliacaoDoEspelho).
-const AVALIACAO_REGISTRADA = {
-  id: 'av-1',
-  batteryId: 'B7',
-  turno: '1° TURNO',
-  tempInput: '38°C',
-  dtMontagem: '2026-07-01T10:00:00.000Z',
-  dtEnchimento: '2026-07-01T10:30:00.000Z',
-  dtDesmoldagem: '2026-07-01T12:00:00.000Z',
-  observations: 'registro de teste',
-  montagem: { pallet1: 'SP', pallet2: 'SP', pallet3: 'SP', pallet4: 'SP' },
-  totalSlabs: 40,
-  dimensaoOperacao: 9,
-  registeredAt: '2026-07-01T12:05:00.000Z',
-  linkedOperacaoId: 'op-1',
-  paineis: [],
-};
+const { montarTela, tick, OPERACAO_FILA } = require('./helpers/setor-qualidade-dom.js');
 
 let dom;
-
-// Sobe um DOM novo (com o HTML real da tela + o script real carregado)
-// pra CADA teste — assim nenhum teste herda estado (localStorage,
-// filaOperacoes, formulário) do anterior.
-function montarTela() {
-  const novoDom = new JSDOM('<!doctype html><html><body></body></html>', {
-    url: 'http://localhost/',
-    runScripts: 'dangerously',
-    pretendToBeVisual: true,
-  });
-  novoDom.window.document.body.innerHTML = HTML_TELA;
-
-  // Stub mínimo de LW — global real do app (ver public/js/data.js),
-  // carregado ANTES de setor-qualidade.js em produção (index.template.html).
-  // Só o suficiente pra não quebrar: BATERIA_IDS (usado em
-  // _espessuraDaBateria pra "adivinhar" a espessura por ID de bateria —
-  // aqui devolvemos lista vazia de propósito, o teste usa uma operação
-  // com `dimensao` real, que tem prioridade sobre o palpite, ver
-  // _definirEspessuraReal/_prefillFromOperacao).
-  novoDom.window.LW = { BATERIA_IDS: [] };
-
-  // Stub de fetch: só as rotas que o fluxo testado realmente chama
-  // (carregarFilaNaoAvaliadas → /operacoes-nao-avaliadas). Outras rotas
-  // (histórico, avaliações salvas) devolvem lista vazia — suficiente pra
-  // não quebrar renderHistory/renderDashboard, que não são exercitados
-  // aqui, mas podem ser chamados de dentro de navigateTo em cascata.
-  novoDom.window.fetch = async (url) => {
-    if (String(url).includes('/operacoes-nao-avaliadas')) {
-      return { ok: true, json: async () => [OPERACAO_FILA] };
-    }
-    if (String(url).includes('/avaliacoes-qualidade')) {
-      return { ok: true, json: async () => [AVALIACAO_REGISTRADA] };
-    }
-    return { ok: true, json: async () => [] };
-  };
-
-  novoDom.window.eval(JS_TELA);
-  return novoDom;
-}
-
-// Espera os microtasks das Promises internas (fetch mock → filaOperacoes)
-// assentarem antes de seguir com o teste.
-function tick(n = 5) {
-  return new Promise(resolve => {
-    let restantes = n;
-    (function proximo() {
-      if (restantes-- <= 0) return resolve();
-      setTimeout(proximo, 0);
-    })();
-  });
-}
 
 beforeEach(() => {
   dom = montarTela();

@@ -669,13 +669,35 @@
 .sq-tools-hint { font-size: .64rem; color: var(--text-3); font-style: italic; }
 
 /* ── Stacks / Pallets ─────────────────────────────────────── */
+/* flex-wrap (não mais grid de 4 colunas fixas) — pallets extras (ver
+   SQ.adicionarPalletExtra) quebram linha naturalmente em vez de
+   espremer os 4 originais. */
 .sq-stacks {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 6px;
   margin-bottom: 16px;
 }
-.sq-pallet-col { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.sq-pallet-col { display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 140px; }
+/* Botão discreto de "novo pallet" — ao lado do último, mesma altura
+   aproximada da grade de placas (margin-top alinha com o topo dela, não
+   com o cabeçalho colorido do pallet). */
+.sq-pallet-add {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 22px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px dashed var(--border-2);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .68rem;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.sq-pallet-add:hover { border-color: var(--blue); color: var(--blue); background: rgba(59,130,246,.08); }
 .sq-pallet-header {
   position: relative;
   display: flex; justify-content: center; align-items: center;
@@ -717,6 +739,19 @@
 }
 .sq-btn-dropdown:hover { border-color: var(--blue); color: var(--text); }
 
+.sq-btn-remove-pallet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: .6rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.sq-btn-remove-pallet:hover { border-color: var(--sq-cor-vermelho); color: var(--sq-cor-vermelho); background: rgba(239,68,68,.08); }
+
 .sq-color-dropdown {
   position: absolute; top: 110%; right: 0; z-index: 999;
   background: var(--bg-card);
@@ -745,6 +780,9 @@
 
 /* Placa individual */
 .sq-slab-stack { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 8px; }
+/* Placa + badge de motivo lado a lado (ver renderStacks, setor-qualidade.js). */
+.sq-slab-linha { display: flex; align-items: center; gap: 4px; }
+.sq-slab-linha .sq-slab { flex: 1; min-width: 0; }
 .sq-slab {
   position: relative;
   width: 100%; height: 30px;
@@ -756,6 +794,37 @@
   transition: border-color .1s;
 }
 .sq-slab:hover { border-color: var(--blue); }
+.sq-slab[draggable="true"] { cursor: grab; }
+.sq-slab.sq-slab-dragging { opacity: .35; cursor: grabbing; }
+/* Pallet recebendo o arraste (ver _ativarDropZone, setor-qualidade.js) */
+.sq-slab-stack-dragover {
+  outline: 2px dashed var(--blue);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+  background: rgba(59, 130, 246, .06);
+}
+/* Placa específica recebendo o arraste (ver _ativarDropZonePlaca) —
+   destaque mais forte que o da coluna inteira, já que aqui é uma troca
+   de posição precisa (placa por placa), não só "em algum lugar deste
+   pallet". */
+.sq-slab-dragover {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+  background: rgba(59, 130, 246, .18) !important;
+}
+/* Pallet extra vazio (recém-criado, ainda sem nenhuma placa arrastada) —
+   mensagem discreta no lugar da grade, some assim que a 1ª placa chega. */
+.sq-slab-stack-extra:empty::after {
+  content: 'arraste uma placa aqui';
+  display: block;
+  text-align: center;
+  font-size: .62rem;
+  font-style: italic;
+  color: var(--text-3);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius);
+  padding: 10px 4px;
+}
 .sq-slab-number {
   position: absolute; top: 2px; left: 4px;
   font-size: .5rem; font-weight: 700; color: var(--text-3);
@@ -786,8 +855,9 @@
   color: red; font-size: 1.56rem; font-weight: 800; line-height: 1;
 }
 
-/* Badge do código de motivo (ex: "BC") — canto oposto ao número da placa
-   (sq-slab-number, top-left), pra não competir por espaço. Pill com fundo
+/* Badge do código de motivo (ex: "BC") — ao LADO da placa (ver
+   .sq-slab-linha, acima), não sobreposto em cima dela — mesma ideia
+   visual do Espelho Visual (ver .sq-mini-slab-motivo). Pill com fundo
    sólido (diferente de -number/-type, que são só texto solto) porque
    também é CLICÁVEL (reabre o seletor — ver _abrirSeletorMotivo,
    setor-qualidade.js) — precisa parecer um botão pequeno, não só uma
@@ -795,13 +865,12 @@
    defeito marcado mas sem motivo escolhido ainda, fica visualmente
    diferente do código já preenchido, pra chamar atenção sem travar nada. */
 .sq-slab-motivo {
-  position: absolute; top: 2px; right: 4px;
+  flex: 0 0 auto;
   display: none; align-items: center; justify-content: center;
-  min-width: 15px; height: 13px; padding: 0 3px;
-  font-size: .48rem; font-weight: 700; font-family: var(--font-mono);
+  min-width: 17px; height: 17px; padding: 0 4px;
+  font-size: .52rem; font-weight: 700; font-family: var(--font-mono);
   color: #fff; background: var(--sq-cor-vermelho);
   border-radius: 3px; cursor: pointer; line-height: 1;
-  z-index: 1;
 }
 .sq-slab-motivo.sq-slab-motivo-pendente { background: var(--accent); }
 .sq-slab-motivo:hover { filter: brightness(1.15); }
@@ -829,7 +898,8 @@
   padding: 4px 20px; border-radius: 16px; border: 1px solid var(--border);
 }
 
-.sq-pallet-info-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 12px; }
+.sq-pallet-info-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.sq-info-col { flex: 1 1 0; min-width: 140px; }
 .sq-info-col { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .sq-info-col-header {
   background: var(--bg-3); color: var(--text-2);
@@ -955,6 +1025,17 @@
    posição calculada em JS (getBoundingClientRect) e aplicada via
    style.left/top inline, por isso position:fixed aqui (coordenadas de
    viewport, iguais às que getBoundingClientRect devolve). */
+/* Overlay escurecendo o resto da tela enquanto o motivo é obrigatório
+   (ver _abrirSeletorMotivo, setor-qualidade.js) — não tem handler de
+   clique nenhum de propósito: cliques nele não fazem nada, só ficam
+   "presos" ali, bloqueando qualquer interação com o resto da tela até a
+   pessoa escolher um motivo no popover por cima. */
+.sq-motivo-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 999;
+  animation: fadeInDown .15s ease;
+}
 .sq-motivo-popover {
   position: fixed;
   z-index: 1000;
@@ -970,13 +1051,12 @@
 .sq-motivo-popover-titulo {
   display: flex; align-items: center; justify-content: space-between;
   font-size: .78rem; font-weight: 700; color: var(--text);
+  margin-bottom: 4px;
+}
+.sq-motivo-popover-obrigatorio {
+  font-size: .66rem; color: var(--text-3); font-style: italic;
   margin-bottom: 10px;
 }
-.sq-motivo-popover-fechar {
-  background: none; border: none; color: var(--text-3);
-  font-size: 1rem; cursor: pointer; line-height: 1; padding: 0 2px;
-}
-.sq-motivo-popover-fechar:hover { color: var(--text); }
 .sq-motivo-popover-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
 }
@@ -1002,5 +1082,8 @@
   .sq-container { padding: 8px 10px; }
   .sq-kpi-grid { grid-template-columns: 1fr 1fr; }
   .sq-topbar, .sq-nav { flex-wrap: wrap; justify-content: center; }
-  .sq-stacks, .sq-pallet-info-grid, .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }
+  .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }
+  /* Tela estreita: 2 pallets por linha (min-width alto força o wrap),
+     em vez de 4+ colunas espremidas. */
+  .sq-pallet-col, .sq-info-col { min-width: calc(50% - 6px); }
 }
