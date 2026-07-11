@@ -1,0 +1,48 @@
+<!-- ============ PAGE: METAS ============ -->
+    <main class="main" id="page-metas">
+      <div class="page-header">
+        <h1 class="page-title">Metas de <span>Produção</span></h1>
+        <p class="page-desc">Progresso do mês corrente — traços, m² e OEE — comparado com os alvos definidos pelo Administrador</p>
+      </div>
+
+      <div class="page-body">
+
+        <div style="margin-bottom:14px;display:flex;justify-content:flex-end" data-admin-only>
+          <button class="btn btn-outline-accent btn-sm" id="btn-metas-editar" onclick="LWMetas.abrirEdicao()">✏️ Editar Metas</button>
+        </div>
+
+        <!-- Formulário de edição (admin) — escondido até "Editar Metas" -->
+        <div class="card mb-4" id="metas-form-card" style="padding:18px 22px;display:none">
+          <div class="card-title" style="margin-bottom:14px">Definir metas do mês</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de Traços (mês)</label>
+              <input class="form-input" type="number" min="0" step="1" id="metas-input-tracos" placeholder="Ex: 500">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de m² (mês)</label>
+              <input class="form-input" type="number" min="0" step="1" id="metas-input-m2" placeholder="Ex: 3000">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Meta de OEE (%)</label>
+              <input class="form-input" type="number" min="0" max="100" step="1" id="metas-input-oee" placeholder="Ex: 65">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="LWMetas.cancelarEdicao()">Cancelar</button>
+            <button class="btn btn-accent btn-sm" id="btn-metas-salvar" onclick="LWMetas.salvar()">Salvar Metas</button>
+          </div>
+        </div>
+
+        <div id="metas-loading" style="text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
+
+        <div id="metas-content" style="display:none">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px">
+            <div class="card" id="metas-card-tracos" style="padding:20px 22px"></div>
+            <div class="card" id="metas-card-m2" style="padding:20px 22px"></div>
+            <div class="card" id="metas-card-oee" style="padding:20px 22px"></div>
+          </div>
+        </div>
+
+      </div><!-- .page-body -->
+    </main>
