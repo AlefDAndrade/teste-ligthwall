@@ -128,7 +128,7 @@
       return `
       <tr data-id-operacao="${l.id_operacao}">
         <td class="mono" title="${l.turno || ''}">${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
-        <td>${l.tipo_montagem || '—'}</td>
+        <td>${LW.escaparHtml(l.tipo_montagem || '—')}</td>
         <td class="mono" style="text-align:center;font-weight:700;color:${vaz > 0 ? 'var(--red)' : 'var(--text-3)'}">${vaz}</td>
         ${_linhaBercos(l)}
       </tr>

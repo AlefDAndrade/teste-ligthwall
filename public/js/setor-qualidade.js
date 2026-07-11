@@ -79,6 +79,26 @@
   let dashboardEvals = [];
   let mirrorIndex    = 0;
 
+  // ── Pallets extras (botão "+" ao lado do último pallet) ──────────────
+  // Os 4 pallets originais sempre têm o MESMO nº de placas (sq-thickness,
+  // "n") — extras são criados VAZIOS e só recebem placas por arrastar
+  // (ver _moverPainel). extraStacks guarda os NÚMEROS dos pallets extras
+  // criados nesta avaliação, na ordem de criação (ex: [5,6]); stackCounts
+  // guarda quantas placas cada pallet (original OU extra) tem AGORA — os
+  // originais nascem com "n" cada, mas também mudam ao arrastar placas
+  // pra fora/dentro deles. Ver _stackIds()/_resetStacksParaPadrao(),
+  // abaixo, e _sincronizarColunasExtras() pro espelho no DOM.
+  let extraStacks  = [];
+  let stackCounts  = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
+  // Só cresce — nunca é decidido a partir de extraStacks.length/max, senão
+  // excluir o pallet 6 (ver _removerPalletExtra) faria o próximo "+"
+  // reaproveitar o nº 6 de novo. Resetado em _resetStacksParaPadrao (nova
+  // avaliação do zero) e realinhado em _carregarAvaliacaoNoFormulario/
+  // _restaurarEstadoDoRascunho (reabrir uma avaliação/rascunho que já
+  // tinha pallets extras — continua a numeração de onde parou, não some
+  // 5 se a avaliação salva já tinha ido até o 7).
+  let proximoNumeroPalletExtra = 5;
+
   // ── Fila de baterias não avaliadas (Registro de Baterias → Setor de
   // Qualidade) — ver carregarFilaNaoAvaliadas()/_iniciarForm(), abaixo.
   let filaOperacoes    = [];  // última lista carregada de GET /operacoes-nao-avaliadas
@@ -638,6 +658,326 @@
     }
   }
 
+  /* ── Pallets extras — infraestrutura ──────────────────── */
+  // Lista de TODOS os pallets ativos agora, na ordem de exibição: os 4
+  // originais primeiro, depois os extras na ordem em que foram criados.
+  function _stackIds() {
+    return ['stack1', 'stack2', 'stack3', 'stack4', ...extraStacks.map(n => 'stack' + n)];
+  }
+
+  // Remove qualquer entrada de slabState/slabMotivo/slabMotivoDescricao/
+  // slabConfig fora do "escopo" atual (pallet que não existe mais, ou
+  // posição além da contagem atual do pallet) — sem isso, encolher um
+  // pallet (arrastar placa pra fora) ou resetar os extras deixaria
+  // registros "fantasma" pra trás que registerEvaluation ainda enviaria
+  // pro servidor (ele envia Object.entries(slabState) inteiro, ver
+  // registerEvaluation), inflando o total de placas registradas.
+  function _limparPlacasForaDoEscopo() {
+    const validos = new Set();
+    _stackIds().forEach(sid => {
+      const n = stackCounts[sid] || 0;
+      for (let i = 1; i <= n; i++) validos.add(`${sid}-${i}`);
+    });
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
+      Object.keys(dict).forEach(id => {
+        if (id.includes('-') && !validos.has(id)) delete dict[id];
+      });
+    });
+  }
+
+  // Volta os pallets pro estado padrão: só os 4 originais, cada um com
+  // "n" placas (nº atual de sq-thickness) — chamado em todo lugar que já
+  // reconstrói a grade do zero (troca de Tipo de Montagem, confirmação da
+  // grade Personalizada, pré-preenchimento a partir de uma operação real,
+  // autoSetThickness) — qualquer reorganização manual feita por arrastar
+  // é descartada nesses casos, igual já acontecia com marcações antes
+  // desta mudança não existir.
+  function _resetStacksParaPadrao() {
+    const n = parseInt(document.getElementById('sq-thickness').value) || 0;
+    extraStacks = [];
+    proximoNumeroPalletExtra = 5;
+    stackCounts = { stack1: n, stack2: n, stack3: n, stack4: n };
+    _limparPlacasForaDoEscopo();
+    _sincronizarColunasExtras();
+  }
+
+  // Espelha extraStacks no DOM: cria a coluna do pallet (grade de placas
+  // + cabeçalho com dropdown de cor) e a coluna de Medição correspondente
+  // pra cada número em extraStacks que ainda não tem elemento na tela, e
+  // remove as colunas de pallets extras que não estão mais em
+  // extraStacks (ex: depois de _resetStacksParaPadrao). Chamada sempre
+  // que extraStacks muda — não precisa ser chamada manualmente em outros
+  // lugares além de _resetStacksParaPadrao/_adicionarPalletExtra/
+  // _moverPainel(quando cria coluna nova)/_carregarAvaliacaoNoFormulario/
+  // applyFormData, que são os únicos pontos que alteram extraStacks.
+  function _sincronizarColunasExtras() {
+    const stacksWrap = document.querySelector('.sq-stacks');
+    const infoWrap    = document.querySelector('.sq-pallet-info-grid');
+    if (!stacksWrap || !infoWrap) return;
+
+    // Remove colunas de pallets extras que não existem mais.
+    stacksWrap.querySelectorAll('.sq-pallet-col[data-extra="1"]').forEach(col => {
+      const n = parseInt(col.dataset.pallet);
+      if (!extraStacks.includes(n)) col.remove();
+    });
+    infoWrap.querySelectorAll('.sq-info-col[data-extra="1"]').forEach(col => {
+      const n = parseInt(col.dataset.pallet);
+      if (!extraStacks.includes(n)) col.remove();
+    });
+
+    // Cria as que faltam.
+    extraStacks.forEach(n => {
+      if (!document.getElementById(`stack${n}`)) stacksWrap.insertBefore(_criarColunaPallet(n), stacksWrap.querySelector('.sq-pallet-add'));
+      if (!document.getElementById(`sq-p${n}-comprimento`)) infoWrap.appendChild(_criarColunaMedicao(n));
+    });
+
+    _atualizarBotaoAdicionarPallet();
+  }
+
+  // Mesma estrutura das 4 colunas de pallet originais (ver
+  // page-setor-qualidade.html) — só que montada por código, já que o
+  // número de pallets agora é variável. draggable/ondrop ligam essa
+  // coluna ao "segurar e arrastar" — ver _moverPainel.
+  function _criarColunaPallet(n) {
+    const sid = 'stack' + n;
+    const col = document.createElement('div');
+    col.className = 'sq-pallet-col';
+    col.dataset.extra = '1';
+    col.dataset.pallet = String(n);
+    col.innerHTML = `
+      <div class="sq-pallet-header">
+        <span class="sq-pallet-label">PALLET ${n}</span>
+        <div class="sq-pallet-actions">
+          <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('${sid}')">⚡ Todas</button>
+          <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'${sid}')">🎨</button>
+          <button class="sq-btn-remove-pallet" onclick="SQ.removerPalletExtra(${n})" title="Excluir este pallet">✕</button>
+          <div class="sq-color-dropdown" id="sq-dd-${sid}">
+            <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('${sid}','verde')"></button>
+            <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('${sid}','vermelho')"></button>
+            <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('${sid}','azul')"></button>
+            <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('${sid}','amarelo')"></button>
+            <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('${sid}','laranja')"></button>
+          </div>
+        </div>
+      </div>
+      <div class="sq-slab-stack sq-slab-stack-extra" id="${sid}"></div>`;
+    _ativarDropZone(col.querySelector('.sq-slab-stack'), sid);
+    return col;
+  }
+
+  function _criarColunaMedicao(n) {
+    const campos = [['comprimento','Comprimento'],['largura','Largura'],['linearidade','Linearidade'],['espessura','Espessura'],['esquadro','Esquadro']];
+    const col = document.createElement('div');
+    col.className = 'sq-info-col';
+    col.dataset.extra = '1';
+    col.dataset.pallet = String(n);
+    col.innerHTML = `
+      <div class="sq-info-col-header">Pallet ${n}</div>
+      ${campos.map(([f, label]) => `
+        <div class="sq-info-row">
+          <span class="sq-info-key">${label}</span>
+          <span class="sq-info-val" id="sq-p${n}-${f}">${defaultPalletInfo(f)}</span>
+          <span class="sq-info-edit" data-pallet="${n}" data-field="${f}" onclick="SQ.editField(this)"><i class="fas fa-pen"></i></span>
+        </div>`).join('')}`;
+    return col;
+  }
+
+  // Habilita e desabilita o "+" — desligado no modo visualização
+  // (viewMode) e enquanto os campos auto-preenchidos estiverem travados
+  // mas sem NENHUMA operação vinculada (ou seja, avaliação avulsa —
+  // nesse caso não tem nem placa nenhuma renderizada ainda pra arrastar).
+  function _atualizarBotaoAdicionarPallet() {
+    const btn = document.getElementById('sq-btn-add-pallet');
+    if (!btn) return;
+    btn.style.display = viewMode ? 'none' : '';
+  }
+
+  // Cria o próximo pallet extra (5º, 6º…) VAZIO — só ganha placas por
+  // arrastar (ver _moverPainel). Número sempre o maior atual + 1, mesmo
+  // que um do meio tenha sido esvaziado, pra nunca reaproveitar um
+  // número já usado nesta avaliação (evita confundir numeração ao
+  // corrigir/revisar depois).
+  function _adicionarPalletExtra() {
+    if (viewMode) return;
+    const novo = proximoNumeroPalletExtra++;
+    extraStacks.push(novo);
+    stackCounts['stack' + novo] = 0;
+    _sincronizarColunasExtras();
+    renderStacks();
+  }
+
+  // Exclui um pallet extra (botão "✕" no cabeçalho, só existe nos extras
+  // — ver _criarColunaPallet). Vazio: exclui direto. Com placas dentro:
+  // confirma antes, avisando que elas serão descartadas — dá pra desfazer
+  // com "Desfazer" logo em seguida, já que isto agora é uma ação
+  // snapshotada (ver pushState/undoLastAction), igual mover uma placa.
+  function _removerPalletExtra(n) {
+    if (viewMode) return;
+    const sid = 'stack' + n;
+    if (!extraStacks.includes(n)) return;
+    const qtd = stackCounts[sid] || 0;
+
+    const excluir = () => {
+      pushState();
+      extraStacks = extraStacks.filter(x => x !== n);
+      delete stackCounts[sid];
+      _limparPlacasForaDoEscopo();
+      _sincronizarColunasExtras();
+      renderStacks();
+      validateAllSlabs();
+    };
+
+    if (qtd === 0) { excluir(); return; }
+    showConfirm(
+      'Excluir Pallet',
+      `O Pallet ${n} ainda tem ${qtd} placa${qtd > 1 ? 's' : ''} nele. Excluir o pallet descarta ${qtd > 1 ? 'essas placas' : 'essa placa'} — dá pra desfazer com "Desfazer" logo em seguida, se precisar. Continuar?`,
+      excluir
+    );
+  }
+
+  // Liga os eventos de "soltar" numa coluna de pallet (base ou extra) —
+  // idempotente (dataset.dropzoneReady evita ligar 2x no mesmo elemento,
+  // já que renderStacks/_criarColunaPallet podem chamar de novo pra
+  // colunas que já existiam). Serve pra soltar na área "vazia" do pallet
+  // (fora de qualquer placa específica — ex: pallet extra ainda vazio) —
+  // soltar EM CIMA de uma placa específica é tratado por
+  // _ativarDropZonePlaca, que intercepta antes (stopPropagation) e chama
+  // _tratarSolturaPlaca no lugar deste handler.
+  function _ativarDropZone(el, sid) {
+    if (!el || el.dataset.dropzoneReady) return;
+    el.dataset.dropzoneReady = '1';
+    el.addEventListener('dragover', e => {
+      if (viewMode) return;
+      e.preventDefault(); // necessário pro navegador permitir o drop aqui
+      el.classList.add('sq-slab-stack-dragover');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('sq-slab-stack-dragover'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('sq-slab-stack-dragover');
+      if (viewMode) return;
+      const origemId = e.dataTransfer.getData('text/plain');
+      if (origemId) _moverPainel(origemId, sid);
+    });
+  }
+
+  // Liga os eventos de "soltar" numa placa ESPECÍFICA (não mais na coluna
+  // toda) — pra saber exatamente em qual posição a placa foi largada, e
+  // então decidir (ver _tratarSolturaPlaca) entre TROCAR de posição (solto
+  // dentro do MESMO pallet) ou MOVER pra outro pallet (comportamento de
+  // sempre, ver _moverPainel). stopPropagation em dragover/drop é
+  // essencial: sem isso o evento "vaza" pro handler da coluna inteira
+  // (_ativarDropZone, acima), que trataria como um drop genérico na área
+  // do pallet em vez de um drop preciso nesta placa.
+  function _ativarDropZonePlaca(el, id) {
+    if (!el || el.dataset.dropzonePlacaReady) return;
+    el.dataset.dropzonePlacaReady = '1';
+    el.addEventListener('dragover', e => {
+      if (viewMode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.add('sq-slab-dragover');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('sq-slab-dragover'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('sq-slab-dragover');
+      if (viewMode) return;
+      const origemId = e.dataTransfer.getData('text/plain');
+      if (origemId) _tratarSolturaPlaca(origemId, id);
+    });
+  }
+
+  // Decide o que fazer quando uma placa é solta EM CIMA de outra placa
+  // específica (destId): mesmo pallet → troca de posição (_trocarPlacas,
+  // pedido do usuário: "se eu colocar o painel 01 na posição 7, o 1 fica
+  // no lugar do 7 e o 7 vai pro lugar do 1"); pallet diferente → mesmo
+  // comportamento de sempre (_moverPainel — vai pro FIM do pallet de
+  // destino, renumerando a origem), ignorando a posição exata onde foi
+  // largada dentro do pallet de destino.
+  function _tratarSolturaPlaca(origemId, destId) {
+    if (viewMode || !origemId || origemId === destId) return;
+    const origStack = origemId.split('-')[0];
+    const destStack = destId.split('-')[0];
+    if (origStack === destStack) _trocarPlacas(origemId, destId);
+    else _moverPainel(origemId, destStack);
+  }
+
+  // Troca o CONTEÚDO de 2 posições do MESMO pallet entre si (marcas,
+  // motivo, e o tipo fixado em slabConfig, se houver) — a placa 1 vira a
+  // 7 e vice-versa, sem renumerar nada (diferente de _moverPainel, que é
+  // entre pallets DIFERENTES e por isso precisa fechar buraco). Não muda
+  // o tipo esperado exibido em nenhuma das 2 posições quando são do mesmo
+  // pallet base (mesmo palletTypes[idx] pras duas) — só importa mesmo
+  // quando uma delas tem um tipo fixado via slabConfig (ex: veio de outro
+  // pallet antes), que também precisa trocar de lugar junto.
+  function _trocarPlacas(idA, idB) {
+    if (viewMode || idA === idB) return;
+    pushState();
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
+      const a = dict[idA], b = dict[idB];
+      if (b !== undefined) dict[idA] = b; else delete dict[idA];
+      if (a !== undefined) dict[idB] = a; else delete dict[idB];
+    });
+    renderStacks();
+    validateAllSlabs();
+  }
+
+  // Move uma placa de um pallet pra outro (segurar-e-arrastar, ver
+  // renderStacks/_ativarDropZone) — pedido do usuário: (1) o pallet de
+  // origem RENUMERA pra fechar o buraco deixado; (2) o tipo esperado
+  // (SP/2P/3T) viaja COM a placa, não fica preso ao pallet de destino
+  // (por isso captura tipoFixado ANTES de mexer em qualquer coisa, e
+  // grava em slabConfig[novoId] — o mesmo mecanismo que "Personalizada"
+  // já usa pra tipo por placa, ver getExpectedType); (3) pallets extras
+  // aceitam qualquer nº de placas, sem limite.
+  function _moverPainel(origemId, destStackId) {
+    if (viewMode) return;
+    const partes = origemId.split('-');
+    const origStack = partes[0];
+    const origPos    = parseInt(partes[1]);
+    if (!origStack || !origPos || origStack === destStackId) return; // solto no próprio pallet — nada a fazer
+    if (!_stackIds().includes(origStack) || !_stackIds().includes(destStackId)) return;
+
+    pushState(); // vira uma ação desfazível, igual marcar/desmarcar uma placa
+
+    const tipoFixado = getExpectedType(origemId);
+    const registro = {
+      marks:           slabState[origemId] ? [...slabState[origemId]] : null,
+      motivo:          slabMotivo[origemId] || null,
+      motivoDescricao: slabMotivoDescricao[origemId] || null,
+    };
+
+    // ── Remove da origem, deslocando quem ficou pra trás uma posição
+    //    pra frente (fecha o buraco) ──────────────────────────────────
+    const nOrigem = stackCounts[origStack] || 0;
+    for (let i = origPos; i < nOrigem; i++) {
+      const de = `${origStack}-${i + 1}`, para = `${origStack}-${i}`;
+      if (slabState[de] !== undefined)  slabState[para]  = slabState[de];  else delete slabState[para];
+      if (slabMotivo[de] !== undefined) slabMotivo[para] = slabMotivo[de]; else delete slabMotivo[para];
+      if (slabMotivoDescricao[de] !== undefined) slabMotivoDescricao[para] = slabMotivoDescricao[de]; else delete slabMotivoDescricao[para];
+      if (slabConfig[de] !== undefined) slabConfig[para] = slabConfig[de]; else delete slabConfig[para];
+    }
+    delete slabState[`${origStack}-${nOrigem}`];
+    delete slabMotivo[`${origStack}-${nOrigem}`];
+    delete slabMotivoDescricao[`${origStack}-${nOrigem}`];
+    delete slabConfig[`${origStack}-${nOrigem}`];
+    stackCounts[origStack] = nOrigem - 1;
+
+    // ── Adiciona no fim do destino ───────────────────────────────────
+    const novaPos = (stackCounts[destStackId] || 0) + 1;
+    stackCounts[destStackId] = novaPos;
+    const novoId = `${destStackId}-${novaPos}`;
+    if (registro.marks)           slabState[novoId]  = registro.marks;
+    if (registro.motivo)          slabMotivo[novoId] = registro.motivo;
+    if (registro.motivoDescricao) slabMotivoDescricao[novoId] = registro.motivoDescricao;
+    if (tipoFixado)                slabConfig[novoId] = tipoFixado;
+
+    renderStacks();
+    validateAllSlabs();
+  }
+
   /* ── Tipo esperado de uma placa ───────────────────────── */
   function getExpectedType(id) {
     if (slabConfig[id]) return slabConfig[id];
@@ -666,22 +1006,24 @@
     palletTypes = val === 'SP+2P' ? ['SP','SP','2P','2P'] :
                   val ? [val,val,val,val] :
                   ['','','',''];
+    _resetStacksParaPadrao();
     renderStacks();
     validateAllSlabs();
   }
 
   /* ── Validação de consistência ────────────────────────── */
-  // Todas as placas do formulário atual (stack1..stack4 × espessura) que
-  // ainda NÃO têm nenhuma marca em slabState — nem uma marca real
-  // (círculo/traço) nem o X de "painel não preenchido". Usada só na hora
-  // de registrar (ver registerEvaluation) pra impedir de fato o registro
-  // enquanto sobrar alguma — substitui o antigo checkbox de confirmação
-  // manual ("confirmo que avaliei todos os painéis"), que dependia da
-  // pessoa lembrar de marcar e não impedia nada por si só.
+  // Todas as placas do formulário atual (todo pallet ativo — base ou
+  // extra, ver _stackIds/stackCounts) que ainda NÃO têm nenhuma marca em
+  // slabState — nem uma marca real (círculo/traço) nem o X de "painel
+  // não preenchido". Usada só na hora de registrar (ver
+  // registerEvaluation) pra impedir de fato o registro enquanto sobrar
+  // alguma — substitui o antigo checkbox de confirmação manual ("confirmo
+  // que avaliei todos os painéis"), que dependia da pessoa lembrar de
+  // marcar e não impedia nada por si só.
   function _paineisNaoMarcados() {
-    const n = parseInt(document.getElementById('sq-thickness').value) || 0;
     const faltando = [];
-    ['stack1', 'stack2', 'stack3', 'stack4'].forEach(sid => {
+    _stackIds().forEach(sid => {
+      const n = stackCounts[sid] || 0;
       for (let i = 1; i <= n; i++) {
         const id = `${sid}-${i}`;
         if (!slabState[id] || !slabState[id].length) faltando.push(id);
@@ -693,7 +1035,7 @@
   function validateAllSlabs() {
     document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
     let hasError = false, msgs = [];
-    ['stack1','stack2','stack3','stack4'].forEach(sid => {
+    _stackIds().forEach(sid => {
       const stack = document.getElementById(sid);
       if (!stack) return;
       stack.querySelectorAll('.sq-slab').forEach(slab => {
@@ -714,11 +1056,14 @@
 
   /* ── Render das pilhas de placas ──────────────────────── */
   function renderStacks() {
-    const n = parseInt(document.getElementById('sq-thickness').value);
-    ['stack1','stack2','stack3','stack4'].forEach((sid, idx) => {
+    _sincronizarColunasExtras(); // garante que as colunas dos pallets extras existem no DOM antes de preenchê-las
+    _stackIds().forEach((sid) => {
       const stack = document.getElementById(sid);
+      if (!stack) return;
+      _ativarDropZone(stack, sid); // liga o "soltar" — idempotente, ver função
       stack.innerHTML = '';
-      for (let i = 1; i <= n; i++) {
+      const total = stackCounts[sid] || 0;
+      for (let i = 1; i <= total; i++) {
         const slab = document.createElement('div');
         slab.className = 'sq-slab';
         const id = `${sid}-${i}`;
@@ -743,10 +1088,13 @@
         mc.className = 'sq-slab-marks';
         slab.appendChild(mc);
 
-        // Badge do código de motivo (ex: "BC") — só aparece quando a placa
-        // tem um motivo salvo (ver _renderBadgeMotivo). Clique reabre o
-        // seletor pra trocar, SEM alternar a marca (stopPropagation — o
-        // clique na placa em si continua marcando/desmarcando normalmente).
+        // Badge do código de motivo (ex: "BC") — ao LADO do painel (não
+        // sobreposto em cima dele), mesma ideia visual do Espelho Visual
+        // (ver .sq-mini-slab-motivo/renderMirror) — só aparece quando a
+        // placa tem um motivo salvo/pendente (ver _renderBadgeMotivo).
+        // Clique reabre o seletor pra trocar, SEM alternar a marca
+        // (stopPropagation — o clique na placa em si continua
+        // marcando/desmarcando normalmente).
         const mo = document.createElement('span');
         mo.className = 'sq-slab-motivo';
         mo.title = 'Clique para editar o motivo';
@@ -755,12 +1103,37 @@
           if (viewMode) return;
           if ((slabState[id] || []).some(m => _corExigeMotivo(m.color))) _abrirSeletorMotivo(id);
         });
-        slab.appendChild(mo);
 
         if (slabState[id]) renderMarks(slab, slabState[id]);
-        _renderBadgeMotivo(id);
         slab.addEventListener('click', () => toggleMark(slab));
-        stack.appendChild(slab);
+
+        // Segurar-e-arrastar pra mover a placa de pallet (ver
+        // _ativarDropZone/_moverPainel) — desligado em modo visualização.
+        slab.draggable = !viewMode;
+        slab.addEventListener('dragstart', (e) => {
+          if (viewMode) { e.preventDefault(); return; }
+          e.dataTransfer.setData('text/plain', id);
+          e.dataTransfer.effectAllowed = 'move';
+          slab.classList.add('sq-slab-dragging');
+        });
+        slab.addEventListener('dragend', () => slab.classList.remove('sq-slab-dragging'));
+        _ativarDropZonePlaca(slab, id); // solto EM CIMA desta placa — troca de posição (mesmo pallet) ou move (pallet diferente), ver _tratarSolturaPlaca
+
+        // Linha = placa + badge de motivo lado a lado (ver comentário no
+        // "mo", acima) — o wrapper existe só pra isso; toda busca por
+        // ".sq-slab" (validação, seleção em lote, drag) continua achando
+        // o slab normalmente, mesmo com esse nível extra por cima.
+        const linha = document.createElement('div');
+        linha.className = 'sq-slab-linha';
+        linha.appendChild(slab);
+        linha.appendChild(mo);
+        stack.appendChild(linha);
+        // SÓ AGORA (depois de slab/mo estarem de fato no documento) —
+        // _renderBadgeMotivo procura o slab por querySelector no
+        // document inteiro; chamado antes disso, com o slab ainda
+        // "solto" (não anexado), não encontrava nada e saía sem aplicar
+        // o display inicial (bug: badge ficava sem display definido).
+        _renderBadgeMotivo(id);
       }
     });
     validateAllSlabs();
@@ -774,7 +1147,9 @@
   // (renderStacks, acima).
   function _renderBadgeMotivo(id) {
     const slab = document.querySelector(`.sq-slab[data-id="${id}"]`);
-    const badge = slab?.querySelector('.sq-slab-motivo');
+    // O badge é IRMÃO do slab (dentro de .sq-slab-linha, ver
+    // renderStacks), não filho dele — fica ao lado da placa.
+    const badge = slab?.parentElement?.querySelector('.sq-slab-motivo');
     if (!badge) return;
     const exigeMotivo = (slabState[id] || []).some(m => _corExigeMotivo(m.color));
     const codigo = slabMotivo[id];
@@ -784,11 +1159,11 @@
       badge.title = codigo === 'OT'
         ? (slabMotivoDescricao[id] || 'Outros (sem descrição)') + ' (clique para editar)'
         : `${codigo} — ${_MOTIVO_POR_CODIGO[codigo] || ''} (clique para editar)`;
-      badge.style.display = '';
+      badge.style.display = 'flex';
     } else if (exigeMotivo) {
       badge.textContent = '?';
       badge.title = 'Motivo do defeito pendente — clique para escolher';
-      badge.style.display = '';
+      badge.style.display = 'flex';
     } else {
       badge.textContent = '';
       badge.style.display = 'none';
@@ -863,25 +1238,32 @@
   //     "Marcar Tudo"/cor no cabeçalho do pallet, ver applyMarksToPallet).
   //     Aplica o motivo escolhido em TODA placa do pallet que estiver
   //     exigindo motivo agora. Ancorado no cabeçalho do pallet.
-  // Sem opção de "pular" de propósito (só ✕ fecha sem escolher, deixando
-  // o badge "?" — a pessoa pode reabrir clicando nele quando quiser
-  // terminar; não trava o fluxo de marcação, mas também não deixa a
-  // pendência invisível).
+  // OBRIGATÓRIO — de propósito, a pedido: sem "✕", sem clicar fora pra
+  // fechar, e com um overlay escurecendo/bloqueando o resto da tela por
+  // baixo (ver .sq-motivo-modal-overlay, CSS). A ÚNICA saída é escolher um
+  // código (ou, no caso de "Outros", digitar uma descrição — cancelar ou
+  // deixar em branco REABRE este mesmo seletor, não descarta). Antes disso
+  // fechava sem escolher, deixando o badge "?" pendente pra resolver depois
+  // — mudou de propósito: já não dá mais pra adiar.
   function _abrirSeletorMotivo(id, stackId) {
-    document.querySelectorAll('.sq-motivo-popover').forEach(el => el.remove());
+    document.querySelectorAll('.sq-motivo-popover, .sq-motivo-modal-overlay').forEach(el => el.remove());
 
     const ancora = id
       ? document.querySelector(`.sq-slab[data-id="${id}"]`)
       : document.querySelector(`#${stackId} .sq-pallet-header`) || document.getElementById(stackId);
     if (!ancora) return;
 
+    const overlay = document.createElement('div');
+    overlay.className = 'sq-motivo-modal-overlay';
+    document.body.appendChild(overlay);
+
     const pop = document.createElement('div');
     pop.className = 'sq-motivo-popover';
     pop.innerHTML = `
       <div class="sq-motivo-popover-titulo">
         ${id ? 'Motivo do defeito' : 'Motivo do defeito — pallet inteiro'}
-        <button type="button" class="sq-motivo-popover-fechar" title="Fechar sem escolher">✕</button>
       </div>
+      <div class="sq-motivo-popover-obrigatorio">Escolha um motivo pra continuar.</div>
       <div class="sq-motivo-popover-grid">
         ${MOTIVOS_DEFEITO.map(m => `
           <button type="button" class="sq-motivo-popover-item" data-codigo="${m.codigo}" title="${_escaparHtml(m.nome)}">
@@ -901,16 +1283,8 @@
 
     function fechar() {
       pop.remove();
-      document.removeEventListener('mousedown', aoClicarFora, true);
+      overlay.remove();
     }
-    function aoClicarFora(e) {
-      if (!pop.contains(e.target)) fechar();
-    }
-    // setTimeout: sem isso, o MESMO clique que abriu o popover (ex: clique
-    // na placa) já contaria como "clique fora" e fecharia na hora.
-    setTimeout(() => document.addEventListener('mousedown', aoClicarFora, true), 0);
-
-    pop.querySelector('.sq-motivo-popover-fechar').addEventListener('click', fechar);
     // Aplica o motivo escolhido — na PLACA (id) ou em todo o PALLET
     // (stackId, quando id é null), sempre nas placas que ainda estiverem
     // exigindo motivo agora (mesmo critério dos 2 modos, ver comentário
@@ -938,15 +1312,14 @@
         const codigo = btn.dataset.codigo;
         if (codigo === 'OT') {
           // Descrição livre — fecha o popover de códigos e abre o prompt
-          // de texto (showPrompt, mesmo modal de sempre). Só aplica se a
-          // pessoa confirmar com um texto não-vazio; cancelar ou deixar
-          // em branco não marca nada (placa continua com "?" pendente,
-          // ver _renderBadgeMotivo — igual a fechar o popover sem
-          // escolher nenhum código).
+          // de texto (showPrompt, mesmo modal de sempre). Cancelar ou
+          // deixar em branco REABRE o seletor de códigos (não descarta —
+          // ver comentário no topo da função: escolher é obrigatório).
           const descricaoAtual = id ? (slabMotivoDescricao[id] || '') : '';
           fechar();
           showPrompt('Descreva o motivo', 'Descrição curta do defeito — aparece no hover do código "OT".', descricaoAtual, (texto) => {
             if (texto && texto.trim()) aplicar('OT', texto.trim());
+            else _abrirSeletorMotivo(id, stackId);
           });
           return;
         }
@@ -1114,11 +1487,20 @@
   function pushState() {
     // slabMotivo snapshotado JUNTO — desfazer uma marcação precisa
     // desfazer o motivo associado também, senão um "?"/código ficava
-    // "grudado" numa placa que o undo já tinha desmarcado.
+    // "grudado" numa placa que o undo já tinha desmarcado. stackCounts/
+    // extraStacks/slabConfig entraram junto quando "arrastar placa pra
+    // outro pallet" (ver _moverPainel) virou uma ação desfazível — sem
+    // isso, desfazer um arraste voltava as marcas de lugar mas deixava o
+    // pallet extra (ou a contagem renumerada) como estava DEPOIS do
+    // arraste.
     actionHistory.push({
       slabState:  JSON.parse(JSON.stringify(slabState)),
       slabMotivo: JSON.parse(JSON.stringify(slabMotivo)),
       slabMotivoDescricao: JSON.parse(JSON.stringify(slabMotivoDescricao)),
+      slabConfig: JSON.parse(JSON.stringify(slabConfig)),
+      stackCounts: JSON.parse(JSON.stringify(stackCounts)),
+      extraStacks: [...extraStacks],
+      proximoNumeroPalletExtra,
     });
     if (actionHistory.length > 30) actionHistory.shift();
   }
@@ -1178,6 +1560,7 @@
     slabConfig = { ...tempSlabConfig };
     palletTypes = ['','','',''];
     updateMountTypeDropdown();
+    _resetStacksParaPadrao();
     renderStacks();
     validateAllSlabs();
     closePalletModal();
@@ -1363,6 +1746,7 @@
       // pessoa escolher manualmente, não arrisca mapear errado.
     }
     updateMountTypeDropdown();
+    _resetStacksParaPadrao();
     renderStacks();
     validateAllSlabs();
   }
@@ -1434,16 +1818,30 @@
   // preenche o formulário inteiro (ver iniciarAvaliacaoDaFila /
   // iniciarAvaliacaoDoSelect, abaixo).
   function _filaOrdinal(posicao) { return posicao + 'ª'; }
+  // IMPORTANTE: extrai dia/mês/hora via .toISOString() — NUNCA via
+  // toLocaleDateString/toLocaleTimeString (o bug que isso corrige: essas
+  // duas aplicam o fuso horário do NAVEGADOR por cima, e neste sistema as
+  // datas (op.data/op.fim) já são a hora de parede (Brasília) "disfarçada"
+  // de UTC — mesma convenção usada em fmtDTL e em toda leitura de
+  // datetime-local deste arquivo, ver comentário em _prefillFromOperacao
+  // logo acima de onde "Data/Hora de Enchimento" é preenchida. Usar
+  // toLocaleDateString/toLocaleTimeString aqui deslocava o horário
+  // exibido na fila pelo fuso configurado no navegador/dispositivo —
+  // mesmo a hora certa já estando ali dentro do próprio valor.
   function _filaData(iso) {
     if (!iso) return '--';
-    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const d = new Date(iso);
+    if (isNaN(d)) return '--';
+    const [, mes, dia] = d.toISOString().slice(0, 10).split('-');
+    return `${dia}/${mes}`;
   }
   function _filaHora(iso) {
     if (!iso) return '--';
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(iso);
+    return isNaN(d) ? '--' : d.toISOString().slice(11, 16);
   }
   function _filaTipoLabel(tipoMontagem) {
-    return tipoMontagem === 'PERSONALIZADA' ? 'Personalizada' : (tipoMontagem || '--');
+    return tipoMontagem === 'PERSONALIZADA' ? 'Personalizada' : _escaparHtml(tipoMontagem || '--');
   }
   // Destaca (classe .sq-fila-item-ativa) o item vinculado à avaliação
   // que está sendo preenchida NESTE momento (linkedOperacaoId) — assim
@@ -1467,7 +1865,7 @@
       <div class="sq-fila-item${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
-          <strong>${op.id_bateria || 'N/I'}</strong>
+          <strong>${_escaparHtml(op.id_bateria || 'N/I')}</strong>
           <span>${_filaData(op.fim)} · ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
         ${_filaExcluirBtn(op)}
@@ -1478,7 +1876,7 @@
       <div class="sq-fila-item sq-fila-item-principal${_filaClasseAtiva(op)}" role="button" tabindex="0" onclick="SQ.iniciarAvaliacaoDaFila('${op.id}')" onkeydown="if(event.key==='Enter')SQ.iniciarAvaliacaoDaFila('${op.id}')" title="Iniciar avaliação desta bateria">
         <span class="sq-fila-ordinal">${_filaOrdinal(posicao)}</span>
         <span class="sq-fila-item-info">
-          <strong>${op.id_bateria || 'N/I'}</strong>
+          <strong>${_escaparHtml(op.id_bateria || 'N/I')}</strong>
           <span>${_filaData(op.fim)} · ${_filaHora(op.fim)} (fim da operação) · Montagem: ${_filaTipoLabel(op.tipo_montagem)}</span>
         </span>
         <i class="fas fa-play"></i>
@@ -1528,7 +1926,7 @@
           sel.innerHTML = outras.map((op, i) => {
             const posicao = i + 4;
             const dt = op.fim ? `${_filaData(op.fim)} ${_filaHora(op.fim)}` : '--';
-            return `<option value="${op.id}">${_filaOrdinal(posicao)} · ${op.id_bateria || 'N/I'} · ${_filaTipoLabel(op.tipo_montagem)} · ${dt}</option>`;
+            return `<option value="${op.id}">${_filaOrdinal(posicao)} · ${_escaparHtml(op.id_bateria || 'N/I')} · ${_filaTipoLabel(op.tipo_montagem)} · ${dt}</option>`;
           }).join('');
           outrasWrap.style.display = 'flex';
           // "X" aplicado ao item ATUALMENTE selecionado no <select> — não
@@ -1770,6 +2168,7 @@
       batteryId:    document.getElementById('sq-batteryId').value,
       linkedOperacaoId,
       palletTypes, slabConfig,
+      extraStacks: [...extraStacks], stackCounts: { ...stackCounts },
       dailySeq:     document.getElementById('sq-dailySeq').value,
       turno:        document.getElementById('sq-turno').value,
       tempInput:    document.getElementById('sq-temp').value,
@@ -1783,13 +2182,13 @@
       slabMotivoDescricao,
       palletInfos: {}
     };
-    for (let p = 1; p <= 4; p++) {
+    [1, 2, 3, 4, ...extraStacks].forEach(p => {
       data.palletInfos[p] = {};
       ['comprimento','largura','linearidade','espessura','esquadro'].forEach(f => {
         const el = document.getElementById(`sq-p${p}-${f}`);
         data.palletInfos[p][f] = el ? el.innerText : '';
       });
-    }
+    });
     localStorage.setItem(`sq_draft_${id}`, JSON.stringify(data));
     currentDraftId = id;
     showAlert('Salvo', 'Avaliação salva com sucesso!');
@@ -1811,6 +2210,7 @@
     currentDraftId = d.id;
     navigateTo('form');
     autoSetThickness();
+    _restaurarEstadoDoRascunho(d); // placas/marcas/pallets extras — sempre depois de autoSetThickness, ver comentário lá
     calculateCureTime();
     setEditable(true);
     // Sempre travado — ver comentário em _bloquearCamposAutoPreenchidos.
@@ -1880,7 +2280,7 @@
         // pra hoje na lista, como se tivesse sido avaliado agora. A data
         // do conserto em si fica em editadoEm, só como rastro auditável.
         registeredAt: editando ? _editandoRegistradoEm : new Date().toISOString(),
-        totalSlabs: parseInt(document.getElementById('sq-thickness').value) * 4,
+        totalSlabs: _stackIds().reduce((soma, sid) => soma + (stackCounts[sid] || 0), 0),
         // Dimensão real da operação (ver _definirEspessuraReal, mais
         // acima) — gravada na própria avaliação pra sobreviver ao reabrir
         // uma já registrada (ver _carregarAvaliacaoNoFormulario), sem
@@ -1965,6 +2365,7 @@
     currentDraftId = d.id;
     applyFormData(d);
     autoSetThickness();
+    _restaurarEstadoDoRascunho(d); // placas/marcas/pallets extras — sempre depois de autoSetThickness, ver comentário lá
     calculateCureTime();
     viewSource = 'form';
     setEditable(false);
@@ -1996,20 +2397,44 @@
     document.getElementById('sq-dtDesmoldagem').value= fmtDTL(item.dtDesmoldagem);
     document.getElementById('sq-obs').value          = item.observations || '';
     refreshPalletInfos();
-    const ns = {};
-    const nm = {};
-    const nd = {};
-    d.paineis.filter(p => p.avaliacaoId === item.id).forEach(p => {
-      ns[`stack${p.pallet}-${p.posicao}`] = p.marcas;
-      if (p.motivo) nm[`stack${p.pallet}-${p.posicao}`] = p.motivo;
-      if (p.motivo === 'OT' && p.motivoDescricao) nd[`stack${p.pallet}-${p.posicao}`] = p.motivoDescricao;
+    actionHistory = [];
+    document.getElementById('sq-thickness').value = item.totalSlabs / 4;
+    autoSetThickness(); // reseta pra base 4 — a reconstrução real (linha abaixo) vem por cima, com pallets extras inclusos
+
+    // Reconstrói pallets extras (se houve algum) direto dos PAINÉIS já
+    // persistidos — não precisa de nenhum campo novo salvo na avaliação
+    // pra isso: cada painel já carrega seu "pallet" (nº, pode ser >4) e
+    // "posicao" (ver evalObj.paineis, registerEvaluation), então dá pra
+    // recompor extraStacks/stackCounts sem mudar o formato salvo no
+    // banco. tipoEsperado de cada painel também é restaurado pra
+    // slabConfig — sem isso, reabrir uma avaliação com placa arrastada
+    // (tipo "fixado" na placa, não no pallet — ver _moverPainel) mostraria
+    // o tipo errado até a pessoa mexer em algo que force um re-render.
+    const paineisDaAvaliacao = d.paineis.filter(p => p.avaliacaoId === item.id);
+    const ns = {}, nm = {}, nd = {}, novoSlabConfig = {}, novasContagens = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
+    paineisDaAvaliacao.forEach(p => {
+      const sid = `stack${p.pallet}`;
+      const id  = `${sid}-${p.posicao}`;
+      ns[id] = p.marcas;
+      if (p.motivo) nm[id] = p.motivo;
+      if (p.motivo === 'OT' && p.motivoDescricao) nd[id] = p.motivoDescricao;
+      if (p.tipoEsperado) novoSlabConfig[id] = p.tipoEsperado;
+      novasContagens[sid] = Math.max(novasContagens[sid] || 0, p.posicao);
     });
     slabState     = ns;
     slabMotivo    = nm;
     slabMotivoDescricao = nd;
+    slabConfig    = novoSlabConfig;
+    stackCounts   = novasContagens;
+    extraStacks   = Object.keys(novasContagens)
+      .map(sid => parseInt(sid.replace('stack', '')))
+      .filter(n => n > 4)
+      .sort((a, b) => a - b);
+    proximoNumeroPalletExtra = extraStacks.length ? Math.max(...extraStacks) + 1 : 5;
     actionHistory = [];
-    document.getElementById('sq-thickness').value = item.totalSlabs / 4;
-    autoSetThickness();
+    _sincronizarColunasExtras();
+    renderStacks();
+    validateAllSlabs();
     calculateCureTime();
   }
 
@@ -2942,7 +3367,6 @@
     document.getElementById('sq-batteryId').value    = d.batteryId || 'B1';
     linkedOperacaoId = d.linkedOperacaoId || null;
     palletTypes = d.palletTypes  || ['','','',''];
-    slabConfig  = d.slabConfig   || {};
     updateMountTypeDropdown();
     document.getElementById('sq-dailySeq').value     = d.dailySeq  || '1';
     document.getElementById('sq-turno').value        = d.turno     || '1° TURNO';
@@ -2951,20 +3375,45 @@
     document.getElementById('sq-dtEnchimento').value = fmtDTL(d.dtEnchimento);
     document.getElementById('sq-dtDesmoldagem').value= fmtDTL(d.dtDesmoldagem);
     document.getElementById('sq-obs').value          = d.observations || '';
+    document.getElementById('sq-thickness').value    = d.slabsPerPallet || 10;
+    // Placas, marcas, medições e pallets extras NÃO são restaurados aqui
+    // de propósito — quem chama applyFormData ainda vai chamar
+    // autoSetThickness() (ver loadDraft/viewDraft), que reseta a grade
+    // pro padrão de 4 pallets; restaurar esse estado ANTES disso faria
+    // autoSetThickness apagar tudo de novo. Ver _restaurarEstadoDoRascunho,
+    // chamada DEPOIS de autoSetThickness nos dois lugares.
+  }
+
+  // Restaura placas/marcas/medições/pallets extras de um rascunho — SEMPRE
+  // chamada depois de autoSetThickness() (ver loadDraft/viewDraft), nunca
+  // antes: autoSetThickness reseta a grade pro padrão de 4 pallets (ver
+  // _resetStacksParaPadrao), o que apagaria qualquer pallet extra e as
+  // placas nele se isto rodasse primeiro. Compatível com rascunhos
+  // salvos ANTES desta funcionalidade existir (sem extraStacks/
+  // stackCounts salvos) — cai de volta pro padrão de 4 pallets com "n"
+  // (slabsPerPallet) cada, igual sempre funcionou.
+  function _restaurarEstadoDoRascunho(d) {
+    extraStacks = Array.isArray(d.extraStacks) ? [...d.extraStacks] : [];
+    proximoNumeroPalletExtra = extraStacks.length ? Math.max(...extraStacks) + 1 : 5;
+    const n = d.slabsPerPallet || parseInt(document.getElementById('sq-thickness').value) || 10;
+    stackCounts = d.stackCounts || { stack1: n, stack2: n, stack3: n, stack4: n };
+    _sincronizarColunasExtras(); // cria as colunas extras (com medição padrão) antes de sobrescrever com os valores salvos
     if (d.palletInfos) {
-      for (let p = 1; p <= 4; p++) {
-        if (!d.palletInfos[p]) continue;
+      [1, 2, 3, 4, ...extraStacks].forEach(p => {
+        if (!d.palletInfos[p]) return;
         ['comprimento','largura','linearidade','espessura','esquadro'].forEach(f => {
           const el = document.getElementById(`sq-p${p}-${f}`);
           if (el) el.innerText = d.palletInfos[p][f] || defaultPalletInfo(f);
         });
-      }
+      });
     }
-    document.getElementById('sq-thickness').value = d.slabsPerPallet || 10;
     slabState     = d.slabState || {};
     slabMotivo    = d.slabMotivo || {};
     slabMotivoDescricao = d.slabMotivoDescricao || {};
+    slabConfig    = d.slabConfig || {};
     actionHistory = [];
+    renderStacks();
+    validateAllSlabs();
   }
 
   function defaultPalletInfo(field) {
@@ -3026,6 +3475,7 @@
 
   function clearForm() {
     slabState = {}; slabMotivo = {}; slabMotivoDescricao = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
+    extraStacks = []; stackCounts = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 }; proximoNumeroPalletExtra = 5;
     linkedOperacaoId = null;
     dimensaoOperacaoAtual = null;
     _editandoAvaliacaoId = null;
@@ -3126,11 +3576,17 @@
     const sel = document.getElementById('sq-thickness');
     sel.value = id==='B5-7.5' ? '11' : id==='B6-12' ? '8' : '10';
     actionHistory = [];
+    _resetStacksParaPadrao();
     renderStacks();
     refreshPalletInfos();
     validateAllSlabs();
   }
 
+  // Só reseta as medições dos 4 pallets ORIGINAIS pros valores padrão —
+  // pallets extras (ver _criarColunaMedicao) já nascem com o padrão na
+  // hora de serem criados e não são recriados aqui, senão um arraste (que
+  // não deveria mexer em medição nenhuma) acabaria apagando edições
+  // manuais feitas na tela sempre que esta função for chamada de novo.
   function refreshPalletInfos() {
     const bid = document.getElementById('sq-batteryId').value;
     const esp = dimensaoOperacaoAtual || _espessuraDaBateria(bid);
@@ -3172,6 +3628,11 @@
       slabState  = anterior.slabState;
       slabMotivo = anterior.slabMotivo;
       slabMotivoDescricao = anterior.slabMotivoDescricao || {};
+      slabConfig   = anterior.slabConfig   || slabConfig;
+      stackCounts  = anterior.stackCounts  || stackCounts;
+      extraStacks  = anterior.extraStacks  || extraStacks;
+      proximoNumeroPalletExtra = anterior.proximoNumeroPalletExtra || proximoNumeroPalletExtra;
+      _sincronizarColunasExtras(); // remove/recria colunas de pallet extra pra bater com o extraStacks restaurado
       renderStacks(); validateAllSlabs();
     }
     else showAlert('Desfazer', 'Nada para desfazer.');
@@ -3232,6 +3693,8 @@
     undoLastAction, clearAllMarks,
     formatTemperature, calculateCureTime, autoSetThickness,
     editField,
+    adicionarPalletExtra: _adicionarPalletExtra,
+    removerPalletExtra: _removerPalletExtra,
     changeMountType,
     openPalletModal, closePalletModal, setModalTipo,
     clearModalPlates, confirmPalletModal,

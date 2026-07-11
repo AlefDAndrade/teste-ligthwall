@@ -157,7 +157,7 @@
 
     const resumo = `
       <div class="ba-resumo">
-        <strong>Bateria ${dados.id_bateria || '—'}</strong> — ${dados.tipo_montagem || '—'}
+        <strong>Bateria ${LW.escaparHtml(dados.id_bateria || '—')}</strong> — ${LW.escaparHtml(dados.tipo_montagem || '—')}
         ${dados.bercos_reais ? ` — ${dados.bercos_reais} berços` : ''}
       </div>`;
     const dica = podeMarcar

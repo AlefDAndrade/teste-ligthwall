@@ -55,9 +55,13 @@
     });
   }
 
+  // Escape de HTML — usa a função central de LW (data.js), a mesma usada
+  // em todo o resto do app; evita manter uma cópia local mais fraca (a
+  // antiga versão daqui só escapava &/</>, sem aspas — o suficiente pros
+  // usos atuais, que são só texto dentro de elementos, mas arriscado se
+  // um dia alguém reaproveitasse o padrão dentro de um atributo).
   function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return LW.escaparHtml(s);
   }
 
   async function carregarDados() {

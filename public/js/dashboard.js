@@ -788,7 +788,7 @@
       // tipos foram usados sem abrir o registro completo. O hover no badge
       // mostra esse resumo (contagem por tipo), sem precisar de UI nova.
       const tituloMontagem = b.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
-        ? LW.resumoBercosPersonalizados(b.bercos_personalizados).replace(/"/g, '&quot;')
+        ? LW.escaparHtml(LW.resumoBercosPersonalizados(b.bercos_personalizados))
         : '';
       const tituloLinha = (_modoEdicaoRegistro
         ? 'Clique para editar esta operação'
@@ -803,7 +803,7 @@
         <td data-col="turno"><span class="badge badge-gray">${b.turno || '—'}</span></td>
         <td data-col="dimensao">${b.dimensao || '—'}</td>
         <td data-col="capacidade">${b.capacidade || '—'}</td>
-        <td data-col="id_bateria">${b.id_bateria || '—'}</td>
+        <td data-col="id_bateria">${LW.escaparHtml(b.id_bateria || '—')}</td>
         <td data-col="inicio" class="mono">${b.inicio ? LW.formatTime(b.inicio) : '—'}</td>
         <td data-col="fim" class="mono">${b.fim ? LW.formatTime(b.fim) : '—'}</td>
         <td data-col="desemplaque" class="mono">${LW.formatDateTime(b.desemplaque || LW.calcularDesemplaque(b.fim))}</td>
@@ -813,7 +813,7 @@
           ? `<span class="badge badge-red" ${b.motivo_atraso ? `data-tooltip="${LW.escaparHtml(b.motivo_atraso)}"` : ''}>⚠ SIM</span>`
           : '<span class="badge badge-green">✓ NÃO</span>'}</td>
         <td data-col="motivo_atraso">${b.motivo_atraso ? LW.escaparHtml(b.motivo_atraso) : '—'}</td>
-        <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `data-tooltip="${tituloMontagem}"` : ''}>${b.tipo_montagem || '—'}</span></td>
+        <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `data-tooltip="${tituloMontagem}"` : ''}>${LW.escaparHtml(b.tipo_montagem || '—')}</span></td>
         <td data-col="paineis_2p">${b.paineis_2p || 0}</td>
         <td data-col="paineis_sp">${b.paineis_sp || 0}</td>
         ${tdsExtrasPaineis}
@@ -1467,7 +1467,7 @@
         data-traco-row-id="${rowId}" data-tooltip="${tituloLinha}"
         onclick="LWDash.onClickLinhaRelatorio('${rowId}')">
         <td class="mono"><span class="relatorio-expand-icon" id="icone-${rowId}">${_modoEdicaoRelatorio ? '✏️' : '▸'}</span>${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
-        <td>${op.id_bateria || '—'}${idx > 0 ? ' <span class="badge badge-gray" data-tooltip="Traço reaproveitado nesta bateria">♻</span>' : ''}</td>
+        <td>${LW.escaparHtml(op.id_bateria || '—')}${idx > 0 ? ' <span class="badge badge-gray" data-tooltip="Traço reaproveitado nesta bateria">♻</span>' : ''}</td>
         <td>${l.num_traco || '—'}</td>
         <td class="mono">${op.berco_inicio || '—'}</td>
         <td class="mono">${op.berco_finalizacao || '—'}</td>
@@ -2039,7 +2039,7 @@
     const dataFormatada = bateria.data
       ? bateria.data.split('-').reverse().join('/')
       : '(data desconhecida)';
-    const msg = `Esta produção (${bateria.id_bateria || ''} — ${dataFormatada}) foi registrada antes da implantação do sistema de rastreamento de traços e não possui vínculo de traço disponível.`;
+    const msg = `Esta produção (${LW.escaparHtml(bateria.id_bateria || '')} — ${dataFormatada}) foi registrada antes da implantação do sistema de rastreamento de traços e não possui vínculo de traço disponível.`;
 
     // Usa o modal de mensagem existente se disponível, senão alert simples
     if (typeof LWOp !== 'undefined' && LWOp.showToast) {
