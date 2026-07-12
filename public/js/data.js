@@ -1423,116 +1423,7 @@ async function desativarSobra(motivo, modoTeste = false) {
   await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() }, modoTeste);
 }
 
-// ---- Backup de Dados ----
-
-// Todos os arquivos que vivem em public/db/ — se um novo arquivo de dados
-// for adicionado lá no futuro, basta incluir o nome aqui também.
-const ARQUIVOS_BACKUP_DB = [
-  'config.json',
-  'contador_tracos.json',
-  'historico.json',
-  'historico_edicoes.json',
-  'relatorio_edicoes.json',
-  'paradas.json',
-  'ajustes_tracos.json',
-  'relatorio_injecao.json',
-  'security.json',
-  // Identidade Leve de Operador — mesmo motivo de segurança de
-  // security.json (ver caminhoArquivoDb, server.js).
-  'operadores.json',
-  'sobra.json',
-  // Metas de produção (Página de Metas) — arquivo simples, mesmo padrão
-  // de config.json (ver POST /salvar-metas, server.js).
-  'metas.json',
-  // Adicionados: Berços Visuais e Avaliações do Setor de Qualidade — antes
-  // ficavam de fora deste backup (só entravam no "Backup Geral"). Vêm de
-  // tabela SQL — a rota GET /db/<nome> reconstrói o JSON a partir do banco.
-  'bercos_visuais.json',
-  'avaliacoes_qualidade.json',
-  // Adicionado: sem isso, "quem já foi avaliado" (fila do Setor de
-  // Qualidade — ver CREATE TABLE operacoes_avaliadas, db.js) não saía no
-  // Backup de Dados — restaurar um backup fazia toda bateria já avaliada
-  // voltar a aparecer na fila, mesmo já avaliada de verdade antes do backup.
-  'operacoes_avaliadas.json',
-  // Adicionado: agora "não avaliadas" é uma fila DE VERDADE, guardada em
-  // arquivo (não mais calculada na hora — ver OPERACOES_NAO_AVALIADAS_PATH,
-  // server.js) — sem isso, ela ficaria de fora do Backup de Dados (o
-  // servidor recalcula sozinho a partir do SQL se este arquivo faltar
-  // junto de historico.json/operacoes_avaliadas.json na restauração, mas
-  // é melhor levar o estado exato de qualquer jeito).
-  'operacoes_nao_avaliadas.json',
-];
-
-/**
- * Busca todos os arquivos de public/db/ (via fetch, igual ao resto do app) e
- * monta um .zip com eles no próprio navegador (usando JSZip, carregado via
- * CDN no index.html), disparando o download. Não depende de nenhuma rota
- * nova no servidor — pros arquivos que migraram pra SQLite (Fase 5), o
- * servidor tem rotas GET /db/<nome> dedicadas que devolvem o conteúdo
- * sempre fresco a partir do banco (ver server.js); fetch('db/'+nome) aqui
- * cai nelas automaticamente, sem essa função precisar saber a diferença.
- *
- * IMPORTANTE (bug corrigido): antes, se algum arquivo falhasse ao buscar,
- * o erro era só logado no console e o .zip seguia sendo gerado (e baixado)
- * incompleto, sem avisar ninguém — só descobria-se na hora de restaurar
- * ("faltam: <arquivo>"). Isso acontecia sobretudo com "security.json":
- * a rota GET /db/security.json exige sessão de admin válida (cookie de
- * até 30 min, ver lib/sessao.js), mas o menu Admin no navegador fica
- * "logado" por muito mais tempo (sessionStorage 'lw_role', sem expirar
- * sozinho) — dava pra ficar horas na tela de Backup sem perceber que a
- * sessão de servidor já tinha expirado, gerar o backup, e só notar o
- * problema dias depois, ao tentar restaurar. Agora, qualquer falha aborta
- * a geração do zip e avisa exatamente qual(is) arquivo(s) falharam.
- */
-async function gerarBackupDados() {
-  if (typeof JSZip === 'undefined') {
-    throw new Error('Biblioteca JSZip não carregada.');
-  }
-
-  const zip = new JSZip();
-  const falhas = [];
-
-  for (const nome of ARQUIVOS_BACKUP_DB) {
-    try {
-      const res = await fetch('db/' + nome, { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const texto = await res.text();
-      zip.file(nome, texto);
-    } catch (err) {
-      console.error(`[Backup] Falha ao incluir "${nome}" no backup:`, err);
-      falhas.push(nome);
-    }
-  }
-
-  if (falhas.length) {
-    // "security.json" tem uma causa mais provável e mais fácil de
-    // resolver que as demais (sessão de admin expirada) — dá a dica certa
-    // em vez de deixar a pessoa adivinhar.
-    const dicaSecurity = falhas.includes('security.json')
-      ? ' Se foi "security.json", provavelmente sua sessão de administrador expirou — feche e reabra a tela de Backup (confirmando a senha de novo) e tente de novo.'
-      : '';
-    throw new Error(
-      `Backup cancelado — não foi possível incluir: ${falhas.join(', ')}.${dicaSecurity}`
-    );
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' });
-
-  // Nome do arquivo final, ex: lightwall_backup_dados_2026-06-19_14h32.zip
-  const agora = nowBrasilia();
-  const hh = String(agora.getUTCHours()).padStart(2, '0');
-  const mm = String(agora.getUTCMinutes()).padStart(2, '0');
-  const nomeArquivo = `lightwall_backup_dados_${todayBrasilia()}_${hh}h${mm}.zip`;
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nomeArquivo;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+// ---- Export ----
 
 // ---- Alerta customizado (substitui o alert() nativo do navegador) ----
 // Mesmo padrão visual usado nos modais de Sobra de Traço (operacao.js):
@@ -1687,8 +1578,9 @@ function mostrarConfirmacao(mensagem, opcoes = {}) {
 
 /**
  * Baixa uma string como arquivo — mesmo mecanismo (Blob + <a> temporário)
- * já usado por gerarBackupDados(), só que genérico: qualquer tela pode
- * chamar pra baixar texto/HTML/JSON sem duplicar esse boilerplate.
+ * já usado por fazerBackupDados()/fazerBackupGeral() (app-core.js), só
+ * que genérico: qualquer tela pode chamar pra baixar texto/HTML/JSON sem
+ * duplicar esse boilerplate.
  * Usado pelos botões "🌐 Exportar Interativo" dos dashboards (Setor de
  * Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
  * Berços, CEP, Análise Focada) — cada um monta seu próprio HTML
@@ -1956,9 +1848,6 @@ window.LW = {
 
   // Sobra de traço
   getSobra, salvarSobra, desativarSobra,
-
-  // Backup de dados
-  gerarBackupDados,
 
   // Alerta customizado (substitui alert() nativo)
   mostrarAlerta,

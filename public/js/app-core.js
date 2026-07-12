@@ -726,36 +726,64 @@
     }
 
     // ---- Backup de Dados (admin) ----
-    // A lógica de buscar os arquivos de public/db/ e montar o .zip vive em
-    // LW.gerarBackupDados() (data.js) — aqui só cuidamos do feedback na tela.
-    // O painel fica aberto durante a geração (pra mostrar o status) e só se
-    // fecha depois que o download foi disparado com sucesso.
-    async function fazerBackupDados() {
+    // Gerado no SERVIDOR (rota GET /backup-dados — ver
+    // gerarZipDadosServidor, lib/rotas/backup.js), diferente de antes
+    // (montado no navegador via fetch de cada GET /db/*.json — ver
+    // conversa que motivou a reformulação de Backup de Dados vs Backup
+    // Geral). Só dados de produção — sem config.json/security.json/
+    // usuarios.json/operadores.json (exclusivos do Backup Geral, abaixo).
+    // Exige sessão de Administrador (ver lib/sessao.js) — pede a senha
+    // antes de gerar/baixar o zip.
+    function fazerBackupDados() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
 
       const card = document.getElementById('backup-hub-card-dados');
 
-      try {
-        if (card) card.style.pointerEvents = 'none';
-        _statusBackupHub('Gerando backup de dados...');
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          if (card) card.style.pointerEvents = 'none';
+          _statusBackupHub('Gerando backup de dados...');
 
-        await LW.gerarBackupDados();
-        fecharBackupHub();
-      } catch (e) {
-        LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
-      } finally {
-        if (card) card.style.pointerEvents = '';
-        _statusBackupHub(null);
-      }
+          const res = await fetch('/backup-dados');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+
+          const cd = res.headers.get('Content-Disposition') || '';
+          const match = cd.match(/filename="(.+?)"/);
+          const nomeArquivo = match ? match[1] : `lightwall_backup_dados_${todayBrasilia()}.zip`;
+
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nomeArquivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          fecharBackupHub();
+        } catch (e) {
+          LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
+        } finally {
+          if (card) card.style.pointerEvents = '';
+          _statusBackupHub(null);
+        }
+      });
     }
 
     // ---- Backup Geral (admin) ----
-    // Diferente do Backup de Dados, este .zip é montado no PRÓPRIO SERVIDOR
-    // (rota GET /backup-geral) — ele varre o projeto inteiro (código + dados),
-    // então não precisa que o front-end conheça cada arquivo de antemão.
-    // GET /backup-geral agora exige sessão de Administrador (ver
-    // lib/sessao.js) — pede a senha aqui, antes de gerar/baixar o zip do
-    // projeto inteiro (que inclui security.json).
+    // Dados de produção + config.json (baterias, tipos de montagem,
+    // automação) + identidade/acesso (security.json, usuarios.json,
+    // operadores.json) — ver gerarZipBackupGeral, lib/rotas/backup.js.
+    // Reformulado (ver conversa que motivou a mudança): ANTES incluía o
+    // PROJETO INTEIRO (código-fonte) — isso saiu, já que código-fonte
+    // tem controle de versão próprio (Git). GET /backup-geral exige
+    // sessão de Administrador (ver lib/sessao.js) — pede a senha aqui,
+    // antes de gerar/baixar o zip (que inclui security.json/usuarios.json).
     function fazerBackupGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       if (typeof AdminAuth === 'undefined') {
@@ -1173,12 +1201,17 @@
     }
 
     // ---- Restaurar Backup Geral (admin) ----
-    // Mesmas ideias do Restaurar Backup de Dados, com camadas extras dado o
-    // risco maior: frase de confirmação explícita, e o backup pode conter
-    // QUALQUER arquivo do projeto (não uma lista fixa como o de dados).
-    const ESSENCIAIS_BACKUP_GERAL = ['server.js', 'package.json', 'public/index.html'];
+    // Mesmas ideias do Restaurar Backup de Dados — dados de produção +
+    // config.json + usuários/senha de administrador (se presentes). Único
+    // arquivo sempre obrigatório é config.json (sempre existiu, mesmo no
+    // sistema antigo pré-Fase A) — security.json/usuarios.json/
+    // operadores.json são OPCIONAIS (ver conversa que motivou isso:
+    // restaurar um backup do sistema antigo, sem esses 3, não pode
+    // apagar os usuários já cadastrados no sistema atual — o servidor
+    // trata isso em _restaurarArquivosExtraDoGeral, lib/rotas/backup.js).
+    const ESSENCIAIS_BACKUP_GERAL = ['config.json'];
 
-    let _restaurarGeralArquivos = null; // { 'server.js': '<conteúdo>', ... } já lidos do .zip
+    let _restaurarGeralArquivos = null; // { 'historico.json': '<conteúdo>', ... } já lidos do .zip
 
     function abrirRestaurarGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
@@ -1286,8 +1319,9 @@
       if (frase !== 'RESTAURAR TUDO' || !senha) return;
 
       const confirmouGeral = await LW.mostrarConfirmacao(
-        'Isso vai substituir TODO o código e os dados do sistema pelos deste backup, e vai exigir reiniciar o ' +
-        'servidor manualmente depois. Uma cópia de segurança completa do estado atual será salva automaticamente antes.',
+        'Isso vai substituir os dados de produção e configurações atuais pelos deste backup (usuários/senha de ' +
+        'administrador só se o backup os incluir). Uma cópia de segurança do estado atual será salva ' +
+        'automaticamente antes.',
         { titulo: 'ÚLTIMA CONFIRMAÇÃO', textoConfirmar: 'Restaurar Tudo', tipo: 'perigo', icon: '⚠️' }
       );
       if (!confirmouGeral) return;
@@ -1308,8 +1342,6 @@
 
         await LW.mostrarAlerta(
           `Backup geral restaurado com sucesso (${json.arquivosRestaurados} arquivos)!\n\n` +
-          `IMPORTANTE: reinicie o servidor agora manualmente (Ctrl+C e "npm start", ou "pm2 restart") para que ` +
-          `mudanças no código do servidor tenham efeito.\n\n` +
           `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}`,
           { tipo: 'sucesso' }
         );

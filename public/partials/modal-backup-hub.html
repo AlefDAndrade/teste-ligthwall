@@ -21,13 +21,14 @@
           <div class="menu-card" id="backup-hub-card-dados" onclick="fazerBackupDados()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup de Dados</div>
-            <div class="menu-card-desc">Só os arquivos de dados (histórico, relatório de injeção, configurações etc.).
+            <div class="menu-card-desc">Só dados de produção — operações, traços, paradas, avaliações de qualidade.
             </div>
           </div>
           <div class="menu-card" id="backup-hub-card-geral" onclick="fazerBackupGeral()">
             <div class="menu-card-icon">🗄️</div>
             <div class="menu-card-title">Backup Geral</div>
-            <div class="menu-card-desc">O programa inteiro como está agora (código + dados).</div>
+            <div class="menu-card-desc">Dados de produção + configurações (baterias, tipos de montagem) + usuários
+              cadastrados e senha de administrador (em hash).</div>
           </div>
         </div>
 
@@ -42,7 +43,8 @@
           <div class="menu-card" onclick="fecharBackupHub();abrirRestaurarGeral()">
             <div class="menu-card-icon">⚠️</div>
             <div class="menu-card-title">Restaurar Geral</div>
-            <div class="menu-card-desc">A partir de um "Backup Geral". Exige reiniciar o servidor depois.</div>
+            <div class="menu-card-desc">A partir de um "Backup Geral". Usuários/senha de administrador só são
+              alterados se o backup os incluir — sem eles, o cadastro atual é mantido.</div>
           </div>
         </div>
 

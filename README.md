@@ -105,7 +105,6 @@ package.json
 **Ainda por fazer** (por ordem de risco, do menor pro maior):
 - Rotas centrais de operação: `registrar-operacao`, `editar-operacao`, `registrar-relatorio-injecao`, `editar-traco-relatorio`, `registrar-ajuste-traco`, `leitura-automatica` — são as maiores e mais tocadas do sistema, cada uma tem bastante lógica de negócio embutida.
 - Autenticação/config: `verificar-senha`, `verificar-recovery`, `gerar-hash`, `salvar-config`, `config/modo-automatico`, `salvar-security`, `db/security.json`, `logout-admin`.
-- **Backup & Restauração** (`backup-geral`, `backups-automaticos`, `mesclar-backup-dados`, `restaurar-backup-dados`, `restaurar-backup-geral`) — deixado por último de propósito: é o domínio de maior risco do sistema, já que `restaurar-backup-geral` pode sobrescrever o próprio código do servidor. Só deve ser fatiado com o padrão já bem validado nos domínios mais simples primeiro (o que já é o caso).
 
 ## Fatiamento de index.html
 
@@ -139,7 +138,7 @@ Os arquivos JSON de `public/db/` crescem sem limite e são lidos/escritos **por 
 
 - **Migração automática, sem passo manual**: no boot, `db.migrarHistoricoSeNecessario()` confere se a tabela `operacoes` está vazia E `historico.json` ainda existe com esse nome — se sim, importa tudo (numa transação) e **renomeia** o arquivo pra `historico.json.migrado-<timestamp>` (nunca apaga). Isso também acontece com `historico_edicoes.json`. Reinicia o servidor sem ter migrado nada ainda? Roda sozinho, sem precisar lembrar de nenhum comando.
 - **Zero mudança no navegador**: `historico.json` não existe mais como arquivo, mas o servidor intercepta `GET /db/historico.json` (e `historico_edicoes.json`) e devolve o mesmo formato de sempre, reconstruído a partir do SQL — toda tela que já fazia `fetch('db/historico.json')` direto (Registro de Baterias, OEE, Análise Operacional, Debriefing, a tela de Backup de Dados) continua funcionando **sem nenhuma alteração**.
-- **Backup e Restauração também não mudam de comportamento**: "Backup de Dados" e o backup automático diário exportam o conteúdo atual da tabela como JSON (mesmo formato); "Restaurar Backup de Dados" substitui o conteúdo da tabela inteira (dentro de uma transação) em vez de escrever um arquivo. "Backup Geral" inclui `data/lightwall.sqlite` automaticamente (já varre o projeto inteiro) — com um detalhe importante: roda um `PRAGMA wal_checkpoint(TRUNCATE)` antes de zipar, senão escritas recentes podem estar só no arquivo `-wal` e não no `.sqlite` principal.
+- **Backup e Restauração também não mudam de comportamento**: "Backup de Dados" e o backup automático diário exportam o conteúdo atual da tabela como JSON (mesmo formato); "Restaurar Backup de Dados" substitui o conteúdo da tabela inteira (dentro de uma transação) em vez de escrever um arquivo. "Backup Geral" reaproveita a mesma exportação JSON (não inclui `data/lightwall.sqlite` diretamente) — com um detalhe importante: roda um `PRAGMA wal_checkpoint(TRUNCATE)` antes de exportar, senão escritas recentes podem estar só no arquivo `-wal` e não no `.sqlite` principal.
 - **Modo de Teste não foi tocado**: continua escrevendo em `public/db/teste/historico.json`, exatamente como antes — só o caminho **real** (sem `?modoTeste=true`) passa a usar SQL.
 - **Testado**: migração automática (comparando campo a campo com o arquivo original — reconstrução idêntica), `/registrar-operacao`, `/editar-operacao` (inclusive a checagem de campos protegidos), `/importar-historico` com deduplicação, 5 registros concorrentes via `Promise.all` (o problema original que motivou a migração), Modo de Teste continuando isolado, e a restauração completa de um Backup de Dados (com o backup de segurança pré-restauração capturando o estado anterior corretamente).
 - **Achado de implementação**: tanto o `better-sqlite3` quanto o `node:sqlite` recusam um objeto de parâmetros nomeados com chaves que não aparecem na query (`UPDATE ... SET x = @x` não aceita um objeto que também tenha `@y` sem uso) — o `UPDATE` de `/editar-operacao` precisa receber só as colunas que de fato atualiza, não o objeto inteiro do registro.
@@ -334,13 +333,13 @@ Um único card no menu ("💾 Backup e Restauração") abre um painel com todas 
 
 | Opção | O que faz |
 |---|---|
-| **Backup de Dados** | Baixa um `.zip` com os arquivos de dados de `public/db/` (histórico, traços, paradas, avaliações de qualidade etc. — 13 no total, alguns reconstruídos a partir do SQLite). Gerado no navegador. |
-| **Backup Geral** | Baixa um `.zip` com o projeto inteiro (código + dados, exceto `node_modules`/`.git`). Gerado no servidor. |
-| **Restaurar Dados** | Sobrescreve `public/db/` a partir de um backup de dados. |
-| **Restaurar Geral** | Sobrescreve o projeto inteiro a partir de um backup geral. **Exige reiniciar o servidor manualmente depois**, pra mudanças em `server.js` valerem. |
-| **Backups Automáticos** | Lista os backups diários gerados pelo servidor (ver abaixo), com link de download pra cada um. |
+| **Backup de Dados** | Baixa um `.zip` só com dados de produção (histórico, traços, paradas, avaliações de qualidade etc. — 13 arquivos, alguns reconstruídos a partir do SQLite). Gerado no servidor. |
+| **Backup Geral** | Baixa um `.zip` com dados de produção + `config.json` (baterias, tipos de montagem, automação) + `security.json`/`usuarios.json`/`operadores.json` (identidade e acesso — senhas sempre em hash). Gerado no servidor. Sem código-fonte (esse tem controle de versão próprio — ver Git). |
+| **Restaurar Dados** | Sobrescreve os dados de produção a partir de um backup de dados. |
+| **Restaurar Geral** | Sobrescreve dados de produção + config a partir de um backup geral. `security.json`/`usuarios.json`/`operadores.json` são **opcionais** — se o backup não os incluir (ex: veio de uma instalação mais antiga, sem esses arquivos), o cadastro atual de usuários/senha de administrador é **preservado**, não apagado. |
+| **Backups Automáticos** | Lista os backups de dados diários gerados pelo servidor (ver abaixo), com link de download pra cada um. |
 
-Toda restauração: exige a senha do administrador (reverificada no servidor), valida o formato de cada arquivo antes de gravar qualquer coisa, e salva automaticamente uma cópia de segurança do estado atual em `backups-seguranca/` (fora de `public/`, nunca servida pela web) antes de sobrescrever. A restauração geral pede também uma frase de confirmação (`RESTAURAR TUDO`) e bloqueia caminhos suspeitos (`../`, `node_modules/`, `.git/`).
+Toda restauração: exige a senha do administrador (reverificada no servidor), valida o formato de cada arquivo antes de gravar qualquer coisa, e salva automaticamente uma cópia de segurança do estado atual em `backups-seguranca/` (fora de `public/`, nunca servida pela web) antes de sobrescrever. A restauração geral pede também uma frase de confirmação (`RESTAURAR TUDO`).
 
 `backups-seguranca/` cresce a cada restauração feita — não há limpeza automática; remova as mais antigas manualmente quando quiser.
 
@@ -436,7 +435,7 @@ Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', 
 - O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
 - Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
 - `deviceId` continua identificando o "dono" da operação em andamento (evita dois computadores autorizados brigando pela mesma operação, ver *Quem pode controlar operações*), mas quem PODE controlar é decidido pela sessão de usuário logado, não mais pelo `deviceId`.
-- Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
+- Por estar fora de `public/db/`, não faz parte de nenhum dos dois backups (Dados ou Geral — ambos são uma lista fixa de arquivos, ver *Backup e Restauração*) — fica de fora dos dois, precisando ser copiado manualmente se quiser preservar o histórico de acessos.
 
 **Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
 
@@ -484,12 +483,13 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outra pessoa autorizada já é a dona — ver *Quem pode controlar operações*) |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
 | `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
-| `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
-| `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
+| `/backup-dados` | GET | Gera e baixa o `.zip` só com dados de produção |
+| `/backup-geral` | GET | Gera e baixa o `.zip` com dados de produção + config.json + identidade/acesso |
+| `/backups-automaticos` | GET | Lista os backups de dados diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |
 | `/mesclar-backup-dados` | POST | Mescla traços/operações/paradas de um backup de OUTRA instalação (exige senha de admin, reverificada) |
-| `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup (exige senha de admin, reverificada) |
-| `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup (exige senha de admin, reverificada) |
+| `/restaurar-backup-dados` | POST | Restaura dados de produção a partir de um backup (exige senha de admin, reverificada) |
+| `/restaurar-backup-geral` | POST | Restaura dados de produção + config + identidade/acesso (esses últimos opcionais e preservados se ausentes) a partir de um backup (exige senha de admin, reverificada) |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
 
 - 🔒 = exige sessão de usuário logado com permissão de controlar operações (HTTP 403 caso contrário — ver *Quem pode controlar operações*). Ignorado quando `?modoTeste=true`.
@@ -512,7 +512,7 @@ Essa sessão **não substitui** a re-verificação de senha das rotas mais destr
 
 ## Limitações conhecidas
 
-- **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever o próprio código do servidor) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.
+- **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever dados de produção, configurações e o cadastro de usuários) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.
 - Backups de segurança (`backups-seguranca/`) não têm rotina de limpeza automática.
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
 - Testes automatizados (`test/`) cobrem autenticação/sessão e Setor de Qualidade — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste automatizado formal, só validação manual (via chamadas HTTP reais) a cada mudança.

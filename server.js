@@ -1,7 +1,6 @@
 const http      = require('http');
 const fs        = require('fs');
 const path      = require('path');
-const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
@@ -111,7 +110,7 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
   adicionarNaFilaNaoAvaliadas, broadcastOperacaoFinalizada,
 });
 const rotasBackup = require('./lib/rotas/backup.js')({
-  db, fs, path, JSZip, vm,
+  db, fs, path, JSZip,
   ROOT_DIR, DB_DIR, SECURITY_PATH, OPERADORES_PATH, USUARIOS_PATH,
   auth, sessao,
   todayBrasiliaServer, horaMinutoBrasiliaServer,

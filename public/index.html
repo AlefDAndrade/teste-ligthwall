@@ -301,7 +301,8 @@
           <div class="menu-card" data-admin-only onclick="abrirBackupHub()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup e Restauração</div>
-            <div class="menu-card-desc">Fazer ou restaurar um backup — só dos dados, ou do programa inteiro.</div>
+            <div class="menu-card-desc">Fazer ou restaurar um backup — só dados de produção, ou dados + configurações
+              e usuários.</div>
           </div>
         </div>
       </div>
@@ -329,13 +330,14 @@
           <div class="menu-card" id="backup-hub-card-dados" onclick="fazerBackupDados()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup de Dados</div>
-            <div class="menu-card-desc">Só os arquivos de dados (histórico, relatório de injeção, configurações etc.).
+            <div class="menu-card-desc">Só dados de produção — operações, traços, paradas, avaliações de qualidade.
             </div>
           </div>
           <div class="menu-card" id="backup-hub-card-geral" onclick="fazerBackupGeral()">
             <div class="menu-card-icon">🗄️</div>
             <div class="menu-card-title">Backup Geral</div>
-            <div class="menu-card-desc">O programa inteiro como está agora (código + dados).</div>
+            <div class="menu-card-desc">Dados de produção + configurações (baterias, tipos de montagem) + usuários
+              cadastrados e senha de administrador (em hash).</div>
           </div>
         </div>
 
@@ -350,7 +352,8 @@
           <div class="menu-card" onclick="fecharBackupHub();abrirRestaurarGeral()">
             <div class="menu-card-icon">⚠️</div>
             <div class="menu-card-title">Restaurar Geral</div>
-            <div class="menu-card-desc">A partir de um "Backup Geral". Exige reiniciar o servidor depois.</div>
+            <div class="menu-card-desc">A partir de um "Backup Geral". Usuários/senha de administrador só são
+              alterados se o backup os incluir — sem eles, o cadastro atual é mantido.</div>
           </div>
         </div>
 
@@ -4155,9 +4158,10 @@
       <!-- Passo 0: escolher o arquivo -->
       <div id="restaurar-step-0">
         <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
-          Restaura <strong>config, histórico, relatório de injeção, segurança, sobra e contador de traços</strong> a
-          partir de um arquivo gerado pelo botão "Backup de Dados" (.zip). Uma cópia de segurança do estado atual é
-          salva automaticamente no servidor antes de qualquer substituição.
+          Restaura <strong>dados de produção</strong> — histórico de operações, relatório de injeção, paradas, sobra,
+          contador de traços, avaliações de qualidade — a partir de um arquivo gerado pelo botão "Backup de Dados"
+          (.zip). Uma cópia de segurança do estado atual é salva automaticamente no servidor antes de qualquer
+          substituição.
         </p>
 
         <div style="
@@ -4312,14 +4316,13 @@
       <!-- Passo 0: escolher o arquivo -->
       <div id="restaurar-geral-step-0">
         <p style="color:var(--text-2);font-size:.9rem;margin-bottom:12px">
-          Restaura <strong>o programa inteiro</strong> (servidor, páginas, código e dados) a partir de um arquivo
+          Restaura <strong>dados de produção + configurações + usuários cadastrados</strong> a partir de um arquivo
           gerado pelo botão "Backup Geral" (.zip).
         </p>
-        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:20px">
-          ⚠ Depois de restaurar, é preciso <u>reiniciar o servidor manualmente</u> (ex: Ctrl+C e "npm start", ou
-          "pm2 restart") para que mudanças no código do servidor tenham efeito. As páginas (HTML/CSS/JS) já aparecem
-          atualizadas no próximo carregamento, mas o processo do servidor continua rodando o código antigo até
-          reiniciar.
+        <p style="color:var(--text-3);font-size:.85rem;margin-bottom:20px">
+          Usuários, senha de administrador e a Identidade Leve de operadores só são alterados se o backup
+          incluir esses arquivos — um backup mais antigo, sem eles, restaura normalmente e mantém o cadastro atual
+          intacto.
         </p>
 
         <div style="
@@ -4351,8 +4354,9 @@
         </div>
 
         <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:16px">
-          ⚠ Isso vai substituir TODO o código e os dados atuais pelos deste backup. Uma cópia de segurança completa
-          do estado atual será salva automaticamente no servidor antes da substituição.
+          ⚠ Isso vai substituir os dados de produção e configurações atuais pelos deste backup (usuários/senha de
+          administrador só se o backup os incluir). Uma cópia de segurança do estado atual será salva
+          automaticamente no servidor antes da substituição.
         </p>
 
         <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">
