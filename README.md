@@ -204,6 +204,8 @@ A lista de páginas por perfil é definida num lugar só (`lib/perfis.js`) e val
 
 A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.js`) — cobre um turno inteiro sem precisar logar de novo no meio do expediente. A sessão do Administrador Master dura 30min (`lib/sessao.js`), mais curta de propósito por ser uma ação administrativa pontual, não "ficar logado o dia todo".
 
+**Atalhos de teclado por usuário**: cada usuário cadastrado tem seus próprios atalhos personalizados (Configurações → Atalhos de Teclado), persistidos no servidor associados ao cadastro (`GET`/`POST /meus-atalhos`, `lib/rotas/usuarios.js`) — a personalização segue a pessoa entre computadores, não fica presa a um navegador. O Administrador Master (sem usuário próprio) continua com os atalhos salvos só em `localStorage` deste navegador, como sempre foi.
+
 ## Páginas
 
 - **Registrar Operação** — fluxo de injeção: seleção de bateria/tipo de montagem, traços, tempos, atrasos, sobra de traço entre operações.
@@ -311,24 +313,20 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 - Tipos **híbridos** não geram cor própria: aparecem sempre com a tela dividida 50/50 entre a cor de cada um dos 2 tipos simples que os compõem (gradiente CSS no HTML; gradiente real desenhado no `<canvas>`, que não entende a sintaxe `linear-gradient()` do CSS).
 - Aparece em: badge de "Tipo de Montagem" no Registro de Baterias, gráfico "Montagem × Atrasos" da Análise Operacional, e uma bolinha de pré-visualização na própria tela de admin.
 
-### Autorizados
+### Quem pode controlar operações
 
-Em **Menu → Configurações → Autorizados**: controla quais computadores podem iniciar, encerrar e registrar operações em **Registrar Operação** (ver *Operação em Andamento*, abaixo). Cada item é `{ deviceId, nome, autorizadoEm }`, guardado em `config.json` (`dispositivosAutorizados`).
+Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: cada perfil "Administrador" e "Administrativo" sempre pode controlar; os demais perfis (Operador, Analista, Qualidade, Manutencao) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm a página Registrar Operação liberada, ver *Perfis de usuário*).
 
-- **Lista vazia (padrão)**: sem restrição — qualquer computador pode controlar, igual ao comportamento antes desta funcionalidade existir.
-- **Lista com 1+ item**: só os `deviceId`s dela podem controlar. Os demais continuam podendo **acompanhar a operação ao vivo** (WebSocket), só não conseguem interagir.
-- A própria tela mostra o `deviceId` do computador que está olhando (gerado e persistido em `localStorage`, `lw_device_id` — ver *Log de Acesso*), já pré-preenchido no campo de autorizar — é assim que se autoriza "este computador aqui".
-- Cada autorizar/remover salva na hora (sem precisar do botão "✓ Salvar Configurações", que é só da aba Baterias e Montagem).
-- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao` e `/confirmar-tracos-hoje` recusam (HTTP 403) qualquer `deviceId` fora da lista, quando ela não está vazia.
-- **Na tela** (Registrar Operação): quem não está autorizado vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de autorizar este computador.
-- Atalhos de teclado (Iniciar/Encerrar/Registrar/Resetar) não dependem só do `<fieldset>` — cada uma dessas 4 ações também checa a autorização no próprio código, então um atalho não contorna a trava.
+- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao`, `/marcar-berco-andamento` e `/confirmar-tracos-hoje` recusam (HTTP 403) quem não tem essa permissão (`podeControlarOperacao()`, `server.js`).
+- **Na tela** (Registrar Operação): quem não tem permissão vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de habilitar isso no cadastro.
+- Atalhos de teclado (Iniciar/Encerrar/Registrar/Resetar) não dependem só do `<fieldset>` — cada uma dessas 4 ações também checa a permissão no próprio código, então um atalho não contorna a trava.
 
-**Dono da operação** (quando há 2+ dispositivos autorizados): só estar na lista não basta — o **primeiro** dispositivo autorizado a dar "Iniciar Injeção" numa operação vazia se torna o **dono** dela (`donoDeviceId`, gravado em `operacao_andamento.json`, recalculado sempre no servidor — nunca confia no que o cliente manda). Enquanto a operação estiver rodando:
-- Só o dono pode editar campos, encerrar ou registrar — outro dispositivo autorizado tentando qualquer uma dessas ações recebe HTTP 409 ("já está sendo controlada por outro computador") e vê o banner "👀 Outro computador autorizado está controlando esta operação agora".
-- **Escape hatch**: "🗑️ Limpar Tudo" funciona pra **qualquer** dispositivo autorizado, mesmo sem ser o dono — é assim que se recupera uma operação travada por um computador que ficou offline, travou, ou esqueceu de encerrar. Limpar também libera o "dono" — o próximo a iniciar assume.
+**Dono da operação** (quando há 2+ pessoas autorizadas a controlar): ter permissão não basta — a **primeira** pessoa autorizada a dar "Iniciar Injeção" numa operação vazia se torna a **dona** dela (`donoDeviceId`, identifica o computador dela; gravado em `operacao_andamento.json`, recalculado sempre no servidor — nunca confia no que o cliente manda). Enquanto a operação estiver rodando:
+- Só a dona pode editar campos, encerrar ou registrar — outra pessoa autorizada tentando qualquer uma dessas ações recebe HTTP 409 ("já está sendo controlada por outra pessoa") e vê o banner "👀 Outra pessoa autorizada está controlando esta operação agora".
+- **Escape hatch**: "🗑️ Limpar Tudo" funciona pra **qualquer** pessoa autorizada, mesmo sem ser a dona — é assim que se recupera uma operação travada por alguém que ficou offline, travou, ou esqueceu de encerrar. Limpar também libera a "dona" — o próximo a iniciar assume. O Administrador Master também pode cancelar de Configurações → Operação em Andamento, sem precisar estar com a tela de Registrar Operação aberta.
 - O dono é zerado junto com a operação (registrar, resetar, ou forçar) — sempre há, no máximo, um dono por vez, nunca persiste entre operações.
 
-**Limitação conhecida**: `deviceId` não é uma credencial de segurança de verdade (ver *Log de Acesso*) — é só uma identidade de conveniência. Quem tiver acesso físico ao computador autorizado controla a operação; isso restringe *qual máquina*, não *quem* a está usando.
+**Limitação conhecida**: a sessão de usuário (cookie HttpOnly, 12h) identifica a pessoa, mas quem tiver acesso à sessão ativa dela (ex: navegador destravado) controla em nome dela — mesmo princípio de qualquer sistema de login por sessão.
 
 ## Backup e Restauração (Administrador)
 
@@ -364,7 +362,7 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 - Campos preenchidos **antes** de clicar em "Iniciar Injeção" não são transmitidos (ainda é só um rascunho local) — a transmissão começa no clique de "Iniciar" e termina quando a operação é registrada, resetada (🗑️ Limpar Tudo) ou enfileirada por falta de conexão.
 - Sem necessidade de framework: o servidor (`server.js`) anexa um `WebSocket.Server` (lib `ws`) ao mesmo `http.Server` já existente.
 
-**Limitação conhecida**: a trava de quem pode editar é por **dispositivo** (ver *Configurações → Autorizados*, abaixo), não por sessão — se a lista de autorizados estiver vazia (padrão), continua valendo "última mudança enviada sobrescreve a anterior", sem nenhuma trava.
+**Limitação conhecida**: a trava de quem pode editar é por **permissão de perfil** (ver *Quem pode controlar operações*, abaixo), não por sessão exclusiva de edição — sempre vale "última mudança enviada sobrescreve a anterior" entre quem tem permissão, sem nenhuma trava adicional de concorrência dentro disso.
 
 ## Modo de Teste (Registrar Operação)
 
@@ -373,8 +371,8 @@ Toggle **🧪 Modo de Teste**, no topo da tela (só pode trocar com a operação
 Com o toggle ativo, a operação funciona normalmente (turno, traços, Iniciar/Finalizar/Registrar, ajustes, sobra), mas:
 
 - **Tudo é salvo em `public/db/teste/`** em vez de `public/db/` — `historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json` e `sobra.json` têm uma cópia isolada lá, criada na hora que o modo de teste é usado por aquela rota pela primeira vez. **Nunca** escreve nos arquivos reais.
-- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de Autorizados/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
-- **Qualquer computador pode usar**, mesmo um que não esteja autorizado a controlar operações reais — a trava de Autorizados é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
+- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de permissão/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
+- **Qualquer pessoa pode usar**, mesmo quem não tem permissão pra controlar operações reais — a trava de permissão é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
 - **Nunca cai na fila de sincronização offline** — se a conexão cair no meio de um teste, ele simplesmente não salva (com aviso de erro), em vez de ficar pendente pra "sincronizar de verdade" depois (essa fila é só pra operações reais).
 - **Sempre desliga ao limpar/zerar a tela** — de propósito, pra nunca ficar "esquecido" ligado numa operação real futura. Pra outro teste, é só ativar de novo.
 - Visualmente reforçado em 3 lugares: o toggle fica roxo/aceso, um banner roxo no topo diz "MODO DE TESTE ATIVO", e o badge de status ao lado do cronômetro ganha um selo "🧪 TESTE".
@@ -402,7 +400,7 @@ Diferente do Modo de Teste (que é local a uma operação, num navegador), o Mod
   - Insumo (balança): `{ tipo: 'insumo', campo: 'cimento_real', valor: 512.3, traco: 1 }` — `campo` é um dos 5 insumos reais do traço (`cimento_real`, `agua_real`, `eps_real`, `superplast_real`, `incorporador_real`); `traco` (número, opcional) indica qual traço — se omitido, aplica no traço selecionado no momento em Registrar Operação.
   - Berço (injetora): `{ tipo: 'berco', berco: 'B7' }` — chega e é logada, mas **ainda sem ação definida** do lado da tela (ver item 7 em *Status da integração*, abaixo).
 - `operacao.js` (`_aplicarLeituraAutomatica`) recebe a leitura via WebSocket e, se o Modo Automático estiver ligado, aplica com `LWOp.updateInsumoOriginal` — o **mesmo caminho** que a digitação manual usa, então total calculado, indicador de traço completo/pendente e persistência funcionam automaticamente, sem lógica duplicada.
-- Sem dispositivo autorizado nem sessão de admin nessa rota especificamente (`/leitura-automatica`) — é uma leitura de sensor, não um controle da operação; a proteção por senha é só pra **ligar/desligar** o modo, não pra cada leitura individual.
+- Sem permissão de controlar operação nem sessão de admin nessa rota especificamente (`/leitura-automatica`) — é uma leitura de sensor, não um controle da operação; a proteção por senha é só pra **ligar/desligar** o modo, não pra cada leitura individual.
 
 ### Status da integração (CLP identificado, coleta ainda não conectada)
 
@@ -437,7 +435,7 @@ Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', 
 - Fica em `logs/`, **fora** de `public/` — de propósito: arquivos em `public/db/` são servidos como arquivo estático comum (ver "Limitações conhecidas"), e isso exporia o IP de quem acessa pra qualquer um que soubesse a URL. Em `logs/`, não existe rota nenhuma que sirva esse arquivo — só o próprio servidor lê/escreve nele direto no disco.
 - O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
 - Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
-- Pensado como base pra restringir o registro de operação a um único computador — já implementado em **Configurações → Autorizados** (ver seção dedicada), usando esse mesmo `deviceId`.
+- `deviceId` continua identificando o "dono" da operação em andamento (evita dois computadores autorizados brigando pela mesma operação, ver *Quem pode controlar operações*), mas quem PODE controlar é decidido pela sessão de usuário logado, não mais pelo `deviceId`.
 - Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
 
 **Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
@@ -483,7 +481,7 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` 🧪 |
-| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outro dispositivo autorizado já é o dono — ver *Autorizados*) |
+| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outra pessoa autorizada já é a dona — ver *Quem pode controlar operações*) |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
 | `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
 | `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
@@ -494,7 +492,7 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup (exige senha de admin, reverificada) |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
 
-- 🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada). Ignorado quando `?modoTeste=true`.
+- 🔒 = exige sessão de usuário logado com permissão de controlar operações (HTTP 403 caso contrário — ver *Quem pode controlar operações*). Ignorado quando `?modoTeste=true`.
 - 🧪 = aceita `?modoTeste=true` — desvia a leitura/escrita pra `public/db/teste/` em vez de `public/db/` (ver *Modo de Teste*, acima).
 - 🔐 = exige sessão de Administrador válida (cookie — ver *Autenticação e Sessão*, abaixo). HTTP 403 sem ela.
 - 🚦 = protegido por rate limiting de tentativas (ver *Autenticação e Sessão*, abaixo). HTTP 429 se bloqueado.

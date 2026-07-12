@@ -148,9 +148,10 @@
       // base pra, no futuro, restringir essa tela a um único computador.
       if (pageId === 'operacao') {
         LW.registrarAcesso('/operacao');
-        // A lista de Configurações → Autorizados pode ter mudado desde o
-        // boot da página (ex: admin acabou de autorizar este computador)
-        // — reaplica a trava na hora de abrir a aba, sem precisar de F5.
+        // A permissão de controlar operações (Configurações → Usuários)
+        // pode ter mudado desde o boot da página (ex: admin acabou de
+        // habilitar isso no cadastro) — reaplica a trava na hora de abrir
+        // a aba, sem precisar de F5.
         if (typeof LWOp !== 'undefined' && LWOp.atualizarTravaAutorizacao) LWOp.atualizarTravaAutorizacao();
       }
 
@@ -452,6 +453,18 @@
 
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
+      // Re-renderiza Configurações → Atalhos se a resposta de
+      // GET /meus-atalhos (assíncrona, ver keyboard-shortcuts.js,
+      // _carregarOverrides) chegar DEPOIS que a pessoa já abriu essa aba
+      // — caso raro (a resposta costuma ser rápida), mas sem isso a tela
+      // ficaria mostrando os combos de FÁBRICA por engano até a pessoa
+      // trocar de aba e voltar. Não faz nada se a aba de Atalhos não
+      // estiver aberta nesse momento (cfgRenderAtalhos já lida com isso).
+      window.addEventListener('lwkeyboard:overrides-carregados', () => {
+        const secaoAtalhos = document.getElementById('cfg-secao-atalhos');
+        if (secaoAtalhos && secaoAtalhos.style.display !== 'none') cfgRenderAtalhos();
+      });
+
       // Set date in topbar and op form
       const now = nowBrasilia();
       document.getElementById('topbar-date').textContent = now.toLocaleDateString('pt-BR', {
@@ -2160,6 +2173,17 @@
       const elNav = document.getElementById('cfg-atalhos-navegacao');
       const elAcoes = document.getElementById('cfg-atalhos-acoes');
       const elRef = document.getElementById('cfg-atalhos-referencia');
+      const elOndeSalva = document.getElementById('cfg-atalhos-onde-salva');
+      // Administrador (senha mestra, sem usuário próprio) continua em
+      // localStorage deste navegador; qualquer usuário cadastrado tem os
+      // atalhos seguindo a pessoa entre computadores (ver
+      // keyboard-shortcuts.js, _usaServidorParaAtalhos).
+      if (elOndeSalva) {
+        const role = sessionStorage.getItem('lw_role');
+        elOndeSalva.textContent = role === 'Administrador'
+          ? 'Fica salvo só neste navegador.'
+          : 'Fica salvo na sua conta — segue você em qualquer computador que logar.';
+      }
       if (elNav) elNav.innerHTML = todos.filter(a => a.grupo === 'navegacao').map(_cfgLinhaAtalho).join('');
       if (elAcoes) elAcoes.innerHTML = todos.filter(a => a.grupo === 'acao').map(_cfgLinhaAtalho).join('');
       // Atalhos NÃO-editáveis (ver REFERENCIA_CONFIG, keyboard-shortcuts.js)
@@ -2528,7 +2552,7 @@
         // salvar, em vez de reconstruir do zero só com o que esta tela
         // conhece. /salvar-config SUBSTITUI o arquivo inteiro (não faz
         // merge) — então campos que este modal nunca edita (ex:
-        // dispositivosAutorizados; modoAutomatico) eram APAGADOS
+        // modoAutomatico) eram APAGADOS
         // silenciosamente toda vez que alguém salvava Baterias e Tipos de
         // Montagem aqui, mesmo sem mexer neles. Usar `...cfgAtual` como
         // base preserva tudo que já existe; só os campos abaixo são de
@@ -2548,11 +2572,10 @@
           baterias: { ids: _cfgDados.baterias },
           dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
           tipos_montagem: { opcoes: novasOpcoesMontagem },
-          // Preserva volume_por_placa e dispositivosAutorizados — usa o que
-          // acabou de vir do servidor; LW.* só como rede de segurança caso
+          // Preserva volume_por_placa — usa o que acabou de vir do
+          // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.
           volume_por_placa: cfgAtual.volume_por_placa || LW.VOLUME_POR_PLACA,
-          dispositivosAutorizados: cfgAtual.dispositivosAutorizados || LW.DISPOSITIVOS_AUTORIZADOS,
         };
       } catch (e) {
         LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
@@ -2600,9 +2623,9 @@
     }
 
     // Deriva dimensoes.opcoes a partir de uma lista de baterias — usado por
-    // cfgSalvar() (com o rascunho em edição) e _configAtualBaseParaSalvar()
-    // (com o que já está carregado), pra manter o campo de compatibilidade
-    // "dimensoes" sempre em sincronia com as baterias, sem duplicar lógica.
+    // cfgSalvar() (com o rascunho em edição), pra manter o campo de
+    // compatibilidade "dimensoes" sempre em sincronia com as baterias, sem
+    // duplicar lógica.
     function _derivarDimensoesDeBaterias(baterias) {
       const uniqueDims = new Map();
       baterias.forEach(b => {
@@ -2611,114 +2634,42 @@
       return Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
     }
 
-    // ---- Dispositivos Autorizados (Configurações → Autorizados) ----
-    // Diferente da seção "Baterias e Montagem" (que só salva tudo de uma vez
-    // no botão "✓ Salvar Configurações"), aqui cada autorizar/remover salva
-    // na hora — não tem o que "cancelar" depois de uma ação tão simples.
-    // Por isso monta o config.json inteiro a partir do que já está
-    // carregado em memória (igual cfgSalvar() faz com volume_por_placa),
-    // só trocando a lista de autorizados.
-    function _configAtualBaseParaSalvar() {
-      return {
-        baterias: { ids: LW.BATERIA_IDS },
-        dimensoes: { opcoes: _derivarDimensoesDeBaterias(LW.BATERIA_IDS) },
-        tipos_montagem: { opcoes: LW.MONTAGEM_OPCOES },
-        volume_por_placa: LW.VOLUME_POR_PLACA,
-        dispositivosAutorizados: LW.DISPOSITIVOS_AUTORIZADOS,
-      };
-    }
 
-    // POST /salvar-config agora exige sessão de Administrador (ver
-    // lib/sessao.js) — pede a senha aqui (se ainda não houver sessão
-    // válida) antes de autorizar/remover um dispositivo. Mantém o mesmo
-    // contrato de antes pros dois chamadores (cfgAdicionarAutorizado/
-    // cfgRemoverAutorizado): retorna uma Promise que resolve quando salvo
-    // com sucesso, e rejeita em erro real OU cancelamento — nesse 2º caso
-    // com `.silencioso = true`, pra quem chama saber que não deve mostrar
-    // um alerta de "erro" (o usuário só desistiu, não é uma falha).
-    function _cfgSalvarAutorizados(novaLista) {
-      return new Promise((resolve, reject) => {
-        if (typeof AdminAuth === 'undefined') {
-          reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
-          return;
-        }
-        AdminAuth.abrirModal(async function onSuccess() {
-          try {
-            const cfg = _configAtualBaseParaSalvar();
-            cfg.dispositivosAutorizados = novaLista;
-            const res = await fetch('/salvar-config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(cfg),
-            });
-            const json = await res.json();
-            if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
-            LW.atualizarDispositivosAutorizados(novaLista);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        }, function onCancel() {
-          const err = new Error('Cancelado.');
-          err.silencioso = true;
-          reject(err);
-        });
-      });
-    }
-
+    // "Configurações → Autorizados" antes gerenciava uma LISTA de
+    // dispositivos (deviceId) que podiam controlar operações — removido
+    // (ver conversa que motivou a mudança): agora quem pode controlar é
+    // decidido pela sessão de usuário logado (podeIniciarOperacao no
+    // cadastro, ver Configurações → Usuários / lib/perfis.js), não mais
+    // por computador. O que sobra útil aqui é só visualizar/cancelar a
+    // operação em andamento agora, se houver uma — mesma função de
+    // "🗑️ Limpar Tudo" em Registrar Operação, só que acessível daqui,
+    // sem precisar estar com aquela tela aberta.
     async function cfgRenderAutorizados() {
-      const meuId = LW.getDeviceId();
-      const lista = LW.DISPOSITIVOS_AUTORIZADOS;
-
-      // Dono atual da operação em andamento (se houver uma rodando agora) —
-      // usado só pra marcar, na lista de autorizados, qual deles está com o
-      // controle nesse momento. Falha de rede aqui não deve travar a tela
-      // de Configurações; nesse caso, simplesmente ninguém é marcado.
-      let donoDeviceId = null;
-      try {
-        const operacaoAtual = await LW.getOperacaoAndamento();
-        if (operacaoAtual && operacaoAtual.status && operacaoAtual.status !== 'idle') {
-          donoDeviceId = operacaoAtual.donoDeviceId || null;
-        }
-      } catch (_) {
-        // sem conexão ou erro ao consultar — segue sem indicar dono
-      }
-
-      // Status de "este computador" — feedback imediato de se quem está
-      // olhando essa tela agora consegue (ou não) controlar a operação.
       const elStatus = document.getElementById('cfg-autorizados-status');
-      let statusHtml;
-      if (!lista.length) {
-        statusHtml = `<span class="badge badge-gray">⬤ Sem restrição — qualquer computador pode controlar</span>`;
-      } else if (lista.some(d => d.deviceId === meuId)) {
-        statusHtml = `<span class="badge badge-green">✓ Este computador ESTÁ autorizado</span>`;
-      } else {
-        statusHtml = `<span class="badge badge-red">⚠ Este computador NÃO está autorizado</span>`;
+
+      let operacaoAtual = null;
+      try {
+        const r = await LW.getOperacaoAndamento();
+        if (r && r.status && r.status !== 'idle') operacaoAtual = r;
+      } catch (_) {
+        // sem conexão ou erro ao consultar — trata como "nenhuma operação"
       }
-      elStatus.innerHTML = statusHtml +
-        `<div style="font-size:.74rem;color:var(--text-3);margin-top:8px">Device ID deste computador: <span style="font-family:var(--font-mono)">${meuId}</span></div>`;
 
-      // Lista de autorizados
-      const elLista = document.getElementById('cfg-autorizados-lista');
-      elLista.innerHTML = lista.map(d => `
+      if (!operacaoAtual) {
+        elStatus.innerHTML = `<span class="badge badge-gray">⬤ Nenhuma operação em andamento agora</span>`;
+        return;
+      }
+
+      elStatus.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
-      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${d.nome ? _escaparHtmlLocal(d.nome) : '(sem nome)'}</span>
-      <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-2)">${_escaparHtmlLocal(d.deviceId)}</span>
-      ${d.deviceId === meuId ? '<span style="font-size:.7rem;color:var(--green)">← este computador</span>' : ''}
-      ${d.deviceId === donoDeviceId ? `<span class="badge badge-green" style="font-size:.7rem;cursor:pointer;text-decoration:underline" onclick="cfgCancelarOperacaoDono('${_escaparHtmlLocal(d.deviceId)}')" title="Clique para cancelar a operação em andamento">🟢 Operando agora${d.nome ? '' : ' — ' + _escaparHtmlLocal(d.deviceId)}</span>` : ''}
-      <button onclick="cfgRemoverAutorizado('${_escaparHtmlLocal(d.deviceId)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
-    </div>
-  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum dispositivo autorizado ainda.</span>';
-
-      // Convenience: pré-preenche o campo de Device ID com o deste
-      // computador — é o caso mais comum (autorizar a própria máquina).
-      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
-      if (inputDeviceId && !inputDeviceId.value) inputDeviceId.value = meuId;
+      <span class="badge badge-green">🟢 Operação em andamento agora</span>
+      <button onclick="cfgCancelarOperacaoDono()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Cancelar Operação</button>
+    </div>`;
     }
 
     /**
-     * Clique no badge "🟢 Operando agora" (Configurações → Autorizados):
-     * cancela a operação em andamento — equivalente ao "🗑️ Limpar Tudo" de
+     * Botão "✕ Cancelar Operação" (Configurações → Autorizados): cancela
+     * a operação em andamento — equivalente ao "🗑️ Limpar Tudo" de
      * Registrar Operação, só que disparado daqui, pelo Administrador, sem
      * precisar estar com aquela tela aberta. Nada do que foi preenchido na
      * operação é salvo; ela simplesmente é descartada.
@@ -2729,12 +2680,9 @@
      * usado no login, sempre pede a senha de novo, mesmo já autenticado).
      * Só depois das duas a operação é de fato cancelada.
      */
-    async function cfgCancelarOperacaoDono(deviceId) {
-      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
-      const identificacao = dispositivo?.nome || deviceId;
-
+    async function cfgCancelarOperacaoDono() {
       const confirmou = await LW.mostrarConfirmacao(
-        `A operação em andamento foi iniciada por "${identificacao}". Cancelar agora descarta tudo o que já foi preenchido nela — turno, traços, horários — sem salvar nada. A operação ficará liberada para qualquer dispositivo autorizado iniciar uma nova.`,
+        'Cancelar agora descarta tudo o que já foi preenchido na operação em andamento — turno, traços, horários — sem salvar nada. A operação ficará liberada para ser iniciada de novo.',
         { titulo: 'Cancelar a operação em andamento?', textoConfirmar: 'Cancelar Operação', tipo: 'perigo', icon: '🛑' }
       );
       if (!confirmou) return;
@@ -2758,7 +2706,7 @@
             LW.mostrarAlerta(json?.erro || 'Não foi possível cancelar a operação. Tente novamente.', { tipo: 'erro' });
             return;
           }
-          LW.mostrarAlerta('Operação cancelada. A operação está liberada para ser iniciada por qualquer dispositivo autorizado.', { tipo: 'sucesso' });
+          LW.mostrarAlerta('Operação cancelada. Ela está liberada para ser iniciada de novo.', { tipo: 'sucesso' });
           cfgRenderAutorizados();
         } catch (_) {
           LW.mostrarAlerta('Erro de conexão ao cancelar a operação. Verifique a rede e tente novamente.', { tipo: 'erro' });
@@ -2775,10 +2723,9 @@
     }
 
     // ---- Operadores (Configurações → Operadores — Identidade Leve) ----
-    // Mesmo raciocínio de Autorizados, acima, mas a lista em si NUNCA é
-    // guardada num global tipo LW.DISPOSITIVOS_AUTORIZADOS — vem sempre
-    // fresca de GET /operadores (nunca inclui pinHash, só {id, nome}),
-    // porque só é consultada aqui, dentro de Configurações.
+    // A lista em si NUNCA é guardada num global — vem sempre fresca de
+    // GET /operadores (nunca inclui pinHash, só {id, nome}), porque só é
+    // consultada aqui, dentro de Configurações.
     let _operadoresCache = [];
 
     async function cfgRenderOperadores() {
@@ -3053,56 +3000,6 @@
       }
 
       cfgRenderUsuarios();
-    }
-
-    async function cfgAdicionarAutorizado() {
-      const inputNome = document.getElementById('cfg-autorizado-nome');
-      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
-
-      const nome = inputNome.value.trim();
-      const deviceId = inputDeviceId.value.trim();
-
-      if (!deviceId) { LW.mostrarAlerta('Cole o Device ID do computador a autorizar.', { tipo: 'aviso' }); return; }
-      if (LW.DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === deviceId)) {
-        LW.mostrarAlerta('Este Device ID já está autorizado.', { tipo: 'aviso' });
-        return;
-      }
-
-      const novaLista = [
-        ...LW.DISPOSITIVOS_AUTORIZADOS,
-        { deviceId, nome, autorizadoEm: new Date().toISOString() },
-      ];
-
-      try {
-        await _cfgSalvarAutorizados(novaLista);
-      } catch (e) {
-        if (!e.silencioso) LW.mostrarAlerta('Erro ao autorizar: ' + e.message, { tipo: 'erro' });
-        return;
-      }
-
-      inputNome.value = '';
-      inputDeviceId.value = '';
-      cfgRenderAutorizados();
-    }
-
-    async function cfgRemoverAutorizado(deviceId) {
-      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
-      const confirmou = await LW.mostrarConfirmacao(
-        `Remover a autorização de "${dispositivo?.nome || deviceId}"? Se a lista ficar vazia, qualquer computador volta a poder controlar operações.`,
-        { titulo: 'Remover dispositivo autorizado', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
-      );
-      if (!confirmou) return;
-
-      const novaLista = LW.DISPOSITIVOS_AUTORIZADOS.filter(d => d.deviceId !== deviceId);
-
-      try {
-        await _cfgSalvarAutorizados(novaLista);
-      } catch (e) {
-        if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
-        return;
-      }
-
-      cfgRenderAutorizados();
     }
 
 

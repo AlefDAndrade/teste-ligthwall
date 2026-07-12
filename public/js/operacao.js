@@ -438,40 +438,32 @@
 
   /**
    * Usado no topo de ações que controlam a operação (iniciar, encerrar,
-   * registrar, resetar) — mostra um aviso e retorna true se este
-   * dispositivo NÃO está autorizado (Configurações → Autorizados). A
-   * trava de verdade é sempre no servidor; isto aqui só dá feedback
-   * imediato (sem esperar a rede) e cobre atalhos de teclado, que não
-   * passam pelos campos/botões desabilitados na tela.
-   */
-  /**
-   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
    * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
-   * pode agir agora: dispositivo fora da lista de Autorizados, OU a
-   * operação já tem outro dono (outro dispositivo autorizado que a
-   * iniciou — ver "dono da operação" em server.js). A trava de verdade é
-   * sempre no servidor; isto aqui só dá feedback imediato (sem esperar a
-   * rede) e cobre atalhos de teclado, que não passam pelos campos/botões
-   * desabilitados na tela.
+   * pode agir agora: a pessoa logada não tem permissão de controlar
+   * operações (Configurações → Usuários), OU a operação já tem outro
+   * dono (outra pessoa autorizada que a iniciou — ver "dono da operação"
+   * em server.js). A trava de verdade é sempre no servidor; isto aqui só
+   * dá feedback imediato (sem esperar a rede) e cobre atalhos de teclado,
+   * que não passam pelos campos/botões desabilitados na tela.
    * @param {object} opts
    * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
    */
   function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
     // Modo de teste é um sandbox local — nunca toca o servidor (ver
-    // persist()), então a trava de Autorizados/dono não faz sentido aqui:
-    // qualquer computador pode testar, autorizado ou não pra operações reais.
+    // persist()), então a trava de permissão/dono não faz sentido aqui:
+    // qualquer pessoa pode testar, autorizada ou não pra operações reais.
     if (state.modo_teste) return false;
     if (!LW.dispositivoEstaAutorizado()) {
       LW.mostrarAlerta(
-        'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+        'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
         { tipo: 'erro' }
       );
       return true;
     }
     if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
       LW.mostrarAlerta(
-        'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+        'Esta operação já está sendo controlada por outra pessoa. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
         { tipo: 'erro' }
       );
       return true;
@@ -482,11 +474,12 @@
   /**
    * Desabilita todos os campos/botões da tela (via <fieldset disabled> —
    * cobre até os elementos de traço, renderizados dinamicamente) e mostra
-   * o banner correspondente quando este dispositivo não pode controlar a
-   * operação agora — seja por não estar na lista de Autorizados, seja por
-   * outro dispositivo autorizado já ser o dono da operação atual. Chamada
-   * sempre que o estado é re-renderizado (renderAll()) — o "dono" muda
-   * dinamicamente, diferente da lista de Autorizados.
+   * o banner correspondente quando a pessoa logada agora não pode
+   * controlar a operação — seja por não ter a permissão "pode iniciar
+   * operação" no cadastro (Configurações → Usuários), seja por outra
+   * pessoa autorizada já ser a dona da operação atual. Chamada sempre
+   * que o estado é re-renderizado (renderAll()) — o "dono" muda
+   * dinamicamente, diferente da permissão de perfil.
    */
   function _aplicarTravaDeAutorizacao() {
     const fieldset = $('op-fieldset-trava');
@@ -529,10 +522,10 @@
     if (podeControlar) {
       aviso.style.display = 'none';
     } else if (!autorizado) {
-      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>';
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações → Usuários</strong>.</span>';
       aviso.style.display = 'flex';
     } else {
-      aviso.innerHTML = '👀 <span>Outro computador autorizado está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
+      aviso.innerHTML = '👀 <span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
       aviso.style.display = 'flex';
     }
   }

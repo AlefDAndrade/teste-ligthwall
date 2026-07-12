@@ -190,15 +190,40 @@
   let _currentNavIndex = 0;
 
   /**
-   * Atalhos personalizados pelo usuário — { [id]: 'Ctrl+Shift+X', ... }.
-   * Fica salvo no localStorage (preferência pessoal deste navegador, não do
-   * servidor — cada pessoa pode ter o seu próprio jeito mais confortável).
-   * Vazio = todo mundo usa o padrão de fábrica.
+   * Atalhos personalizados — { [id]: 'Ctrl+Shift+X', ... }.
+   *
+   * Duas fontes possíveis, dependendo de quem está logado (ver
+   * sessionStorage.lw_role):
+   *   - Administrador (senha mestra, sem usuário próprio): continua em
+   *     localStorage deste navegador, exatamente como sempre foi — não
+   *     há usuarioId pra associar no servidor.
+   *   - Qualquer usuário cadastrado (Operador/Analista/Qualidade/
+   *     Manutencao/Administrativo): persistido no SERVIDOR, associado ao
+   *     usuarioId (ver GET/POST /meus-atalhos, lib/rotas/usuarios.js) —
+   *     os atalhos seguem a pessoa entre computadores, não ficam presos
+   *     a "este navegador".
+   *
+   * Carregar do servidor é ASSÍNCRONO (diferente de localStorage, que é
+   * síncrono) — até a resposta chegar, _overrides fica vazio (equivale a
+   * "ainda não personalizou nada", nunca trava nem gera erro; os atalhos
+   * de fábrica funcionam normalmente nesse meio tempo). Quando a resposta
+   * chega, dispara 'lwkeyboard:overrides-carregados' (window) pra quem
+   * estiver com a tela de Configurações → Atalhos aberta re-renderizar
+   * com os valores reais, em vez de continuar mostrando os padrões.
    */
   const LS_KEY_ATALHOS = 'lw_atalhos_customizados';
   let _overrides = {};
+  let _origemOverrides = 'localStorage'; // 'localStorage' | 'servidor' — ver _usaServidorParaAtalhos()
 
-  function _carregarOverrides() {
+  function _usaServidorParaAtalhos() {
+    try {
+      return sessionStorage.getItem('lw_role') !== 'Administrador';
+    } catch (_) {
+      return false; // sessionStorage indisponível — cai pro comportamento de sempre (localStorage)
+    }
+  }
+
+  function _carregarOverridesDoLocalStorage() {
     try {
       const raw = localStorage.getItem(LS_KEY_ATALHOS);
       _overrides = raw ? JSON.parse(raw) : {};
@@ -207,10 +232,52 @@
     }
   }
 
-  function _salvarOverrides() {
+  async function _carregarOverrides() {
+    if (!_usaServidorParaAtalhos()) {
+      _origemOverrides = 'localStorage';
+      _carregarOverridesDoLocalStorage();
+      return;
+    }
+    _origemOverrides = 'servidor';
     try {
-      localStorage.setItem(LS_KEY_ATALHOS, JSON.stringify(_overrides));
-    } catch (_) { /* localStorage indisponível — segue só em memória */ }
+      const res = await fetch('/meus-atalhos');
+      if (res.status === 403) {
+        // Sem sessão de usuário válida no servidor ainda (ex: timing raro
+        // — sessionStorage.lw_role já dizia "não é Administrador", mas a
+        // sessão de verdade no servidor ainda não existia nesse instante)
+        // — cai pro localStorage como fallback seguro, em vez de ficar
+        // sem atalho nenhum até o próximo boot.
+        _origemOverrides = 'localStorage';
+        _carregarOverridesDoLocalStorage();
+        window.dispatchEvent(new CustomEvent('lwkeyboard:overrides-carregados'));
+        return;
+      }
+      const data = await res.json();
+      _overrides = (data.ok && data.atalhos) || {};
+    } catch (_) {
+      // Sem rede/servidor fora do ar — fica vazio (padrões de fábrica
+      // funcionam normalmente); tenta de novo no próximo boot da página.
+      _overrides = {};
+    }
+    window.dispatchEvent(new CustomEvent('lwkeyboard:overrides-carregados'));
+  }
+
+  function _salvarOverrides() {
+    if (_origemOverrides === 'localStorage') {
+      try {
+        localStorage.setItem(LS_KEY_ATALHOS, JSON.stringify(_overrides));
+      } catch (_) { /* localStorage indisponível — segue só em memória */ }
+      return;
+    }
+    // Servidor — best-effort assíncrono; _overrides (em memória) já foi
+    // atualizado por quem chamou ANTES de chamar _salvarOverrides (ver
+    // _definirAtalho/_resetarAtalhos, abaixo), então a UI reage na hora
+    // mesmo sem esperar a resposta da rede.
+    fetch('/salvar-meus-atalhos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ atalhos: _overrides }),
+    }).catch(() => { /* sem rede — tenta nada além de já ter ficado em memória; próxima ação tenta salvar de novo */ });
   }
 
   /** Combo em uso de fato pra um atalho — o personalizado, se houver, senão
@@ -1133,6 +1200,12 @@
     cancelarCaptura: _cancelarCaptura,
   };
 
+  // _carregarOverrides() é assíncrona quando busca do servidor (usuário
+  // logado — ver _usaServidorParaAtalhos) — não usa await de propósito:
+  // os atalhos de FÁBRICA já funcionam desde já; os PERSONALIZADOS
+  // aparecem assim que a resposta chegar (ver evento
+  // 'lwkeyboard:overrides-carregados', escutado por quem precisar
+  // re-renderizar, ex: Configurações → Atalhos, app-core.js).
   _carregarOverrides();
   console.log('[LWKeyboard] Atalhos globais carregados. Pressione F1 ou ? para ajuda.');
 })();

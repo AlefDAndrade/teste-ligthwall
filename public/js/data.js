@@ -34,11 +34,6 @@ let MONTAGEM_OPCOES = [];
 let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
-// Dispositivos autorizados a controlar a operação em andamento (iniciar,
-// encerrar, registrar) — [{ deviceId, nome, autorizadoEm }]. Lista vazia =
-// sem restrição (qualquer computador pode controlar). Editável em
-// Configurações → Autorizados. Ver dispositivoAutorizado() em server.js.
-let DISPOSITIVOS_AUTORIZADOS = [];
 
 let _configReady = false;
 const _configCallbacks = [];
@@ -359,13 +354,9 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "volume_por_placa" válido — mantendo lista já carregada.');
     }
 
-    // Lista vazia/ausente é o padrão (sem restrição) — não é um erro nem
-    // precisa de warning, diferente dos outros blocos acima.
-    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
-      ? cfg.dispositivosAutorizados.map(d => ({
-          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
-        }))
-      : [];
+    // (Removido: leitura de "dispositivosAutorizados" — o sistema de
+    // dispositivo autorizado por deviceId foi substituído por permissão
+    // de perfil de usuário, ver dispositivoEstaAutorizado(), abaixo.)
 
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
@@ -388,10 +379,7 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
-    // Falha pra ler config.json não deve travar quem já estava autorizado
-    // (nem ninguém, na falta de configuração) — fica vazio (sem
-    // restrição), nunca bloqueado por padrão.
-    if (!DISPOSITIVOS_AUTORIZADOS.length) DISPOSITIVOS_AUTORIZADOS = [];
+    // (Removido: fallback de DISPOSITIVOS_AUTORIZADOS — não existe mais.)
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -472,9 +460,10 @@ function getDeviceId() {
 /**
  * Anexa "?deviceId=..." (ou "&deviceId=..." se já houver query string) na
  * URL — usado pelas rotas que controlam a operação em andamento (iniciar,
- * encerrar, registrar), pra o servidor checar se este dispositivo está
- * autorizado (ver dispositivoAutorizado() em server.js e a seção
- * "Configurações → Autorizados").
+ * encerrar, registrar), pra o servidor saber qual computador é o "dono"
+ * da operação (ver donoDeviceId em lib/rotas/operacao-andamento.js). A
+ * AUTORIZAÇÃO pra controlar é decidida pela sessão de usuário logado
+ * (ver podeControlarOperacao() em server.js), não mais pelo deviceId.
  */
 function _comDeviceId(url) {
   const sep = url.includes('?') ? '&' : '?';
@@ -495,16 +484,6 @@ function _comModoTeste(url, modoTeste) {
 }
 
 /**
- * Atualiza a cópia em memória de DISPOSITIVOS_AUTORIZADOS depois de salvar
- * com sucesso em config.json (Configurações → Autorizados) — loadConfig()
- * só roda uma vez por página (guarda em _configReady), então isto é o jeito
- * de refletir a mudança sem precisar recarregar a página inteira.
- */
-function atualizarDispositivosAutorizados(lista) {
-  DISPOSITIVOS_AUTORIZADOS = Array.isArray(lista) ? lista : [];
-}
-
-/**
  * Registra um acesso à rota informada — melhor esforço: nunca lança erro
  * pra quem chamou (sem conexão, simplesmente não loga; não é crítico a
  * ponto de travar a navegação por isso).
@@ -521,16 +500,22 @@ async function registrarAcesso(rota) {
 }
 
 /**
- * Indica se ESTE dispositivo pode controlar a operação em andamento — true
- * se a lista de Configurações → Autorizados estiver vazia (sem restrição)
- * ou se o deviceId deste navegador estiver nela. Usado pela tela de
- * Registrar Operação pra desabilitar campos/botões com feedback claro —
- * a trava de verdade é sempre no servidor (ver dispositivoAutorizado() em
- * server.js), isto aqui é só pra UI/UX.
+ * Indica se a pessoa LOGADA AGORA pode controlar a operação em andamento
+ * — substituiu o antigo sistema de "dispositivo autorizado" (deviceId
+ * numa lista em Configurações → Autorizados, removido). Agora é por
+ * PESSOA, não por computador: "Administrador" (senha mestra) e
+ * "Administrativo" sempre podem; os demais perfis só se o usuário
+ * específico tiver sido marcado com "pode iniciar operação" no cadastro
+ * (ver sessionStorage.lw_pode_iniciar_operacao, gravado no login —
+ * login.html/POST /login-usuario). Usado pela tela de Registrar Operação
+ * pra desabilitar campos/botões com feedback claro — a trava de verdade
+ * é sempre no servidor (ver podeControlarOperacao() em server.js), isto
+ * aqui é só pra UI/UX.
  */
 function dispositivoEstaAutorizado() {
-  if (!DISPOSITIVOS_AUTORIZADOS.length) return true;
-  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
+  const role = sessionStorage.getItem('lw_role');
+  if (role === 'Administrador' || role === 'Administrativo') return true;
+  return sessionStorage.getItem('lw_pode_iniciar_operacao') === 'true';
 }
 
 // ============================================================
@@ -646,9 +631,9 @@ function _agendarReconexaoOperacaoAndamento() {
  * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
  * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
  * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
- * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de um
- * dispositivo autorizado limpar uma operação que outro dispositivo
- * autorizado começou (ver dono da operação, em server.js).
+ * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de uma
+ * pessoa autorizada limpar uma operação que outra pessoa autorizada
+ * começou (ver dono da operação, em server.js).
  * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
  */
 function enviarOperacaoAndamento(dados, { imediato = false, forcar = false } = {}) {
@@ -672,13 +657,13 @@ async function _postOperacaoAndamento(dados, forcar = false) {
     });
     if (!res.ok) {
       // Diferente de falha de rede (catch abaixo): o servidor respondeu e
-      // recusou — "dispositivo não autorizado" ou "operação já tem dono"
-      // (ver Configurações → Autorizados). Mostra na hora, senão a pessoa
-      // fica digitando sem nenhum feedback de que nada está sendo
-      // transmitido.
+      // recusou — "sem permissão pra controlar operações" ou "operação já
+      // tem dono" (ver Configurações → Usuários / podeControlarOperacao()
+      // em server.js). Mostra na hora, senão a pessoa fica digitando sem
+      // nenhum feedback de que nada está sendo transmitido.
       _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
       const json = await res.json().catch(() => null);
-      mostrarAlerta(json?.erro || 'Este computador não está autorizado a controlar a operação.', { tipo: 'erro' });
+      mostrarAlerta(json?.erro || 'Você não está autorizado a controlar a operação.', { tipo: 'erro' });
     }
   } catch (_) {
     _opAndamentoUltimoEnviado = undefined;
@@ -1906,7 +1891,6 @@ window.LW = {
   get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
-  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
 
   // Config loader
@@ -1934,7 +1918,6 @@ window.LW = {
 
   // Log de Acesso
   getDeviceId, registrarAcesso,
-  atualizarDispositivosAutorizados,
   dispositivoEstaAutorizado,
 
   // Cálculos

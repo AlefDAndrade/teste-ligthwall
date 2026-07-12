@@ -94,11 +94,11 @@ const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNao
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
 const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste });
-const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, dispositivoAutorizado, negarDispositivoNaoAutorizado });
+const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
   sessao, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
-  lerBercosAndamento, salvarBercosAndamentoNoDisco, dispositivoAutorizado, negarDispositivoNaoAutorizado,
+  lerBercosAndamento, salvarBercosAndamentoNoDisco, podeControlarOperacao, negarControleDeOperacao,
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao, numOuNulo });
@@ -106,7 +106,7 @@ const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, p
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, sessao, numOuNulo });
 const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
   db, fs, path, dirParaModoTeste,
-  dispositivoAutorizado, negarDispositivoNaoAutorizado,
+  podeControlarOperacao, negarControleDeOperacao,
   lerBercosAndamento, salvarBercosAndamentoNoDisco,
   adicionarNaFilaNaoAvaliadas, broadcastOperacaoFinalizada,
 });
@@ -409,41 +409,41 @@ function salvarBercosAndamentoNoDisco(mapa) {
 const DIR_LOGS = path.join(ROOT_DIR, 'logs');
 const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 
-// ─── DISPOSITIVOS AUTORIZADOS A CONTROLAR A OPERAÇÃO ───────────────────────
-// Lista opcional em config.json (dispositivosAutorizados: [{ deviceId, nome,
-// autorizadoEm }]), editável em Configurações → Autorizados. Regra: lista
-// VAZIA = sem restrição (qualquer computador pode iniciar/encerrar/registrar
-// — comportamento padrão, igual a antes desta funcionalidade existir).
-// Lista com pelo menos 1 item = só os deviceIds dela podem controlar; os
-// demais continuam podendo ACOMPANHAR ao vivo (WebSocket), só não interagir.
-function lerConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
-  } catch (_) {
-    return {};
-  }
+// ─── QUEM PODE CONTROLAR A OPERAÇÃO (iniciar/encerrar/registrar) ──────────
+// Substituiu o antigo sistema de "dispositivo autorizado" (lista de
+// deviceIds em config.json, editável em Configurações → Autorizados) —
+// ver conversa que motivou a mudança: a trava agora é por PESSOA
+// (sessão de usuário logado — ver lib/sessao-usuario.js), não por
+// computador. "Administrador" (senha mestra) e "Administrativo" sempre
+// podem, irrestrito; os demais perfis só se o usuário específico tiver
+// sido marcado com podeIniciarOperacao:true no cadastro (Configurações →
+// Usuários — ver lib/rotas/usuarios.js, lib/perfis.js).
+//
+// Diferente da versão antiga (função pura, só um deviceId), esta lê o
+// `req` inteiro pra extrair o cookie de sessão — ver
+// sessaoUsuario.dadosDaSessao(req).
+function podeControlarOperacao(req) {
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false; // sem sessão de usuário válida, sem acesso
+  if (dados.perfil === 'Administrativo') return true; // "quase tudo", ver lib/perfis.js
+  return !!dados.podeIniciarOperacao;
 }
 
-function dispositivoAutorizado(deviceId) {
-  const cfg = lerConfig();
-  const lista = Array.isArray(cfg.dispositivosAutorizados) ? cfg.dispositivosAutorizados : [];
-  if (!lista.length) return true; // sem restrição configurada ainda
-  return lista.some(d => d && d.deviceId === deviceId);
-}
-
-function negarDispositivoNaoAutorizado(res) {
+function negarControleDeOperacao(res) {
   res.writeHead(403, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     ok: false,
-    erro: 'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+    erro: 'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
   }));
 }
 
 const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
-  // ?deviceId=... — usado pra checar autorização de dispositivo em rotas
-  // que controlam a operação em andamento, ver dispositivoAutorizado();
+  // ?deviceId=... — usado só pra identificar o "dono" da operação em
+  // andamento, ver donoDeviceId em lib/rotas/operacao-andamento.js; a
+  // AUTORIZAÇÃO pra controlar operações agora é por sessão de usuário
+  // logado, ver podeControlarOperacao(), acima;
   // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
   // ver dirParaModoTeste(), mais abaixo).
   const [urlPath, queryString] = req.url.split('?');
