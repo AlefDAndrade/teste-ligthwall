@@ -185,15 +185,24 @@ As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `opera
 
 ## Perfis de usuário
 
-Escolhidos na tela de login (`login.html`), sem necessidade de cadastro prévio:
+Login em `login.html`: usuário + senha. O **perfil** de cada pessoa (o que ela pode acessar) é definido no cadastro pelo Administrador Master (Configurações → Usuários) — quem loga não escolhe o próprio perfil, já entra direto com o que foi configurado.
+
+O botão **"Entrar como Administrador"**, no topo da tela de login, continua separado: é a senha única mestra de sempre, sem cadastro, sem usuário — mesmo comportamento de antes desta mudança.
 
 | Perfil | Acesso |
 |---|---|
-| **Operador** | Registrar Operação + todos os dashboards e relatórios. Sem senha. |
-| **Analista** | Todos os dashboards e relatórios. **Sem** acesso a Registrar Operação. Sem senha. |
-| **Administrador** | Acesso total — inclui Configurações, Backup/Restauração e Importação. **Sempre** pede senha na tela de login, mesmo que já tenha sido usado antes neste navegador. |
+| **Operador** | Registrar Operação (se marcado como autorizado a iniciar/encerrar — ver abaixo), relatórios de Bateria/Injeção/Berços, Análises Focadas, Análise Operacional, Desempenho Turnos, Manutenção. Configurações: só Atalhos de Teclado. |
+| **Analista** | Mesmo acesso do Operador, **exceto** Registrar Operação e Manutenção — só dashboards/relatórios. Configurações: só Atalhos de Teclado. |
+| **Qualidade** | Só Setor de Qualidade. Configurações: só Atalhos de Teclado. |
+| **Manutencao** | Só Manutenção. Configurações: só Atalhos de Teclado. |
+| **Administrativo** | Quase tudo — todas as páginas de trabalho + Configurações (Dados, Usuários, Automação, Atalhos), **exceto** Dados SQL e Backup/Restauração. |
+| **Administrador** (senha mestra) | Acesso total, irrestrito — inclui Dados SQL, Backup/Restauração e Importação. **Sempre** pede senha na tela de login, mesmo que já tenha sido usado antes neste navegador. |
 
-A sessão (`sessionStorage`) dura enquanto a aba estiver aberta. Um F5 dentro do sistema não exige login de novo; fechar a aba ou voltar à tela de login, sim.
+A lista de páginas por perfil é definida num lugar só (`lib/perfis.js`) e validada tanto no front (esconde itens de menu) quanto no back (cada rota sensível confere de novo — nunca confia só no que o navegador mandou).
+
+"Pode iniciar/encerrar operações em Registrar Operação" é uma permissão à parte, marcada por usuário no cadastro (só aparece pra perfis que já têm a página Registrar Operação liberada) — substitui o antigo sistema de "dispositivo autorizado" por deviceId.
+
+A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.js`) — cobre um turno inteiro sem precisar logar de novo no meio do expediente. A sessão do Administrador Master dura 30min (`lib/sessao.js`), mais curta de propósito por ser uma ação administrativa pontual, não "ficar logado o dia todo".
 
 ## Páginas
 

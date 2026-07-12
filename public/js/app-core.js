@@ -39,11 +39,63 @@
     });
 
     // ---- Navigation ----
-    // Páginas bloqueadas por perfil — Analista não acessa Registrar Operação,
-    // mesmo navegando direto (atalho de teclado, URL, etc.), não só pela UI.
-    const PAGINAS_BLOQUEADAS_POR_PERFIL = {
-      'Analista': ['operacao'],
-    };
+    // Controle de acesso por perfil — ANTES era uma lista fixa de páginas
+    // BLOQUEADAS por perfil (só existia 1 entrada: Analista sem Operação).
+    // Agora que existem 6 perfis (Operador, Analista, Qualidade,
+    // Manutencao, Administrativo, AdminMaster — ver lib/perfis.js,
+    // server.js) com listas de páginas bem diferentes entre si, virou uma
+    // lista de páginas PERMITIDAS, carregada do servidor (GET /perfis) —
+    // não mais hardcoded aqui, pra nunca ficar dessincronizada da mesma
+    // fonte de verdade que o servidor usa pra validar de verdade.
+    //
+    // _paginasPermitidas começa vazio e é preenchido no boot (ver
+    // DOMContentLoaded, mais abaixo) — antes disso, _paginaPermitida()
+    // devolve `true` pra tudo (fail-open só durante o brevíssimo instante
+    // entre o DOM carregar e a resposta de /perfis chegar; qualquer
+    // rota sensível de verdade é validada de novo no servidor mesmo
+    // assim, então não é uma brecha real de segurança, só evita a tela
+    // "piscar" escondendo/mostrando itens de novo depois de carregar).
+    let _paginasPermitidas = null; // null = ainda não carregou; Array = já carregou
+
+    // "Administrador" (botão do topo, senha mestra — ver login.html) é
+    // irrestrito por definição, igual sempre foi — nunca passa pela
+    // lista carregada do servidor.
+    function _paginaPermitida(pageId) {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return true;
+      if (!_paginasPermitidas) return true; // ainda carregando — ver comentário acima
+      return _paginasPermitidas.includes(pageId);
+    }
+
+    async function _carregarPermissoesDoServidor() {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') { _paginasPermitidas = null; return; } // irrestrito, nunca precisa da lista
+      try {
+        const res = await fetch('/perfis');
+        const data = await res.json();
+        _paginasPermitidas = (data.ok && data.paginasPorPerfil[role]) || [];
+      } catch (e) {
+        // Sem servidor/rede — mantém null (fail-open temporário, ver
+        // comentário em _paginaPermitida) em vez de travar a pessoa fora
+        // de tudo por causa de uma falha de rede pontual.
+        _paginasPermitidas = null;
+      }
+    }
+
+    // Esconde do menu lateral e do Menu Principal todo [data-page="..."]
+    // que o perfil atual não pode acessar — chamado logo depois de
+    // _carregarPermissoesDoServidor() ter a lista pronta (ver
+    // DOMContentLoaded). Diferente de _paginaPermitida() (trava a
+    // NAVEGAÇÃO em si, em showPage()): isso aqui é só a parte visual,
+    // pra nem oferecer o link de algo que a pessoa não pode abrir.
+    function _aplicarVisibilidadeDoMenu() {
+      if (!_paginasPermitidas) return; // Administrador ou ainda carregando — nada pra esconder
+      document.querySelectorAll('[data-page]').forEach(el => {
+        const pagina = el.getAttribute('data-page');
+        if (pagina === 'menu') return; // Menu Principal sempre visível pra todo mundo
+        el.style.display = _paginasPermitidas.includes(pagina) ? '' : 'none';
+      });
+    }
 
     // Restaura, depois de um F5, a última página que a pessoa estava
     // vendo nesta aba (ver showPage, que grava sessionStorage a cada
@@ -55,8 +107,7 @@
       let pagina = null;
       try { pagina = sessionStorage.getItem('lw_ultima_pagina'); } catch (e) { /* sessionStorage indisponível — sem restauração, sem quebrar o boot */ }
       if (!pagina || pagina === 'menu') return; // já é o padrão (nenhum showPage() extra necessário)
-      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[sessionStorage.getItem('lw_role')] || [];
-      if (bloqueadas.includes(pagina)) return;
+      if (!_paginaPermitida(pagina)) return;
       if (!document.getElementById('page-' + pagina)) return; // versão salva antiga/página que não existe mais
       showPage(pagina);
     }
@@ -85,9 +136,7 @@
     }
 
     function showPage(pageId, navEl) {
-      const role = sessionStorage.getItem('lw_role');
-      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
-      if (bloqueadas.includes(pageId)) return;
+      if (!_paginaPermitida(pageId)) return;
 
       // Lembra a página atual pra restaurar depois de um F5 (ver
       // _restaurarUltimaPagina, chamada no boot) — sessionStorage, não
@@ -440,29 +489,20 @@
 
       // Perfil ausente ou inválido (ex: sessionStorage adulterada) — volta
       // pro login em vez de deixar a tela sem nenhuma restrição aplicada.
-      const PERFIS_VALIDOS = ['Operador', 'Analista', 'Administrador'];
+      // 6 perfis no total (ver lib/perfis.js, server.js): os 3 de sempre
+      // (Operador/Analista/Administrador — Administrador é a senha mestra,
+      // nunca um usuário cadastrado) + os 3 novos que vêm do cadastro
+      // (Qualidade/Manutencao/Administrativo — Administrativo é "quase
+      // tudo", ver PAGINAS_POR_PERFIL, mas não tem senha mestra: também é
+      // um perfil comum, só com lista de páginas bem mais ampla).
+      const PERFIS_VALIDOS = ['Operador', 'Analista', 'Qualidade', 'Manutencao', 'Administrativo', 'Administrador'];
       if (!PERFIS_VALIDOS.includes(role)) {
         sessionStorage.clear();
         window.location.href = 'login.html';
         return;
       }
 
-      if (role === 'Operador') {
-        // Esconde itens exclusivos do administrador (config, backup, import)
-        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
-
-        // Bloqueia acesso direto via showPage para páginas admin
-        // Vai direto para a tela de operação
-        showPage('operacao');
-
-      } else if (role === 'Analista') {
-        // Mesmas restrições do Operador (sem config/backup/import), e
-        // também sem acesso à Operação — só dashboards e relatórios.
-        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
-        _restaurarUltimaPagina();
-
-      } else if (role === 'Administrador') {
+      if (role === 'Administrador') {
         // Verifica se a autenticação admin foi concluída corretamente
         if (!AdminAuth.isAutenticado()) {
           // Acesso indevido sem autenticação — retorna ao login
@@ -470,12 +510,69 @@
           window.location.href = 'login.html';
           return;
         }
-        // Administrador: acesso total
+        // Administrador Master: acesso total, irrestrito — nunca passa
+        // pela lista de páginas do servidor (ver _paginaPermitida).
         document.getElementById('btn-config').style.display = 'inline-flex';
-        // Garante que itens admin e de operação estejam visíveis
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
         _restaurarUltimaPagina();
+
+      } else {
+        // Todo o resto (Operador, Analista, Qualidade, Manutencao,
+        // Administrativo) — vem de login usuário+senha (ver login.html,
+        // POST /login-usuario), diferente de Administrador (senha mestra
+        // única, sem cadastro). sessionStorage.lw_role sozinho é só um
+        // valor no navegador (editável por quem souber abrir o DevTools)
+        // — antes de confiar nele pra esconder/mostrar qualquer coisa,
+        // confirma que existe uma sessão de usuário REAL e válida no
+        // servidor (ver GET /minha-sessao, lib/sessao-usuario.js). Toda
+        // rota sensível já revalida por conta própria de qualquer forma
+        // (ver lib/perfis.js, paginaPermitida) — isso aqui fecha o boot
+        // sem UI enganosa, não é a única linha de defesa.
+        let sessaoReal = null;
+        try {
+          const resSessao = await fetch('/minha-sessao');
+          const dataSessao = await resSessao.json();
+          if (dataSessao.ok) sessaoReal = dataSessao;
+        } catch (e) { /* sem rede — trata como sessão inválida, abaixo */ }
+
+        if (!sessaoReal || sessaoReal.perfil !== role) {
+          sessionStorage.clear();
+          window.location.href = 'login.html';
+          return;
+        }
+
+        // Mesmo tratamento genérico pros 5 perfis: busca a lista de
+        // páginas permitidas do servidor (fonte única de verdade — ver
+        // lib/perfis.js) e esconde do menu tudo que não está nela.
+        // "data-admin-only" continua exclusivo do Administrador Master de
+        // verdade (ações sensíveis dentro de uma página, ex: editar um
+        // registro — ver comentário em nav-sidebar.html/page-menu.html),
+        // mesmo perfis com bastante acesso como Administrativo não
+        // ganham esses botões.
+        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
+
+        await _carregarPermissoesDoServidor();
+        _aplicarVisibilidadeDoMenu();
+
+        // "⚙ Configurações" no topbar não tem mais data-admin-only (ver
+        // nav-topbar.html) — agora é revelado pra qualquer perfil que
+        // tenha PELO MENOS UMA aba liberada lá dentro (mesmo raciocínio
+        // de abrirConfig(), app-core.js — hoje sempre verdade, já que
+        // "config-atalhos" está em todos os perfis cadastráveis).
+        const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'operadores', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
+        document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
+
+        if (role === 'Operador') {
+          // Operador sempre entra direto na tela de trabalho (Registrar
+          // Operação), mesmo comportamento de sempre — os outros perfis
+          // (Analista, Qualidade, Manutencao, Administrativo) restauram
+          // a última página vista, ou caem no Menu Principal na 1ª vez.
+          showPage('operacao');
+        } else {
+          _restaurarUltimaPagina();
+        }
       }
 
       const roleEl = document.getElementById('topbar-role');
@@ -1642,7 +1739,16 @@
     }
 
     function abrirConfig() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      const role = sessionStorage.getItem('lw_role');
+      // "Administrador" (senha mestra) sempre pode. Os outros 5 perfis
+      // (ver lib/perfis.js) só se tiverem PELO MENOS UMA aba de
+      // Configurações liberada — hoje isso é sempre verdade, já que
+      // "config-atalhos" está em todos os perfis cadastráveis, mas a
+      // checagem fica explícita mesmo assim, não hardcoded pra um perfil
+      // só, igual sempre foi (evita ficar obsoleta se um perfil novo
+      // aparecer sem nenhuma aba de config no futuro).
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-operadores') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-sql')) return;
+
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
       _cfgDados = {
@@ -1652,9 +1758,35 @@
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
       cfgRenderTudo();
-      cfgMostrarSecao('dados');
+      _cfgAplicarVisibilidadeDeAbas();
+      // Abre na primeira aba que este perfil realmente tem acesso — nem
+      // sempre "dados", que era o padrão fixo de antes (só fazia sentido
+      // quando só o Administrador Master via este modal).
+      const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
+        : ['dados', 'atalhos', 'usuarios', 'automacao', 'operadores', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+      cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
+    }
+
+    // Esconde do menu lateral do modal de Configurações as abas que este
+    // perfil não pode ver — "Administrador" (senha mestra) nunca passa
+    // por aqui (vê tudo, ver abrirConfig acima). Os outros perfis usam a
+    // mesma lista de páginas permitidas do resto do sistema (ver
+    // lib/perfis.js) — "config-dados", "config-atalhos",
+    // "config-operadores", "config-automacao", "config-usuarios" e
+    // "config-sql" são os IDs de página usados especificamente pras
+    // abas de Configurações (não são páginas de verdade — não tem
+    // showPage nenhum com esses nomes, só entram no mesmo mapa de
+    // permissões por conveniência, ver comentário em lib/perfis.js).
+    function _cfgAplicarVisibilidadeDeAbas() {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return; // vê tudo, nada pra esconder
+      const MAPA = { dados: 'cfg-nav-dados', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', operadores: 'cfg-nav-operadores', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
+      Object.entries(MAPA).forEach(([secao, navId]) => {
+        const el = document.getElementById(navId);
+        if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
+      });
     }
 
     function fecharConfig() {
@@ -1700,12 +1832,14 @@
     function cfgMostrarSecao(secao) {
       const elDados = document.getElementById('cfg-secao-dados');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
+      const elUsuarios = document.getElementById('cfg-secao-usuarios');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
       const elOperadores = document.getElementById('cfg-secao-operadores');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
+      if (elUsuarios) elUsuarios.style.display = secao === 'usuarios' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
       if (elOperadores) elOperadores.style.display = secao === 'operadores' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
@@ -1715,18 +1849,21 @@
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
       const navDados = document.getElementById('cfg-nav-dados');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
+      const navUsuarios = document.getElementById('cfg-nav-usuarios');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
       const navOperadores = document.getElementById('cfg-nav-operadores');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navUsuarios) navUsuarios.style.cssText = secao === 'usuarios' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navOperadores) navOperadores.style.cssText = secao === 'operadores' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
+      if (secao === 'usuarios') cfgRenderUsuarios();
       if (secao === 'autorizados') cfgRenderAutorizados();
       if (secao === 'operadores') cfgRenderOperadores();
       if (secao === 'automacao') cfgRenderAutomacao();
@@ -2752,6 +2889,170 @@
       }
 
       cfgRenderOperadores();
+    }
+
+    // ---- Usuários (Configurações → Usuários) ───────────────────────────
+    // Diferente de Operadores (acima — Identidade Leve, só informativa,
+    // sem senha nem controle de acesso): aqui é login de verdade
+    // (usuário+senha, ver login.html/POST /login-usuario) — o PERFIL
+    // escolhido no cadastro decide o que a pessoa pode acessar (ver
+    // lib/perfis.js, server.js). Lista em cache local (nunca inclui
+    // senhaHash — GET /usuarios só devolve {id, nomeUsuario, perfil}),
+    // igual _operadoresCache.
+    let _usuariosCache = [];
+    let _perfisInfoCache = null; // { paginasPorPerfil, perfisCadastraveis, perfisComPaginaOperacao } — carregado 1x
+
+    const RÓTULO_PERFIL = {
+      Operador: 'Operador',
+      Analista: 'Analista',
+      Qualidade: 'Setor Qualidade',
+      Manutencao: 'Manutenção',
+      Administrativo: 'Administrativo',
+    };
+
+    // Mostra/esconde o checkbox "Pode iniciar/encerrar operações" — só
+    // faz sentido pra perfis que de fato têm a página "operacao"
+    // liberada (ver lib/perfis.js, PERFIS_COM_PAGINA_OPERACAO); pros
+    // outros, a marcação não significaria nada, então nem mostra o
+    // campo. Chamado ao trocar o <select> de perfil (ver onchange no
+    // HTML, modal-config.html) e também no boot da seção (cfgRenderUsuarios).
+    async function cfgAtualizarCampoPodeIniciarOperacao() {
+      if (!_perfisInfoCache) {
+        try {
+          const res = await fetch('/perfis');
+          _perfisInfoCache = await res.json();
+        } catch (e) {
+          _perfisInfoCache = { perfisComPaginaOperacao: [] };
+        }
+      }
+      const perfil = document.getElementById('cfg-usuario-perfil').value;
+      const wrap = document.getElementById('cfg-usuario-pode-iniciar-wrap');
+      const podeMostrar = (_perfisInfoCache.perfisComPaginaOperacao || []).includes(perfil);
+      wrap.style.display = podeMostrar ? 'block' : 'none';
+      if (!podeMostrar) document.getElementById('cfg-usuario-pode-iniciar').checked = false;
+    }
+
+    async function cfgRenderUsuarios() {
+      await cfgAtualizarCampoPodeIniciarOperacao(); // garante _perfisInfoCache pronto e o campo certo já visível
+
+      const elStatus = document.getElementById('cfg-usuarios-status');
+      const elLista = document.getElementById('cfg-usuarios-lista');
+      elLista.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
+      try {
+        const res = await fetch('/usuarios');
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao listar usuários.');
+        _usuariosCache = json.usuarios;
+      } catch (e) {
+        elLista.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
+        return;
+      }
+
+      elStatus.innerHTML = _usuariosCache.length
+        ? `<span class="badge badge-green">✓ ${_usuariosCache.length} usuário(s) cadastrado(s)</span>`
+        : `<span class="badge badge-gray">⬤ Nenhum usuário cadastrado ainda — ninguém consegue logar com usuário+senha (só o botão "Entrar como Administrador" continua funcionando).</span>`;
+
+      elLista.innerHTML = _usuariosCache.map(u => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
+      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(u.nomeUsuario)}</span>
+      <span class="badge badge-blue">${_escaparHtmlLocal(RÓTULO_PERFIL[u.perfil] || u.perfil)}</span>
+      ${u.podeIniciarOperacao ? '<span class="badge badge-green" title="Pode iniciar/encerrar operações">▶ Inicia Operação</span>' : ''}
+      <button onclick="cfgRemoverUsuario('${_escaparHtmlLocal(u.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum usuário cadastrado ainda.</span>';
+    }
+
+    // POST /salvar-usuarios exige sessão de Administrador Master (ver
+    // lib/sessao.js — mesma senha mestra de sempre, NÃO a sessão de
+    // usuário comum) — mesmo contrato de _cfgSalvarOperadores acima.
+    function _cfgSalvarUsuarios(listaParaEnviar) {
+      return new Promise((resolve, reject) => {
+        if (typeof AdminAuth === 'undefined') {
+          reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
+          return;
+        }
+        AdminAuth.abrirModal(async function onSuccess() {
+          try {
+            const res = await fetch('/salvar-usuarios', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(listaParaEnviar),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }, function onCancel() {
+          const err = new Error('Cancelado.');
+          err.silencioso = true;
+          reject(err);
+        });
+      });
+    }
+
+    async function cfgAdicionarUsuario() {
+      const inputNome = document.getElementById('cfg-usuario-nome');
+      const inputSenha = document.getElementById('cfg-usuario-senha');
+      const selectPerfil = document.getElementById('cfg-usuario-perfil');
+      const chkPodeIniciar = document.getElementById('cfg-usuario-pode-iniciar');
+
+      const nomeUsuario = inputNome.value.trim();
+      const senha = inputSenha.value;
+      const perfil = selectPerfil.value;
+      const podeIniciarOperacao = chkPodeIniciar.checked;
+
+      if (!nomeUsuario) { LW.mostrarAlerta('Digite o nome de usuário.', { tipo: 'aviso' }); return; }
+      if (_usuariosCache.some(u => u.nomeUsuario.toLowerCase() === nomeUsuario.toLowerCase())) {
+        LW.mostrarAlerta(`Já existe um usuário chamado "${nomeUsuario}".`, { tipo: 'aviso' });
+        return;
+      }
+      if (senha.length < 4) { LW.mostrarAlerta('A senha precisa ter no mínimo 4 caracteres.', { tipo: 'aviso' }); return; }
+
+      // Reenvia todo mundo que já existia SEM "senha" (preserva o hash de
+      // cada um no servidor — ver comentário em POST /salvar-usuarios) +
+      // o novo, com a senha em texto puro só nesta chamada (o servidor
+      // faz o hash antes de gravar; nunca fica em texto puro em disco).
+      const listaParaEnviar = [
+        ..._usuariosCache.map(u => ({ id: u.id, nomeUsuario: u.nomeUsuario, perfil: u.perfil, podeIniciarOperacao: u.podeIniciarOperacao })),
+        { nomeUsuario, senha, perfil, podeIniciarOperacao },
+      ];
+
+      try {
+        await _cfgSalvarUsuarios(listaParaEnviar);
+      } catch (e) {
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao adicionar: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      inputNome.value = '';
+      inputSenha.value = '';
+      selectPerfil.value = 'Operador';
+      chkPodeIniciar.checked = false;
+      cfgRenderUsuarios();
+    }
+
+    async function cfgRemoverUsuario(id) {
+      const usuario = _usuariosCache.find(u => u.id === id);
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover o usuário "${usuario?.nomeUsuario || id}"? Essa pessoa não vai conseguir mais logar — registros já feitos por ela continuam intactos, isto só afeta o acesso dela ao sistema a partir de agora.`,
+        { titulo: 'Remover usuário', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+
+      const listaParaEnviar = _usuariosCache
+        .filter(u => u.id !== id)
+        .map(u => ({ id: u.id, nomeUsuario: u.nomeUsuario, perfil: u.perfil, podeIniciarOperacao: u.podeIniciarOperacao }));
+
+      try {
+        await _cfgSalvarUsuarios(listaParaEnviar);
+      } catch (e) {
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      cfgRenderUsuarios();
     }
 
     async function cfgAdicionarAutorizado() {

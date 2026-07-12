@@ -41,6 +41,11 @@ const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
 // ver README, "Limitações conhecidas"). GET /operadores (abaixo) nunca
 // devolve pinHash, só {id, nome}.
 const OPERADORES_PATH = path.join(PRIVATE_DIR, 'operadores.json');
+// Cadastro de usuários com login+senha+perfil (ver lib/rotas/usuarios.js,
+// lib/perfis.js) — mesmo motivo de OPERADORES_PATH viver fora de public/:
+// contém senhaHash por usuário. GET /usuarios (lib/rotas/usuarios.js)
+// nunca devolve senhaHash, só {id, nomeUsuario, perfil}.
+const USUARIOS_PATH = path.join(PRIVATE_DIR, 'usuarios.json');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
 // Migração automática, só na 1ª vez que sobe depois desta mudança: se o
@@ -66,6 +71,16 @@ const auth = require('./lib/auth.js')(SECURITY_PATH);
 // antes desta mudança: GET /db/security.json e POST /salvar-security.
 const sessao = require('./lib/sessao.js')();
 
+// Sessão de USUÁRIO CADASTRADO (Operador/Analista/Qualidade/Manutenção/
+// Administrativo — ver lib/perfis.js) — diferente de `sessao` acima, que é
+// só pro Administrador Master (senha única mestra). Ver lib/sessao-usuario.js.
+const sessaoUsuario = require('./lib/sessao-usuario.js')();
+
+// Mapa central de permissões por perfil (quais páginas cada um vê) — ver
+// lib/perfis.js. Usado tanto por GET /perfis (front monta o menu) quanto
+// por validações no servidor (lib/rotas/usuarios.js).
+const perfis = require('./lib/perfis.js');
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
@@ -73,6 +88,7 @@ const sessao = require('./lib/sessao.js')();
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
 const rotasOperadores = require('./lib/rotas/operadores.js')({ fs, path, PRIVATE_DIR, auth, sessao });
+const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao, sessaoUsuario, perfis });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
@@ -96,12 +112,12 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
 });
 const rotasBackup = require('./lib/rotas/backup.js')({
   db, fs, path, JSZip, vm,
-  ROOT_DIR, DB_DIR, SECURITY_PATH, OPERADORES_PATH,
+  ROOT_DIR, DB_DIR, SECURITY_PATH, OPERADORES_PATH, USUARIOS_PATH,
   auth, sessao,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasOperadores, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasOperadores, rotasUsuarios, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

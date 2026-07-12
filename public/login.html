@@ -25,6 +25,18 @@
     <div class="bg-vignette"></div>
     <div class="bg-glow"></div>
 
+    <!-- Administrador Master — senha única mestra, SEM usuário próprio
+         (continua exatamente como sempre foi, só mudou de lugar visual:
+         antes era mais um botão dentre "Operador/Analista/Administrador",
+         agora fica destacado no topo, separado do formulário de
+         usuário+senha, que é o fluxo principal pra todo mundo cadastrado —
+         ver conversa que motivou esta reformulação da tela). -->
+    <div class="admin-topo-wrap">
+        <button class="btn-admin-topo" onclick="solicitarSenhaAdmin()">
+            🔒 Entrar como Administrador
+        </button>
+    </div>
+
     <div class="login-wrap">
 
         <div class="logo-block">
@@ -34,34 +46,22 @@
         </div>
 
         <div class="login-card">
-            <div class="card-question">Entrar como?</div>
-            <div class="roles">
+            <div class="card-question">Acesso ao Sistema</div>
 
-                <!-- OPERADOR -->
-                <button class="btn-operador" onclick="entrar('Operador')">
-                    <span class="btn-role-label">
-                        Operador
-                        <span class="badge-recommended">Principal</span>
-                    </span>
-                    <span class="btn-role-sub">Registro de injeções · Controle de turno</span>
-                    <span class="btn-role-icon">🏭</span>
-                </button>
+            <form class="login-form" id="login-form" onsubmit="return false;">
+                <div class="login-field">
+                    <label for="login-usuario">Usuário</label>
+                    <input id="login-usuario" type="text" autocomplete="username" placeholder="Seu usuário" autofocus>
+                </div>
+                <div class="login-field">
+                    <label for="login-senha">Senha</label>
+                    <input id="login-senha" type="password" autocomplete="current-password" placeholder="••••••••">
+                </div>
 
-                <!-- ANALISTA -->
-                <button class="btn-admin" onclick="entrar('Analista')">
-                    <span class="btn-role-label">Analista</span>
-                    <span class="btn-role-sub">Dashboards · Relatórios · Análise</span>
-                    <span class="btn-role-icon">📈</span>
-                </button>
+                <div class="login-erro" id="login-erro">Usuário ou senha incorretos.</div>
 
-                <!-- ADMINISTRADOR -->
-                <button class="btn-admin" onclick="solicitarSenhaAdmin()">
-                    <span class="btn-role-label">Administrador</span>
-                    <span class="btn-role-sub">Configurações · Backups · Acesso total</span>
-                    <span class="btn-role-icon">📊</span>
-                </button>
-
-            </div>
+                <button type="submit" class="btn-login-entrar" id="btn-login-entrar">Entrar</button>
+            </form>
         </div>
 
         <div class="login-footer">Lightwall SC · Uso interno · Acesso restrito</div>
@@ -83,7 +83,7 @@
         // ─── Restaura o estado normal da tela se a página voltar do cache do
         // navegador (bfcache) — ex: botão "Voltar" depois de já ter entrado
         // num perfil. Sem isso, a tela volta "congelada" no overlay de
-        // carregamento (barra em 100%, "Pronto!"), cobrindo os botões de
+        // carregamento (barra em 100%, "Pronto!"), cobrindo o formulário de
         // login e dando a impressão de estar carregando pra sempre. ─────────
         window.addEventListener('pageshow', (event) => {
             if (!event.persisted) return; // carregamento normal, nada a fazer
@@ -92,18 +92,18 @@
             const fill = document.getElementById('loading-fill');
             const lbl = document.getElementById('loading-label');
             const roleLabel = document.getElementById('loading-role-label');
+            const btnEntrar = document.getElementById('btn-login-entrar');
+            const erroEl = document.getElementById('login-erro');
 
             if (overlay) overlay.classList.remove('active');
             if (fill) fill.style.width = '0%';
             if (lbl) lbl.textContent = 'Carregando sistema...';
             if (roleLabel) roleLabel.textContent = 'Operador';
+            if (btnEntrar) { btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar'; }
+            if (erroEl) erroEl.style.display = 'none';
         });
 
-        // Removido: indicativo de "acesso autorizado / clique para entrar".
-        // A senha agora é pedida sempre que o Administrador é acessado a
-        // partir da tela de login, então esse aviso deixou de ser verdade.
-
-        // ─── Intercepta o clique em "Administrador" ────────────────────────────────
+        // ─── Intercepta o clique em "Entrar como Administrador" ────────────
         function solicitarSenhaAdmin() {
             // Sempre pede a senha aqui na tela de login, mesmo que já tenha
             // autenticado como administrador antes nesta máquina/navegador.
@@ -111,22 +111,100 @@
             // na área de administrador não pede senha de novo — porque ali
             // a verificação é feita pelo index.html, não por aqui.)
             AdminAuth.abrirModal(function onSuccess() {
-                entrar('Administrador');
+                _iniciarTransicao('Administrador');
             });
         }
 
-        function entrar(role) {
+        // ─── Login com usuário+senha (POST /login-usuario) ──────────────────
+        // Diferente do Administrador Master (senha única, sem usuário — ver
+        // solicitarSenhaAdmin acima): aqui é um usuário CADASTRADO (ver
+        // Configurações → Usuários), e o PERFIL que decide o que a pessoa vê
+        // já vem pronto do cadastro — ninguém escolhe "entrar como Operador
+        // ou Analista" na hora do login, isso é definido de antemão por
+        // quem cadastrou (ver lib/perfis.js, server.js).
+        const form = document.getElementById('login-form');
+        const usuarioInput = document.getElementById('login-usuario');
+        const senhaInput = document.getElementById('login-senha');
+        const btnEntrar = document.getElementById('btn-login-entrar');
+        const erroEl = document.getElementById('login-erro');
+
+        form.addEventListener('submit', _tentarLogin);
+
+        async function _tentarLogin() {
+            const nomeUsuario = usuarioInput.value.trim();
+            const senha = senhaInput.value;
+
+            erroEl.style.display = 'none';
+
+            if (!nomeUsuario || !senha) {
+                erroEl.textContent = 'Informe usuário e senha.';
+                erroEl.style.display = 'block';
+                return;
+            }
+
+            btnEntrar.disabled = true;
+            btnEntrar.textContent = 'Entrando…';
+
+            try {
+                const res = await fetch('/login-usuario', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nomeUsuario, senha }),
+                });
+                const data = await res.json();
+
+                if (res.status === 429) {
+                    const segundos = Number(res.headers.get('Retry-After')) || 300;
+                    const min = Math.ceil(segundos / 60);
+                    erroEl.textContent = `🔒 Muitas tentativas erradas. Aguarde ${min} min para tentar de novo.`;
+                    erroEl.style.display = 'block';
+                    return;
+                }
+
+                if (!data.ok) {
+                    erroEl.textContent = data.erro || 'Usuário ou senha incorretos.';
+                    erroEl.style.display = 'block';
+                    senhaInput.value = '';
+                    senhaInput.focus();
+                    return;
+                }
+
+                // Mesma chave de sempre (sessionStorage.lw_role) — os ~23
+                // pontos do sistema que já checam essa chave (ver
+                // app-core.js e outros) continuam funcionando sem
+                // modificação nenhuma, só que agora o VALOR vem do
+                // cadastro (perfil), não de um clique em botão.
+                sessionStorage.setItem('lw_role', data.perfil);
+                sessionStorage.setItem('lw_nome_usuario', data.nomeUsuario);
+                sessionStorage.setItem('lw_pode_iniciar_operacao', data.podeIniciarOperacao ? 'true' : 'false');
+
+                _iniciarTransicao(data.perfil);
+            } catch (e) {
+                erroEl.textContent = 'Erro de conexão. Tente novamente.';
+                erroEl.style.display = 'block';
+            } finally {
+                btnEntrar.disabled = false;
+                btnEntrar.textContent = 'Entrar';
+            }
+        }
+
+        senhaInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') _tentarLogin(); });
+
+        function _iniciarTransicao(role) {
             const overlay = document.getElementById('loading-overlay');
             const roleLabel = document.getElementById('loading-role-label');
             const fill = document.getElementById('loading-fill');
             const lbl = document.getElementById('loading-label');
 
-            sessionStorage.setItem('lw_role', role);
+            // "Administrador" (botão do topo) não passa por /login-usuario
+            // — não tem sessionStorage.lw_role setado ainda nesse caso até
+            // aqui; seta agora, mesma chave, valor fixo "Administrador"
+            // (mesmo comportamento de sempre pro botão mestre).
+            if (role === 'Administrador') sessionStorage.setItem('lw_role', role);
 
             roleLabel.textContent = role;
             overlay.classList.add('active');
 
-            // Animate bar
             requestAnimationFrame(() => {
                 fill.style.width = '30%';
                 lbl.textContent = 'Autenticando acesso...';
