@@ -1,0 +1,1981 @@
+'use strict';
+
+(function () {
+
+  // ============================================================
+  // 0. FUNÇÕES DE COMPRESSÃO/DESCOMPRESSÃO DE PDF (Pako)
+  // ============================================================
+  // ALTERAÇÃO: A compressão GZIP foi removida para novos PDFs, pois é ineficaz 
+  // (PDFs já são compactados internamente). Mantido o fallback para 
+  // descompressão de dados antigos que porventura tenham sido comprimidos.
+  function compressPDF(base64) {
+      // Retorna o Base64 original sem tentar comprimir
+      return base64;
+  }
+
+  function decompressPDF(compressedStr) {
+    try {
+        // Verifica se o dado antigo possui o prefixo de compressão (legado)
+        if (compressedStr.startsWith('pdfgz:')) {
+            const base64Data = compressedStr.replace('pdfgz:', '');
+            const binaryString = atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const decompressed = pako.ungzip(bytes);
+            // Converte Uint8Array descomprimido de volta para base64
+            let binary = '';
+            const chunkSize = 1024;
+            for (let i = 0; i < decompressed.length; i += chunkSize) {
+                const chunk = decompressed.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return 'data:application/pdf;base64,' + btoa(binary);
+        } else {
+            // Dados novos ou não comprimidos são retornados diretamente
+            return compressedStr;
+        }
+    } catch (e) {
+        console.error("Erro ao descomprimir PDF:", e);
+        // Se falhar, retorna a string original (pode ser que o dado não esteja comprimido)
+        return compressedStr;
+    }
+  }
+
+  // ============================================================
+  // 1. BANCO DE DADOS
+  // ============================================================
+  let manutencoes = [];
+  let agendamentos = [];
+  let estoque = [];
+  let movimentacoes = [];
+  
+  try {
+    const rawManut = localStorage.getItem('lightwall_manutencao');
+    if (rawManut) {
+      const parsed = JSON.parse(rawManut);
+      if (Array.isArray(parsed)) manutencoes = parsed;
+    }
+  } catch (e) {}
+
+  try {
+    const rawAgend = localStorage.getItem('lightwall_agendamentos');
+    if (rawAgend) {
+      const parsed = JSON.parse(rawAgend);
+      if (Array.isArray(parsed)) agendamentos = parsed;
+    }
+  } catch (e) {}
+
+  try {
+    const rawEstoque = localStorage.getItem('lightwall_estoque');
+    if (rawEstoque) {
+      const parsed = JSON.parse(rawEstoque);
+      if (Array.isArray(parsed)) estoque = parsed;
+    }
+  } catch (e) {}
+
+  try {
+    const rawMov = localStorage.getItem('lightwall_movimentacoes');
+    if (rawMov) {
+      const parsed = JSON.parse(rawMov);
+      if (Array.isArray(parsed)) movimentacoes = parsed;
+    }
+  } catch (e) {}
+
+  let pageCorretiva = 0;
+  let pageProgramada = 0;
+  const ITEMS_PER_PAGE = 10;
+
+  function salvarDados() {
+    try {
+      localStorage.setItem('lightwall_manutencao', JSON.stringify(manutencoes));
+      localStorage.setItem('lightwall_agendamentos', JSON.stringify(agendamentos));
+      localStorage.setItem('lightwall_estoque', JSON.stringify(estoque));
+      localStorage.setItem('lightwall_movimentacoes', JSON.stringify(movimentacoes));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        alert('❌ Limite de armazenamento do navegador atingido!\n\nExporte seus dados usando o botão "Exportar Excel" e depois exclua chamados antigos para liberar espaço.');
+      } else {
+        console.error('Erro ao salvar no localStorage:', e);
+        toast('Erro ao salvar dados. Verifique o console.', 'error');
+      }
+    }
+  }
+
+  function toast(msg, tipo='success') {
+    const container = document.getElementById('man-toastContainer');
+    const t = document.createElement('div');
+    t.className = `man-toast ${tipo === 'error' ? 'error' : ''}`;
+    t.innerHTML = `<span>${tipo === 'error' ? '<i class="fas fa-exclamation-circle"></i>' : '<i class="fas fa-check-circle"></i>'}</span><span>${msg}</span>`;
+    container.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  function gerarId(prefixo = 'MAN-') {
+    const ts = Date.now().toString(36);
+    const rand = Math.random().toString(36).substr(2, 4);
+    return prefixo + ts + '-' + rand;
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+
+  // ============================================================
+  // 2. NAVEGAÇÃO
+  // ============================================================
+  function navegar(aba) {
+    document.querySelectorAll('.man-nav-tabs .man-btn').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.man-page').forEach(el => el.classList.remove('active'));
+    // "aba" chega sem prefixo (mesmos 5 nomes de sempre: manutencao,
+    // programada, dashboard, pecas, almoxarifado — ver onclick="navegar(...)"
+    // no HTML e a chamada no boot, mais abaixo), mas o ID real do elemento
+    // na página tem prefixo "man-" (ver page-manutencao.html) — prefixa
+    // aqui, uma vez só, em vez de mudar todo mundo que chama navegar().
+    const el = document.getElementById('man-' + aba);
+    if(el) {
+      el.classList.add('active');
+      document.querySelectorAll('.man-nav-tabs .man-btn').forEach(b => {
+        const btnText = b.textContent.toLowerCase();
+        let shouldActive = false;
+        if (aba === 'manutencao') shouldActive = btnText.includes('corretiva');
+        else if (aba === 'pecas') shouldActive = btnText.includes('peças') || btnText.includes('compra');
+        else shouldActive = btnText.includes(aba);
+        if (shouldActive) b.classList.add('active');
+      });
+      if(aba === 'dashboard') renderDashboard();
+      if(aba === 'manutencao') { pageCorretiva = 0; renderCorretiva(); }
+      if(aba === 'programada') { pageProgramada = 0; renderProgramada(); }
+      if(aba === 'pecas') { renderPecas(); }
+      if(aba === 'almoxarifado') { renderAlmoxarifado(); }
+    }
+  }
+
+  // ============================================================
+  // 3. LÓGICA DA MANUTENÇÃO CORRETIVA
+  // ============================================================
+  let prioridadeSelecionada = '';
+  let tiposSelecionados = [];
+
+  async function previewArquivo(input, previewId, btnId) {
+    const file = input.files[0];
+    if (file) {
+      const container = document.getElementById(previewId);
+      container.style.display = 'block';
+      document.getElementById(btnId).style.display = 'inline';
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = function(e) {
+          const base64Data = e.target.result;
+          // ALTERAÇÃO: Não comprime mais o PDF com GZIP
+          container.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(file.name)}</span></div>`;
+          container.dataset.filename = file.name;
+          container.dataset.base64 = base64Data; // Armazena o dado sem compressão
+        };
+      } else {
+        const compressed = await compressImage(file);
+        container.innerHTML = `<img src="${compressed}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+      }
+    }
+  }
+
+  function compressImage(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800, MAX_HEIGHT = 600;
+          let width = img.width, height = img.height;
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+      };
+    });
+  }
+
+  function removerArquivo(inputId, previewId, btnId) {
+    document.getElementById(inputId).value = '';
+    document.getElementById(previewId).style.display = 'none';
+    document.getElementById(previewId).innerHTML = '';
+    document.getElementById(previewId).dataset.filename = '';
+    document.getElementById(previewId).dataset.base64 = '';
+    document.getElementById(btnId).style.display = 'none';
+  }
+
+  function toggleEmpresaExterna() {
+    const el = document.getElementById('man-manTipoExecucao');
+    if (el) {
+      const tipo = el.value;
+      const row = document.getElementById('man-manEmpresaExternaRow');
+      if (row) row.style.display = tipo === 'Externo' ? 'block' : 'none';
+    }
+  }
+  
+  function setPrioridade(valor) {
+    prioridadeSelecionada = valor;
+    document.getElementById('man-manPrioridade').value = valor;
+    const classMap = { 'BAIXA': 'active-baixa', 'MÉDIA': 'active-media', 'ALTA': 'active-alta' };
+    document.querySelectorAll('.man-prioridade-btn').forEach(el => {
+      el.classList.remove('active-baixa', 'active-media', 'active-alta');
+      if(el.dataset.value === valor) el.classList.add(classMap[valor]);
+    });
+  }
+
+  function toggleTipo(tipo) {
+    const index = tiposSelecionados.indexOf(tipo);
+    if(index > -1) tiposSelecionados.splice(index, 1); else tiposSelecionados.push(tipo);
+    document.getElementById('man-manTipos').value = JSON.stringify(tiposSelecionados);
+    document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.toggle('active', tiposSelecionados.includes(el.dataset.type)));
+  }
+
+  function toggleSupervisorSection() {
+    const el = document.getElementById('man-manAguardandoPecas');
+    const section = document.getElementById('man-supervisorSection');
+    if (el && section) section.style.display = el.value === 'Sim' ? 'block' : 'none';
+  }
+
+  function novoChamado() {
+    const card = document.getElementById('man-formCard');
+    if (card) card.style.display = 'block';
+    const title = document.getElementById('man-formTitle');
+    if (title) title.innerHTML = '<i class="fas fa-edit"></i> Novo Chamado (Operador)';
+    const display = document.getElementById('man-formIdDisplay');
+    if (display) display.textContent = '#' + gerarId();
+    document.getElementById('man-manId').value = '';
+    document.getElementById('man-manEtiquetaFechada').value = 'false';
+    const tech = document.getElementById('man-techSection');
+    if (tech) { tech.classList.remove('open'); tech.style.display = 'none'; }
+    const sup = document.getElementById('man-supervisorSection');
+    if (sup) sup.style.display = 'none';
+    document.getElementById('man-manForm').reset();
+    const data = document.getElementById('man-manData');
+    if (data) data.valueAsDate = new Date();
+    document.getElementById('man-manPrioridade').value = '';
+    document.getElementById('man-manTipos').value = '[]';
+    document.getElementById('man-manTempoGasto').value = '';
+    document.getElementById('man-supTempoGasto').value = '';
+    document.getElementById('man-btnFecharEtiqueta').style.display = 'none';
+    document.getElementById('man-manEmpresaExternaRow').style.display = 'none';
+    document.getElementById('man-manTipoEtiqueta').value = 'Azul';
+    prioridadeSelecionada = ''; tiposSelecionados = [];
+    document.querySelectorAll('.man-prioridade-btn').forEach(el => el.classList.remove('active-baixa', 'active-media', 'active-alta'));
+    document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.remove('active'));
+
+    const turnoSelect = document.getElementById('man-manTurno');
+    if (turnoSelect) {
+        const hora = new Date().getHours();
+        if (hora >= 6 && hora < 14) turnoSelect.value = '1º TURNO';
+        else if (hora >= 14 && hora < 22) turnoSelect.value = '2º TURNO';
+        else turnoSelect.value = '3º TURNO';
+    }
+
+    if (card) card.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function fecharFormulario() { 
+    const card = document.getElementById('man-formCard');
+    if (card) card.style.display = 'none'; 
+    fecharModal(); 
+  }
+
+  function formatarTempo(minutos) {
+    if (minutos === null || minutos === undefined || isNaN(minutos)) return 'Não registrado';
+    if (minutos === 0) return '0 minutos';
+    const dias = Math.floor(minutos / (24 * 60));
+    const horas = Math.floor((minutos % (24 * 60)) / 60);
+    const minRest = minutos % 60;
+    let str = '';
+    if (dias > 0) str += dias + ' dia(s)';
+    if (horas > 0) str += (str ? ' e ' : '') + horas + ' hora(s)';
+    if (minRest > 0 && dias === 0 && horas === 0) str += minRest + ' minuto(s)';
+    else if (minRest > 0 && (dias > 0 || horas > 0)) str += ' e ' + minRest + ' minuto(s)';
+    return str || '0 minutos';
+  }
+
+  function calcularTempoGasto() {
+    const dtI = document.getElementById('man-manDataInicio')?.value;
+    const hrI = document.getElementById('man-manHoraInicio')?.value;
+    const dtF = document.getElementById('man-manDataFim')?.value;
+    const hrF = document.getElementById('man-manHoraFim')?.value;
+    const display = document.getElementById('man-manTempoGasto');
+    if (dtI && hrI && dtF && hrF && display) {
+      let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
+      if (diffMin < 0) diffMin = 0;
+      display.value = formatarTempo(diffMin);
+    } else if (display) display.value = '';
+  }
+
+  function calcularTempoSupervisao() {
+    const dtI = document.getElementById('man-supDataInicio')?.value;
+    const hrI = document.getElementById('man-supHoraInicio')?.value;
+    const dtF = document.getElementById('man-supDataFim')?.value;
+    const hrF = document.getElementById('man-supHoraFim')?.value;
+    const display = document.getElementById('man-supTempoGasto');
+    if (dtI && hrI && dtF && hrF && display) {
+      let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
+      if (diffMin < 0) diffMin = 0;
+      display.value = formatarTempo(diffMin);
+    } else if (display) display.value = '';
+  }
+
+  function aoMudarSituacao() {
+    const situacao = document.getElementById('man-manSituacao')?.value;
+    const etiquetaFechada = document.getElementById('man-manEtiquetaFechada')?.value === 'true';
+    const btnFechar = document.getElementById('man-btnFecharEtiqueta');
+    if (situacao === 'Concluido' && !etiquetaFechada && btnFechar) {
+      btnFechar.style.display = 'inline-block';
+      const dataFim = document.getElementById('man-manDataFim');
+      const horaFim = document.getElementById('man-manHoraFim');
+      if (dataFim && !dataFim.value) {
+        const agora = new Date();
+        dataFim.value = agora.toISOString().split('T')[0];
+        if (horaFim) horaFim.value = agora.toLocaleTimeString('pt-BR', { hour12: false });
+        calcularTempoGasto();
+      }
+    } else if (btnFechar) btnFechar.style.display = 'none';
+  }
+
+  function salvarManutencao() {
+    try {
+      if (document.getElementById('man-manEtiquetaFechada')?.value === 'true') {
+        toast('Etiqueta fechada. Não pode ser alterada.', 'error');
+        return;
+      }
+
+      const setor = document.getElementById('man-manSetor')?.value?.trim() || '';
+      const maquina = document.getElementById('man-manMaquina')?.value?.trim() || '';
+      const turno = document.getElementById('man-manTurno')?.value || '';
+      const observador = document.getElementById('man-manObservador')?.value?.trim() || '';
+      const prioridade = document.getElementById('man-manPrioridade')?.value || '';
+      const tipoManutencao = document.getElementById('man-manTipoManutencao')?.value || '';
+      const anomalia = document.getElementById('man-manAnomalia')?.value?.trim() || '';
+      const responsavel = document.getElementById('man-manResponsavel')?.value?.trim() || '';
+      const tipoEtiqueta = document.getElementById('man-manTipoEtiqueta')?.value || 'Azul';
+
+      if (!setor || !maquina || !observador || !anomalia || !prioridade || !tipoManutencao) {
+        toast('Preencha todos os campos obrigatórios.', 'error');
+        return;
+      }
+
+      calcularTempoGasto(); calcularTempoSupervisao();
+
+      const dtI = document.getElementById('man-manDataInicio')?.value || '';
+      const hrI = document.getElementById('man-manHoraInicio')?.value || '';
+      const dtF = document.getElementById('man-manDataFim')?.value || '';
+      const hrF = document.getElementById('man-manHoraFim')?.value || '';
+      let tempoGastoNumerico = 0;
+      if (dtI && hrI && dtF && hrF) {
+        let diffMs = new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`);
+        if (diffMs < 0) diffMs = 0;
+        tempoGastoNumerico = Math.floor(diffMs / 1000 / 60);
+      }
+
+      const supDtI = document.getElementById('man-supDataInicio')?.value || '';
+      const supHrI = document.getElementById('man-supHoraInicio')?.value || '';
+      const supDtF = document.getElementById('man-supDataFim')?.value || '';
+      const supHrF = document.getElementById('man-supHoraFim')?.value || '';
+      let tempoSupervisaoNumerico = 0;
+      if (supDtI && supHrI && supDtF && supHrF) {
+        let diffMs = new Date(`${supDtF}T${supHrF}`) - new Date(`${supDtI}T${supHrI}`);
+        if (diffMs < 0) diffMs = 0;
+        tempoSupervisaoNumerico = Math.floor(diffMs / 1000 / 60);
+      }
+
+      const fotoOperadorPreview = document.getElementById('man-fotoOperadorPreview');
+      let fotoOperador = '';
+      if (fotoOperadorPreview.style.display !== 'none') {
+        const img = fotoOperadorPreview.querySelector('img');
+        if (img) fotoOperador = img.src;
+        else if (fotoOperadorPreview.dataset.base64) fotoOperador = fotoOperadorPreview.dataset.base64;
+        else if (fotoOperadorPreview.dataset.filename) fotoOperador = 'PDF: ' + fotoOperadorPreview.dataset.filename;
+      }
+
+      const fotoTecnicoPreview = document.getElementById('man-fotoTecnicoPreview');
+      let fotoTecnico = '';
+      if (fotoTecnicoPreview.style.display !== 'none') {
+        const img = fotoTecnicoPreview.querySelector('img');
+        if (img) fotoTecnico = img.src;
+        else if (fotoTecnicoPreview.dataset.base64) fotoTecnico = fotoTecnicoPreview.dataset.base64;
+        else if (fotoTecnicoPreview.dataset.filename) fotoTecnico = 'PDF: ' + fotoTecnicoPreview.dataset.filename;
+      }
+
+      const obj = {
+        id: document.getElementById('man-manId')?.value || gerarId(),
+        data: document.getElementById('man-manData')?.value || '',
+        setor: setor, maquina: maquina, turno: turno,
+        observador: observador, prioridade: prioridade, anomalia: anomalia,
+        local: document.getElementById('man-manLocal')?.value?.trim() || '',
+        tipos: JSON.parse(document.getElementById('man-manTipos')?.value || '[]'),
+        tipoManutencao: tipoManutencao, tipoEtiqueta: tipoEtiqueta,
+        tipoExecucao: document.getElementById('man-manTipoExecucao')?.value || 'Interno',
+        empresaExterna: document.getElementById('man-manEmpresaExterna')?.value?.trim() || '',
+        responsavel: responsavel, fotoOperador: fotoOperador, fotoTecnico: fotoTecnico,
+        dataInicio: dtI, horaInicio: hrI, dataFim: dtF, horaFim: hrF,
+        tempoGasto: tempoGastoNumerico, situacao: document.getElementById('man-manSituacao')?.value || 'Aguardando',
+        emManutencao: document.getElementById('man-manEmManutencao')?.value || 'Nao',
+        aguardandoPecas: document.getElementById('man-manAguardandoPecas')?.value || 'Nao',
+        pecasAvariadas: document.getElementById('man-manPecasAvariadas')?.value?.trim() || '',
+        pecasComprar: document.getElementById('man-manPecasComprar')?.value?.trim() || '',
+        rotina: document.getElementById('man-manRotina')?.value?.trim() || '',
+        supDataInicio: supDtI, supHoraInicio: supHrI, supDataFim: supDtF, supHoraFim: supHrF,
+        supTempoGasto: tempoSupervisaoNumerico,
+        statusCompra: document.getElementById('man-manStatusCompra')?.value || '',
+        previsaoChegada: document.getElementById('man-manPrevisaoChegada')?.value || '',
+        fornecedor: document.getElementById('man-manFornecedor')?.value?.trim() || '',
+        respSupervisor: document.getElementById('man-manRespSupervisor')?.value?.trim() || '',
+        obsSupervisor: document.getElementById('man-manObsSupervisor')?.value?.trim() || '',
+        custoPecas: parseFloat(document.getElementById('man-manCustoPecas')?.value) || 0,
+        custoMaoObra: parseFloat(document.getElementById('man-manCustoMaoObra')?.value) || 0,
+        etiquetaFechada: false,
+        dataModificacao: new Date().toISOString()
+      };
+
+      const manId = document.getElementById('man-manId')?.value;
+      if (manId) {
+        const idx = manutencoes.findIndex(m => m.id === obj.id);
+        if (idx > -1) manutencoes[idx] = obj;
+      } else {
+        manutencoes.unshift(obj);
+      }
+
+      salvarDados();
+      toast('Chamado salvo com sucesso!');
+      fecharFormulario(); 
+      pageCorretiva = 0;
+      renderCorretiva();
+      renderDashboard();
+
+    } catch (error) {
+      console.error("Erro fatal na função salvarManutencao:", error);
+      toast('Erro interno ao salvar. Verifique o console.', 'error');
+    }
+  }
+
+  function abrirModalFechamento() {
+    const id = document.getElementById('man-manId')?.value;
+    if(!id) { toast('Salve o chamado antes de fechá-lo.', 'error'); return; }
+    const chamado = manutencoes.find(m => m.id === id);
+    if(!chamado) { toast('Erro ao carregar dados.', 'error'); return; }
+    
+    const dtI = document.getElementById('man-manDataInicio')?.value;
+    const hrI = document.getElementById('man-manHoraInicio')?.value;
+    const dtF = document.getElementById('man-manDataFim')?.value;
+    const hrF = document.getElementById('man-manHoraFim')?.value;
+    let tempoExibido = chamado.tempoGasto;
+    if (dtI && hrI && dtF && hrF) {
+        let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
+        if (diffMin < 0) diffMin = 0;
+        tempoExibido = diffMin;
+    }
+    const tempoFormatado = formatarTempo(tempoExibido);
+
+    const body = document.getElementById('man-modalResumoBody');
+    if (body) {
+      body.innerHTML = `
+        <div class="man-modal-resumo-item"><span class="label">Anomalia:</span><span class="value">${esc(chamado.anomalia)}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Quem abriu:</span><span class="value">${esc(chamado.observador)}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Quem resolveu:</span><span class="value">${esc(chamado.responsavel || 'Não informado')}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Tempo de manutenção:</span><span class="value">${tempoFormatado}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Peças avariadas:</span><span class="value">${esc(chamado.pecasAvariadas || '-')}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Peças a comprar:</span><span class="value">${esc(chamado.pecasComprar || '-')}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Custo Peças:</span><span class="value">R$ ${chamado.custoPecas ? chamado.custoPecas.toFixed(2) : '0,00'}</span></div>
+        <div class="man-modal-resumo-item"><span class="label">Custo Mão de Obra:</span><span class="value">R$ ${chamado.custoMaoObra ? chamado.custoMaoObra.toFixed(2) : '0,00'}</span></div>
+      `;
+      document.getElementById('man-modalFechamento').style.display = 'flex';
+    }
+  }
+
+  function fecharModal() { document.getElementById('man-modalFechamento').style.display = 'none'; }
+
+  function confirmarFechamento() {
+    const id = document.getElementById('man-manId')?.value;
+    const chamado = manutencoes.find(m => m.id === id);
+    if(!chamado) return;
+    chamado.etiquetaFechada = true;
+    chamado.situacao = 'Concluido';
+    if(!chamado.dataFim) {
+      const agora = new Date();
+      chamado.dataFim = agora.toISOString().split('T')[0];
+      chamado.horaFim = agora.toLocaleTimeString('pt-BR', { hour12: false });
+    }
+    salvarDados();
+    fecharModal();
+    fecharFormulario();
+    pageCorretiva = 0;
+    renderCorretiva();
+    renderDashboard();
+    toast('Chamado fechado! Etiqueta bloqueada.');
+  }
+
+  function limparFiltrosCorretiva() {
+    document.getElementById('man-filtroID').value = '';
+    document.getElementById('man-filtroMaquina').value = '';
+    document.getElementById('man-filtroSetor').value = '';
+    document.getElementById('man-filtroTipo').value = '';
+    document.getElementById('man-filtroPrioridade').value = '';
+    document.getElementById('man-filtroStatus').value = '';
+    pageCorretiva = 0;
+    renderCorretiva();
+  }
+
+  function aplicarFiltrosCorretiva() { pageCorretiva = 0; renderCorretiva(); }
+
+  function abrirHistorico(id) {
+    const chamado = manutencoes.find(m => m.id === id);
+    if(!chamado) { toast('Chamado não encontrado.', 'error'); return; }
+
+    function exibirImagem(src, titulo) {
+      if (!src || src === '' || src === 'null' || src === 'undefined') {
+        return `<div style="margin-top:4px; font-size:12px; color:var(--man-text-secondary); opacity:0.6;">Nenhum anexo.</div>`;
+      }
+      
+      // Verifica se é um PDF comprimido (legado) ou normal
+      if (src.startsWith('pdfgz:')) {
+        const decompressedBase64 = decompressPDF(src);
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);">
+          <i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i>
+          <span>PDF anexado</span>
+          <a href="${decompressedBase64}" target="_blank" style="color:var(--man-blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+        </div>`;
+      }
+      // Verifica se é um PDF Base64 padrão
+      if (src.startsWith('data:application/pdf;base64,')) {
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);">
+          <i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i>
+          <span>PDF anexado</span>
+          <a href="${src}" target="_blank" style="color:var(--man-blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+        </div>`;
+      }
+      if (src.startsWith('PDF:')) {
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i> ${esc(src.replace('PDF: ', ''))}</div>`;
+      }
+      return `
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+          <span style="font-size:12px; color:var(--man-text-secondary);">${titulo}:</span>
+          <img src="${src}" style="max-width:100%; max-height:150px; object-fit:cover; border-radius:6px; border:1px solid var(--man-border-color); cursor:pointer;" onclick="window.open(this.src, '_blank')">
+        </div>
+      `;
+    }
+
+    let html = `
+      <div style="display:flex; flex-direction:column; gap:16px; padding:8px 0;">
+        <div style="border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+          <h3 style="color:var(--man-orange); margin-bottom:4px;"><i class="fas fa-clipboard-list"></i> Chamado #${esc(chamado.id)}</h3>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--man-text-secondary);">
+            <span><i class="fas fa-industry"></i> ${esc(chamado.maquina)}</span>
+            <span><i class="fas fa-building"></i> ${esc(chamado.setor)}</span>
+          </div>
+        </div>
+
+        <div style="background:rgba(255,92,108,0.08); border-left:4px solid var(--man-red); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-user" style="color:var(--man-red);"></i> Abertura (Operador)</span>
+            <span>${esc(chamado.data)}</span>
+          </div>
+          <div style="color:var(--man-text-primary);"><strong>${esc(chamado.observador)}</strong> - ${esc(chamado.anomalia)}</div>
+          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:2px;">Prioridade: <span style="color:${chamado.prioridade === 'ALTA' ? 'var(--man-red)' : chamado.prioridade === 'MÉDIA' ? 'var(--man-yellow)' : 'var(--man-green)'}; font-weight:600;">${esc(chamado.prioridade)}</span> | Etiqueta: ${esc(chamado.tipoEtiqueta)} | Turno: <strong>${esc(chamado.turno)}</strong></div>
+          ${exibirImagem(chamado.fotoOperador, 'Anexo do problema')}
+        </div>
+
+        <div style="background:rgba(245,130,31,0.08); border-left:4px solid var(--man-orange); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-hard-hat" style="color:var(--man-orange);"></i> Execução (Manutenção)</span>
+            <span>${chamado.dataInicio ? esc(chamado.dataInicio) : 'Não iniciado'}</span>
+          </div>
+          <div style="color:var(--man-text-primary);"><strong>Responsável:</strong> ${esc(chamado.responsavel || 'Não atribuído')}</div>
+          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:2px;">
+            <span><i class="fas fa-hourglass-half"></i> ${formatarTempo(chamado.tempoGasto)}</span>
+            <span style="margin-left:12px;">Status: <span class="man-badge ${chamado.situacao === 'Concluido' ? 'man-badge-green' : chamado.situacao === 'Em Manutencao' ? 'man-badge-blue' : 'man-badge-gray'}">${esc(chamado.situacao)}</span></span>
+          </div>
+          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+            <i class="fas fa-tools"></i> ${esc(chamado.rotina || 'Nenhuma rotina registrada')}
+          </div>
+          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+            <strong>Custo Mão de Obra:</strong> R$ ${chamado.custoMaoObra ? chamado.custoMaoObra.toFixed(2) : '0,00'}<br>
+            <strong style="color:var(--man-orange);">Custo Total:</strong> <span style="color:var(--man-orange); font-weight:600;">R$ ${(chamado.custoPecas + chamado.custoMaoObra).toFixed(2)}</span>
+          </div>
+          ${exibirImagem(chamado.fotoTecnico, 'Anexo do serviço')}
+        </div>
+
+        <div style="background:rgba(77,141,255,0.08); border-left:4px solid var(--man-blue); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-user-shield" style="color:var(--man-blue);"></i> Supervisão</span>
+            <span>${chamado.supDataInicio ? esc(chamado.supDataInicio) : 'Não atuado'}</span>
+          </div>
+          <div style="font-size:12px; color:var(--man-text-secondary);">
+            <strong>Status da Compra:</strong> <span class="man-badge ${chamado.statusCompra === 'Peça recebida' ? 'man-badge-green' : chamado.statusCompra ? 'man-badge-yellow' : 'man-badge-gray'}">${esc(chamado.statusCompra || 'N/A')}</span>
+          </div>
+          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+            <strong>Custo Peças:</strong> R$ ${chamado.custoPecas ? chamado.custoPecas.toFixed(2) : '0,00'}<br>
+            <i class="fas fa-truck"></i> ${esc(chamado.fornecedor || 'Sem fornecedor')}
+          </div>
+          ${chamado.obsSupervisor ? `<div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;"><i class="fas fa-sticky-note"></i> ${esc(chamado.obsSupervisor)}</div>` : ''}
+        </div>
+
+        <div style="background:rgba(46,211,163,0.08); border-left:4px solid var(--man-green); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-check-circle" style="color:var(--man-green);"></i> Fechamento</span>
+            <span>${chamado.etiquetaFechada ? esc(chamado.dataFim) : 'Em aberto'}</span>
+          </div>
+          <div style="color:var(--man-text-primary); font-weight:600;">
+            ${chamado.etiquetaFechada ? '<i class="fas fa-lock" style="color:var(--man-green);"></i> Etiqueta Fechada' : '<i class="fas fa-unlock" style="color:var(--man-red);"></i> Etiqueta Aberta'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('man-historicoBody').innerHTML = html;
+    document.getElementById('man-modalHistorico').style.display = 'flex';
+  }
+
+  function fecharModalHistorico() { document.getElementById('man-modalHistorico').style.display = 'none'; }
+
+  function renderCorretiva() {
+    try {
+      const filtroID = document.getElementById('man-filtroID')?.value?.toLowerCase()?.trim() || '';
+      const filtroMaquina = document.getElementById('man-filtroMaquina')?.value?.toLowerCase()?.trim() || '';
+      const filtroSetor = document.getElementById('man-filtroSetor')?.value?.toLowerCase()?.trim() || '';
+      const filtroTipo = document.getElementById('man-filtroTipo')?.value || '';
+      const filtroPrioridade = document.getElementById('man-filtroPrioridade')?.value || '';
+      const filtroStatus = document.getElementById('man-filtroStatus')?.value || '';
+      const filtroEtiqueta = document.getElementById('man-filtroEtiqueta')?.value || '';
+
+      let dados = manutencoes;
+      if (filtroID) dados = dados.filter(m => (m.id || '').toLowerCase().includes(filtroID));
+      if (filtroMaquina) dados = dados.filter(m => (m.maquina || '').toLowerCase().includes(filtroMaquina));
+      if (filtroSetor) dados = dados.filter(m => (m.setor || '').toLowerCase().includes(filtroSetor));
+      if (filtroTipo) dados = dados.filter(m => (m.tipoManutencao || '') === filtroTipo);
+      if (filtroPrioridade) dados = dados.filter(m => (m.prioridade || '') === filtroPrioridade);
+      if (filtroStatus) dados = dados.filter(m => (m.situacao || '') === filtroStatus);
+      if (filtroEtiqueta) dados = dados.filter(m => (m.tipoEtiqueta || '') === filtroEtiqueta);
+
+      const total = dados.length;
+      const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+      if (pageCorretiva >= totalPages) pageCorretiva = totalPages - 1;
+      if (pageCorretiva < 0) pageCorretiva = 0;
+
+      const start = pageCorretiva * ITEMS_PER_PAGE;
+      const pageData = dados.slice(start, start + ITEMS_PER_PAGE);
+
+      const tbody = document.getElementById('man-corretivaTableBody');
+      if(pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhum chamado encontrado.</td></tr>`;
+      } else {
+        tbody.innerHTML = pageData.map(m => {
+          const situacao = m.situacao || 'Aguardando';
+          const sc = situacao === 'Concluido' ? 'man-badge-green' : situacao === 'Em Manutencao' ? 'man-badge-blue' : 'man-badge-gray';
+          const prioridade = m.prioridade || 'BAIXA';
+          const pc = prioridade === 'ALTA' ? 'var(--man-red)' : prioridade === 'MÉDIA' ? 'var(--man-yellow)' : 'var(--man-green)';
+          const tipo = m.tipoManutencao || '-';
+          const tpc = tipo === 'Elétrica' ? 'var(--man-yellow)' : 'var(--man-blue)';
+          const etiqueta = m.tipoEtiqueta || 'Azul';
+          const etiquetaCor = etiqueta === 'Azul' ? 'var(--man-blue)' : 'var(--man-red)';
+          const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
+          let supClass = 'man-badge-green'; 
+          let supText = '✅ OK';
+          if ((m.aguardandoPecas || '') === 'Sim') {
+              if (m.statusCompra) {
+                  supText = m.statusCompra;
+                  if (m.statusCompra === 'Em Análise') supClass = 'man-badge-yellow';
+                  else if (m.statusCompra === 'Cotação em andamento') supClass = 'man-badge-orange';
+                  else if (m.statusCompra === 'Pedido efetuado') supClass = 'man-badge-blue';
+                  else if (m.statusCompra === 'Peça em transporte') supClass = 'man-badge-purple';
+                  else if (m.statusCompra === 'Peça recebida') supClass = 'man-badge-green';
+              } else {
+                  supText = 'Sob Supervisão';
+                  supClass = 'man-badge-orange';
+              }
+          }
+          const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock"></i>' : '';
+          const deleteIcon = (m.situacao === 'Aguardando' && !m.etiquetaFechada) 
+            ? `<span style="cursor:pointer;" onclick="excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>` 
+            : '';
+
+          return `<tr>
+            <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon}</td>
+            <td data-label="Máquina">${esc(m.maquina || '-')}</td>
+            <td data-label="Setor">${esc(m.setor || '-')}</td>
+            <td data-label="Turno"><strong>${esc(m.turno || '-')}</strong></td>
+            <td data-label="Observador">${esc(m.observador || '-')}</td>
+            <td data-label="Tipo"><span style="color:${tpc};">${esc(tipo)}</span></td>
+            <td data-label="Prioridade"><span style="color:${pc};">${esc(prioridade)}</span></td>
+            <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
+            <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
+            <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
+            <td data-label="Ações" style="justify-content:flex-end;"><div class="man-actions-table"><span style="cursor:pointer;" onclick="abrirHistorico('${m.id}')"><i class="fas fa-eye"></i></span><span style="cursor:pointer;" onclick="editarManutencao('${m.id}')"><i class="fas fa-edit"></i></span>${deleteIcon}</div></td>
+          </tr>`;
+        }).join('');
+      }
+
+      const pagDiv = document.getElementById('man-pagCorretiva');
+      pagDiv.innerHTML = `
+        <button onclick="changePageCorretiva(-1)" ${pageCorretiva === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+        <span>${pageCorretiva + 1} / ${totalPages}</span>
+        <button onclick="changePageCorretiva(1)" ${pageCorretiva === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+      `;
+    } catch (error) {
+      console.error("Erro ao renderizar a tabela corretiva:", error);
+      const tbody = document.getElementById('man-corretivaTableBody');
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--man-red);">Erro ao carregar a lista.</td></tr>`;
+    }
+  }
+
+  function changePageCorretiva(delta) {
+    pageCorretiva += delta;
+    renderCorretiva();
+  }
+
+  function editarManutencao(id) {
+    try {
+      const m = manutencoes.find(x => x.id === id);
+      if(!m) return;
+      if (m.etiquetaFechada) { toast('Etiqueta fechada.', 'error'); return; }
+      const card = document.getElementById('man-formCard');
+      if (card) card.style.display = 'block';
+      const title = document.getElementById('man-formTitle');
+      if (title) title.innerHTML = '<i class="fas fa-edit"></i> Editar Chamado (Manutenção)';
+      const display = document.getElementById('man-formIdDisplay');
+      if (display) display.textContent = '#' + m.id;
+      document.getElementById('man-manId').value = m.id;
+      document.getElementById('man-manEtiquetaFechada').value = m.etiquetaFechada ? 'true' : 'false';
+      document.getElementById('man-manSetor').value = m.setor;
+      document.getElementById('man-manMaquina').value = m.maquina;
+      document.getElementById('man-manTurno').value = m.turno;
+      document.getElementById('man-manData').value = m.data;
+      document.getElementById('man-manObservador').value = m.observador;
+      setPrioridade(m.prioridade);
+      document.getElementById('man-manTipoManutencao').value = m.tipoManutencao || ''; 
+      document.getElementById('man-manTipoEtiqueta').value = m.tipoEtiqueta || 'Azul';
+      const execEl = document.getElementById('man-manTipoExecucao');
+      if (execEl) execEl.value = m.tipoExecucao || 'Interno';
+      toggleEmpresaExterna();
+      document.getElementById('man-manEmpresaExterna').value = m.empresaExterna || '';
+      document.getElementById('man-manResponsavel').value = m.responsavel || '';
+      
+      if (m.fotoOperador) {
+          const preview = document.getElementById('man-fotoOperadorPreview');
+          preview.style.display = 'block';
+          if (m.fotoOperador.startsWith('pdfgz:') || m.fotoOperador.startsWith('data:application/pdf')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
+              preview.dataset.base64 = m.fotoOperador;
+          } else if (m.fotoOperador.startsWith('PDF:')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoOperador.replace('PDF: ', ''))}</span></div>`;
+              preview.dataset.filename = m.fotoOperador.replace('PDF: ', '');
+          } else {
+              preview.innerHTML = `<img src="${m.fotoOperador}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+          }
+          document.getElementById('man-btnRemoverFotoOp').style.display = 'inline';
+      }
+      
+      if (m.fotoTecnico) {
+          const preview = document.getElementById('man-fotoTecnicoPreview');
+          preview.style.display = 'block';
+          if (m.fotoTecnico.startsWith('pdfgz:') || m.fotoTecnico.startsWith('data:application/pdf')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
+              preview.dataset.base64 = m.fotoTecnico;
+          } else if (m.fotoTecnico.startsWith('PDF:')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoTecnico.replace('PDF: ', ''))}</span></div>`;
+              preview.dataset.filename = m.fotoTecnico.replace('PDF: ', '');
+          } else {
+              preview.innerHTML = `<img src="${m.fotoTecnico}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+          }
+          document.getElementById('man-btnRemoverFotoTec').style.display = 'inline';
+      }
+
+      document.getElementById('man-manAnomalia').value = m.anomalia;
+      document.getElementById('man-manLocal').value = m.local;
+      tiposSelecionados = m.tipos || [];
+      document.getElementById('man-manTipos').value = JSON.stringify(tiposSelecionados);
+      document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.toggle('active', tiposSelecionados.includes(el.dataset.type)));
+      const tech = document.getElementById('man-techSection');
+      if (tech) { tech.classList.add('open'); tech.style.display = 'block'; }
+      document.getElementById('man-manDataInicio').value = m.dataInicio || '';
+      document.getElementById('man-manHoraInicio').value = m.horaInicio || '';
+      document.getElementById('man-manDataFim').value = m.dataFim || '';
+      document.getElementById('man-manHoraFim').value = m.horaFim || '';
+      calcularTempoGasto();
+      document.getElementById('man-manSituacao').value = m.situacao || 'Aguardando';
+      document.getElementById('man-manEmManutencao').value = m.emManutencao || 'Nao';
+      document.getElementById('man-manAguardandoPecas').value = m.aguardandoPecas || 'Nao';
+      document.getElementById('man-manPecasAvariadas').value = m.pecasAvariadas || '';
+      document.getElementById('man-manPecasComprar').value = m.pecasComprar || '';
+      document.getElementById('man-manRotina').value = m.rotina || '';
+      document.getElementById('man-manCustoMaoObra').value = m.custoMaoObra || '';
+      // Abre a supervisão se tiver peças ou custo de peças
+      if (m.aguardandoPecas === 'Sim' || (m.custoPecas && m.custoPecas > 0)) {
+          toggleSupervisorSection();
+          document.getElementById('man-supDataInicio').value = m.supDataInicio || '';
+          document.getElementById('man-supHoraInicio').value = m.supHoraInicio || '';
+          document.getElementById('man-supDataFim').value = m.supDataFim || '';
+          document.getElementById('man-supHoraFim').value = m.supHoraFim || '';
+          document.getElementById('man-supTempoGasto').value = formatarTempo(m.supTempoGasto);
+          document.getElementById('man-manStatusCompra').value = m.statusCompra || '';
+          document.getElementById('man-manPrevisaoChegada').value = m.previsaoChegada || '';
+          document.getElementById('man-manFornecedor').value = m.fornecedor || '';
+          document.getElementById('man-manCustoPecas').value = m.custoPecas || '';
+          document.getElementById('man-manRespSupervisor').value = m.respSupervisor || '';
+          document.getElementById('man-manObsSupervisor').value = m.obsSupervisor || '';
+      }
+      document.getElementById('man-btnFecharEtiqueta').style.display = (m.situacao === 'Concluido' && !m.etiquetaFechada) ? 'inline-block' : 'none';
+      if (card) card.scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+      toast('Erro ao carregar dados.', 'error');
+      console.error("Erro em editarManutencao:", error);
+    }
+  }
+
+  function excluirManutencao(id) { 
+    const m = manutencoes.find(x => x.id === id); 
+    if (m && (m.etiquetaFechada || m.situacao !== 'Aguardando')) { 
+      toast('Este chamado não pode mais ser excluído (já foi processado).', 'error'); 
+      return; 
+    } 
+    if(!confirm('Excluir este chamado permanentemente?')) return; 
+    manutencoes = manutencoes.filter(m => m.id !== id); 
+    salvarDados(); 
+    pageCorretiva = 0; 
+    renderCorretiva(); 
+    renderDashboard(); 
+    toast('Chamado excluído.'); 
+  }
+
+  // ============================================================
+  // 4. MANUTENÇÃO PROGRAMADA (RECORRÊNCIA E TURNO)
+  // ============================================================
+
+  function calcularProximoHorarioDisponivel(data, horaInicioConflito, setor, maquina) {
+    const conflito = agendamentos.find(a => 
+      a.data === data && 
+      a.maquina.toLowerCase() === maquina.toLowerCase() &&
+      a.setor.toLowerCase() === setor.toLowerCase() &&
+      a.hora === horaInicioConflito &&
+      (a.status === 'Pendente' || a.status === 'Aprovado' || a.status === 'Em Execucao')
+    );
+
+    if (!conflito) return horaInicioConflito;
+
+    let horaFimConflito = '';
+    if (conflito.horaFimEstimado) {
+      horaFimConflito = conflito.horaFimEstimado;
+    } else {
+      const [h, m] = conflito.hora.split(':').map(Number);
+      let totalMin = (h * 60) + m + 120;
+      let hFim = Math.floor(totalMin / 60);
+      let mFim = totalMin % 60;
+      horaFimConflito = `${String(hFim).padStart(2, '0')}:${String(mFim).padStart(2, '0')}`;
+    }
+
+    const [hFim, mFim] = horaFimConflito.split(':').map(Number);
+    let totalMinMargem = (hFim * 60) + mFim + 30;
+    let hProx = Math.floor(totalMinMargem / 60);
+    let mProx = totalMinMargem % 60;
+    if (hProx >= 24) hProx = 0;
+
+    return `${String(hProx).padStart(2, '0')}:${String(mProx).padStart(2, '0')}`;
+  }
+
+  function verificarConflito() {
+    const data = document.getElementById('man-progData')?.value || '';
+    const hora = document.getElementById('man-progHora')?.value || '';
+    const setor = document.getElementById('man-progSetor')?.value?.trim() || '';
+    const maquina = document.getElementById('man-progMaquina')?.value?.trim() || '';
+    const msg = document.getElementById('man-progMensagem');
+    
+    if(!data || !hora) { if (msg) msg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Selecione a data e a hora.'; return false; }
+    if(!setor || !maquina) {
+      if (msg) msg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Preencha o setor e a máquina.';
+      return false;
+    }
+
+    const conflito = agendamentos.some(a => 
+      a.data === data && 
+      a.maquina.toLowerCase() === maquina.toLowerCase() && 
+      (a.status === 'Pendente' || a.status === 'Aprovado')
+    );
+
+    if(conflito && msg) {
+      const horarioSugerido = calcularProximoHorarioDisponivel(data, hora, setor, maquina);
+      msg.innerHTML = `<i class="fas fa-times-circle" style="color:var(--man-red);"></i> <span style="color:var(--man-red);">Sugestão ocupada!</span> Próximo horário disponível: <strong>${data} às ${horarioSugerido}</strong>.`;
+      return false;
+    } else if (msg) { 
+      msg.innerHTML = '<i class="fas fa-check-circle" style="color:var(--man-green);"></i> <span style="color:var(--man-green);">Sugestão disponível!</span>'; 
+      return true; 
+    }
+    return true;
+  }
+
+  function gerarOcorrenciasRecorrentes(dataBase, recorrencia, quantidade = 5) {
+    const ocorrencias = [];
+    let dataAtual = new Date(dataBase + 'T00:00:00');
+    for (let i = 0; i < quantidade; i++) {
+        ocorrencias.push(dataAtual.toISOString().split('T')[0]);
+        if (recorrencia === 'Diário') dataAtual.setDate(dataAtual.getDate() + 1);
+        else if (recorrencia === 'Semanal') dataAtual.setDate(dataAtual.getDate() + 7);
+        else if (recorrencia === 'Mensal') dataAtual.setMonth(dataAtual.getMonth() + 1);
+    }
+    return ocorrencias;
+  }
+
+  function verificarEAgendiar() {
+    if(!verificarConflito()) return;
+    const data = document.getElementById('man-progData')?.value || '';
+    const hora = document.getElementById('man-progHora')?.value || '';
+    const setor = document.getElementById('man-progSetor')?.value?.trim() || '';
+    const maquina = document.getElementById('man-progMaquina')?.value?.trim() || '';
+    const tipo = document.getElementById('man-progTipo')?.value || '';
+    const solicitante = document.getElementById('man-progSolicitante')?.value?.trim() || '';
+    const recorrencia = document.getElementById('man-progRecorrencia')?.value || 'Nenhuma';
+    const turno = document.getElementById('man-progTurno')?.value || '';
+    const obs = document.getElementById('man-progObs')?.value?.trim() || '';
+    
+    if(!setor || !maquina || !solicitante) { toast('Preencha Setor, Máquina e Solicitante.', 'error'); return; }
+
+    let datasParaAgendar = [data];
+    if (recorrencia !== 'Nenhuma') {
+        datasParaAgendar = gerarOcorrenciasRecorrentes(data, recorrencia, 10);
+        toast(`Agendamento recorrente (${recorrencia}) criado para as próximas ${datasParaAgendar.length} ocorrências!`);
+    }
+
+    const novosAgendamentos = datasParaAgendar.map(d => ({
+        id: gerarId('PRG-'),
+        data: d,
+        hora: hora,
+        turno: turno,
+        setor: setor,
+        maquina: maquina,
+        tipo: tipo,
+        solicitante: solicitante,
+        observacoes: obs,
+        status: 'Pendente',
+        justificativa: '',
+        dataCriacao: new Date().toISOString().split('T')[0]
+    }));
+
+    agendamentos.unshift(...novosAgendamentos);
+    salvarDados();
+    document.getElementById('man-progSolicitante').value = ''; document.getElementById('man-progObs').value = ''; 
+    const msg = document.getElementById('man-progMensagem');
+    if (msg) msg.innerHTML = '';
+    pageProgramada = 0;
+    renderProgramada(); renderDashboard();
+  }
+
+  function abrirDetalhesProgramada(id) {
+    const a = agendamentos.find(x => x.id === id);
+    if(!a) { toast('Agendamento não encontrado.', 'error'); return; }
+    
+    const statusClass = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
+    
+    let htmlPlanejamento = '';
+    if (a.status === 'Aprovado' && a.dataInicioEstimado) {
+        htmlPlanejamento = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                <span><strong>Início Previsto:</strong> ${esc(a.dataInicioEstimado)} ${esc(a.horaInicioEstimado)}</span>
+                <span><strong>Fim Previsto:</strong> ${esc(a.dataFimEstimado)} ${esc(a.horaFimEstimado)}</span>
+                <span><strong>Responsável pela Aprovação:</strong> ${esc(a.justificativa ? a.justificativa.split('Aprovado por ')[1]?.split('.')[0] || 'Não informado' : 'Não informado')}</span>
+                <span><strong>Duração Estimada:</strong> ${esc(document.getElementById('man-aprTempoEstimado')?.value || 'Não calculada')}</span>
+            </div>
+        `;
+    }
+
+    let htmlExecucao = '';
+    if (a.execucao || a.status === 'Em Execucao' || a.status === 'Concluido' || a.status === 'Nao Executado') {
+        const exec = a.execucao || {};
+        const tempoGasto = exec.tempoGasto ? formatarTempo(exec.tempoGasto) : 'Não registrado';
+        const motivoNao = exec.motivoNaoExecutado ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Motivo da não execução:</strong> ${esc(exec.motivoNaoExecutado)}</div>` : '';
+        const observacoesExec = exec.observacoes ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Observações da execução:</strong> ${esc(exec.observacoes)}</div>` : '';
+
+        htmlExecucao = `
+            <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                <strong>Status da Execução:</strong> <span class="man-badge ${statusClass}">${esc(a.status)}</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                <span><strong>Início Real:</strong> ${a.execucaoDataInicio ? esc(a.execucaoDataInicio) + ' ' + esc(a.execucaoHoraInicio) : 'Não iniciado'}</span>
+                <span><strong>Fim Real:</strong> ${exec.dataFim ? esc(exec.dataFim) + ' ' + esc(exec.horaFim) : 'Não finalizado'}</span>
+                <span><strong>Tempo Gasto:</strong> ${tempoGasto}</span>
+                <span><strong>Responsável pela Execução:</strong> ${esc(exec.tecnicoResponsavel || 'Não atribuído')}</span>
+                <span><strong>Tipo de Execução:</strong> ${esc(exec.tipoExecucao || 'N/A')}</span>
+            </div>
+            ${exec.tipoExecucao === 'Externo' ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Empresa Externa:</strong> ${esc(exec.empresaExterna)}</div>` : ''}
+            ${motivoNao}
+            ${observacoesExec}
+        `;
+    }
+
+    const body = document.getElementById('man-detalhesProgramadaBody');
+    if (body) {
+        body.innerHTML = `
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+                <h3 style="color:var(--man-orange); margin-bottom:6px;"><i class="fas fa-calendar-alt"></i> Solicitação #${esc(a.id)}</h3>
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--man-text-secondary);">
+                    <span><strong>Solicitante:</strong> ${esc(a.solicitante)}</span>
+                    <span><strong>Data Programada:</strong> ${esc(a.data)}</span>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+                <h4 style="color:var(--man-red); margin-bottom:4px;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</h4>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary);">
+                    <span><strong>Setor:</strong> ${esc(a.setor)}</span>
+                    <span><strong>Máquina:</strong> ${esc(a.maquina)}</span>
+                    <span><strong>Turno:</strong> <strong>${esc(a.turno)}</strong></span>
+                    <span><strong>Tipo:</strong> ${esc(a.tipo)}</span>
+                    <span><strong>Sugestão de Horário:</strong> ${esc(a.hora || '-')}</span>
+                </div>
+                <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                    <strong>Observações do Solicitante:</strong> ${esc(a.observacoes || '-')}
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+                <h4 style="color:var(--man-blue); margin-bottom:4px;"><i class="fas fa-calendar-check"></i> 2. Status e Planejamento</h4>
+                <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                    <strong>Status Atual:</strong> <span class="man-badge ${statusClass}">${esc(a.status)}</span>
+                </div>
+                ${htmlPlanejamento}
+                ${a.justificativa && a.status !== 'Aprovado' ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Justificativa:</strong> ${esc(a.justificativa)}</div>` : ''}
+            </div>
+
+            ${(a.status === 'Em Execucao' || a.status === 'Concluido' || a.status === 'Nao Executado') ? `
+                <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+                    <h4 style="color:var(--man-green); margin-bottom:4px;"><i class="fas fa-tools"></i> 3. Execução</h4>
+                    ${htmlExecucao}
+                </div>
+            ` : ''}
+        `;
+    }
+    document.getElementById('man-modalDetalhesProgramada').style.display = 'flex';
+  }
+
+  function fecharModalDetalhesProgramada() { document.getElementById('man-modalDetalhesProgramada').style.display = 'none'; }
+
+  function toggleExecEmpresaExterna() {
+    const el = document.getElementById('man-execTipoExecucao');
+    if (el) {
+      const tipo = el.value;
+      const row = document.getElementById('man-execEmpresaExternaRow');
+      if (row) row.style.display = tipo === 'Externo' ? 'block' : 'none';
+    }
+  }
+
+  function abrirModalInicio(id) {
+    const a = agendamentos.find(x => x.id === id); if(!a) return;
+    document.getElementById('man-inicioId').value = a.id;
+    const agora = new Date(); const hoje = agora.toISOString().split('T')[0]; const horaAtual = agora.toLocaleTimeString('pt-BR', { hour12: false });
+    document.getElementById('man-inicioData').value = hoje;
+    document.getElementById('man-inicioHora').value = horaAtual;
+    document.getElementById('man-modalInicioProgramada').style.display = 'flex';
+  }
+  function fecharModalInicio() { document.getElementById('man-modalInicioProgramada').style.display = 'none'; }
+  function confirmarInicio() {
+    const id = document.getElementById('man-inicioId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
+    const dtI = document.getElementById('man-inicioData')?.value, hrI = document.getElementById('man-inicioHora')?.value;
+    if(!dtI || !hrI) { toast('Defina o horário de início.', 'error'); return; }
+    a.execucaoDataInicio = dtI;
+    a.execucaoHoraInicio = hrI;
+    a.status = 'Em Execucao';
+    a.justificativa = `Iniciado em ${dtI} às ${hrI}`;
+    salvarDados(); toast('Tarefa marcada como Em Execução!'); fecharModalInicio(); pageProgramada = 0; renderProgramada(); renderDashboard();
+  }
+
+  function abrirModalFinalizar(id) {
+    const a = agendamentos.find(x => x.id === id); if(!a) return;
+    document.getElementById('man-execId').value = a.id;
+    document.getElementById('man-execTecnico').value = '';
+    document.getElementById('man-execMotivo').value = '';
+    document.getElementById('man-execObs').value = '';
+    document.getElementById('man-execExecutado').value = 'Sim';
+    document.getElementById('man-execMotivoGroup').style.display = 'none';
+    document.getElementById('man-execTempoGasto').value = '';
+    document.getElementById('man-execTipoExecucao').value = 'Interno';
+    document.getElementById('man-execEmpresaExternaRow').style.display = 'none';
+    document.getElementById('man-execEmpresaExterna').value = '';
+    document.getElementById('man-execDataInicio').value = a.execucaoDataInicio || '';
+    document.getElementById('man-execHoraInicio').value = a.execucaoHoraInicio || '';
+    const agora = new Date(); const hoje = agora.toISOString().split('T')[0]; const horaAtual = agora.toLocaleTimeString('pt-BR', { hour12: false });
+    document.getElementById('man-execDataFim').value = hoje;
+    document.getElementById('man-execHoraFim').value = horaAtual;
+    const aviso = document.getElementById('man-execucaoAvisoAtraso');
+    if (hoje > a.data) { aviso.style.display = 'block'; } else { aviso.style.display = 'none'; }
+    calcularTempoExecucao();
+    document.getElementById('man-modalFinalizarProgramada').style.display = 'flex';
+  }
+  function fecharModalFinalizar() { document.getElementById('man-modalFinalizarProgramada').style.display = 'none'; }
+  function calcularTempoExecucao() {
+    const dtI = document.getElementById('man-execDataInicio')?.value, hrI = document.getElementById('man-execHoraInicio')?.value;
+    const dtF = document.getElementById('man-execDataFim')?.value, hrF = document.getElementById('man-execHoraFim')?.value;
+    const display = document.getElementById('man-execTempoGasto');
+    if (dtI && hrI && dtF && hrF && display) {
+      let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
+      if (diffMin < 0) diffMin = 0;
+      display.value = formatarTempo(diffMin);
+    } else if (display) display.value = '';
+  }
+  function toggleExecucaoCampos() {
+    const executado = document.getElementById('man-execExecutado')?.value; const group = document.getElementById('man-execMotivoGroup');
+    if (executado === 'Nao' && group) { group.style.display = 'block'; } else if (group) { group.style.display = 'none'; }
+  }
+  function salvarExecucao() {
+    const id = document.getElementById('man-execId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
+    const executado = document.getElementById('man-execExecutado')?.value, tecnico = document.getElementById('man-execTecnico')?.value?.trim() || '';
+    const motivo = document.getElementById('man-execMotivo')?.value?.trim() || '', obs = document.getElementById('man-execObs')?.value?.trim() || '';
+    const tipoExecucao = document.getElementById('man-execTipoExecucao')?.value || 'Interno';
+    const empresaExterna = document.getElementById('man-execEmpresaExterna')?.value?.trim() || '';
+    const dtI = document.getElementById('man-execDataInicio')?.value, hrI = document.getElementById('man-execHoraInicio')?.value;
+    const dtF = document.getElementById('man-execDataFim')?.value, hrF = document.getElementById('man-execHoraFim')?.value;
+    if(!tecnico) { toast('Informe o nome do Técnico.', 'error'); return; }
+    if(executado === 'Nao' && !motivo) { toast('Informe o motivo da não execução.', 'error'); return; }
+    if(!dtI || !hrI || !dtF || !hrF) { toast('Preencha o período de execução.', 'error'); return; }
+    if(tipoExecucao === 'Externo' && !empresaExterna) { toast('Informe o nome da Empresa Externa.', 'error'); return; }
+    calcularTempoExecucao(); const tempoGastoStr = document.getElementById('man-execTempoGasto')?.value || '0 minutos';
+    const tempoGasto = parseInt(document.getElementById('man-execTempoGasto')?.value?.replace(' min', '')) || 0;
+    a.execucao = { dataInicio: dtI, horaInicio: hrI, dataFim: dtF, horaFim: hrF, tempoGasto: tempoGasto, executado: executado, motivoNaoExecutado: motivo, tecnicoResponsavel: tecnico, observacoes: obs, tipoExecucao: tipoExecucao, empresaExterna: empresaExterna };
+    if(executado === 'Sim') { a.status = 'Concluido'; a.justificativa = `Executado por ${tipoExecucao === 'Externo' ? 'Empresa: ' + empresaExterna : tecnico} em ${dtF} às ${hrF}. Tempo: ${tempoGastoStr}.`; } 
+    else { a.status = 'Nao Executado'; a.justificativa = `Não executado. Motivo: ${motivo}. Registrado por ${tecnico}.`; }
+    salvarDados(); fecharModalFinalizar(); pageProgramada = 0; renderProgramada(); renderDashboard(); toast('Execução finalizada!');
+  }
+
+  function aprovarAgendamento(id) { abrirModalAprovacao(id); }
+  
+  // ============================================================
+  // NOVO: LÓGICA DE REPROVAÇÃO VIA MODAL
+  // ============================================================
+  function abrirModalReprovacao(id) {
+    document.getElementById('man-reprovacaoId').value = id;
+    document.getElementById('man-reprovacaoJustificativa').value = '';
+    document.getElementById('man-modalReprovacaoProgramada').style.display = 'flex';
+  }
+
+  function fecharModalReprovacao() {
+    document.getElementById('man-modalReprovacaoProgramada').style.display = 'none';
+  }
+
+  function confirmarReprovacao() {
+    const id = document.getElementById('man-reprovacaoId').value;
+    const justificativa = document.getElementById('man-reprovacaoJustificativa').value.trim();
+    const a = agendamentos.find(x => x.id === id);
+    if(!a) return;
+    if(!justificativa) {
+      toast('Por favor, informe o motivo da reprovação.', 'error');
+      return;
+    }
+    a.status = 'Reprovado';
+    a.justificativa = justificativa;
+    salvarDados();
+    fecharModalReprovacao();
+    pageProgramada = 0;
+    renderProgramada();
+    renderDashboard();
+    toast('Agendamento reprovado com justificativa registrada.');
+  }
+
+  function excluirAgendamento(id) { 
+    const a = agendamentos.find(x => x.id === id); 
+    if (a && a.status !== 'Pendente') { 
+      toast('Este agendamento não pode mais ser excluído (já foi processado).', 'error'); 
+      return; 
+    } 
+    if(!confirm('Excluir este agendamento?')) return; 
+    agendamentos = agendamentos.filter(a => a.id !== id); 
+    salvarDados(); 
+    pageProgramada = 0; 
+    renderProgramada(); 
+    renderDashboard(); 
+    toast('Agendamento excluído.'); 
+  }
+
+  function abrirModalAprovacao(id) {
+    const a = agendamentos.find(x => x.id === id); if(!a) return;
+    document.getElementById('man-aprId').value = a.id;
+    document.getElementById('man-aprSugestaoDisplay').textContent = a.hora || 'Não definida';
+    const horaBase = a.hora || '08:00';
+    document.getElementById('man-aprDataInicio').value = a.data;
+    document.getElementById('man-aprHoraInicio').value = horaBase;
+    document.getElementById('man-aprDataFim').value = a.data;
+    let [h, m] = horaBase.split(':').map(Number); h += 1; let hFim = String(h).padStart(2,'0'); let mFim = String(m).padStart(2,'0');
+    document.getElementById('man-aprHoraFim').value = `${hFim}:${mFim}`;
+    document.getElementById('man-aprResponsavel').value = ''; 
+    calcularTempoEstimado();
+    document.getElementById('man-modalAprovacaoProgramada').style.display = 'flex';
+  }
+  function fecharModalAprovacao() { document.getElementById('man-modalAprovacaoProgramada').style.display = 'none'; }
+  function calcularTempoEstimado() {
+    const dtI = document.getElementById('man-aprDataInicio')?.value, hrI = document.getElementById('man-aprHoraInicio')?.value;
+    const dtF = document.getElementById('man-aprDataFim')?.value, hrF = document.getElementById('man-aprHoraFim')?.value;
+    const display = document.getElementById('man-aprTempoEstimado');
+    if (dtI && hrI && dtF && hrF && display) {
+      let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
+      if (diffMin < 0) diffMin = 0;
+      display.value = formatarTempo(diffMin);
+    } else if (display) display.value = '';
+  }
+  function confirmarAprovacao() {
+    const id = document.getElementById('man-aprId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
+    const dtI = document.getElementById('man-aprDataInicio')?.value, hrI = document.getElementById('man-aprHoraInicio')?.value;
+    const dtF = document.getElementById('man-aprDataFim')?.value, hrF = document.getElementById('man-aprHoraFim')?.value;
+    const responsavel = document.getElementById('man-aprResponsavel')?.value?.trim() || '';
+    if(!dtI || !hrI || !dtF || !hrF) { toast('Defina o período estimado.', 'error'); return; }
+    if(!responsavel) { toast('Informe o Responsável pela Aprovação.', 'error'); return; }
+    a.dataInicioEstimado = dtI; a.horaInicioEstimado = hrI; a.dataFimEstimado = dtF; a.horaFimEstimado = hrF;
+    a.status = 'Aprovado'; a.justificativa = `Aprovado por ${responsavel}. Previsto: ${dtI} ${hrI} a ${dtF} ${hrF}`;
+    salvarDados(); toast('Aprovada!'); fecharModalAprovacao(); pageProgramada = 0; renderProgramada(); renderDashboard();
+  }
+
+  function renderProgramada() {
+    document.getElementById('man-progTotal').textContent = agendamentos.length;
+    document.getElementById('man-progPendentes').textContent = agendamentos.filter(a => a.status === 'Pendente').length;
+    document.getElementById('man-progAprovados').textContent = agendamentos.filter(a => a.status === 'Aprovado').length;
+    document.getElementById('man-progReprovados').textContent = agendamentos.filter(a => a.status === 'Reprovado').length;
+
+    const total = agendamentos.length;
+    const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+    if (pageProgramada >= totalPages) pageProgramada = totalPages - 1;
+    if (pageProgramada < 0) pageProgramada = 0;
+    const start = pageProgramada * ITEMS_PER_PAGE;
+    const pageData = agendamentos.slice(start, start + ITEMS_PER_PAGE);
+
+    const tbody = document.getElementById('man-programadaTableBody');
+    if(pageData.length === 0) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhuma manutenção programada.</td></tr>`; } 
+    else {
+      tbody.innerHTML = pageData.map(a => {
+        const sc = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
+        let acoes = `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirDetalhesProgramada('${a.id}')"><i class="fas fa-eye"></i></button> `;
+        if(a.status === 'Aprovado' || a.status === 'Pendente') {
+          acoes += `<button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="aprovarAgendamento('${a.id}')"><i class="fas fa-check"></i></button><button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
+        } else if(a.status === 'Em Execucao') {
+          acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
+        } else {
+          acoes += `<span style="font-size:12px; color:var(--man-text-secondary);">${esc(a.justificativa || '-')}</span>`;
+        }
+        if(a.status === 'Aprovado' || a.status === 'Pendente') {
+          acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--man-blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
+        }
+
+        const deleteIcon = a.status === 'Pendente' 
+          ? `<span style="color:var(--man-red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
+          : '';
+
+        let estimadoDisplay = '-';
+        if(a.dataInicioEstimado) { estimadoDisplay = `${a.dataInicioEstimado} ${a.horaInicioEstimado} → ${a.dataFimEstimado} ${a.horaFimEstimado}`; }
+        return `<tr>
+          <td data-label="Nº"><strong>${esc(a.id)}</strong></td>
+          <td data-label="Máquina">${esc(a.maquina || '-')} (${esc(a.setor || '-')})</td>
+          <td data-label="Solicitante">${esc(a.solicitante || '-')}</td>
+          <td data-label="Turno"><strong>${esc(a.turno || '-')}</strong></td>
+          <td data-label="Data">${esc(a.data || '-')}</td>
+          <td data-label="Sugestão">${esc(a.hora) || '-'}</td>
+          <td data-label="Estimado" style="font-size:11px;">${estimadoDisplay}</td>
+          <td data-label="Status"><span class="man-badge ${sc}">${esc(a.status)}</span></td>
+          <td data-label="Ações" style="justify-content:flex-end;"><div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">${acoes}${deleteIcon}</div></td>
+        </tr>`;
+      }).join('');
+    }
+
+    const pagDiv = document.getElementById('man-pagProgramada');
+    pagDiv.innerHTML = `
+      <button onclick="changePageProgramada(-1)" ${pageProgramada === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+      <span>${pageProgramada + 1} / ${totalPages}</span>
+      <button onclick="changePageProgramada(1)" ${pageProgramada === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+    `;
+  }
+
+  function changePageProgramada(delta) {
+    pageProgramada += delta;
+    renderProgramada();
+  }
+
+  // ============================================================
+  // 5. PEÇAS (COMPRA)
+  // ============================================================
+  function renderPecas() {
+    const chamadosComPecas = manutencoes.filter(m => m.pecasComprar && m.pecasComprar.trim() !== '');
+
+    const emAndamento = chamadosComPecas.filter(m => m.statusCompra && m.statusCompra !== 'Peça recebida');
+    const recebidas = chamadosComPecas.filter(m => m.statusCompra && m.statusCompra === 'Peça recebida');
+
+    document.getElementById('man-kpiPecasTotal').textContent = chamadosComPecas.length;
+    document.getElementById('man-kpiPecasAndamento').textContent = emAndamento.length;
+    document.getElementById('man-kpiPecasRecebidas').textContent = recebidas.length;
+
+    const tbodyAndamento = document.getElementById('man-pecasAndamentoBody');
+    if (emAndamento.length === 0) {
+      tbodyAndamento.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhuma peça em processo de compra ou cotação no momento.</td></tr>`;
+    } else {
+      tbodyAndamento.innerHTML = emAndamento.map(m => {
+        const statusClass = m.statusCompra === 'Em Análise' ? 'man-badge-yellow' : m.statusCompra === 'Cotação em andamento' ? 'man-badge-orange' : m.statusCompra === 'Pedido efetuado' ? 'man-badge-blue' : m.statusCompra === 'Peça em transporte' ? 'man-badge-purple' : 'man-badge-gray';
+        return `<tr>
+          <td data-label="Chamado"><strong>${esc(m.id)}</strong></td>
+          <td data-label="Máquina">${esc(m.maquina)}</td>
+          <td data-label="Setor">${esc(m.setor)}</td>
+          <td data-label="Peças">${esc(m.pecasComprar)}</td>
+          <td data-label="Status"><span class="man-badge ${statusClass}">${esc(m.statusCompra)}</span></td>
+          <td data-label="Ações"><button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px;" onclick="abrirHistorico('${m.id}')"><i class="fas fa-eye"></i> Ver Chamado</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    const tbodyRecebidas = document.getElementById('man-pecasRecebidasBody');
+    if (recebidas.length === 0) {
+      tbodyRecebidas.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhuma peça recebida registrada.</td></tr>`;
+    } else {
+      tbodyRecebidas.innerHTML = recebidas.map(m => {
+        return `<tr>
+          <td data-label="Chamado"><strong>${esc(m.id)}</strong></td>
+          <td data-label="Máquina">${esc(m.maquina)}</td>
+          <td data-label="Setor">${esc(m.setor)}</td>
+          <td data-label="Peças">${esc(m.pecasComprar)}</td>
+          <td data-label="Ações"><button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px;" onclick="abrirHistorico('${m.id}')"><i class="fas fa-eye"></i> Ver Chamado</button></td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // ============================================================
+  // 6. SISTEMA DE ALMOXARIFADO E ESTOQUE
+  // ============================================================
+  
+  function renderAlmoxarifado() {
+    const filtroBusca = document.getElementById('man-filtroAlmox')?.value?.toLowerCase()?.trim() || '';
+    const filtroCat = document.getElementById('man-filtroAlmoxCategoria')?.value || '';
+
+    let dados = estoque;
+    if (filtroBusca) dados = dados.filter(p => (p.codigo || '').toLowerCase().includes(filtroBusca) || (p.nome || '').toLowerCase().includes(filtroBusca));
+    if (filtroCat) dados = dados.filter(p => (p.categoria || '') === filtroCat);
+
+    const totalItens = dados.length;
+    const valorTotal = dados.reduce((acc, p) => acc + ((p.quantidade || 0) * (p.preco || 0)), 0);
+    const estoqueCritico = dados.filter(p => (p.quantidade || 0) <= (p.estoqueMinimo || 0)).length;
+
+    document.getElementById('man-almoxTotalItens').textContent = totalItens;
+    document.getElementById('man-almoxEstoqueCritico').textContent = estoqueCritico;
+    document.getElementById('man-almoxValorTotal').textContent = `R$ ${valorTotal.toFixed(2)}`;
+
+    const tbody = document.getElementById('man-almoxarifadoBody');
+    if (dados.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhuma peça cadastrada no almoxarifado.</td></tr>`;
+    } else {
+      tbody.innerHTML = dados.map((p, index) => {
+        const statusEstoque = (p.quantidade || 0) <= (p.estoqueMinimo || 0) 
+          ? '<span style="color:var(--man-red);"><i class="fas fa-exclamation-circle"></i> Crítico</span>' 
+          : '<span style="color:var(--man-green);"><i class="fas fa-check-circle"></i> OK</span>';
+        return `<tr>
+          <td data-label="Código"><strong>${esc(p.codigo || '-')}</strong></td>
+          <td data-label="Nome">${esc(p.nome)}</td>
+          <td data-label="Categoria">${esc(p.categoria || 'Outros')}</td>
+          <td data-label="Estoque"><strong>${p.quantidade || 0}</strong> ${statusEstoque}</td>
+          <td data-label="Mínimo">${p.estoqueMinimo || 0}</td>
+          <td data-label="Localização">${esc(p.localizacao || '-')}</td>
+          <td data-label="Fornecedor">${esc(p.fornecedor || '-')}</td>
+          <td data-label="Ações">
+            <div class="man-actions-table">
+              <span style="cursor:pointer;" onclick="abrirModalCadastroEstoque('${p.id}')"><i class="fas fa-edit"></i></span>
+              <span style="cursor:pointer;" onclick="abrirModalMovimentacao('${p.id}')"><i class="fas fa-exchange-alt"></i></span>
+              <span style="cursor:pointer;" onclick="abrirHistoricoEstoque('${p.id}')"><i class="fas fa-history"></i></span>
+              <span style="cursor:pointer; color:var(--man-red);" onclick="excluirItemEstoque('${p.id}')"><i class="fas fa-trash-alt"></i></span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  function abrirModalCadastroEstoque(id = null) {
+    const modal = document.getElementById('man-modalCadastroEstoque');
+    const title = document.getElementById('man-modalEstoqueTitle');
+    if (id) {
+      title.innerHTML = '<i class="fas fa-edit"></i> Editar Peça';
+      const item = estoque.find(p => p.id === id);
+      if (!item) return;
+      document.getElementById('man-estoqueEditId').value = item.id;
+      document.getElementById('man-estoqueCodigo').value = item.codigo || '';
+      document.getElementById('man-estoqueNome').value = item.nome || '';
+      document.getElementById('man-estoqueCategoria').value = item.categoria || 'Outros';
+      document.getElementById('man-estoqueLocalizacao').value = item.localizacao || '';
+      document.getElementById('man-estoqueFornecedor').value = item.fornecedor || '';
+      document.getElementById('man-estoquePreco').value = item.preco || '';
+      document.getElementById('man-estoqueQtdInicial').value = item.quantidade || '';
+      document.getElementById('man-estoqueMinimo').value = item.estoqueMinimo || '';
+      document.getElementById('man-estoqueQtdInicial').disabled = true;
+    } else {
+      title.innerHTML = '<i class="fas fa-box"></i> Cadastrar Peça';
+      document.getElementById('man-estoqueEditId').value = '';
+      document.getElementById('man-estoqueCodigo').value = '';
+      document.getElementById('man-estoqueNome').value = '';
+      document.getElementById('man-estoqueCategoria').value = 'Elétrica';
+      document.getElementById('man-estoqueLocalizacao').value = '';
+      document.getElementById('man-estoqueFornecedor').value = '';
+      document.getElementById('man-estoquePreco').value = '';
+      document.getElementById('man-estoqueQtdInicial').value = '';
+      document.getElementById('man-estoqueMinimo').value = '';
+      document.getElementById('man-estoqueQtdInicial').disabled = false;
+    }
+    modal.style.display = 'flex';
+  }
+
+  function fecharModalEstoque() {
+    document.getElementById('man-modalCadastroEstoque').style.display = 'none';
+  }
+
+  function salvarItemEstoque() {
+    const id = document.getElementById('man-estoqueEditId').value;
+    const codigo = document.getElementById('man-estoqueCodigo').value.trim();
+    const nome = document.getElementById('man-estoqueNome').value.trim();
+    const categoria = document.getElementById('man-estoqueCategoria').value;
+    const localizacao = document.getElementById('man-estoqueLocalizacao').value.trim();
+    const fornecedor = document.getElementById('man-estoqueFornecedor').value.trim();
+    const preco = parseFloat(document.getElementById('man-estoquePreco').value) || 0;
+    const qtdInicial = parseInt(document.getElementById('man-estoqueQtdInicial').value) || 0;
+    const estoqueMinimo = parseInt(document.getElementById('man-estoqueMinimo').value) || 0;
+
+    if (!codigo || !nome) {
+      toast('Código e Nome são obrigatórios.', 'error');
+      return;
+    }
+
+    if (id) {
+      const idx = estoque.findIndex(p => p.id === id);
+      if (idx > -1) {
+        estoque[idx].codigo = codigo;
+        estoque[idx].nome = nome;
+        estoque[idx].categoria = categoria;
+        estoque[idx].localizacao = localizacao;
+        estoque[idx].fornecedor = fornecedor;
+        estoque[idx].preco = preco;
+        estoque[idx].estoqueMinimo = estoqueMinimo;
+        toast('Peça atualizada!');
+      }
+    } else {
+      const novoItem = {
+        id: gerarId('PEC-'),
+        codigo: codigo,
+        nome: nome,
+        categoria: categoria,
+        localizacao: localizacao,
+        fornecedor: fornecedor,
+        preco: preco,
+        quantidade: qtdInicial,
+        estoqueMinimo: estoqueMinimo,
+        dataCriacao: new Date().toISOString()
+      };
+      estoque.push(novoItem);
+      
+      if (qtdInicial > 0) {
+        movimentacoes.push({
+          id: gerarId('MOV-'),
+          pecaId: novoItem.id,
+          tipo: 'Entrada',
+          quantidade: qtdInicial,
+          motivo: 'Estoque inicial',
+          data: new Date().toISOString()
+        });
+      }
+      toast('Peça cadastrada com sucesso!');
+    }
+
+    salvarDados();
+    fecharModalEstoque();
+    renderAlmoxarifado();
+  }
+
+  function excluirItemEstoque(id) {
+    if (!confirm('Excluir esta peça permanentemente? Isso também apagará seu histórico.')) return;
+    estoque = estoque.filter(p => p.id !== id);
+    movimentacoes = movimentacoes.filter(m => m.pecaId !== id);
+    salvarDados();
+    renderAlmoxarifado();
+    toast('Peça removida.');
+  }
+
+  function abrirModalMovimentacao(id) {
+    document.getElementById('man-movEstoqueId').value = id;
+    document.getElementById('man-movTipo').value = 'Entrada';
+    document.getElementById('man-movQuantidade').value = '';
+    document.getElementById('man-movMotivo').value = '';
+    document.getElementById('man-modalMovimentacaoEstoque').style.display = 'flex';
+  }
+
+  function fecharModalMovimentacao() {
+    document.getElementById('man-modalMovimentacaoEstoque').style.display = 'none';
+  }
+
+  function confirmarMovimentacao() {
+    const id = document.getElementById('man-movEstoqueId').value;
+    const tipo = document.getElementById('man-movTipo').value;
+    const qtd = parseInt(document.getElementById('man-movQuantidade').value) || 0;
+    const motivo = document.getElementById('man-movMotivo').value.trim();
+
+    if (qtd <= 0) { toast('Quantidade inválida.', 'error'); return; }
+    if (!motivo) { toast('Informe o motivo da movimentação.', 'error'); return; }
+
+    const item = estoque.find(p => p.id === id);
+    if (!item) { toast('Item não encontrado.', 'error'); return; }
+
+    if (tipo === 'Saída' && qtd > item.quantidade) {
+      toast('Quantidade insuficiente em estoque.', 'error');
+      return;
+    }
+
+    if (tipo === 'Entrada') item.quantidade = (item.quantidade || 0) + qtd;
+    else if (tipo === 'Saída') item.quantidade = (item.quantidade || 0) - qtd;
+
+    movimentacoes.push({
+      id: gerarId('MOV-'),
+      pecaId: id,
+      tipo: tipo,
+      quantidade: qtd,
+      motivo: motivo,
+      data: new Date().toISOString()
+    });
+
+    salvarDados();
+    fecharModalMovimentacao();
+    renderAlmoxarifado();
+    toast('Movimentação registrada!');
+  }
+
+  // ============================================================
+  // 6.1. HISTÓRICO DO ESTOQUE
+  // ============================================================
+  function abrirHistoricoEstoque(id) {
+    const item = estoque.find(p => p.id === id);
+    if (!item) { toast('Peça não encontrada.', 'error'); return; }
+
+    const historico = movimentacoes.filter(m => m.pecaId === id).sort((a, b) => new Date(a.data) - new Date(b.data));
+    const body = document.getElementById('man-historicoEstoqueBody');
+    
+    body.dataset.pecaId = id;
+
+    let saldo = 0;
+    let totalEntradas = 0;
+    let totalSaidas = 0;
+
+    let html = `<div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
+      <h4 style="color:var(--man-orange);"><i class="fas fa-box"></i> ${esc(item.nome)} (${esc(item.codigo)})</h4>
+      <div style="font-size:13px; color:var(--man-text-secondary);">
+        Estoque Atual: <strong>${item.quantidade}</strong> | 
+        Estoque Mínimo: ${item.estoqueMinimo || 0}
+      </div>
+    </div>`;
+
+    if (historico.length === 0) {
+      html += `<div style="color:var(--man-text-secondary); text-align:center; padding:20px;">Nenhuma movimentação registrada para esta peça.</div>`;
+    } else {
+      html += `<table style="width:100%; font-size:13px; border-collapse:collapse;">
+        <thead><tr>
+          <th style="text-align:left; border-bottom:1px solid var(--man-border-color); padding:6px;">Data/Hora</th>
+          <th style="text-align:left; border-bottom:1px solid var(--man-border-color); padding:6px;">Tipo</th>
+          <th style="text-align:right; border-bottom:1px solid var(--man-border-color); padding:6px;">Qtd.</th>
+          <th style="text-align:right; border-bottom:1px solid var(--man-border-color); padding:6px;">Saldo Anterior</th>
+          <th style="text-align:right; border-bottom:1px solid var(--man-border-color); padding:6px;">Saldo Posterior</th>
+          <th style="text-align:left; border-bottom:1px solid var(--man-border-color); padding:6px;">Motivo</th>
+        </tr></thead><tbody>`;
+
+      historico.forEach(m => {
+        const saldoAnterior = saldo;
+        const qtd = m.quantidade;
+        if (m.tipo === 'Entrada') { saldo += qtd; totalEntradas += qtd; }
+        else if (m.tipo === 'Saída') { saldo -= qtd; totalSaidas += qtd; }
+        const saldoPosterior = saldo;
+        const dataFormatada = new Date(m.data).toLocaleString('pt-BR', { hour12: false });
+        const cor = m.tipo === 'Entrada' ? 'var(--man-green)' : 'var(--man-red)';
+        html += `<tr>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft);">${dataFormatada}</td>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft); color:${cor}; font-weight:600;">${m.tipo}</td>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft); text-align:right;">${qtd}</td>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft); text-align:right; color:var(--man-text-secondary);">${saldoAnterior}</td>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft); text-align:right; font-weight:600;">${saldoPosterior}</td>
+          <td style="padding:6px; border-bottom:1px solid var(--man-border-soft);">${esc(m.motivo)}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      
+      html += `<div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--man-border-color); display:flex; justify-content:space-between; font-size:13px;">
+        <span><strong>Entradas:</strong> <span style="color:var(--man-green);">${totalEntradas}</span></span>
+        <span><strong>Saídas:</strong> <span style="color:var(--man-red);">${totalSaidas}</span></span>
+        <span><strong>Saldo Final:</strong> <strong>${saldo}</strong></span>
+      </div>`;
+    }
+
+    body.innerHTML = html;
+    document.getElementById('man-modalHistoricoEstoque').style.display = 'flex';
+    
+    document.getElementById('man-btnExportarHistEstoque').onclick = function() {
+        exportarHistoricoEstoqueExcel(document.getElementById('man-historicoEstoqueBody').dataset.pecaId);
+    };
+  }
+
+  function exportarHistoricoEstoqueExcel(id) {
+    const item = estoque.find(p => p.id === id);
+    if (!item) { toast('Peça não encontrada.', 'error'); return; }
+    const historico = movimentacoes.filter(m => m.pecaId === id).sort((a, b) => new Date(a.data) - new Date(b.data));
+    
+    if (historico.length === 0) { toast('Nenhum histórico para exportar.', 'error'); return; }
+
+    let saldo = 0;
+    const linhas = [];
+    linhas.push('Data;Tipo;Quantidade;Saldo Anterior;Saldo Posterior;Motivo');
+    
+    historico.forEach(m => {
+      const saldoAnterior = saldo;
+      const qtd = m.quantidade;
+      if (m.tipo === 'Entrada') saldo += qtd;
+      else if (m.tipo === 'Saída') saldo -= qtd;
+      const saldoPosterior = saldo;
+      
+      const dataFormatada = new Date(m.data).toLocaleString('pt-BR', { hour12: false });
+      const motivoEsc = m.motivo.replace(/;/g, ',');
+      linhas.push(`${dataFormatada};${m.tipo};${qtd};${saldoAnterior};${saldoPosterior};${motivoEsc}`);
+    });
+
+    const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `historico_${item.nome}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url); 
+    toast('Histórico exportado com sucesso!');
+  }
+
+  function fecharModalHistoricoEstoque() {
+    document.getElementById('man-modalHistoricoEstoque').style.display = 'none';
+  }
+
+  // ============================================================
+  // 7. RELATÓRIO PDF E DASHBOARD
+  // ============================================================
+  function gerarRelatorioPDF() {
+    const dashboard = document.getElementById('man-dashboard');
+    if (!dashboard.classList.contains('active')) {
+      toast('Por favor, vá até a aba "Visão Executiva" para gerar o PDF.', 'error');
+      return;
+    }
+
+    toast('Gerando PDF... aguarde um momento.', 'success');
+
+    html2canvas(dashboard, {
+      scale: 2,
+      backgroundColor: '#0b121a',
+      useCORS: true,
+      logging: false
+    }).then(canvas => {
+      const imgData = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('landscape', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`lightwall_relatorio_executivo_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast('Relatório PDF gerado com sucesso!');
+    }).catch(err => {
+      console.error("Erro ao gerar PDF:", err);
+      toast('Erro ao gerar PDF. Verifique o console.', 'error');
+    });
+  }
+
+  let chartInstance = null;
+
+  function renderDashboard() {
+    const totalAbertos = manutencoes.filter(m => !m.etiquetaFechada).length;
+    const totalFechados = manutencoes.filter(m => m.etiquetaFechada).length;
+    document.getElementById('man-kpiTotalAbertos').textContent = totalAbertos;
+    document.getElementById('man-kpiTotalFechados').textContent = totalFechados;
+    
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('man-kpiProgHoje').textContent = agendamentos.filter(a => a.data === hoje && a.status === 'Aprovado').length;
+    document.getElementById('man-kpiProgPend').textContent = agendamentos.filter(a => a.status === 'Pendente').length;
+    document.getElementById('man-kpiProgMes').textContent = agendamentos.filter(a => a.data.slice(0, 7) === hoje.slice(0, 7) && a.status === 'Aprovado').length;
+    
+    const custosMes = manutencoes.filter(m => m.data.slice(0, 7) === hoje.slice(0, 7));
+    const totalPecas = custosMes.reduce((acc, m) => acc + (m.custoPecas || 0), 0);
+    const totalMaoObra = custosMes.reduce((acc, m) => acc + (m.custoMaoObra || 0), 0);
+    document.getElementById('man-kpiCustoPecas').textContent = `R$ ${totalPecas.toFixed(2)}`;
+    document.getElementById('man-kpiCustoMaoObra').textContent = `R$ ${totalMaoObra.toFixed(2)}`;
+    document.getElementById('man-kpiCustoTotal').textContent = `R$ ${(totalPecas + totalMaoObra).toFixed(2)}`;
+    
+    const ultimosAbertos = [...manutencoes].filter(m => !m.etiquetaFechada).slice(0, 3);
+    document.getElementById('man-dashboardAbertos').innerHTML = ultimosAbertos.length ? ultimosAbertos.map(m => `<div><i class="fas fa-wrench"></i> ${esc(m.data)} - ${esc(m.maquina)} (${esc(m.situacao)})</div>`).join('') : 'Nenhum chamado aberto recente.';
+    const ultimosFechados = [...manutencoes].filter(m => m.etiquetaFechada).slice(0, 3);
+    document.getElementById('man-dashboardFechados').innerHTML = ultimosFechados.length ? ultimosFechados.map(m => `<div><i class="fas fa-check"></i> ${esc(m.data)} - ${esc(m.maquina)} (${esc(m.observador)})</div>`).join('') : 'Nenhum chamado fechado recente.';
+
+    // MTTR
+    const mttrMap = {};
+    manutencoes
+      .filter(m => m.etiquetaFechada && Number(m.tempoGasto) > 0)
+      .forEach(m => {
+        const maq = m.maquina || 'Desconhecida';
+        if (!mttrMap[maq]) mttrMap[maq] = { total: 0, count: 0 };
+        mttrMap[maq].total += Number(m.tempoGasto);
+        mttrMap[maq].count++;
+      });
+
+    let mttrHtml = '';
+    for (const [maq, data] of Object.entries(mttrMap)) {
+      if (data.count > 0) {
+        const mediaMin = data.total / data.count;
+        const mediaHoras = mediaMin / 60;
+        const horasFormatadas = mediaHoras.toFixed(1);
+        mttrHtml += `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--man-border-soft); font-size:14px; color:var(--man-text-secondary);"><span>${esc(maq)}</span><span style="color:var(--man-orange); font-weight:600;">${horasFormatadas} h</span></div>`;
+      }
+    }
+    document.getElementById('man-mttrContainer').innerHTML = mttrHtml || 'Nenhum dado de MTTR disponível.';
+
+    const labels = [], abertos = [], fechados = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = d.toISOString().slice(0, 7);
+      labels.push(d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }));
+      abertos.push(manutencoes.filter(m => m.data.slice(0, 7) === key && !m.etiquetaFechada).length);
+      fechados.push(manutencoes.filter(m => m.data.slice(0, 7) === key && m.etiquetaFechada).length);
+    }
+
+    if (chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById('man-chartManutencao').getContext('2d');
+    chartInstance = new Chart(ctx, {
+      type: 'bar', data: { labels: labels, datasets: [
+          { label: 'Abertos', data: abertos, backgroundColor: 'rgba(255, 92, 108, 0.7)', borderColor: '#ff5c6c', borderWidth: 1 },
+          { label: 'Fechados', data: fechados, backgroundColor: 'rgba(46, 211, 163, 0.7)', borderColor: '#2ed3a3', borderWidth: 1 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#a0b8d0' } } }, scales: { x: { ticks: { color: '#a0b8d0' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#a0b8d0' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+    });
+  }
+
+  // ============================================================
+  // 8. EXPORTAÇÃO E IMPORTAÇÃO (COM ESCAPE DE CSV ROBUSTO)
+  // ============================================================
+  function escapeCSV(text) {
+    if (!text) return '';
+    let t = String(text);
+    // Se contiver ponto e vírgula, aspas ou quebras de linha, escapa e envolve em aspas duplas
+    if (t.includes(';') || t.includes('"') || t.includes('\n') || t.includes('\r')) {
+        t = t.replace(/"/g, '""');
+        t = `"${t}"`;
+    }
+    return t;
+  }
+
+  function exportarCSV() {
+    if(manutencoes.length === 0) { toast('Nenhum dado para exportar.', 'error'); return; }
+    const headers = 'ID;Máquina;Setor;Turno;Observador;Prioridade;Situação;Anomalia;Custo Peças;Custo Mão Obra\n';
+    const rows = manutencoes.map(m => 
+      `${esc(m.id)};${escapeCSV(m.maquina)};${escapeCSV(m.setor)};${escapeCSV(m.turno)};${escapeCSV(m.observador)};${escapeCSV(m.prioridade)};${escapeCSV(m.situacao)};${escapeCSV(m.anomalia)};${m.custoPecas || 0};${m.custoMaoObra || 0}`
+    ).join('\n');
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `lightwall_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url); toast('Exportação CSV concluída!');
+  }
+
+  function importarDados(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.corretivas || !data.programadas) {
+          toast('Arquivo inválido.', 'error');
+          return;
+        }
+        if (confirm('Deseja SUBSTITUIR os dados atuais? (Cancelar = mesclar)')) {
+          manutencoes = data.corretivas;
+          agendamentos = data.programadas;
+          if (data.estoque) estoque = data.estoque;
+          if (data.movimentacoes) movimentacoes = data.movimentacoes;
+        } else {
+          manutencoes = manutencoes.concat(data.corretivas);
+          agendamentos = agendamentos.concat(data.programadas);
+          if (data.estoque) estoque = estoque.concat(data.estoque);
+          if (data.movimentacoes) movimentacoes = movimentacoes.concat(data.movimentacoes);
+        }
+        salvarDados();
+        pageCorretiva = 0; pageProgramada = 0;
+        renderCorretiva(); renderProgramada(); renderDashboard(); renderPecas(); renderAlmoxarifado();
+        toast('Importação realizada com sucesso!');
+      } catch (err) {
+        toast('Erro ao ler o arquivo.', 'error');
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  // ============================================================
+  // 9. INICIALIZAÇÃO
+  // ============================================================
+  // Antes rodava sozinho em DOMContentLoaded (protótipo standalone, único
+  // conteúdo da página). Agora que é mais uma página da SPA, só inicializa
+  // quando o usuário navega até ela pela 1ª vez — mesmo padrão de
+  // MAN.init(), chamado de dentro de showPage() (ver app-core.js e
+  // SQ.init() do Setor de Qualidade, que segue a mesma lógica).
+  function init() {
+    const progData = document.getElementById('man-progData');
+    if (progData) progData.valueAsDate = new Date();
+    navegar('manutencao');
+    renderDashboard(); renderCorretiva(); renderProgramada();
+    renderPecas(); renderAlmoxarifado();
+  }
+
+  /* ── API pública ──────────────────────────────────────────
+     Todo o código acima ficou fechado numa IIFE (o protótipo original
+     declarava essas ~74 funções soltas, direto no <script> — qualquer uma
+     delas (esc, toast, gerarId, ...) vazava pro window global e podia
+     colidir com qualquer coisa que o resto do sistema definisse no
+     futuro; nomes como "toast" e "esc" são genéricos demais pra ficar
+     soltos). Só as funções REALMENTE chamadas de fora da IIFE (pelos
+     onclick="..." do HTML — tanto os estáticos em page-manutencao.html
+     quanto os gerados dinamicamente pelas próprias template strings do
+     JS, ex: onclick="excluirManutencao('${m.id}')" dentro de
+     renderCorretiva) são expostas aqui — os outros ~20 helpers internos
+     (esc, gerarId, toast, formatarTempo, compressImage, etc.) continuam
+     privados dentro da IIFE, só acessíveis de dentro dela mesma.
+
+     window.MAN.init() é chamado por showPage('manutencao', ...) — ver
+     app-core.js — na 1ª vez que o usuário abre a página (mesmo padrão
+     de SQ.init(), Setor de Qualidade). Cada window.nomeFuncao = MAN.nomeFuncao
+     abaixo existe só por compatibilidade com os onclick="..." inline
+     (que chamam a função pelo nome direto, sem "MAN." na frente) — sem
+     isso, precisaríamos reescrever todo onclick="excluirManutencao(...)"
+     do HTML (estático E gerado dinamicamente) para
+     onclick="MAN.excluirManutencao(...)". */
+  window.MAN = {
+    abrirDetalhesProgramada,
+    abrirHistorico,
+    abrirHistoricoEstoque,
+    abrirModalCadastroEstoque,
+    abrirModalFechamento,
+    abrirModalFinalizar,
+    abrirModalInicio,
+    abrirModalMovimentacao,
+    abrirModalReprovacao,
+    aoMudarSituacao,
+    aplicarFiltrosCorretiva,
+    aprovarAgendamento,
+    calcularTempoEstimado,
+    calcularTempoExecucao,
+    calcularTempoGasto,
+    calcularTempoSupervisao,
+    changePageCorretiva,
+    changePageProgramada,
+    confirmarAprovacao,
+    confirmarFechamento,
+    confirmarInicio,
+    confirmarMovimentacao,
+    confirmarReprovacao,
+    editarManutencao,
+    excluirAgendamento,
+    excluirItemEstoque,
+    excluirManutencao,
+    exportarCSV,
+    fecharFormulario,
+    fecharModal,
+    fecharModalAprovacao,
+    fecharModalDetalhesProgramada,
+    fecharModalEstoque,
+    fecharModalFinalizar,
+    fecharModalHistorico,
+    fecharModalHistoricoEstoque,
+    fecharModalInicio,
+    fecharModalMovimentacao,
+    fecharModalReprovacao,
+    gerarRelatorioPDF,
+    importarDados,
+    limparFiltrosCorretiva,
+    navegar,
+    novoChamado,
+    previewArquivo,
+    removerArquivo,
+    renderAlmoxarifado,
+    salvarExecucao,
+    salvarItemEstoque,
+    salvarManutencao,
+    setPrioridade,
+    toggleEmpresaExterna,
+    toggleExecEmpresaExterna,
+    toggleExecucaoCampos,
+    toggleSupervisorSection,
+    toggleTipo,
+    verificarEAgendiar,
+    init,
+  };
+  window.abrirDetalhesProgramada = MAN.abrirDetalhesProgramada;
+  window.abrirHistorico = MAN.abrirHistorico;
+  window.abrirHistoricoEstoque = MAN.abrirHistoricoEstoque;
+  window.abrirModalCadastroEstoque = MAN.abrirModalCadastroEstoque;
+  window.abrirModalFechamento = MAN.abrirModalFechamento;
+  window.abrirModalFinalizar = MAN.abrirModalFinalizar;
+  window.abrirModalInicio = MAN.abrirModalInicio;
+  window.abrirModalMovimentacao = MAN.abrirModalMovimentacao;
+  window.abrirModalReprovacao = MAN.abrirModalReprovacao;
+  window.aoMudarSituacao = MAN.aoMudarSituacao;
+  window.aplicarFiltrosCorretiva = MAN.aplicarFiltrosCorretiva;
+  window.aprovarAgendamento = MAN.aprovarAgendamento;
+  window.calcularTempoEstimado = MAN.calcularTempoEstimado;
+  window.calcularTempoExecucao = MAN.calcularTempoExecucao;
+  window.calcularTempoGasto = MAN.calcularTempoGasto;
+  window.calcularTempoSupervisao = MAN.calcularTempoSupervisao;
+  window.changePageCorretiva = MAN.changePageCorretiva;
+  window.changePageProgramada = MAN.changePageProgramada;
+  window.confirmarAprovacao = MAN.confirmarAprovacao;
+  window.confirmarFechamento = MAN.confirmarFechamento;
+  window.confirmarInicio = MAN.confirmarInicio;
+  window.confirmarMovimentacao = MAN.confirmarMovimentacao;
+  window.confirmarReprovacao = MAN.confirmarReprovacao;
+  window.editarManutencao = MAN.editarManutencao;
+  window.excluirAgendamento = MAN.excluirAgendamento;
+  window.excluirItemEstoque = MAN.excluirItemEstoque;
+  window.excluirManutencao = MAN.excluirManutencao;
+  window.exportarCSV = MAN.exportarCSV;
+  window.fecharFormulario = MAN.fecharFormulario;
+  window.fecharModal = MAN.fecharModal;
+  window.fecharModalAprovacao = MAN.fecharModalAprovacao;
+  window.fecharModalDetalhesProgramada = MAN.fecharModalDetalhesProgramada;
+  window.fecharModalEstoque = MAN.fecharModalEstoque;
+  window.fecharModalFinalizar = MAN.fecharModalFinalizar;
+  window.fecharModalHistorico = MAN.fecharModalHistorico;
+  window.fecharModalHistoricoEstoque = MAN.fecharModalHistoricoEstoque;
+  window.fecharModalInicio = MAN.fecharModalInicio;
+  window.fecharModalMovimentacao = MAN.fecharModalMovimentacao;
+  window.fecharModalReprovacao = MAN.fecharModalReprovacao;
+  window.gerarRelatorioPDF = MAN.gerarRelatorioPDF;
+  window.importarDados = MAN.importarDados;
+  window.limparFiltrosCorretiva = MAN.limparFiltrosCorretiva;
+  window.navegar = MAN.navegar;
+  window.novoChamado = MAN.novoChamado;
+  window.previewArquivo = MAN.previewArquivo;
+  window.removerArquivo = MAN.removerArquivo;
+  window.renderAlmoxarifado = MAN.renderAlmoxarifado;
+  window.salvarExecucao = MAN.salvarExecucao;
+  window.salvarItemEstoque = MAN.salvarItemEstoque;
+  window.salvarManutencao = MAN.salvarManutencao;
+  window.setPrioridade = MAN.setPrioridade;
+  window.toggleEmpresaExterna = MAN.toggleEmpresaExterna;
+  window.toggleExecEmpresaExterna = MAN.toggleExecEmpresaExterna;
+  window.toggleExecucaoCampos = MAN.toggleExecucaoCampos;
+  window.toggleSupervisorSection = MAN.toggleSupervisorSection;
+  window.toggleTipo = MAN.toggleTipo;
+  window.verificarEAgendiar = MAN.verificarEAgendiar;
+
+})();

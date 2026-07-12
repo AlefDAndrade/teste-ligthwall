@@ -1,0 +1,530 @@
+<!-- ============ PAGE: MANUTENÇÃO ============ -->
+    <main class="main" id="page-manutencao">
+      <div class="page-header">
+        <h1 class="page-title">Manuten<span>ção</span></h1>
+        <p class="page-desc">Chamados Corretivos · Manutenção Programada · Compra de Peças · Almoxarifado</p>
+      </div>
+      <div class="page-body" style="padding:0;">
+<div class="man-container">
+  <!-- Barra de ações da página — a marca "LIGHTWALL" do protótipo
+       original foi removida daqui: já aparece no topbar global da SPA
+       (nav-topbar.html), ficaria duplicada. Mantido só como barra de
+       ações + abas internas, mesmo padrão do Setor de Qualidade
+       (ver .sq-topbar/.sq-nav, page-setor-qualidade.html). -->
+  <div class="man-topbar man-no-print">
+    <div class="man-brand">
+      <div style="width:4px; height:24px; background:var(--man-orange); border-radius:2px;"></div>
+      Gestão de Manutenção
+    </div>
+    <div class="man-actions">
+      <button class="man-btn man-btn-primary" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
+      <button class="man-btn man-btn-outline" onclick="exportarCSV()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+      <button class="man-btn man-btn-outline" onclick="gerarRelatorioPDF()"><i class="fas fa-file-pdf"></i> Relatório PDF</button>
+      <button class="man-btn man-btn-outline" onclick="document.getElementById('man-importFile').click()"><i class="fas fa-upload"></i> Importar Backup</button>
+      <input type="file" id="man-importFile" accept=".json" style="display:none" onchange="importarDados(event)">
+    </div>
+  </div>
+
+  <!-- NAVEGAÇÃO -->
+  <div class="man-nav-tabs man-no-print">
+    <button class="man-btn active" onclick="navegar('manutencao')"><i class="fas fa-wrench"></i> Corretiva</button>
+    <button class="man-btn" onclick="navegar('programada')"><i class="fas fa-calendar-alt"></i> Programada</button>
+    <button class="man-btn" onclick="navegar('dashboard')"><i class="fas fa-chart-pie"></i> Visão Executiva</button>
+    <button class="man-btn" onclick="navegar('pecas')"><i class="fas fa-shopping-cart"></i> Peças (Compra)</button>
+    <button class="man-btn" onclick="navegar('almoxarifado')"><i class="fas fa-warehouse"></i> Almoxarifado</button>
+  </div>
+
+  <!-- PÁGINA: MANUTENÇÃO CORRETIVA -->
+  <div id="man-manutencao" class="man-page active">
+    
+    <!-- FILTROS -->
+    <div class="man-filters man-no-print">
+      <div class="man-filter-group"><label><i class="fas fa-search"></i> ID</label><input type="text" id="man-filtroID" placeholder="Buscar ID..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-industry"></i> Máquina</label><input type="text" id="man-filtroMaquina" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-building"></i> Setor</label><input type="text" id="man-filtroSetor" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-bolt"></i> Tipo</label>
+        <select id="man-filtroTipo" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todos</option>
+          <option value="Elétrica">Elétrica</option>
+          <option value="Mecânica">Mecânica</option>
+        </select>
+      </div>
+      <div class="man-filter-group"><label><i class="fas fa-exclamation-triangle"></i> Prioridade</label>
+        <select id="man-filtroPrioridade" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todas</option>
+          <option value="BAIXA">Baixa</option>
+          <option value="MÉDIA">Média</option>
+          <option value="ALTA">Alta</option>
+        </select>
+      </div>
+      <div class="man-filter-group"><label><i class="fas fa-check-circle"></i> Status</label>
+        <select id="man-filtroStatus" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todos</option>
+          <option value="Aguardando">Aguardando</option>
+          <option value="Em Manutencao">Em Manutenção</option>
+          <option value="Concluido">Concluído</option>
+        </select>
+      </div>
+      <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
+    </div>
+
+    <!-- FORMULÁRIO -->
+    <div id="man-formCard" class="man-card" style="display: none;">
+      <div class="man-card-title">
+        <span id="man-formTitle"><i class="fas fa-edit"></i> Registro de Solicitação</span>
+        <span id="man-formIdDisplay" style="color:var(--man-text-muted); font-family: 'JetBrains Mono'; font-size:12px;"></span>
+      </div>
+      <form id="man-manForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-manId"><input type="hidden" id="man-manEtiquetaFechada" value="false">
+
+        <!-- SEÇÃO 1: ABERTURA -->
+        <div style="background:rgba(255,92,108,0.05); border-left:4px solid var(--man-red); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-red); font-weight:600;"><i class="fas fa-user"></i> 1. Abertura do Chamado</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-manSetor" placeholder="Ex: Injetora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-manMaquina" placeholder="Ex: M01"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
+            <div class="man-form-field">
+              <select id="man-manTurno">
+                <option value="1º TURNO">1º TURNO</option>
+                <option value="2º TURNO">2º TURNO</option>
+                <option value="3º TURNO">3º TURNO</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data</div><div class="man-form-field"><input type="date" id="man-manData"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Observador</div><div class="man-form-field"><input type="text" id="man-manObservador" placeholder="Nome do operador"></div></div>
+        </div>
+
+        <!-- SEÇÃO 2: DETALHES DO PROBLEMA -->
+        <div style="background:rgba(77,141,255,0.05); border-left:4px solid var(--man-blue); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-blue); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> 2. Detalhes do Problema</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-file-alt"></i> Anomalia</div><div class="man-form-field"><textarea id="man-manAnomalia" placeholder="Descreva o problema..."></textarea></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-map-pin"></i> Local</div><div class="man-form-field"><input type="text" id="man-manLocal" placeholder="Ex: EM FRENTE AO PAINEL"></div></div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-list-ul"></i> Tipos de Anomalia</div>
+            <div class="man-form-field">
+              <div class="man-tipos-anomalia" id="man-tiposContainer">
+                <span class="man-tag-anomalia S" data-type="S" onclick="toggleTipo('S')">S</span>
+                <span class="man-tag-anomalia Q" data-type="Q" onclick="toggleTipo('Q')">Q</span>
+                <span class="man-tag-anomalia CB" data-type="CB" onclick="toggleTipo('CB')">CB</span>
+                <span class="man-tag-anomalia LDA" data-type="LDA" onclick="toggleTipo('LDA')">LDA</span>
+                <span class="man-tag-anomalia FS" data-type="FS" onclick="toggleTipo('FS')">FS</span>
+                <span class="man-tag-anomalia FM" data-type="FM" onclick="toggleTipo('FM')">FM</span>
+                <span class="man-tag-anomalia ID" data-type="ID" onclick="toggleTipo('ID')">ID</span>
+              </div>
+              <input type="hidden" id="man-manTipos" value="[]">
+            </div>
+          </div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-exclamation-circle"></i> Prioridade</div>
+            <div class="man-form-field">
+              <div class="man-prioridade-box">
+                <button type="button" class="man-prioridade-btn" data-value="BAIXA" onclick="setPrioridade('BAIXA')">BAIXA</button>
+                <button type="button" class="man-prioridade-btn" data-value="MÉDIA" onclick="setPrioridade('MÉDIA')">MÉDIA</button>
+                <button type="button" class="man-prioridade-btn" data-value="ALTA" onclick="setPrioridade('ALTA')">ALTA</button>
+              </div>
+              <input type="hidden" id="man-manPrioridade">
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-manTipoManutencao"><option value="">Selecione...</option><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-tag"></i> Tipo de Etiqueta</div>
+            <div class="man-form-field">
+              <select id="man-manTipoEtiqueta">
+                <option value="Azul"><i class="fas fa-circle" style="color:var(--man-blue);"></i> Azul (Autônoma)</option>
+                <option value="Vermelho"><i class="fas fa-circle" style="color:var(--man-red);"></i> Vermelho (Técnica)</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera"></i> Foto / Documento</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoOperador" accept="image/*,.pdf" disabled onchange="previewArquivo(this, 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')"><div id="man-fotoOperadorPreview" style="display:none;"></div><button id="man-btnRemoverFotoOp" style="display:none;" onclick="removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')">Remover</button></div><span class="man-upload-hint">Upload ainda não é funcional nesta etapa — só a interface está pronta.</span></div></div></div>
+        </div>
+
+        <!-- SEÇÃO 3: EXECUÇÃO (MANUTENÇÃO) -->
+        <div id="man-techSection">
+          <div style="background:rgba(245,130,31,0.05); border-left:4px solid var(--man-orange); padding:10px 0; margin:0;">
+            <div style="padding:0 16px 8px 16px; color:var(--man-orange); font-weight:600;"><i class="fas fa-hard-hat"></i> 3. Execução (Manutenção)</div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataInicio" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraInicio" onchange="calcularTempoGasto()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataFim" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraFim" onchange="calcularTempoGasto()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo gasto</div><div class="man-form-field"><input type="text" id="man-manTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600;"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-cog"></i> Responsável pela Execução</div>
+              <div class="man-form-field">
+                <select id="man-manTipoExecucao" onchange="toggleEmpresaExterna()">
+                  <option value="Interno">Interno</option>
+                  <option value="Externo">Empresa Externa</option>
+                </select>
+              </div>
+            </div>
+            <div class="man-form-row" id="man-manEmpresaExternaRow" style="display:none;"><div class="man-form-label"><i class="fas fa-building"></i> Nome da Empresa</div><div class="man-form-field"><input type="text" id="man-manEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-tie"></i> Responsável Técnico</div><div class="man-form-field"><input type="text" id="man-manResponsavel" placeholder="Nome do técnico"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-info-circle"></i> Situação</div><div class="man-form-field"><select id="man-manSituacao" onchange="aoMudarSituacao()"><option value="Aguardando">Aguardando Atendimento</option><option value="Em Manutencao">Em Manutenção</option><option value="Concluido">Concluído</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-pause-circle"></i> Em manutenção?</div><div class="man-form-field"><select id="man-manEmManutencao"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-boxes"></i> Aguardando peças?</div><div class="man-form-field"><select id="man-manAguardandoPecas" onchange="toggleSupervisorSection()"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Peças avariadas</div><div class="man-form-field"><input type="text" id="man-manPecasAvariadas" placeholder="Ex: Válvulas"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shopping-cart"></i> Peças a comprar</div><div class="man-form-field"><input type="text" id="man-manPecasComprar" placeholder="Ex: Conector em L"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clipboard-list"></i> Rotina executada</div><div class="man-form-field"><textarea id="man-manRotina" placeholder="Descreva o procedimento..."></textarea></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera-retro"></i> Foto / Documento do Serviço</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoTecnico" accept="image/*,.pdf" disabled onchange="previewArquivo(this, 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')"><div id="man-fotoTecnicoPreview" style="display:none;"></div><button id="man-btnRemoverFotoTec" style="display:none;" onclick="removerArquivo('man-manFotoTecnico', 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')">Remover</button></div><span class="man-upload-hint">Upload ainda não é funcional nesta etapa — só a interface está pronta.</span></div></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-clock"></i> Custo Mão de Obra (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoMaoObra" step="0.01" placeholder="0,00"></div></div>
+          </div>
+        </div>
+
+        <!-- SEÇÃO 4: ACOMPANHAMENTO DA SUPERVISÃO -->
+        <div id="man-supervisorSection">
+          <div style="background:rgba(46,211,163,0.05); border-left:4px solid var(--man-green); padding:10px 0; margin:0;">
+            <div style="padding:0 16px 8px 16px; color:var(--man-green); font-weight:600;"><i class="fas fa-user-shield"></i> 4. Acompanhamento (Supervisão)</div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataInicio" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraInicio" onchange="calcularTempoSupervisao()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataFim" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraFim" onchange="calcularTempoSupervisao()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo de atuação</div><div class="man-form-field"><input type="text" id="man-supTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-green); font-weight:600;"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shipping-fast"></i> Status da Compra</div><div class="man-form-field"><select id="man-manStatusCompra"><option value="">Selecione...</option><option value="Em Análise">Em Análise</option><option value="Cotação em andamento">Cotação em andamento</option><option value="Pedido efetuado">Pedido efetuado</option><option value="Peça em transporte">Peça em transporte</option><option value="Peça recebida">Peça recebida</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-check"></i> Previsão de Chegada</div><div class="man-form-field"><input type="date" id="man-manPrevisaoChegada"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-truck"></i> Nº Pedido / Fornecedor</div><div class="man-form-field"><input type="text" id="man-manFornecedor" placeholder="Pedido #123 - Fornecedor A"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-dollar-sign"></i> Custo Peças (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoPecas" step="0.01" placeholder="0,00"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-check"></i> Responsável pela Análise</div><div class="man-form-field"><input type="text" id="man-manRespSupervisor" placeholder="Nome do supervisor"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações da Supervisão</div><div class="man-form-field"><textarea id="man-manObsSupervisor" placeholder="Informações adicionais sobre prazos, negociações ou justificativas..."></textarea></div></div>
+          </div>
+        </div>
+        
+        <!-- BOTÕES INFERIORES -->
+        <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
+          <button type="button" class="man-btn man-btn-success" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
+          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- PAINEL DE CHAMADOS -->
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
+      <div class="man-table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width: 9%;">Nº</th>
+            <th style="width: 12%;">Máquina</th>
+            <th style="width: 9%;">Setor</th>
+            <th style="width: 9%;">Turno</th>
+            <th style="width: 11%;">Observador</th>
+            <th style="width: 9%;">Tipo</th>
+            <th style="width: 8%;">Prioridade</th>
+            <th style="width: 8%;">Etiqueta</th>
+            <th style="width: 12%;">Status</th>
+            <th style="width: 12%;">Supervisão</th>
+            <th style="width: 10%;">Ações</th>
+          </tr></thead>
+          <tbody id="man-corretivaTableBody"></tbody>
+        </table>
+      </div>
+      <div id="man-pagCorretiva" class="man-pagination man-no-print"></div>
+    </div>
+  </div>
+
+  <!-- PÁGINA: MANUTENÇÃO PROGRAMADA -->
+  <div id="man-programada" class="man-page">
+    <div class="man-dashboard-kpis man-no-print">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progTotal">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Total</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progPendentes" style="color:var(--man-yellow);">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Pendentes</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progAprovados" style="color:var(--man-green);">0</div><div class="man-kpi-label"><i class="fas fa-check-circle"></i> Aprovados</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progReprovados" style="color:var(--man-red);">0</div><div class="man-kpi-label"><i class="fas fa-times-circle"></i> Reprovados</div></div>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-pen-square"></i> Solicitar Manutenção Programada</div>
+      <form class="man-form-paper" onsubmit="return false;">
+        <!-- SEÇÃO 1: DADOS DA SOLICITAÇÃO -->
+        <div style="background:rgba(77,141,255,0.05); border-left:4px solid var(--man-blue); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-blue); font-weight:600;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-progSetor" placeholder="Ex: Injetora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-progMaquina" placeholder="Ex: M01"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-progTipo"><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Solicitante</div><div class="man-form-field"><input type="text" id="man-progSolicitante" placeholder="Seu nome"></div></div>
+        </div>
+        <!-- SEÇÃO 2: PLANEJAMENTO -->
+        <div style="background:rgba(245,130,31,0.05); border-left:4px solid var(--man-orange); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-orange); font-weight:600;"><i class="fas fa-calendar-check"></i> 2. Planejamento</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data Programada</div><div class="man-form-field"><input type="date" id="man-progData"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
+            <div class="man-form-field">
+              <select id="man-progTurno">
+                <option value="1º TURNO">1º TURNO</option>
+                <option value="2º TURNO">2º TURNO</option>
+                <option value="3º TURNO">3º TURNO</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Sugestão de Horário</div><div class="man-form-field"><input type="time" id="man-progHora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sync-alt"></i> Recorrência</div>
+            <div class="man-form-field">
+              <select id="man-progRecorrencia">
+                <option value="Nenhuma">Nenhuma</option>
+                <option value="Diário">Diário</option>
+                <option value="Semanal">Semanal</option>
+                <option value="Mensal">Mensal</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações</div><div class="man-form-field"><textarea id="man-progObs" placeholder="Descreva o motivo ou necessidade..."></textarea></div></div>
+          <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
+            <button type="button" class="man-btn man-btn-primary" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
+            <div id="man-progMensagem" style="font-size:13px; display:flex; align-items:center; color:var(--man-text-secondary);"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</div>
+      <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
+      <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+    </div>
+  </div>
+
+  <!-- PÁGINA: VISÃO EXECUTIVA -->
+  <div id="man-dashboard" class="man-page">
+    <div class="man-dashboard-kpis">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalAbertos">0</div><div class="man-kpi-label"><i class="fas fa-folder-open"></i> Chamados Abertos</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalFechados" style="color:var(--man-green);">0</div><div class="man-kpi-label"><i class="fas fa-check-double"></i> Chamados Fechados</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgMes">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Programadas no Mês</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgHoje">0</div><div class="man-kpi-label"><i class="fas fa-calendar-day"></i> Manut. Hoje</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgPend">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Agend. Pendentes</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoPecas" style="color:var(--man-yellow);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-cogs"></i> Custo Peças</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoMaoObra" style="color:var(--man-blue);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-user-clock"></i> Mão de Obra</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoTotal" style="color:var(--man-orange);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-coins"></i> Custo Total</div></div>
+    </div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-chart-bar"></i> Evolução de Chamados (últimos 6 meses)</div><canvas id="man-chartManutencao" height="150"></canvas></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-clock"></i> MTTR (Tempo Médio de Reparo) por Máquina</div><div id="man-mttrContainer"></div></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-folder-open"></i> Últimos Chamados Abertos</div><div id="man-dashboardAbertos" style="font-size:13px; color:var(--man-text-secondary);">Nenhum chamado aberto recente.</div></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-check-double"></i> Últimos Chamados Fechados</div><div id="man-dashboardFechados" style="font-size:13px; color:var(--man-text-secondary);">Nenhum chamado fechado recente.</div></div>
+  </div>
+
+  <!-- PÁGINA: PEÇAS (COMPRA) -->
+  <div id="man-pecas" class="man-page">
+    <div class="man-dashboard-kpis man-no-print">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiPecasTotal">0</div><div class="man-kpi-label"><i class="fas fa-boxes"></i> Total de Solicitações</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiPecasAndamento" style="color:var(--man-yellow);">0</div><div class="man-kpi-label"><i class="fas fa-spinner"></i> Em Andamento</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiPecasRecebidas" style="color:var(--man-green);">0</div><div class="man-kpi-label"><i class="fas fa-check-circle"></i> Recebidas</div></div>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-clock"></i> Peças em Compra / Cotação</div>
+      <div class="man-table-wrap"><table><thead><tr><th style="width:15%;">Chamado</th><th style="width:15%;">Máquina</th><th style="width:15%;">Setor</th><th style="width:25%;">Peças</th><th style="width:15%;">Status</th><th style="width:15%;">Ações</th></tr></thead><tbody id="man-pecasAndamentoBody"></tbody></table></div>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-check-double"></i> Peças Recebidas</div>
+      <div class="man-table-wrap"><table><thead><tr><th style="width:15%;">Chamado</th><th style="width:15%;">Máquina</th><th style="width:15%;">Setor</th><th style="width:40%;">Peças</th><th style="width:15%;">Ações</th></tr></thead><tbody id="man-pecasRecebidasBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- PÁGINA: ALMOXARIFADO -->
+  <div id="man-almoxarifado" class="man-page">
+    <div class="man-dashboard-kpis man-no-print">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-almoxTotalItens">0</div><div class="man-kpi-label"><i class="fas fa-box"></i> Total de Itens</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-almoxEstoqueCritico" style="color:var(--man-red);">0</div><div class="man-kpi-label"><i class="fas fa-exclamation-triangle"></i> Estoque Crítico</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-almoxValorTotal" style="color:var(--man-orange);">R$ 0,00</div><div class="man-kpi-label"><i class="fas fa-coins"></i> Valor em Estoque</div></div>
+    </div>
+
+    <div class="man-filters man-no-print">
+      <div class="man-filter-group"><label><i class="fas fa-search"></i> Código / Nome</label><input type="text" id="man-filtroAlmox" placeholder="Buscar..." oninput="renderAlmoxarifado()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-tags"></i> Categoria</label>
+        <select id="man-filtroAlmoxCategoria" onchange="renderAlmoxarifado()">
+          <option value="">Todas</option>
+          <option value="Elétrica">Elétrica</option>
+          <option value="Mecânica">Mecânica</option>
+          <option value="Hidráulica">Hidráulica</option>
+          <option value="Pneumática">Pneumática</option>
+          <option value="Outros">Outros</option>
+        </select>
+      </div>
+      <button class="man-btn man-btn-success" onclick="abrirModalCadastroEstoque()"><i class="fas fa-plus-circle"></i> Cadastrar Peça</button>
+    </div>
+
+    <div class="man-card">
+      <div class="man-table-wrap">
+        <table>
+          <thead><tr>
+            <th>Código</th>
+            <th>Nome</th>
+            <th>Categoria</th>
+            <th>Estoque</th>
+            <th>Mínimo</th>
+            <th>Localização</th>
+            <th>Fornecedor</th>
+            <th>Ações</th>
+          </tr></thead>
+          <tbody id="man-almoxarifadoBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAIS DO ALMOXARIFADO -->
+  <div id="man-modalCadastroEstoque" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2 id="man-modalEstoqueTitle"><i class="fas fa-box"></i> Cadastrar Peça</h2>
+      <form class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-estoqueEditId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-barcode"></i> Código Interno</div><div class="man-form-field"><input type="text" id="man-estoqueCodigo" placeholder="Ex: PEC-001"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tag"></i> Nome</div><div class="man-form-field"><input type="text" id="man-estoqueNome" placeholder="Ex: Rolamento 6202"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-list"></i> Categoria</div><div class="man-form-field"><select id="man-estoqueCategoria"><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option><option value="Hidráulica">Hidráulica</option><option value="Pneumática">Pneumática</option><option value="Outros">Outros</option></select></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-warehouse"></i> Localização</div><div class="man-form-field"><input type="text" id="man-estoqueLocalizacao" placeholder="Ex: Prateleira A, Gaveta 3"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-truck"></i> Fornecedor</div><div class="man-form-field"><input type="text" id="man-estoqueFornecedor" placeholder="Ex: Fornecedor A"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-dollar-sign"></i> Preço Médio (R$)</div><div class="man-form-field"><input type="number" id="man-estoquePreco" step="0.01" placeholder="0,00"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Qtd. Inicial</div><div class="man-form-field"><input type="number" id="man-estoqueQtdInicial" step="1" placeholder="0"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-exclamation-triangle"></i> Estoque Mínimo</div><div class="man-form-field"><input type="number" id="man-estoqueMinimo" step="1" placeholder="Ex: 5"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" onclick="salvarItemEstoque()"><i class="fas fa-save"></i> Salvar</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalEstoque()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalMovimentacaoEstoque" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2 id="man-modalMovTitle"><i class="fas fa-exchange-alt"></i> Movimentar Estoque</h2>
+      <form class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-movEstoqueId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-arrows-alt-h"></i> Tipo</div><div class="man-form-field"><select id="man-movTipo"><option value="Entrada">Entrada</option><option value="Saída">Saída</option></select></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Quantidade</div><div class="man-form-field"><input type="number" id="man-movQuantidade" step="1" placeholder="1"></div></div>
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Motivo / Chamado</div><div class="man-form-field"><input type="text" id="man-movMotivo" placeholder="Ex: Utilizado no chamado MAN-123 ou Compra direta"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" onclick="confirmarMovimentacao()"><i class="fas fa-check"></i> Confirmar</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalMovimentacao()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL HISTÓRICO DO ESTOQUE -->
+  <div id="man-modalHistoricoEstoque" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-history"></i> Histórico da Peça</h2>
+      <div id="man-historicoEstoqueBody" data-peca-id=""></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-outline" id="man-btnExportarHistEstoque"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+        <button class="man-btn man-btn-outline" onclick="fecharModalHistoricoEstoque()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAIS EXISTENTES -->
+  <div id="man-modalFechamento" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-lock"></i> Confirmar Fechamento do Chamado</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Revise o resumo antes de finalizar:</p>
+      <div id="man-modalResumoBody"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-success" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
+        <button class="man-btn man-btn-outline" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="man-modalHistorico" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-eye"></i> Trajetória do Chamado</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Linha do tempo visual do chamado:</p>
+      <div id="man-historicoBody" style="font-size: 14px; line-height: 1.6; max-height: 400px; overflow-y: auto;"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-outline" onclick="fecharModalHistorico()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="man-modalInicioProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-play"></i> Iniciar Execução da Tarefa</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Registre o horário de início da execução.</p>
+      <form id="man-inicioForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-inicioId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-inicioData" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-inicioHora" onchange="calcularTempoEstimado()"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalInicio()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalFinalizarProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-stopwatch"></i> Finalizar Execução da Tarefa</h2>
+      <div id="man-execucaoAvisoAtraso" style="display:none; padding:10px; margin-bottom:12px; border:1px solid var(--man-red); background:rgba(255,92,108,0.1); border-radius:6px; color:var(--man-red); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> Esta tarefa está ATRASADA! Por favor, informe o motivo do atraso ou da não execução no campo abaixo.</div>
+      <form id="man-execForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-execId">
+        <div class="man-form-row" style="background:var(--man-bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Período de Execução</div></div>
+        <div class="man-form-row"><div class="man-form-label">Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataInicio" readonly style="opacity:0.7; cursor:not-allowed;"><label>Hora</label><input type="time" id="man-execHoraInicio" readonly style="opacity:0.7; cursor:not-allowed;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Fim (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataFim" onchange="calcularTempoExecucao()"><label>Hora</label><input type="time" id="man-execHoraFim" onchange="calcularTempoExecucao()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Tempo gasto:</div><div class="man-form-field"><input type="text" id="man-execTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Responsável pela Execução:</div>
+          <div class="man-form-field">
+            <select id="man-execTipoExecucao" onchange="toggleExecEmpresaExterna()">
+              <option value="Interno">Interno</option>
+              <option value="Externo">Empresa Externa</option>
+            </select>
+          </div>
+        </div>
+        <div class="man-form-row" id="man-execEmpresaExternaRow" style="display:none;"><div class="man-form-label">Nome da Empresa:</div><div class="man-form-field"><input type="text" id="man-execEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
+        <div class="man-form-row"><div class="man-form-label">Tarefa executada?</div><div class="man-form-field"><select id="man-execExecutado" onchange="toggleExecucaoCampos()"><option value="Sim">Sim</option><option value="Nao">Não</option></select></div></div>
+        <div class="man-form-row" id="man-execMotivoGroup" style="display:none;"><div class="man-form-label">Motivo da não execução:</div><div class="man-form-field"><textarea id="man-execMotivo" placeholder="Descreva o motivo pelo qual a tarefa não foi executada..." style="width:100%;"></textarea></div></div>
+        <div class="man-form-row"><div class="man-form-label">Técnico Responsável:</div><div class="man-form-field"><input type="text" id="man-execTecnico" placeholder="Nome do técnico que executou" style="width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Observações:</div><div class="man-form-field"><textarea id="man-execObs" placeholder="Informações adicionais sobre a execução..." style="width:100%;"></textarea></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalFinalizar()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalAprovacaoProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-check-circle"></i> Aprovar Tarefa e Definir Horário</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Defina o horário de início e fim estimados para a execução da tarefa.</p>
+      <form id="man-aprForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-aprId">
+        <div class="man-form-row" style="background:var(--man-bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Sugestão do Operador: <span id="man-aprSugestaoDisplay" style="color:var(--man-text-primary); font-weight:600;">--:--</span></div></div>
+        <div class="man-form-row"><div class="man-form-label">Início Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataInicio" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraInicio" onchange="calcularTempoEstimado()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Fim Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataFim" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraFim" onchange="calcularTempoEstimado()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Duração Estimada:</div><div class="man-form-field"><input type="text" id="man-aprTempoEstimado" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Responsável pela Aprovação:</div><div class="man-form-field"><input type="text" id="man-aprResponsavel" placeholder="Nome do técnico/supervisor que aprova" style="width:100%;"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalAprovacao()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalDetalhesProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-file-alt"></i> Detalhes da Solicitação</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Visualização completa dos dados:</p>
+      <div id="man-detalhesProgramadaBody"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-outline" onclick="fecharModalDetalhesProgramada()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOVO MODAL: REPROVAÇÃO DE AGENDAMENTO -->
+  <div id="man-modalReprovacaoProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-times-circle" style="color:var(--man-red);"></i> Reprovar Agendamento</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Por favor, informe o motivo da reprovação do agendamento para registro no histórico.</p>
+      <form id="man-reprovacaoForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-reprovacaoId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Justificativa</div><div class="man-form-field"><textarea id="man-reprovacaoJustificativa" placeholder="Ex: Não será possível realizar nesta data devido a falta de peças..."></textarea></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-danger" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalReprovacao()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="man-toast-container man-no-print" id="man-toastContainer"></div>
+</div>
+
+      </div>
+    </main>

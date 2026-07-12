@@ -206,6 +206,13 @@
         SQ.init();
       }
 
+      // Manutenção — mesmo padrão de guarda "só uma vez, na 1ª vez que
+      // abre" do Setor de Qualidade, acima (ver comentário lá).
+      if (pageId === 'manutencao' && !window._manInit) {
+        window._manInit = true;
+        MAN.init();
+      }
+
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
       // não faz nada se essa página não tem tour, ou se já foi visto antes
       // (guardado em localStorage). Roda por último, depois dos inits
