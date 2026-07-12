@@ -18,7 +18,7 @@ npm start
 
 `npm start` (e `npm run dev`) já rodam `node build-index.js` automaticamente antes de subir o servidor (via `prestart`/`predev` no `package.json`) — então `public/index.html` está sempre atualizado com o que tiver em `public/partials/`, sem precisar lembrar de um passo manual. Pra gerar manualmente sem subir o servidor (ex: só pra conferir o resultado), `npm run build`.
 
-O servidor sobe em `http://localhost:3000` (ou na porta da variável de ambiente `PORT`, se definida — útil pra rodar os testes numa porta separada sem conflitar com um servidor de desenvolvimento já aberto). Requer Node `>= 18`.
+O servidor sobe em `http://localhost:5000` (ou na porta da variável de ambiente `PORT`, se definida — útil pra rodar os testes numa porta separada sem conflitar com um servidor de desenvolvimento já aberto). Requer Node `>= 18`.
 
 ## Testes automatizados
 
