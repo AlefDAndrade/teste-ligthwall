@@ -1993,24 +1993,22 @@
 
   function registrarOperacao() {
     if (_bloqueadoPorAutorizacao()) return;
-    // "Quem está operando?" (ver operador.js) — pergunta leve, opcional,
-    // ANTES de seguir com o registro de verdade; exigir() nunca trava o
-    // fluxo (resolve com null se pulado ou se ninguém estiver cadastrado
-    // ainda). O nome (não o PIN) fica em state.operador_nome só até este
-    // registro ser montado, logo abaixo.
-    LWOperador.exigir().then(operador => {
-      state.operador_nome = operador?.nome || null;
-      // Montagem Personalizada precisa que "berços reais" bata com a
-      // quantidade de berços com tipo definido na grade — confere (e resolve
-      // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
-      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
-        _reconciliarMontagemPersonalizada().then(podeSeguir => {
-          if (podeSeguir) _registrarOperacaoInterna();
-        });
-        return;
-      }
-      _registrarOperacaoInterna();
-    });
+    // Autoria automática — quem está logado agora (ver
+    // LW.nomeDeQuemEstaLogado(), data.js) já tem nome próprio (login com
+    // usuário+senha), não precisa perguntar "quem está operando" de novo
+    // (antiga Identidade Leve de Operador, removida — ver conversa que
+    // motivou isso).
+    state.operador_nome = LW.nomeDeQuemEstaLogado();
+    // Montagem Personalizada precisa que "berços reais" bata com a
+    // quantidade de berços com tipo definido na grade — confere (e resolve
+    // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
+    if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+      _reconciliarMontagemPersonalizada().then(podeSeguir => {
+        if (podeSeguir) _registrarOperacaoInterna();
+      });
+      return;
+    }
+    _registrarOperacaoInterna();
   }
 
   function _registrarOperacaoInterna() {

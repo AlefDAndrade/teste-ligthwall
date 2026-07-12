@@ -32,18 +32,13 @@ const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "ban
 // mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
 const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
 const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
-// Cadastro de Identidade Leve de Operador (ver "Identidade Leve de
-// Operador", db.js) — mesmo motivo de SECURITY_PATH viver fora de
-// public/: contém pinHash por operador, e um arquivo dentro de public/db/
-// seria servido cru pela rota estática genérica pra qualquer um que
-// soubesse a URL (foi exatamente o problema histórico de security.json —
-// ver README, "Limitações conhecidas"). GET /operadores (abaixo) nunca
-// devolve pinHash, só {id, nome}.
-const OPERADORES_PATH = path.join(PRIVATE_DIR, 'operadores.json');
 // Cadastro de usuários com login+senha+perfil (ver lib/rotas/usuarios.js,
-// lib/perfis.js) — mesmo motivo de OPERADORES_PATH viver fora de public/:
-// contém senhaHash por usuário. GET /usuarios (lib/rotas/usuarios.js)
-// nunca devolve senhaHash, só {id, nomeUsuario, perfil}.
+// lib/perfis.js) — mesmo motivo de segurança: contém senhaHash por
+// usuário, e um arquivo dentro de public/db/ seria servido cru pela rota
+// estática genérica pra qualquer um que soubesse a URL (foi exatamente o
+// problema histórico de security.json — ver README, "Limitações
+// conhecidas"). GET /usuarios (lib/rotas/usuarios.js) nunca devolve
+// senhaHash, só {id, nomeUsuario, perfil}.
 const USUARIOS_PATH = path.join(PRIVATE_DIR, 'usuarios.json');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
@@ -86,7 +81,6 @@ const perfis = require('./lib/perfis.js');
 // devolve true se já respondeu. Chamadas em sequência dentro do
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
-const rotasOperadores = require('./lib/rotas/operadores.js')({ fs, path, PRIVATE_DIR, auth, sessao });
 const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao, sessaoUsuario, perfis });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
@@ -111,12 +105,12 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
 });
 const rotasBackup = require('./lib/rotas/backup.js')({
   db, fs, path, JSZip,
-  ROOT_DIR, DB_DIR, SECURITY_PATH, OPERADORES_PATH, USUARIOS_PATH,
+  ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH,
   auth, sessao,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasOperadores, rotasUsuarios, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

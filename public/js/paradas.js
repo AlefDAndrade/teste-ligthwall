@@ -208,11 +208,13 @@
       return;
     }
 
-    // "Quem está operando?" (ver operador.js) — só perguntado ao CRIAR
-    // uma parada nova; numa edição, omitir o campo faz o servidor
-    // preservar o autor original (ver POST /salvar-parada, server.js) em
-    // vez de trocar pra quem só corrigiu um detalhe depois.
-    const operador = _modoEdicao ? null : await LWOperador.exigir();
+    // Autoria automática — só preenchida ao CRIAR uma parada nova; numa
+    // edição, omitir o campo faz o servidor preservar o autor original
+    // (ver POST /salvar-parada, server.js) em vez de trocar pra quem só
+    // corrigiu um detalhe depois. Antes perguntava "quem está operando"
+    // via PIN (Identidade Leve de Operador, removida — ver conversa que
+    // motivou isso); agora usa quem já está logado (LW.nomeDeQuemEstaLogado()).
+    const nomeAutor = _modoEdicao ? null : LW.nomeDeQuemEstaLogado();
 
     const parada = {
       id:             _modoEdicao || _gerarIdParada(),
@@ -224,7 +226,7 @@
       classificacao,
       obs,
       registrado_em:  new Date().toISOString(),
-      ...(operador ? { operador_nome: operador.nome } : {}),
+      ...(nomeAutor ? { operador_nome: nomeAutor } : {}),
     };
 
     const btn = document.getElementById('btn-salvar-parada');

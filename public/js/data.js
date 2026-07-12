@@ -427,6 +427,36 @@ function clearOperacaoAtual() {
 }
 
 // ============================================================
+//  AUTORIA — "quem registrou isto"
+// ============================================================
+// Substitui a antiga "Identidade Leve de Operador" (perguntava PIN toda
+// vez, separado do login — ver conversa que motivou a remoção): agora
+// que o login exige usuário+senha (ver login.html), a pessoa já TEM um
+// nome próprio no momento em que registra qualquer coisa — não precisa
+// perguntar de novo. Usado em Registrar Operação, Paradas, e Avaliações
+// do Setor de Qualidade (ver operacao.js, paradas.js, setor-qualidade.js).
+
+/**
+ * Nome de quem está logado agora, pra gravar como autoria num registro
+ * novo (operação, parada, avaliação de qualidade). "ADM" pro
+ * Administrador Master (senha mestra, sem usuário/nome próprio — ver
+ * conversa que motivou esse valor fixo); o nome de cadastro pra qualquer
+ * usuário logado (Operador/Analista/Qualidade/Manutencao/Administrativo
+ * — ver sessionStorage.lw_nome_usuario, gravado no login).
+ * @returns {string|null} nunca lança erro — null só se sessionStorage
+ *   estiver indisponível (navegador sem storage), caso extremamente raro.
+ */
+function nomeDeQuemEstaLogado() {
+  try {
+    const role = sessionStorage.getItem('lw_role');
+    if (role === 'Administrador') return 'ADM';
+    return sessionStorage.getItem('lw_nome_usuario') || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// ============================================================
 //  LOG DE ACESSO
 //
 //  Registra no servidor cada acesso a rotas "sensíveis" do app — por
@@ -1810,6 +1840,7 @@ window.LW = {
 
   // Log de Acesso
   getDeviceId, registrarAcesso,
+  nomeDeQuemEstaLogado,
   dispositivoEstaAutorizado,
 
   // Cálculos

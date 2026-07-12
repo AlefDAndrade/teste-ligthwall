@@ -82,14 +82,15 @@ db.exec(`
     -- com este id_operacao?", nunca mais por esta coluna.
     avaliado              INTEGER NOT NULL DEFAULT 0,
     modo_teste            INTEGER DEFAULT 0,
-    -- Nome de quem registrou (ver "Identidade Leve de Operador",
-    -- public/js/operador.js) — puramente informativo, NUNCA usado como
-    -- controle de acesso: sem operador selecionado, a coluna fica NULL e
-    -- a operação é registrada normalmente (o registro em si nunca é
-    -- bloqueado por falta de identidade). Guardado como o NOME já
-    -- resolvido (não um id/FK) de propósito — sobrevive sozinho mesmo se
-    -- aquele operador for removido do cadastro depois; é rótulo de
-    -- auditoria, não uma referência viva.
+    -- Nome de quem registrou (ver LW.nomeDeQuemEstaLogado(), data.js) —
+    -- puramente informativo, NUNCA usado como controle de acesso: quem
+    -- controla o que a pessoa pode fazer é o perfil dela (ver
+    -- lib/perfis.js), não este campo. Preenchido automaticamente com o
+    -- nome de quem está logado no momento do registro (antes: perguntava
+    -- via PIN à parte do login — "Identidade Leve de Operador", removida).
+    -- Guardado como o NOME já resolvido (não um id/FK) de propósito —
+    -- sobrevive sozinho mesmo se aquele usuário for removido do cadastro
+    -- depois; é rótulo de auditoria, não uma referência viva.
     operador_nome         TEXT,
     criado_em             TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -327,6 +328,11 @@ db.exec(`
     id_bateria    TEXT,
     turno         TEXT,
     registrado_em TEXT NOT NULL,
+    -- Nome de quem avaliou (ver LW.nomeDeQuemEstaLogado(), data.js) —
+    -- mesmo raciocínio de operacoes.operador_nome (acima): puramente
+    -- informativo, preenchido automaticamente com quem está logado no
+    -- momento do registro, nunca usado como controle de acesso.
+    avaliador_nome TEXT,
     dados         TEXT NOT NULL  -- JSON: avaliação inteira, incluindo a lista de painéis
   );
   CREATE INDEX IF NOT EXISTS idx_avaliacoes_qualidade_operacao ON avaliacoes_qualidade(id_operacao);
@@ -541,8 +547,8 @@ if (!_colunasOperacoes.includes('avaliado')) {
 
 // ------------------------------------------------------------
 //  Migração leve: coluna "operador_nome" em operacoes E em paradas —
-//  ver "Identidade Leve de Operador" (operacoes.operador_nome, acima,
-//  pro raciocínio completo). Mesmo padrão da migração de "avaliado".
+//  ver comentário em operacoes.operador_nome, acima, pro raciocínio
+//  completo. Mesmo padrão da migração de "avaliado".
 // ------------------------------------------------------------
 if (!_colunasOperacoes.includes('operador_nome')) {
   db.exec('ALTER TABLE operacoes ADD COLUMN operador_nome TEXT');
@@ -552,6 +558,11 @@ const _colunasParadas = db.prepare("PRAGMA table_info(paradas)").all().map(c => 
 if (!_colunasParadas.includes('operador_nome')) {
   db.exec('ALTER TABLE paradas ADD COLUMN operador_nome TEXT');
   console.log('[migração] Coluna "operador_nome" adicionada à tabela paradas.');
+}
+const _colunasAvaliacoesQualidade = db.prepare("PRAGMA table_info(avaliacoes_qualidade)").all().map(c => c.name);
+if (!_colunasAvaliacoesQualidade.includes('avaliador_nome')) {
+  db.exec('ALTER TABLE avaliacoes_qualidade ADD COLUMN avaliador_nome TEXT');
+  console.log('[migração] Coluna "avaliador_nome" adicionada à tabela avaliacoes_qualidade.');
 }
 
 // ------------------------------------------------------------
@@ -711,8 +722,8 @@ function operacaoParaRow(r) {
     // avaliado, por ex.) — nunca por acidente de um campo truthy qualquer
     // vindo do JSON antigo.
     avaliado: r.avaliado === true || r.avaliado === 1 ? 1 : 0,
-    // Ver "Identidade Leve de Operador" (operacoes.operador_nome,
-    // CREATE TABLE acima) — nunca obrigatório, fica NULL se não vier.
+    // Ver comentário em operacoes.operador_nome (CREATE TABLE, acima) —
+    // nunca obrigatório, fica NULL se não vier.
     operador_nome: r.operador_nome || null,
   };
 }
@@ -1042,8 +1053,8 @@ module.exports.detalheOperacao = detalheOperacao;
  * @param {object} avaliacao - objeto inteiro vindo do front (evalObj + paineis)
  */
 const SQL_SALVAR_AVALIACAO_QUALIDADE = `
-  INSERT OR REPLACE INTO avaliacoes_qualidade (id, id_operacao, id_bateria, turno, registrado_em, dados)
-  VALUES (@id, @id_operacao, @id_bateria, @turno, @registrado_em, @dados)
+  INSERT OR REPLACE INTO avaliacoes_qualidade (id, id_operacao, id_bateria, turno, registrado_em, avaliador_nome, dados)
+  VALUES (@id, @id_operacao, @id_bateria, @turno, @registrado_em, @avaliador_nome, @dados)
 `;
 const SQL_SALVAR_PAINEIS_AVALIACAO = `
   INSERT OR REPLACE INTO avaliacao_paineis (id_avaliacao, id_operacao, id_bateria, registrado_em, paineis)
@@ -1073,6 +1084,9 @@ function salvarAvaliacaoQualidade(avaliacao) {
     id_bateria: avaliacao.batteryId || null,
     turno: avaliacao.turno || null,
     registrado_em: avaliacao.registeredAt || new Date().toISOString(),
+    // Ver comentário em avaliacoes_qualidade.avaliador_nome (CREATE
+    // TABLE, acima) — nunca obrigatório, fica NULL se não vier.
+    avaliador_nome: avaliacao.avaliadorNome || null,
     dados: JSON.stringify(avaliacao),
   };
   const gravarTudo = db.transaction(() => {
@@ -1153,9 +1167,17 @@ _migrarPaineisAvaliacaoExistentes();
  */
 function listarAvaliacoesQualidade() {
   const rows = db.prepare(
-    'SELECT dados FROM avaliacoes_qualidade ORDER BY registrado_em DESC'
+    'SELECT avaliador_nome, dados FROM avaliacoes_qualidade ORDER BY registrado_em DESC'
   ).all();
-  return rows.map(r => JSON.parse(r.dados));
+  return rows.map(r => {
+    const avaliacao = JSON.parse(r.dados);
+    // Coluna SQL prevalece sobre o que estiver dentro do JSON — cobre o
+    // caso de uma avaliação salva ANTES da coluna avaliador_nome existir
+    // (nesse caso, r.avaliador_nome é null, então avaliacao.avaliadorNome,
+    // se já tiver algo, continua valendo).
+    if (r.avaliador_nome) avaliacao.avaliadorNome = r.avaliador_nome;
+    return avaliacao;
+  });
 }
 /**
  * Substitui TODO o conteúdo de avaliacoes_qualidade pelo array informado
@@ -1480,8 +1502,7 @@ function paradaParaRow(p) {
     classificacao: p.classificacao ?? null,
     obs: p.obs ?? null,
     registrado_em: p.registrado_em ?? null,
-    // Ver "Identidade Leve de Operador" (paradas.operador_nome, CREATE
-    // TABLE acima).
+    // Ver comentário em paradas.operador_nome (CREATE TABLE, acima).
     operador_nome: p.operador_nome || null,
   };
 }

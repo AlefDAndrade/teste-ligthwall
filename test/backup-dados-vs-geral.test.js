@@ -4,12 +4,12 @@
 //   - Backup de Dados: só dados de produção da fábrica (operações,
 //     traços, paradas, qualidade etc) — sem config.json nem identidade.
 //   - Backup Geral: dados de produção + config.json + identidade/acesso
-//     (security.json, usuarios.json, operadores.json) — sem código-fonte
-//     (isso saiu; tem controle de versão próprio, ver Git).
+//     (security.json, usuarios.json) — sem código-fonte (isso saiu; tem
+//     controle de versão próprio, ver Git).
 //   - Restaurar um Backup Geral de uma instalação MAIS ANTIGA (sem
-//     security.json/usuarios.json/operadores.json, que não existiam
-//     antes da Fase A) preserva o cadastro de usuários/senha do
-//     Administrador Master já existentes, em vez de apagar ou dar erro.
+//     security.json/usuarios.json, que não existiam antes da Fase A)
+//     preserva o cadastro de usuários/senha do Administrador Master já
+//     existentes, em vez de apagar ou dar erro.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,7 +73,7 @@ test('GET /backup-geral exige sessao de administrador', async () => {
   assert.equal(resp.status, 403);
 });
 
-test('Backup de Dados nao inclui config.json, security.json, usuarios.json ou operadores.json', async () => {
+test('Backup de Dados nao inclui config.json, security.json ou usuarios.json', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   const resp = await fetch(`${servidor.baseUrl}/backup-dados`, { headers: { Cookie: cookieAdmin } });
   assert.equal(resp.status, 200);
@@ -87,7 +87,6 @@ test('Backup de Dados nao inclui config.json, security.json, usuarios.json ou op
   assert.ok(!arquivos.includes('config.json'), 'config.json e exclusivo do Backup Geral');
   assert.ok(!arquivos.includes('security.json'), 'security.json e exclusivo do Backup Geral');
   assert.ok(!arquivos.includes('usuarios.json'), 'usuarios.json e exclusivo do Backup Geral');
-  assert.ok(!arquivos.includes('operadores.json'), 'operadores.json e exclusivo do Backup Geral');
 });
 
 test('Backup Geral inclui dados de producao + config.json + identidade/acesso, sem codigo-fonte', async () => {
@@ -110,10 +109,6 @@ test('Backup Geral inclui dados de producao + config.json + identidade/acesso, s
   assert.ok(arquivos.includes('config.json'));
   assert.ok(arquivos.includes('security.json'));
   assert.ok(arquivos.includes('usuarios.json'));
-  // operadores.json pode legitimamente nao aparecer se nenhum operador
-  // (Identidade Leve) foi cadastrado ainda neste ambiente de teste — o
-  // arquivo simplesmente nao existe no disco ainda, e _gerarZipComArquivos
-  // pula silenciosamente arquivos ausentes (ver try/catch, backup.js).
   assert.ok(!arquivos.includes('server.js'), 'codigo-fonte nao deveria mais entrar no Backup Geral');
   assert.ok(!arquivos.includes('package.json'), 'codigo-fonte nao deveria mais entrar no Backup Geral');
 
@@ -121,7 +116,7 @@ test('Backup Geral inclui dados de producao + config.json + identidade/acesso, s
   assert.ok(usuariosZip.some(u => u.nomeUsuario === 'no.zip.geral'));
 });
 
-test('restaurar um Backup Geral de instalacao ANTIGA (sem usuarios/security/operadores) preserva o cadastro atual', async () => {
+test('restaurar um Backup Geral de instalacao ANTIGA (sem usuarios/security) preserva o cadastro atual', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',

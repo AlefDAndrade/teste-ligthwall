@@ -90,7 +90,7 @@ package.json
 |---|---|---|
 | 1 | Hash de senha (scrypt + compat. legado) e rate limiting de tentativas | `lib/auth.js` |
 | 2 | Sessão de Administrador | `lib/sessao.js` |
-| 3 | Identidade Leve de Operador (cadastro, verificação de PIN) | `lib/rotas/operadores.js` |
+| 3 | Identidade Leve de Operador (cadastro, verificação de PIN) — *removida depois, ver Autoria automática de registro* | `lib/rotas/operadores.js` (não existe mais) |
 | 4 | Registro de Paradas | `lib/rotas/paradas.js` |
 | 5 | Setor de Qualidade / Avaliações (fila, avaliação, marcação) | `lib/rotas/qualidade.js` |
 | 6 | Dados SQL (Configurações → 🗄️ Dados SQL) | `lib/rotas/sql-admin.js` |
@@ -223,9 +223,11 @@ Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
 
 O app também funciona como **PWA** (manifest + service worker, cobrindo só a casca estática — HTML/CSS/JS/ícones, nunca dado de produção): dá pra "Adicionar à tela inicial" num tablet e abrir sem barra de endereço, com alguma tolerância a queda rápida de rede.
 
-## Identidade Leve de Operador
+## Autoria automática de registro
 
-Cadastro opcional (Configurações → Operadores) pra saber **quem registrou o quê** em Registrar Operação e Registro de Paradas — não é login nem controle de acesso, é só um rótulo de auditoria. Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador (guardado em `sessionStorage`, nunca em cookie/sessão do servidor) e anexado ao registro como `operador_nome`. Enquanto ninguém estiver cadastrado, o sistema funciona exatamente como antes, sem perguntar nada a ninguém — é totalmente opt-in.
+Registrar Operação, Registro de Paradas e Avaliações do Setor de Qualidade gravam automaticamente **quem registrou** (`operador_nome`/`avaliadorNome`) — não é login nem controle de acesso, é só um rótulo de auditoria (`LW.nomeDeQuemEstaLogado()`, `data.js`). O nome vem de quem já está logado no sistema (usuário cadastrado — ver *Perfis de usuário*) ou `"ADM"` para o Administrador Master (senha mestra, sem usuário próprio). Ninguém precisa escolher/confirmar identidade separadamente — substituiu a antiga "Identidade Leve de Operador" (perguntava PIN à parte do login, toda vez que algo era registrado).
+
+Numa correção/edição de um registro já existente (parada, avaliação de qualidade), o autor **original** é preservado — corrigir um detalhe não troca a autoria pra quem só corrigiu.
 
 ## Ajuste de Receita (Registrar Operação)
 
@@ -508,7 +510,7 @@ A senha do Administrador é guardada com hash **scrypt** (nativo do Node — sem
 - O arquivo físico não existe mais em `public/db/` (migração automática no boot, se uma instalação antiga ainda tiver o arquivo no lugar velho — renomeia, nunca apaga).
 - `GET /db/security.json` (mesma URL de sempre — o front continua usando ela) e `POST /salvar-security` agora exigem uma **sessão de Administrador** válida: um cookie `HttpOnly`, emitido depois de uma senha ou chave de recuperação confirmada com sucesso, válido por 30 minutos, destruído em `/logout-admin` (chamado automaticamente pelo botão de logout). Em memória, igual ao rate limiting.
 
-Essa sessão **não substitui** a re-verificação de senha das rotas mais destrutivas (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade: mesmo um cookie de sessão vazado/sequestrado de uma aba esquecida aberta não basta pra restaurar dados ou sobrescrever o servidor sozinho). Fora essas 3, a sessão hoje cobre a maior parte das rotas administrativas — `salvar-config`, `salvar-metas`, `config/modo-automatico`, `importar-relatorio-injecao`, `importar-historico`, `backup-geral`, `backups-automaticos` (listagem e download), toda a aba "🗄️ Dados SQL", `admin/resetar-operacao`, e o cadastro de Identidade Leve de Operador (`salvar-operadores`) — além das 2 originais (`db/security.json`, `salvar-security`).
+Essa sessão **não substitui** a re-verificação de senha das rotas mais destrutivas (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade: mesmo um cookie de sessão vazado/sequestrado de uma aba esquecida aberta não basta pra restaurar dados ou sobrescrever o servidor sozinho). Fora essas 3, a sessão hoje cobre a maior parte das rotas administrativas — `salvar-config`, `salvar-metas`, `config/modo-automatico`, `importar-relatorio-injecao`, `importar-historico`, `backup-dados`, `backup-geral`, `backups-automaticos` (listagem e download), toda a aba "🗄️ Dados SQL", `admin/resetar-operacao`, e o cadastro de usuários (`salvar-usuarios`) — além das 2 originais (`db/security.json`, `salvar-security`).
 
 ## Limitações conhecidas
 
@@ -516,4 +518,3 @@ Essa sessão **não substitui** a re-verificação de senha das rotas mais destr
 - Backups de segurança (`backups-seguranca/`) não têm rotina de limpeza automática.
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
 - Testes automatizados (`test/`) cobrem autenticação/sessão e Setor de Qualidade — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste automatizado formal, só validação manual (via chamadas HTTP reais) a cada mudança.
-- Identidade Leve de Operador é só rótulo de auditoria — não é login nem controle de acesso; qualquer PIN correto de qualquer operador cadastrado funciona pra qualquer registro, sem vínculo a permissões específicas.

@@ -117,6 +117,7 @@
   let _editandoAvaliacaoId      = null;
   let _editandoRegistradoEm     = null;
   let _editandoLinkedOperacaoId = null;
+  let _editandoAvaliadorNome    = null;
 
   // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
   // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
@@ -1595,6 +1596,7 @@
       _editandoAvaliacaoId = null;
       _editandoRegistradoEm = null;
       _editandoLinkedOperacaoId = null;
+      _editandoAvaliadorNome = null;
     }
     document.querySelectorAll('.sq-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sq-nav-btn').forEach(el => el.classList.remove('active'));
@@ -2481,6 +2483,15 @@
         dimensaoOperacao: dimensaoOperacaoAtual || null,
         capacidadeOperacao: capacidadeOperacaoAtual || null,
         observations: document.getElementById('sq-obs').value,
+        // Autoria automática — quem está logado agora (ver
+        // LW.nomeDeQuemEstaLogado(), data.js), preenchida só ao
+        // REGISTRAR uma avaliação nova; numa correção, preserva o
+        // avaliador original (_editandoAvaliadorNome, carregado junto
+        // com o resto da avaliação em edição — ver
+        // _carregarAvaliacaoNoFormulario) em vez de trocar pra quem só
+        // corrigiu um detalhe depois (mesmo raciocínio de Paradas,
+        // paradas.js).
+        avaliadorNome: editando ? (_editandoAvaliadorNome || null) : LW.nomeDeQuemEstaLogado(),
         ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
       // Painéis embutidos na própria avaliação — 1 linha no banco pra
@@ -2683,6 +2694,7 @@
         _editandoAvaliacaoId      = item.id;
         _editandoRegistradoEm     = item.registeredAt || null;
         _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
+        _editandoAvaliadorNome    = item.avaliadorNome || null;
         setEditable(true);
         // Mesma trava do lançamento novo: os dados vieram da operação
         // real na hora do registro original, corrigir aqui não deveria
@@ -3761,6 +3773,7 @@
     _editandoAvaliacaoId = null;
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
+    _editandoAvaliadorNome = null;
     _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';

@@ -53,9 +53,8 @@
         📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
       </span>
 
-      <span id="topbar-operador-atual" title="Clique para trocar quem está identificado nesta aba"
-        onclick="LWOperador.trocar()"
-        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap;cursor:pointer">
+      <span id="topbar-nome-usuario"
+        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap">
       </span>
 
       <div style="position:relative">
@@ -3345,9 +3344,6 @@
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🟢 Operação em Andamento</button>
-          <button type="button" id="cfg-nav-operadores" onclick="cfgMostrarSecao('operadores')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            👤 Operadores</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -3528,10 +3524,7 @@
           <!-- ========== /SEÇÃO: Atalhos de Teclado ========== -->
 
           <!-- ========== SEÇÃO: Usuários ========== -->
-          <!-- Cadastro de usuário+senha com PERFIL — diferente da seção
-               "Operadores" (Identidade Leve, acima): aquela é só
-               informativa ("quem registrou o quê", sem senha nem
-               controle de acesso nenhum). Esta aqui é o login de verdade
+          <!-- Cadastro de usuário+senha com PERFIL — login de verdade
                (ver login.html, POST /login-usuario) — o perfil escolhido
                aqui decide exatamente o que a pessoa pode acessar (ver
                lib/perfis.js). Só o Administrador Master (senha mestra)
@@ -3609,40 +3602,6 @@
             <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
           </div>
           <!-- ========== /SEÇÃO: Operação em Andamento ========== -->
-
-          <!-- ========== SEÇÃO: Operadores (Identidade Leve) ========== -->
-          <div id="cfg-secao-operadores" style="display:none">
-            <div class="card-title">Operadores</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Cadastro opcional pra saber <strong>quem registrou o quê</strong> (Registrar Operação, Registro de
-              Paradas). Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador — não é
-              login nem trava nada: enquanto ninguém estiver cadastrado aqui, o sistema funciona exatamente como
-              antes, sem perguntar nada a ninguém.
-            </p>
-
-            <div id="cfg-operadores-status" style="margin-bottom:18px"></div>
-
-            <div id="cfg-operadores-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-            </div>
-
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Adicionar Operador</div>
-              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:2;min-width:160px">
-                  <label class="form-label">Nome</label>
-                  <input class="form-input" id="cfg-operador-nome" placeholder="Ex: João Silva">
-                </div>
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
-                  <label class="form-label">PIN (4 a 8 dígitos)</label>
-                  <input class="form-input" id="cfg-operador-pin" type="password" inputmode="numeric" maxlength="8"
-                    style="font-family:var(--font-mono)">
-                </div>
-                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarOperador()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Operadores ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
@@ -3727,7 +3686,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
-  <script src="js/operador.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
@@ -4320,9 +4278,8 @@
           gerado pelo botão "Backup Geral" (.zip).
         </p>
         <p style="color:var(--text-3);font-size:.85rem;margin-bottom:20px">
-          Usuários, senha de administrador e a Identidade Leve de operadores só são alterados se o backup
-          incluir esses arquivos — um backup mais antigo, sem eles, restaura normalmente e mantém o cadastro atual
-          intacto.
+          Usuários e senha de administrador só são alterados se o backup incluir esses arquivos — um backup mais
+          antigo, sem eles, restaura normalmente e mantém o cadastro atual intacto.
         </p>
 
         <div style="
