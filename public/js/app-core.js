@@ -82,6 +82,7 @@
     function _paginaPermitida(pageId) {
       const role = sessionStorage.getItem('lw_role');
       if (role === 'Administrador') return true;
+      if (pageId === 'menu') return true; // Menu Principal sempre acessível, pra todo mundo — mesma regra de _aplicarVisibilidadeDoMenu, abaixo, e de PAGINAS_DE_TRABALHO (lib/perfis.js). Reforça o que o servidor já garante (ver paginasPermitidas, lib/perfis-customizados.js) — nunca deveria faltar, mas showPage('menu') não pode ficar refém disso.
       if (!_paginasPermitidas) return true; // ainda carregando — ver comentário acima
       return _paginasPermitidas.includes(pageId);
     }
@@ -521,23 +522,21 @@
       // ---- Controle de acesso por perfil ----
       const role = sessionStorage.getItem('lw_role');
 
-      // Perfil ausente ou inválido (ex: sessionStorage adulterada) — volta
-      // pro login em vez de deixar a tela sem nenhuma restrição aplicada.
-      // 6 perfis no total (ver lib/perfis.js, server.js): os 3 de sempre
-      // (Operador/Analista/Administrador — Administrador é a senha mestra,
-      // nunca um usuário cadastrado) + os 3 novos que vêm do cadastro
-      // (Qualidade/Manutencao/Administrativo — Administrativo é "quase
-      // tudo", ver PAGINAS_POR_PERFIL, mas não tem senha mestra: também é
-      // um perfil comum, só com lista de páginas bem mais ampla).
-      // 7 perfis no total (ver lib/perfis.js, server.js): a senha mestra
-      // ("Administrador") + os 6 perfis novos que vêm do cadastro
-      // (OperadorInjetora, AssistenteQualidade, Encarregado, Manutencao,
-      // Supervisao, Administrativo — "Administrativo" tem rótulo
-      // "Administrador" na tela, mas o id interno continua diferente do
-      // master pra não colidir com a checagem `role === 'Administrador'`
-      // usada em todo o resto do app pra identificar a sessão mestra).
-      const PERFIS_VALIDOS = ['OperadorInjetora', 'AssistenteQualidade', 'Encarregado', 'Manutencao', 'Supervisao', 'Administrativo', 'Administrador'];
-      if (!PERFIS_VALIDOS.includes(role)) {
+      // Sem role nenhum (sessionStorage vazia/adulterada) — volta pro
+      // login antes de tentar mais nada. NÃO existe mais uma lista fixa
+      // de "perfis válidos" aqui — perfis CUSTOMIZADOS (Configurações →
+      // Usuários → "+ Criar novo tipo de perfil", ver
+      // lib/perfis-customizados.js) têm ids GERADOS
+      // (ex: custom_lider-de-turno_1720000000000), então qualquer lista
+      // hardcoded aqui ficaria desatualizada assim que um perfil novo
+      // fosse criado — foi exatamente isso que aconteceu (perfil
+      // customizado sendo rejeitado no boot e mandado de volta pro
+      // login, mesmo com uma sessão real e válida no servidor). A
+      // validação de verdade pra qualquer perfil que não seja a senha
+      // mestra é a chamada a GET /minha-sessao logo abaixo — confirma
+      // que existe uma sessão de usuário REAL pra esse role específico,
+      // o que já rejeita um valor inventado/adulterado do mesmo jeito.
+      if (!role) {
         sessionStorage.clear();
         window.location.href = 'login.html';
         return;
