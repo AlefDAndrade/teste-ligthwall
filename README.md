@@ -184,22 +184,27 @@ As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `opera
 
 ## Perfis de usuário
 
-Login em `login.html`: usuário + senha. O **perfil** de cada pessoa (o que ela pode acessar) é definido no cadastro pelo Administrador Master (Configurações → Usuários) — quem loga não escolhe o próprio perfil, já entra direto com o que foi configurado.
+Login em `login.html`: usuário + senha. O **perfil** de cada pessoa é definido no cadastro pelo Administrador (Configurações → Usuários) — quem loga não escolhe o próprio perfil, já entra direto com o que foi configurado.
 
-O botão **"Entrar como Administrador"**, no topo da tela de login, continua separado: é a senha única mestra de sempre, sem cadastro, sem usuário — mesmo comportamento de antes desta mudança.
+O botão **"Entrar como Administrador"**, no topo da tela de login, continua separado: é a senha única mestra de sempre, sem cadastro, sem usuário — mesmo comportamento de antes.
 
-| Perfil | Acesso |
-|---|---|
-| **Operador** | Registrar Operação (se marcado como autorizado a iniciar/encerrar — ver abaixo), relatórios de Bateria/Injeção/Berços, Análises Focadas, Análise Operacional, Desempenho Turnos, Manutenção. Configurações: só Atalhos de Teclado. |
-| **Analista** | Mesmo acesso do Operador, **exceto** Registrar Operação e Manutenção — só dashboards/relatórios. Configurações: só Atalhos de Teclado. |
-| **Qualidade** | Só Setor de Qualidade. Configurações: só Atalhos de Teclado. |
-| **Manutencao** | Só Manutenção. Configurações: só Atalhos de Teclado. |
-| **Administrativo** | Quase tudo — todas as páginas de trabalho + Configurações (Dados, Usuários, Automação, Atalhos), **exceto** Dados SQL e Backup/Restauração. |
-| **Administrador** (senha mestra) | Acesso total, irrestrito — inclui Dados SQL, Backup/Restauração e Importação. **Sempre** pede senha na tela de login, mesmo que já tenha sido usado antes neste navegador. |
+**Modelo de permissões**: quase todas as ferramentas ficam abertas para **visualização** a qualquer perfil — o que muda por perfil é o poder de **editar/registrar**. Cada perfil só pode editar as áreas listadas abaixo; nas demais, a tela abre normalmente, mas em modo somente-leitura (formulários desabilitados, botões de salvar/excluir escondidos). O servidor valida de novo em cada rota de escrita — nunca confia só no que o navegador esconde.
 
-A lista de páginas por perfil é definida num lugar só (`lib/perfis.js`) e validada tanto no front (esconde itens de menu) quanto no back (cada rota sensível confere de novo — nunca confia só no que o navegador mandou).
+| Perfil | Pode editar | O resto |
+|---|---|---|
+| **Operador de Injetora** | Ferramentas de registro de operação (Registrar Operação, histórico/traço), Registrar Paradas | Visualização |
+| **Assistente de Qualidade** | Setor de Qualidade, Registrar Paradas | Visualização |
+| **Encarregado** | Injetora + Qualidade + Paradas, e pode **abrir** um chamado de manutenção (não fechar) | Visualização |
+| **Manutenção** | Manutenção completa (chamados, programada, almoxarifado, movimentações), Registrar Paradas | Visualização |
+| **Supervisão** | Injetora + Qualidade + Paradas + Manutenção completa | Visualização |
+| **Administrador** (perfil cadastrado) | Tudo — igual ao Administrador Master, inclusive Configurações completas | — |
+| **Administrador** (senha mestra) | Acesso total, irrestrito | — |
 
-"Pode iniciar/encerrar operações em Registrar Operação" é uma permissão à parte, marcada por usuário no cadastro (só aparece pra perfis que já têm a página Registrar Operação liberada) — substitui o antigo sistema de "dispositivo autorizado" por deviceId.
+O checkbox **"Pode iniciar/encerrar operações em Registrar Operação"** continua existindo por usuário (Configurações → Usuários) — só aparece pra quem tem a área de edição da Injetora sem já ser administrador (Operador de Injetora, Encarregado, Supervisão): mesmo tendo permissão de editar a ferramenta, ainda precisa dessa marcação específica pra efetivamente controlar uma operação em andamento (ver *Quem pode controlar operações*, abaixo).
+
+**Configurações**: todo perfil vê só a aba **Atalhos de Teclado**. Só o perfil **Administrador** (cadastrado) tem acesso às demais abas (Dados, Usuários, Automação, Dados SQL, Backup/Restauração) — igual ao Administrador Master.
+
+O mapa de permissões (páginas e áreas de edição) é definido num lugar só (`lib/perfis.js`) e validado tanto no front (esconde/desabilita controles de edição) quanto no back (cada rota de escrita confere de novo — nunca confia só no que o navegador mandou).
 
 A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.js`) — cobre um turno inteiro sem precisar logar de novo no meio do expediente. A sessão do Administrador Master dura 30min (`lib/sessao.js`), mais curta de propósito por ser uma ação administrativa pontual, não "ficar logado o dia todo".
 
@@ -327,7 +332,7 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 
 ### Quem pode controlar operações
 
-Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: cada perfil "Administrador" e "Administrativo" sempre pode controlar; os demais perfis (Operador, Analista, Qualidade, Manutencao) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm a página Registrar Operação liberada, ver *Perfis de usuário*).
+Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: o Administrador Master e o perfil cadastrado "Administrador" sempre podem controlar; os demais perfis com a área de edição da Injetora (Operador de Injetora, Encarregado, Supervisão) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm essa área liberada, ver *Perfis de usuário*). Perfis sem a área da Injetora (Assistente de Qualidade, Manutenção) nunca controlam operações, independente da marcação.
 
 - Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao`, `/marcar-berco-andamento` e `/confirmar-tracos-hoje` recusam (HTTP 403) quem não tem essa permissão (`podeControlarOperacao()`, `server.js`).
 - **Na tela** (Registrar Operação): quem não tem permissão vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de habilitar isso no cadastro.

@@ -83,7 +83,7 @@ test('rotas de operadores (Identidade Leve) nao existem mais', async () => {
 });
 
 test('operador_nome enviado no registro de operacao e persistido e devolvido em GET /db/historico.json', async () => {
-  const cookie = await cadastrarELogar('ana.autoria', 'Operador');
+  const cookie = await cadastrarELogar('ana.autoria', 'OperadorInjetora');
   const idOp = 'op-autoria-' + Date.now();
 
   const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao`, {
@@ -126,7 +126,7 @@ test('avaliadorNome enviado no registro de avaliacao de qualidade e persistido e
   const idAvaliacao = 'ev-autoria-' + Date.now();
   const respAvaliacao = await fetch(`${servidor.baseUrl}/registrar-avaliacao-qualidade`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({
       id: idAvaliacao,
       batteryId: 'B5',
@@ -158,7 +158,7 @@ test('avaliacao sem avaliadorNome fica com o campo ausente/null, sem quebrar', a
   const idAvaliacao = 'ev-sem-avaliador-' + Date.now();
   const resp = await fetch(`${servidor.baseUrl}/registrar-avaliacao-qualidade`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: idAvaliacao, batteryId: 'B5', linkedOperacaoId: idOp, turno: '1° TURNO', paineis: [] }),
   });
   assert.equal(resp.status, 200);

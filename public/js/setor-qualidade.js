@@ -2711,6 +2711,14 @@
   function exitViewMode()  { viewMode = false; setEditable(true); }
 
   function setEditable(editable) {
+    // Perfis sem a área 'qualidade' de edição (ver lib/perfis.js — hoje,
+    // Operador de Injetora e Manutenção) nunca ficam editáveis aqui, nem
+    // que algum fluxo interno peça setEditable(true): o Setor de
+    // Qualidade fica só como visualização pra eles. O servidor valida de
+    // novo em POST /registrar-avaliacao-qualidade e
+    // /marcar-operacao-avaliada, isso aqui é só a parte visual.
+    const permiteEdicao = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('qualidade') : true;
+    if (!permiteEdicao) editable = false;
     document.getElementById('sq-view-overlay').style.display = editable ? 'none' : 'block';
     document.querySelectorAll('.sq-hide-view').forEach(el => el.classList.toggle('is-view', !editable));
     document.querySelectorAll('.sq-show-view').forEach(el => el.classList.toggle('is-view', !editable));

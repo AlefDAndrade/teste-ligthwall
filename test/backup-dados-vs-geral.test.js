@@ -95,7 +95,7 @@ test('Backup Geral inclui dados de producao + config.json + identidade/acesso, s
   await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify([{ nomeUsuario: 'no.zip.geral', senha: 'senhateste1234', perfil: 'Operador', podeIniciarOperacao: true }]),
+    body: JSON.stringify([{ nomeUsuario: 'no.zip.geral', senha: 'senhateste1234', perfil: 'OperadorInjetora', podeIniciarOperacao: true }]),
   });
 
   const resp = await fetch(`${servidor.baseUrl}/backup-geral`, { headers: { Cookie: cookieAdmin } });
@@ -121,7 +121,7 @@ test('restaurar um Backup Geral de instalacao ANTIGA (sem usuarios/security) pre
   await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify([{ nomeUsuario: 'preservado.migracao', senha: 'senhamigracao1', perfil: 'Operador', podeIniciarOperacao: true }]),
+    body: JSON.stringify([{ nomeUsuario: 'preservado.migracao', senha: 'senhamigracao1', perfil: 'OperadorInjetora', podeIniciarOperacao: true }]),
   });
 
   const resp = await fetch(`${servidor.baseUrl}/restaurar-backup-geral`, {
@@ -158,7 +158,7 @@ test('restaurar um Backup Geral com usuarios.json presente SUBSTITUI o cadastro 
   await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify([{ nomeUsuario: 'sera.substituido', senha: 'senhasub1234', perfil: 'Operador', podeIniciarOperacao: true }]),
+    body: JSON.stringify([{ nomeUsuario: 'sera.substituido', senha: 'senhasub1234', perfil: 'OperadorInjetora', podeIniciarOperacao: true }]),
   });
 
   const usuariosDoBackup = [
@@ -166,7 +166,7 @@ test('restaurar um Backup Geral com usuarios.json presente SUBSTITUI o cadastro 
       id: 'id-restaurado-999',
       nomeUsuario: 'veio.do.backup',
       senhaHash: crypto.createHash('sha256').update('qualquer-coisa', 'utf8').digest('hex'),
-      perfil: 'Analista',
+      perfil: 'Supervisao',
       podeIniciarOperacao: false,
       atalhos: {},
     },

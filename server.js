@@ -70,10 +70,51 @@ const sessao = require('./lib/sessao.js')();
 // só pro Administrador Master (senha única mestra). Ver lib/sessao-usuario.js.
 const sessaoUsuario = require('./lib/sessao-usuario.js')();
 
-// Mapa central de permissões por perfil (quais páginas cada um vê) — ver
-// lib/perfis.js. Usado tanto por GET /perfis (front monta o menu) quanto
-// por validações no servidor (lib/rotas/usuarios.js).
+// Mapa central de permissões por perfil (o que cada um vê e o que pode
+// EDITAR) — ver lib/perfis.js. Usado tanto por GET /perfis (front monta o
+// menu e esconde controles de edição) quanto por validações no servidor
+// (rotas de escrita de cada domínio).
 const perfis = require('./lib/perfis.js');
+
+// ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
+// Todas as páginas são abertas pra VISUALIZAÇÃO; o que cada perfil pode
+// EDITAR/registrar é validado aqui, rota a rota, por área ('injetora',
+// 'paradas', 'qualidade', 'manutencao', 'manutencao-chamado'). Funções
+// declaradas (não const) de propósito: são referenciadas no wiring das
+// factories logo abaixo, antes do ponto do arquivo onde estariam se fossem
+// const (hoisting).
+
+// A sessão do Administrador Master (lib/sessao.js) edita qualquer área;
+// pros usuários cadastrados, decide o perfil (ver perfis.podeEditar).
+function podeEditarArea(req, area) {
+  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  return !!dados && perfis.podeEditar(dados.perfil, area);
+}
+
+function negarEdicao(res, oQue) {
+  res.writeHead(403, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    ok: false,
+    erro: `Seu perfil só pode VISUALIZAR ${oQue} — sem permissão pra registrar, editar ou excluir. Se precisar dessa permissão, fale com um Administrador (ou confira se sua sessão não expirou, fazendo login de novo).`,
+  }));
+}
+
+// Poderes totais de administração: a sessão mestra de sempre (lib/sessao.js)
+// OU um usuário cadastrado com perfil Administrativo ("Administrador" na
+// tela — igual ao master por definição, ver lib/perfis.js). As rotas que
+// antes exigiam só a sessão mestra (backup, SQL, importação, gerenciar
+// usuários, salvar config, resetar operação) agora aceitam as duas — por
+// isso recebem `sessaoOuAdmin` (abaixo) no lugar de `sessao`.
+function temPoderesDeAdmin(req) {
+  if (sessao.requestTemSessaoValida(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  return !!dados && dados.perfil === 'Administrativo';
+}
+
+// Mesmo contrato de lib/sessao.js (só o método que essas rotas usam) —
+// permite passar isto no lugar de `sessao` sem mudar nada dentro delas.
+const sessaoOuAdmin = { requestTemSessaoValida: temPoderesDeAdmin };
 
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
@@ -81,23 +122,23 @@ const perfis = require('./lib/perfis.js');
 // devolve true se já respondeu. Chamadas em sequência dentro do
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
-const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao, sessaoUsuario, perfis });
-const rotasParadas = require('./lib/rotas/paradas.js')({ db });
-const rotasManutencao = require('./lib/rotas/manutencao.js')({ db });
-const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
-const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
+const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis });
+const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
+const rotasManutencao = require('./lib/rotas/manutencao.js')({ db, podeEditarArea, negarEdicao });
+const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
+const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
-const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste });
+const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste, podeEditarArea, negarEdicao });
 const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
-  sessao, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
+  sessao: sessaoOuAdmin, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
   lerBercosAndamento, salvarBercosAndamentoNoDisco, podeControlarOperacao, negarControleDeOperacao,
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
-const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao, numOuNulo });
+const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao: sessaoOuAdmin, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
-const rotasEdicao = require('./lib/rotas/edicao.js')({ db, sessao, numOuNulo });
+const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
 const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
   db, fs, path, dirParaModoTeste,
   podeControlarOperacao, negarControleDeOperacao,
@@ -107,7 +148,7 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
 const rotasBackup = require('./lib/rotas/backup.js')({
   db, fs, path, JSZip,
   ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH,
-  auth, sessao,
+  auth, sessao: sessaoOuAdmin,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
@@ -417,10 +458,15 @@ const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 // `req` inteiro pra extrair o cookie de sessão — ver
 // sessaoUsuario.dadosDaSessao(req).
 function podeControlarOperacao(req) {
+  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master: irrestrito
   const dados = sessaoUsuario.dadosDaSessao(req);
   if (!dados) return false; // sem sessão de usuário válida, sem acesso
-  if (dados.perfil === 'Administrativo') return true; // "quase tudo", ver lib/perfis.js
-  return !!dados.podeIniciarOperacao;
+  if (perfis.ehPerfilDeAdmin(dados.perfil)) return true; // Administrativo = igual ao master
+  // Pros demais perfis, duas condições juntas: o perfil precisa ter a área
+  // 'injetora' de edição (Operador de Injetora, Encarregado, Supervisão —
+  // ver lib/perfis.js) E o usuário específico precisa ter sido marcado com
+  // o checkbox "pode iniciar/encerrar operações" no cadastro.
+  return perfis.podeEditar(dados.perfil, 'injetora') && !!dados.podeIniciarOperacao;
 }
 
 function negarControleDeOperacao(res) {

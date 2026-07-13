@@ -313,9 +313,12 @@
       const badge = p.classificacao === 'Planejada'
         ? `<span class="badge badge-blue">Planejada</span>`
         : `<span class="badge badge-red">Não Planejada</span>`;
-      // Registro de Paradas não é uma feature exclusiva de administrador —
-      // qualquer perfil que acesse esta página pode editar/excluir registros.
-      const canEdit = true;
+      // Registro de Paradas é aberto pra visualização a todo perfil, mas
+      // só quem tem a área 'paradas' de edição (ver lib/perfis.js — hoje,
+      // na prática, todo perfil cadastrável) pode editar/excluir — o
+      // servidor valida de novo em POST /salvar-parada e
+      // /excluir-parada, isso aqui é só a parte visual.
+      const canEdit = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('paradas') : true;
       const btns = canEdit
         ? `<button class="btn btn-ghost btn-sm" onclick="LWParadas.editarParada('${p.id}')">✏</button>
            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="LWParadas.confirmarExclusao('${p.id}')">✕</button>`

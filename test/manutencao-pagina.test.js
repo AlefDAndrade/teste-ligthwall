@@ -17,15 +17,36 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const { JSDOM } = require('jsdom');
 const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
+
+// Rotas de ESCRITA de Manutenção agora exigem poderes de admin ou a área
+// 'manutencao'/'manutencao-chamado' de edição (modelo novo, ver
+// lib/perfis.js) — sessionStorage.lw_role='Administrador' sozinho não
+// basta mais (nunca bastou de verdade pro resto do sistema, ver
+// app-core.js/AdminAuth), então este teste autentica uma sessão REAL de
+// Admin Master no servidor e injeta o cookie em todo fetch feito de
+// dentro da página, do mesmo jeito que o app de verdade faz via
+// AdminAuth.abrirModal().
+const SENHA_ADMIN = 'senha-admin-manutencao-pagina-000';
+const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').digest('hex');
 
 let servidor;
 let dom;
 let window;
 
 before(async () => {
-  servidor = await iniciarServidorDeTeste();
+  servidor = await iniciarServidorDeTeste({
+    seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+  });
+  const respAdmin = await fetch(`${servidor.baseUrl}/verificar-senha`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senha: SENHA_ADMIN }),
+  });
+  const cookieAdmin = (respAdmin.headers.get('set-cookie') || '').split(';')[0];
+
   dom = await JSDOM.fromURL(servidor.baseUrl + '/index.html', {
     runScripts: 'dangerously',
     resources: 'usable',
@@ -41,10 +62,14 @@ before(async () => {
       // window.fetch não é implementado pelo jsdom (só o fetch global do
       // Node, fora do window, funciona) — necessário desde a Fase 2
       // (backend real de Manutenção, ver lib/rotas/manutencao.js), que
-      // faz fetch() de dentro da página pra persistir os dados.
+      // faz fetch() de dentro da página pra persistir os dados. Anexa o
+      // cookie da sessão real de Admin Master (autenticada acima) —
+      // mesmo cookie que o navegador de verdade carrega depois de passar
+      // pelo modal do AdminAuth.
       win.fetch = (url, opts) => {
         const absoluta = new URL(url, win.location.href).toString();
-        return fetch(absoluta, opts);
+        const headers = { ...(opts && opts.headers), Cookie: cookieAdmin };
+        return fetch(absoluta, { ...opts, headers });
       };
     },
   });

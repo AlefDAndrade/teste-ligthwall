@@ -17,7 +17,7 @@
       Gestão de Manutenção
     </div>
     <div class="man-actions">
-      <button class="man-btn man-btn-primary" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
+      <button class="man-btn man-btn-primary" data-manut-area="manutencao-chamado" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
       <button class="man-btn man-btn-outline" onclick="exportarCSV()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
       <button class="man-btn man-btn-outline" onclick="gerarRelatorioPDF()"><i class="fas fa-file-pdf"></i> Relatório PDF</button>
       <button class="man-btn man-btn-outline" onclick="document.getElementById('man-importFile').click()"><i class="fas fa-upload"></i> Importar Backup</button>
@@ -185,8 +185,8 @@
         
         <!-- BOTÕES INFERIORES -->
         <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
-          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
+          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" data-manut-area="manutencao-chamado" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
+          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" data-manut-area="manutencao" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
         </div>
       </form>
@@ -263,7 +263,7 @@
           </div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações</div><div class="man-form-field"><textarea id="man-progObs" placeholder="Descreva o motivo ou necessidade..."></textarea></div></div>
           <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-            <button type="button" class="man-btn man-btn-primary" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
+            <button type="button" class="man-btn man-btn-primary" data-manut-area="manutencao" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
             <div id="man-progMensagem" style="font-size:13px; display:flex; align-items:center; color:var(--man-text-secondary);"></div>
           </div>
         </div>
@@ -334,7 +334,7 @@
           <option value="Outros">Outros</option>
         </select>
       </div>
-      <button class="man-btn man-btn-success" onclick="abrirModalCadastroEstoque()"><i class="fas fa-plus-circle"></i> Cadastrar Peça</button>
+      <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="abrirModalCadastroEstoque()"><i class="fas fa-plus-circle"></i> Cadastrar Peça</button>
     </div>
 
     <div class="man-card">
@@ -371,7 +371,7 @@
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Qtd. Inicial</div><div class="man-form-field"><input type="number" id="man-estoqueQtdInicial" step="1" placeholder="0"></div></div>
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-exclamation-triangle"></i> Estoque Mínimo</div><div class="man-form-field"><input type="number" id="man-estoqueMinimo" step="1" placeholder="Ex: 5"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="salvarItemEstoque()"><i class="fas fa-save"></i> Salvar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarItemEstoque()"><i class="fas fa-save"></i> Salvar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalEstoque()">Cancelar</button>
         </div>
       </form>
@@ -387,7 +387,7 @@
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Quantidade</div><div class="man-form-field"><input type="number" id="man-movQuantidade" step="1" placeholder="1"></div></div>
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Motivo / Chamado</div><div class="man-form-field"><input type="text" id="man-movMotivo" placeholder="Ex: Utilizado no chamado MAN-123 ou Compra direta"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarMovimentacao()"><i class="fas fa-check"></i> Confirmar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarMovimentacao()"><i class="fas fa-check"></i> Confirmar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalMovimentacao()">Cancelar</button>
         </div>
       </form>
@@ -413,7 +413,7 @@
       <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Revise o resumo antes de finalizar:</p>
       <div id="man-modalResumoBody"></div>
       <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-        <button class="man-btn man-btn-success" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
+        <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
         <button class="man-btn man-btn-outline" onclick="fecharModal()">Cancelar</button>
       </div>
     </div>
@@ -438,7 +438,7 @@
         <input type="hidden" id="man-inicioId">
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-inicioData" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-inicioHora" onchange="calcularTempoEstimado()"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalInicio()">Cancelar</button>
         </div>
       </form>
@@ -469,7 +469,7 @@
         <div class="man-form-row"><div class="man-form-label">Técnico Responsável:</div><div class="man-form-field"><input type="text" id="man-execTecnico" placeholder="Nome do técnico que executou" style="width:100%;"></div></div>
         <div class="man-form-row"><div class="man-form-label">Observações:</div><div class="man-form-field"><textarea id="man-execObs" placeholder="Informações adicionais sobre a execução..." style="width:100%;"></textarea></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalFinalizar()">Cancelar</button>
         </div>
       </form>
@@ -488,7 +488,7 @@
         <div class="man-form-row"><div class="man-form-label">Duração Estimada:</div><div class="man-form-field"><input type="text" id="man-aprTempoEstimado" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
         <div class="man-form-row"><div class="man-form-label">Responsável pela Aprovação:</div><div class="man-form-field"><input type="text" id="man-aprResponsavel" placeholder="Nome do técnico/supervisor que aprova" style="width:100%;"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalAprovacao()">Cancelar</button>
         </div>
       </form>
@@ -515,7 +515,7 @@
         <input type="hidden" id="man-reprovacaoId">
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Justificativa</div><div class="man-form-field"><textarea id="man-reprovacaoJustificativa" placeholder="Ex: Não será possível realizar nesta data devido a falta de peças..."></textarea></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-danger" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
+          <button type="button" class="man-btn man-btn-danger" data-manut-area="manutencao" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalReprovacao()">Cancelar</button>
         </div>
       </form>

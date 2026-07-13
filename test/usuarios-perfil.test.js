@@ -1,15 +1,18 @@
 // ─── test/usuarios-perfil.test.js ────────────────────────────────────────────
-// Testa o sistema de login novo (Fase A — ver conversa que motivou isso):
-// usuário+senha com PERFIL definido no cadastro (não mais "escolha seu
-// papel" sem senha). 6 perfis: Operador, Analista, Qualidade, Manutencao,
-// Administrativo (cadastráveis — ver lib/perfis.js) e Administrador
-// (senha mestra única, sem cadastro, continua como sempre foi).
+// Testa o sistema de login com PERFIL definido no cadastro. Modelo NOVO (ver
+// lib/perfis.js): 6 perfis cadastráveis — OperadorInjetora,
+// AssistenteQualidade, Encarregado, Manutencao, Supervisao, Administrativo
+// (rótulo "Administrador" na tela) — + o Administrador Master (senha única,
+// sem cadastro, continua como sempre foi). TODA página é aberta pra
+// visualização a todo perfil; o que muda por perfil agora é a ÁREA DE EDIÇÃO
+// (injetora/paradas/qualidade/manutencao/manutencao-chamado), não mais
+// "quais páginas cada um vê".
 //
 // Cobre: rotas de backend (GET /perfis, POST /login-usuario,
 // POST /salvar-usuarios, GET /usuarios, GET /minha-sessao,
-// POST /logout-usuario) via HTTP direto, e o boot da SPA (menu ajustado
-// por perfil) via servidor real + jsdom — mesmo padrão de
-// test/manutencao-pagina.test.js.
+// POST /logout-usuario) via HTTP direto, e o boot da SPA (visualização
+// aberta pra todo perfil, Configurações restrita) via servidor real + jsdom
+// — mesmo padrão de test/manutencao-pagina.test.js.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -50,26 +53,41 @@ async function logarComoAdminMaster() {
 // Backend — rotas puras via HTTP
 // ═══════════════════════════════════════════════════════════════════════
 
-test('GET /perfis expõe os 5 perfis cadastráveis e suas páginas', async () => {
+test('GET /perfis expõe os 6 perfis cadastráveis e suas áreas de edição', async () => {
   const resp = await fetch(`${servidor.baseUrl}/perfis`);
   const data = await resp.json();
   assert.equal(resp.status, 200);
   assert.equal(data.ok, true);
-  assert.deepEqual(data.perfisCadastraveis, ['Operador', 'Analista', 'Qualidade', 'Manutencao', 'Administrativo']);
-  assert.ok(data.paginasPorPerfil.Operador.includes('operacao'));
-  assert.ok(data.paginasPorPerfil.Operador.includes('manutencao'));
-  assert.ok(!data.paginasPorPerfil.Analista.includes('operacao'), 'Analista não deveria ter acesso a Registrar Operação');
-  assert.deepEqual(data.paginasPorPerfil.Qualidade, ['setor-qualidade', 'config-atalhos']);
-  assert.deepEqual(data.paginasPorPerfil.Manutencao, ['manutencao', 'config-atalhos']);
-  assert.ok(data.paginasPorPerfil.Administrativo.includes('setor-qualidade'));
-  assert.ok(!data.paginasPorPerfil.Administrativo.includes('config-sql'), 'Administrativo não deveria ter Dados SQL');
+  assert.deepEqual(data.perfisCadastraveis, [
+    'OperadorInjetora', 'AssistenteQualidade', 'Encarregado', 'Manutencao', 'Supervisao', 'Administrativo',
+  ]);
+
+  // Visualização aberta: todo perfil cadastrável vê todas as páginas de
+  // trabalho, inclusive as que não edita.
+  assert.ok(data.paginasPorPerfil.OperadorInjetora.includes('operacao'));
+  assert.ok(data.paginasPorPerfil.OperadorInjetora.includes('setor-qualidade'), 'visualização é aberta, mesmo sem poder editar');
+  assert.ok(data.paginasPorPerfil.AssistenteQualidade.includes('operacao'), 'visualização é aberta, mesmo sem poder editar');
+
+  // Áreas de edição — a permissão de verdade no modelo novo.
+  assert.deepEqual(data.areasEdicaoPorPerfil.OperadorInjetora, ['injetora', 'paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.AssistenteQualidade, ['qualidade', 'paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Encarregado, ['injetora', 'qualidade', 'paradas', 'manutencao-chamado']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Manutencao, ['manutencao', 'paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Supervisao, ['injetora', 'qualidade', 'paradas', 'manutencao']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Administrativo, ['injetora', 'paradas', 'qualidade', 'manutencao', 'manutencao-chamado']);
+
+  // Configurações: só o Administrador (perfil Administrativo) tem tudo;
+  // os demais só Atalhos.
+  assert.deepEqual(data.paginasPorPerfil.OperadorInjetora.filter(p => p.startsWith('config-')), ['config-atalhos']);
+  assert.ok(data.paginasPorPerfil.Administrativo.includes('config-sql'), 'Administrador (Administrativo) deveria ter Dados SQL, igual ao master');
+  assert.ok(data.paginasPorPerfil.Administrativo.includes('config-usuarios'));
 });
 
-test('POST /salvar-usuarios exige sessão de Administrador Master', async () => {
+test('POST /salvar-usuarios exige poderes de administrador (master ou perfil Administrativo)', async () => {
   const resp = await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify([{ nomeUsuario: 'sem.sessao', senha: '1234', perfil: 'Operador' }]),
+    body: JSON.stringify([{ nomeUsuario: 'sem.sessao', senha: '1234', perfil: 'OperadorInjetora' }]),
   });
   assert.equal(resp.status, 403);
   const data = await resp.json();
@@ -83,7 +101,7 @@ test('cadastrar um usuário novo, listar, e fazer login com sucesso', async () =
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify([
-      { nomeUsuario: 'ana.oper', senha: 'senha1234', perfil: 'Operador', podeIniciarOperacao: true },
+      { nomeUsuario: 'ana.oper', senha: 'senha1234', perfil: 'OperadorInjetora', podeIniciarOperacao: true },
     ]),
   });
   const dataSalvar = await respSalvar.json();
@@ -91,7 +109,7 @@ test('cadastrar um usuário novo, listar, e fazer login com sucesso', async () =
   assert.equal(dataSalvar.ok, true);
   assert.equal(dataSalvar.usuarios.length, 1);
   assert.equal(dataSalvar.usuarios[0].nomeUsuario, 'ana.oper');
-  assert.equal(dataSalvar.usuarios[0].perfil, 'Operador');
+  assert.equal(dataSalvar.usuarios[0].perfil, 'OperadorInjetora');
   assert.equal(dataSalvar.usuarios[0].podeIniciarOperacao, true);
 
   const respLista = await fetch(`${servidor.baseUrl}/usuarios`);
@@ -108,7 +126,7 @@ test('cadastrar um usuário novo, listar, e fazer login com sucesso', async () =
   const dataLogin = await respLogin.json();
   assert.equal(respLogin.status, 200);
   assert.equal(dataLogin.ok, true);
-  assert.equal(dataLogin.perfil, 'Operador');
+  assert.equal(dataLogin.perfil, 'OperadorInjetora');
   assert.equal(dataLogin.podeIniciarOperacao, true);
   assert.ok(extrairCookie(respLogin), 'login deveria emitir um cookie de sessão de usuário');
 });
@@ -148,7 +166,7 @@ test('GET /minha-sessao confirma a sessão de usuário real e POST /logout-usuar
   const respSessao = await fetch(`${servidor.baseUrl}/minha-sessao`, { headers: { Cookie: cookieUsuario } });
   const dataSessao = await respSessao.json();
   assert.equal(dataSessao.ok, true);
-  assert.equal(dataSessao.perfil, 'Operador');
+  assert.equal(dataSessao.perfil, 'OperadorInjetora');
 
   const respSemCookie = await fetch(`${servidor.baseUrl}/minha-sessao`);
   const dataSemCookie = await respSemCookie.json();
@@ -160,7 +178,7 @@ test('GET /minha-sessao confirma a sessão de usuário real e POST /logout-usuar
   assert.equal(dataDepoisLogout.ok, false, 'depois do logout, a sessão não deveria mais ser válida');
 });
 
-test('perfil sem página "operacao" liberada nunca recebe podeIniciarOperacao=true, mesmo se enviado no payload', async () => {
+test('perfil sem controle de operação nunca recebe podeIniciarOperacao=true, mesmo se enviado no payload', async () => {
   const cookieAdmin = await logarComoAdminMaster();
 
   // Busca o id real de "ana.oper" (já cadastrada num teste anterior) —
@@ -175,14 +193,28 @@ test('perfil sem página "operacao" liberada nunca recebe podeIniciarOperacao=tr
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify([
-      { id: ana.id, nomeUsuario: 'ana.oper', perfil: 'Operador', podeIniciarOperacao: true }, // sem "senha" -> preserva o hash atual
-      { nomeUsuario: 'joana.qual', senha: 'senhaqual1', perfil: 'Qualidade', podeIniciarOperacao: true },
+      { id: ana.id, nomeUsuario: 'ana.oper', perfil: 'OperadorInjetora', podeIniciarOperacao: true }, // sem "senha" -> preserva o hash atual
+      { nomeUsuario: 'joana.qual', senha: 'senhaqual1', perfil: 'AssistenteQualidade', podeIniciarOperacao: true },
     ]),
   });
   const data = await resp.json();
   assert.equal(resp.status, 200);
   const joana = data.usuarios.find(u => u.nomeUsuario === 'joana.qual');
-  assert.equal(joana.podeIniciarOperacao, false, 'Qualidade não tem a página operacao, então a marcação deveria ser forçada pra false');
+  assert.equal(joana.podeIniciarOperacao, false, 'Assistente de Qualidade não tem área injetora, então a marcação deveria ser forçada pra false');
+});
+
+test('perfil Administrativo nunca recebe podeIniciarOperacao=true (é irrestrito, o checkbox é redundante)', async () => {
+  const cookieAdmin = await logarComoAdminMaster();
+  const resp = await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify([
+      { nomeUsuario: 'root.admin', senha: 'senharoot1234', perfil: 'Administrativo', podeIniciarOperacao: true },
+    ]),
+  });
+  const data = await resp.json();
+  const root = data.usuarios.find(u => u.nomeUsuario === 'root.admin');
+  assert.equal(root.podeIniciarOperacao, false);
 });
 
 test('nome de usuário duplicado é recusado ao salvar', async () => {
@@ -191,8 +223,8 @@ test('nome de usuário duplicado é recusado ao salvar', async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify([
-      { nomeUsuario: 'duplicado', senha: 'senha1111', perfil: 'Operador' },
-      { nomeUsuario: 'Duplicado', senha: 'senha2222', perfil: 'Analista' },
+      { nomeUsuario: 'duplicado', senha: 'senha1111', perfil: 'OperadorInjetora' },
+      { nomeUsuario: 'Duplicado', senha: 'senha2222', perfil: 'Supervisao' },
     ]),
   });
   assert.equal(resp.status, 400);
@@ -214,8 +246,36 @@ test('perfil inválido é recusado ao salvar', async () => {
   assert.match(data.erro, /perfil/i);
 });
 
+test('perfil descontinuado (cadastro de antes da mudança) é recusado no login', async () => {
+  // Simula um cadastro antigo — grava direto no arquivo, contornando a
+  // validação de POST /salvar-usuarios (que já rejeitaria "Operador" hoje).
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const usuariosPath = path.join(servidor.pastaTemp, 'private', 'usuarios.json');
+  const usuarios = JSON.parse(fs.readFileSync(usuariosPath, 'utf8'));
+  usuarios.push({
+    id: 'usuario_legado_1',
+    nomeUsuario: 'legado.operador',
+    senhaHash: require('node:crypto').createHash('sha256').update('senhalegado1').digest('hex'),
+    perfil: 'Operador', // perfil descontinuado
+    podeIniciarOperacao: true,
+    atalhos: {},
+  });
+  fs.writeFileSync(usuariosPath, JSON.stringify(usuarios, null, 2), 'utf8');
+
+  const resp = await fetch(`${servidor.baseUrl}/login-usuario`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nomeUsuario: 'legado.operador', senha: 'senhalegado1' }),
+  });
+  assert.equal(resp.status, 400);
+  const data = await resp.json();
+  assert.equal(data.ok, false);
+  assert.match(data.erro, /descontinuado/i);
+});
+
 // ═══════════════════════════════════════════════════════════════════════
-// Front-end — boot da SPA respeitando o perfil (servidor real + jsdom)
+// Front-end — boot da SPA (visualização aberta, Configurações restrita)
 // ═══════════════════════════════════════════════════════════════════════
 
 async function carregarSpaComo(perfil, nomeUsuario, senha) {
@@ -224,7 +284,7 @@ async function carregarSpaComo(perfil, nomeUsuario, senha) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify([
-      { nomeUsuario, senha, perfil, podeIniciarOperacao: perfil === 'Operador' },
+      { nomeUsuario, senha, perfil, podeIniciarOperacao: perfil === 'OperadorInjetora' },
     ]),
   }).catch(() => {});
 
@@ -254,8 +314,8 @@ async function carregarSpaComo(perfil, nomeUsuario, senha) {
   return dom;
 }
 
-test('boot da SPA como Qualidade: só vê Setor de Qualidade, esconde Operação/OEE', async () => {
-  const dom = await carregarSpaComo('Qualidade', 'joana.boot', 'senhaboot1');
+test('boot da SPA como AssistenteQualidade: visualização aberta (vê Operação e OEE também)', async () => {
+  const dom = await carregarSpaComo('AssistenteQualidade', 'joana.boot', 'senhaboot1');
   const { window } = dom;
   const document = window.document;
 
@@ -265,15 +325,18 @@ test('boot da SPA como Qualidade: só vê Setor de Qualidade, esconde Operação
     const itemOee = document.querySelector('[data-page="oee"]');
 
     assert.notEqual(itemQualidade.style.display, 'none');
-    assert.equal(itemOperacao.style.display, 'none');
-    assert.equal(itemOee.style.display, 'none');
+    // Modelo novo: visualização aberta — Assistente de Qualidade também VÊ
+    // Operação e OEE, só não pode EDITAR (área 'injetora' não está na sua
+    // lista, ver GET /perfis).
+    assert.notEqual(itemOperacao.style.display, 'none');
+    assert.notEqual(itemOee.style.display, 'none');
   } finally {
     window.close();
   }
 });
 
-test('boot da SPA como Operador: entra direto em Registrar Operação, vê Manutenção', async () => {
-  const dom = await carregarSpaComo('Operador', 'carlos.boot', 'senhaboot2');
+test('boot da SPA como OperadorInjetora: entra direto em Registrar Operação, vê tudo', async () => {
+  const dom = await carregarSpaComo('OperadorInjetora', 'carlos.boot', 'senhaboot2');
   const { window } = dom;
   const document = window.document;
 
@@ -284,13 +347,13 @@ test('boot da SPA como Operador: entra direto em Registrar Operação, vê Manut
     const itemManutencao = document.querySelector('[data-page="manutencao"]');
     const itemQualidade = document.querySelector('[data-page="setor-qualidade"]');
     assert.notEqual(itemManutencao.style.display, 'none');
-    assert.equal(itemQualidade.style.display, 'none');
+    assert.notEqual(itemQualidade.style.display, 'none', 'visualização é aberta, mesmo sem poder editar');
   } finally {
     window.close();
   }
 });
 
-test('boot da SPA como Manutencao: só vê Manutenção, botão de Configurações aparece (tem config-atalhos)', async () => {
+test('boot da SPA como Manutencao: vê tudo, botão de Configurações aparece (tem config-atalhos)', async () => {
   const dom = await carregarSpaComo('Manutencao', 'pedro.boot', 'senhaboot3');
   const { window } = dom;
   const document = window.document;
@@ -299,10 +362,29 @@ test('boot da SPA como Manutencao: só vê Manutenção, botão de Configuraçõ
     const itemManutencao = document.querySelector('[data-page="manutencao"]');
     const itemOperacao = document.querySelector('[data-page="operacao"]');
     assert.notEqual(itemManutencao.style.display, 'none');
-    assert.equal(itemOperacao.style.display, 'none');
+    assert.notEqual(itemOperacao.style.display, 'none', 'visualização é aberta, mesmo sem poder editar');
 
     const btnConfig = document.getElementById('btn-config');
     assert.notEqual(btnConfig.style.display, 'none', 'Manutencao tem config-atalhos, então o botão deveria aparecer');
+  } finally {
+    window.close();
+  }
+});
+
+test('boot da SPA como Administrativo ("Administrador" cadastrado): vê todas as abas de Configurações', async () => {
+  const dom = await carregarSpaComo('Administrativo', 'sara.boot', 'senhaboot4');
+  const { window } = dom;
+  const document = window.document;
+
+  try {
+    const navSql = document.getElementById('cfg-nav-sql');
+    const navUsuarios = document.getElementById('cfg-nav-usuarios');
+    // _cfgAplicarVisibilidadeDeAbas só roda quando o modal de Configurações
+    // abre — aqui só confirmamos que os elementos existem e não estão
+    // marcados como escondidos de antemão (o teste de unidade de
+    // permissão de verdade já está coberto por GET /perfis, acima).
+    assert.ok(navSql, 'aba de Dados SQL deveria existir no DOM');
+    assert.ok(navUsuarios, 'aba de Usuários deveria existir no DOM');
   } finally {
     window.close();
   }

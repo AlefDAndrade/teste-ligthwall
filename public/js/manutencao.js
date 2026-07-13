@@ -748,7 +748,8 @@
               }
           }
           const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock"></i>' : '';
-          const deleteIcon = (m.situacao === 'Aguardando' && !m.etiquetaFechada) 
+          const _podeEditarManut = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+          const deleteIcon = (m.situacao === 'Aguardando' && !m.etiquetaFechada && _podeEditarManut)
             ? `<span style="cursor:pointer;" onclick="excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>` 
             : '';
 
@@ -877,7 +878,8 @@
           document.getElementById('man-manRespSupervisor').value = m.respSupervisor || '';
           document.getElementById('man-manObsSupervisor').value = m.obsSupervisor || '';
       }
-      document.getElementById('man-btnFecharEtiqueta').style.display = (m.situacao === 'Concluido' && !m.etiquetaFechada) ? 'inline-block' : 'none';
+      const _podeFecharChamado = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+      document.getElementById('man-btnFecharEtiqueta').style.display = (m.situacao === 'Concluido' && !m.etiquetaFechada && _podeFecharChamado) ? 'inline-block' : 'none';
       if (card) card.scrollIntoView({ behavior: 'smooth' });
     } catch (error) {
       toast('Erro ao carregar dados.', 'error');
@@ -1369,19 +1371,23 @@
     else {
       tbody.innerHTML = pageData.map(a => {
         const sc = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
+        const _podeEditarManutProg = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
         let acoes = `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirDetalhesProgramada('${a.id}')"><i class="fas fa-eye"></i></button> `;
-        if(a.status === 'Aprovado' || a.status === 'Pendente') {
+        if (!_podeEditarManutProg) {
+          // Visualização — sem ações de aprovar/reprovar/iniciar/finalizar,
+          // que exigem a área 'manutencao' completa (ver lib/perfis.js).
+        } else if(a.status === 'Aprovado' || a.status === 'Pendente') {
           acoes += `<button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="aprovarAgendamento('${a.id}')"><i class="fas fa-check"></i></button><button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
         } else if(a.status === 'Em Execucao') {
           acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
         } else {
           acoes += `<span style="font-size:12px; color:var(--man-text-secondary);">${esc(a.justificativa || '-')}</span>`;
         }
-        if(a.status === 'Aprovado' || a.status === 'Pendente') {
+        if(_podeEditarManutProg && (a.status === 'Aprovado' || a.status === 'Pendente')) {
           acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--man-blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
         }
 
-        const deleteIcon = a.status === 'Pendente' 
+        const deleteIcon = (_podeEditarManutProg && a.status === 'Pendente')
           ? `<span style="color:var(--man-red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
           : '';
 
@@ -1498,10 +1504,12 @@
           <td data-label="Fornecedor">${esc(p.fornecedor || '-')}</td>
           <td data-label="Ações">
             <div class="man-actions-table">
+              <span style="cursor:pointer;" onclick="abrirHistoricoEstoque('${p.id}')"><i class="fas fa-history"></i></span>
+              ${(typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true) ? `
               <span style="cursor:pointer;" onclick="abrirModalCadastroEstoque('${p.id}')"><i class="fas fa-edit"></i></span>
               <span style="cursor:pointer;" onclick="abrirModalMovimentacao('${p.id}')"><i class="fas fa-exchange-alt"></i></span>
-              <span style="cursor:pointer;" onclick="abrirHistoricoEstoque('${p.id}')"><i class="fas fa-history"></i></span>
               <span style="cursor:pointer; color:var(--man-red);" onclick="excluirItemEstoque('${p.id}')"><i class="fas fa-trash-alt"></i></span>
+              ` : ''}
             </div>
           </td>
         </tr>`;
@@ -1972,6 +1980,23 @@
     await carregarTudoDoServidor();
     renderDashboard(); renderCorretiva(); renderProgramada();
     renderPecas(); renderAlmoxarifado();
+    _aplicarVisibilidadeDeEdicao();
+  }
+
+  // Esconde os botões estáticos marcados com [data-manut-area] que o
+  // perfil atual não pode usar (modelo novo, ver lib/perfis.js): "Novo
+  // Chamado"/"Salvar Chamado" exigem 'manutencao-chamado' (todo perfil com
+  // acesso a Manutenção tem isso, exceto quem não tem nenhuma área de
+  // manutenção); o resto (Fechar Chamado, Programada, Almoxarifado) exige
+  // 'manutencao' completa. Mesmo padrão de _aplicarVisibilidadeDoMenu()
+  // (app-core.js) — só a parte visual, o servidor valida de novo em cada
+  // rota de escrita.
+  function _aplicarVisibilidadeDeEdicao() {
+    if (typeof _perfilPodeEditar !== 'function') return;
+    document.querySelectorAll('[data-manut-area]').forEach(el => {
+      const area = el.getAttribute('data-manut-area');
+      el.style.display = _perfilPodeEditar(area) ? '' : 'none';
+    });
   }
 
   /* ── API pública ──────────────────────────────────────────
