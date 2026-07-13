@@ -35,6 +35,17 @@ let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
 
+// Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
+// cada QUADRANTE (metade da bateria × lado do berço). Configurável em
+// Configurações → Bateria e Montagem → "Definir Paletes" (ver
+// public/js/paletes-config.js, cfgSalvar em app-core.js — persistido em
+// config.json, chave "paletes"). Default abaixo só entra em ação se
+// config.json ainda não tiver essa chave (instalação existente, antes
+// desta funcionalidade) — depois da 1ª vez que o Administrador salvar em
+// Configurações, o valor real sempre vem do arquivo.
+const PALETES_CONFIG_DEFAULT = { direitoPrimeira: 4, direitoSegunda: 2, esquerdoPrimeira: 3, esquerdoSegunda: 1 };
+let PALETES_CONFIG = { ...PALETES_CONFIG_DEFAULT };
+
 let _configReady = false;
 const _configCallbacks = [];
 
@@ -285,6 +296,20 @@ function _aplicarTiposMontagem(opcoes) {
   CIMENTICIA_POR_TIPO = _montarCimenticiaPorTipo(opcoes);
 }
 
+// Confere se `cfg` é uma permutação válida dos 4 paletes-base sobre os 4
+// quadrantes (direitoPrimeira/direitoSegunda/esquerdoPrimeira/
+// esquerdoSegunda) — cada palete (1-4) usado exatamente 1 vez. Usada por
+// loadConfig() (abaixo) e por cfgSalvarPaletes() (paletes-config.js)
+// antes de persistir, pra nunca deixar 2 quadrantes apontando pro mesmo
+// palete ou um palete de fora sem quadrante nenhum.
+function _paletesConfigValida(cfg) {
+  if (!cfg || typeof cfg !== 'object') return false;
+  const CHAVES = ['direitoPrimeira', 'direitoSegunda', 'esquerdoPrimeira', 'esquerdoSegunda'];
+  const valores = CHAVES.map(k => cfg[k]);
+  if (valores.some(v => !Number.isInteger(v) || v < 1 || v > 4)) return false;
+  return new Set(valores).size === 4; // os 4 valores precisam ser distintos (1,2,3,4 em alguma ordem)
+}
+
 async function loadConfig() {
   if (_configReady) return;
   try {
@@ -353,6 +378,23 @@ async function loadConfig() {
     } else {
       console.warn('[LW] config.json sem "volume_por_placa" válido — mantendo lista já carregada.');
     }
+
+    // "paletes": direcionamento de painéis por quadrante (ver
+    // PALETES_CONFIG, acima) — configurável em Configurações → Bateria e
+    // Montagem → "Definir Paletes". Só aceita se for de fato uma
+    // PERMUTAÇÃO válida dos 4 paletes (cada um usado exatamente 1 vez);
+    // qualquer outra coisa (ausente, chave faltando, valor repetido) cai
+    // no default, pra nunca deixar 2 quadrantes apontando pro mesmo
+    // palete ou um palete sem quadrante nenhum.
+    if (_paletesConfigValida(cfg.paletes)) {
+      PALETES_CONFIG = { ...cfg.paletes };
+    } else if (cfg.paletes !== undefined) {
+      console.warn('[LW] config.json com "paletes" inválido (não é uma permutação de 1-4) — usando default.');
+      PALETES_CONFIG = { ...PALETES_CONFIG_DEFAULT };
+    }
+    // Se cfg.paletes for undefined (instalação antes desta funcionalidade
+    // existir), mantém o default já atribuído na declaração — nem loga
+    // aviso, é o caminho normal esperado.
 
     // (Removido: leitura de "dispositivosAutorizados" — o sistema de
     // dispositivo autorizado por deviceId foi substituído por permissão
@@ -1807,6 +1849,9 @@ window.LW = {
 
   // Getters dinâmicos — leem do estado após config.json carregar
   get DIMENSAO_OPTS() { return DIMENSAO_OPTS; },
+  get PALETES_CONFIG() { return PALETES_CONFIG; },
+  PALETES_CONFIG_DEFAULT,
+  paletesConfigValida: _paletesConfigValida,
   get MONTAGEM_OPTS() { return MONTAGEM_OPTS; },
   get MONTAGEM_MAP() { return MONTAGEM_MAP; },
   get MONTAGEM_OPCOES() { return MONTAGEM_OPCOES; },

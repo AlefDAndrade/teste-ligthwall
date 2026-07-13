@@ -3485,6 +3485,53 @@
 
       <hr class="divider">
 
+      <!-- ---- Definir Paletes ---- -->
+      <!-- Direcionamento de painéis por palete (ver public/js/paletes-config.js,
+           LW.PALETES_CONFIG em data.js, _paletePorMetadeELado em
+           setor-qualidade.js). 4 selects, um por quadrante (metade da
+           bateria × lado do berço) — cada um escolhe qual dos 4
+           paletes-base recebe aquele quadrante. A prévia abaixo mostra o
+           resultado ao vivo, pras dimensões de bateria já cadastradas
+           (18/20/22 berços — ver LW.DIMENSAO_OPTS), antes de salvar de
+           verdade. -->
+      <div style="margin-bottom:28px">
+        <div class="card-title">Definir Paletes</div>
+        <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+          Cada berço enche 2 painéis — um do lado <strong>Direito</strong>, um do lado <strong>Esquerdo</strong>.
+          Escolha, pra cada metade da bateria e cada lado, qual dos 4 paletes recebe esses painéis.
+          A prévia abaixo mostra o resultado antes de salvar.
+        </p>
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">1ª metade · Lado Direito</label>
+              <select class="form-input" id="pc-select-direitoPrimeira" onchange="pcAoMudarSelect()"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">2ª metade · Lado Direito</label>
+              <select class="form-input" id="pc-select-direitoSegunda" onchange="pcAoMudarSelect()"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">1ª metade · Lado Esquerdo</label>
+              <select class="form-input" id="pc-select-esquerdoPrimeira" onchange="pcAoMudarSelect()"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">2ª metade · Lado Esquerdo</label>
+              <select class="form-input" id="pc-select-esquerdoSegunda" onchange="pcAoMudarSelect()"></select>
+            </div>
+          </div>
+          <div id="pc-erro" style="display:none;color:var(--red);font-size:.82rem;margin-top:12px"></div>
+        </div>
+
+        <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+          Prévia — berços visuais</div>
+        <div id="pc-abas-dimensao" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
+        <div id="pc-preview" style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto"></div>
+      </div>
+      <!-- ---- /Definir Paletes ---- -->
+
+      <hr class="divider">
+
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
         <button class="btn btn-ghost" onclick="fecharConfigComConfirmacao()">Cancelar</button>
         <button class="btn btn-primary" onclick="cfgSalvar()">✓ Salvar Configurações</button>
@@ -3757,6 +3804,7 @@
   <script src="js/manutencao.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/perfis-customizados.js"></script>
+  <script src="js/paletes-config.js"></script>
 <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
   <div id="editar-operacao-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">

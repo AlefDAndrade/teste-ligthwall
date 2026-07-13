@@ -73,8 +73,17 @@ function montarTela(opcoes = {}) {
   // _espessuraDaBateria pra "adivinhar" a espessura por ID de bateria —
   // aqui devolvemos lista vazia de propósito, os testes usam operações
   // com `dimensao` real, que tem prioridade sobre o palpite, ver
-  // _definirEspessuraReal/_prefillFromOperacao).
-  novoDom.window.LW = { BATERIA_IDS: [] };
+  // _definirEspessuraReal/_prefillFromOperacao). PALETES_CONFIG_DEFAULT
+  // (sem PALETES_CONFIG — simula config.json ainda sem a chave "paletes",
+  // ver loadConfig()/data.js) é o direcionamento de painéis por palete
+  // (ver _paletePorMetadeELado, setor-qualidade.js) — precisa bater com o
+  // default real de data.js, ou os testes que verificam em qual pallet
+  // cada berço cai (ex: setor-qualidade-paineis-nao-enchidos.test.js)
+  // ficam testando um valor que não existe de verdade.
+  novoDom.window.LW = {
+    BATERIA_IDS: [],
+    PALETES_CONFIG_DEFAULT: { direitoPrimeira: 4, direitoSegunda: 2, esquerdoPrimeira: 3, esquerdoSegunda: 1 },
+  };
 
   // Stub de fetch: só as rotas que os fluxos testados realmente chamam.
   novoDom.window.fetch = async (url) => {

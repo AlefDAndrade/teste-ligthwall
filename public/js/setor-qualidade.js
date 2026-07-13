@@ -1826,20 +1826,28 @@
   }
 
   // ── Direcionamento de painéis por palete ──────────────────────────────
-  // Cada berço da bateria enche 2 painéis — um do lado ESQUERDO, um do
-  // lado DIREITO. A capacidade (nº de berços configurado, nunca
-  // bercos_reais — ver capacidadeOperacaoAtual) é dividida em duas
-  // metades; qual metade + qual lado determina o palete de destino:
-  //   Esquerdo, 1ª metade  (berço 1..metade)            → Palete 3
-  //   Esquerdo, 2ª metade  (berço metade+1..capacidade)  → Palete 1
-  //   Direito,  1ª metade  (berço 1..metade)             → Palete 4
-  //   Direito,  2ª metade  (berço metade+1..capacidade)  → Palete 2
-  // Capacidade ímpar: a 1ª metade fica com o berço extra (Math.ceil) —
-  // convenção simples, não especificada à parte pelo pedido original.
-  const PALETE_POR_METADE_E_LADO = {
-    esquerdo: { primeira: 3, segunda: 1 },
-    direito:  { primeira: 4, segunda: 2 },
-  };
+  // Cada berço da bateria enche 2 painéis — um do lado ESQUERDO (DB:
+  // estado_esquerda), um do lado DIREITO (DB: estado_direita) — mesmo
+  // "Direito"/"Esquerdo" já usado nos pontinhos de Bateria Atual e
+  // Análise Focada (ver data-lado="direita"/"esquerda", ba-dot-topo/
+  // ba-dot-base, bateria-atual.js). A capacidade (nº de berços
+  // configurado, nunca bercos_reais — ver capacidadeOperacaoAtual) é
+  // dividida em duas metades; qual metade + qual lado determina o
+  // palete de destino. CONFIGURÁVEL desde Configurações → Bateria e
+  // Montagem → "Definir Paletes" (ver public/js/paletes-config.js,
+  // LW.PALETES_CONFIG, data.js) — mapeamento DIRETO (config.direito* →
+  // aqui `direito`, config.esquerdo* → aqui `esquerdo`), sem nenhuma
+  // inversão escondida: a prévia visual da própria tela de configuração
+  // mostra exatamente pra qual palete cada lado vai, então qualquer
+  // ajuste necessário é feito ali mesmo, visualmente, pelo Administrador
+  // — não decidido "no escuro" aqui no código.
+  function _paletePorMetadeELado() {
+    const cfg = LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT;
+    return {
+      esquerdo: { primeira: cfg.esquerdoPrimeira, segunda: cfg.esquerdoSegunda },
+      direito:  { primeira: cfg.direitoPrimeira,  segunda: cfg.direitoSegunda },
+    };
+  }
 
   // Berço + lado -> { pallet, posicao } (posição É o número mostrado
   // dentro daquele palete, sempre 1..metade).
@@ -1847,7 +1855,7 @@
     if (!capacidade || capacidade <= 0) return null;
     const metade = Math.ceil(capacidade / 2);
     const primeiraMetade = bercoNum <= metade;
-    const pallet = PALETE_POR_METADE_E_LADO[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
+    const pallet = _paletePorMetadeELado()[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
     if (!pallet) return null;
     const posicao = primeiraMetade ? bercoNum : bercoNum - metade;
     return { pallet, posicao };
@@ -1932,11 +1940,15 @@
   // em vez de um índice solto 1..N sem relação com o berço físico.
   // Paletes extras (5+, ver adicionarPalletExtra) não têm berço de
   // origem definido — devolve null, a chamada volta a numerar 1..N.
+  // Generalizado pra qualquer permutação configurada em "Definir
+  // Paletes" (ver _paletePorMetadeELado, acima) — não assume mais que
+  // paletes 3/4 são sempre a 1ª metade.
   function _bercoDoSlot(pallet, posicao, capacidade) {
     if (!capacidade || capacidade <= 0) return null;
     const metade = Math.ceil(capacidade / 2);
-    if (pallet === 3 || pallet === 4) return posicao;       // 1ª metade — numeração direta
-    if (pallet === 1 || pallet === 2) return metade + posicao; // 2ª metade
+    const mapa = _paletePorMetadeELado();
+    if (pallet === mapa.esquerdo.primeira || pallet === mapa.direito.primeira) return posicao;         // 1ª metade — numeração direta
+    if (pallet === mapa.esquerdo.segunda  || pallet === mapa.direito.segunda)  return metade + posicao; // 2ª metade
     return null;
   }
 
@@ -1945,14 +1957,17 @@
   // capacidade da operação já é conhecida (ver capacidadeOperacaoAtual);
   // fica em branco (mesmo texto de sempre, sem subtítulo) enquanto não
   // for, pra não mostrar uma faixa errada antes da operação carregar.
+  // Generalizado pra qualquer permutação configurada em "Definir
+  // Paletes" (ver _paletePorMetadeELado, acima).
   function _atualizarSubtitulosPallets() {
     const cap = capacidadeOperacaoAtual;
     const metade = cap ? Math.ceil(cap / 2) : null;
+    const mapa = _paletePorMetadeELado();
     const faixas = cap ? {
-      3: `Berços 1–${metade} · Esq.`,
-      4: `Berços 1–${metade} · Dir.`,
-      1: `Berços ${metade + 1}–${cap} · Esq.`,
-      2: `Berços ${metade + 1}–${cap} · Dir.`,
+      [mapa.esquerdo.primeira]: `Berços 1–${metade} · Esq.`,
+      [mapa.direito.primeira]:  `Berços 1–${metade} · Dir.`,
+      [mapa.esquerdo.segunda]:  `Berços ${metade + 1}–${cap} · Esq.`,
+      [mapa.direito.segunda]:   `Berços ${metade + 1}–${cap} · Dir.`,
     } : { 1: '', 2: '', 3: '', 4: '' };
     Object.entries(faixas).forEach(([n, texto]) => {
       const el = document.getElementById('sq-pallet-sub-' + n);
