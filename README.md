@@ -339,6 +339,15 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 - Tipos **híbridos** não geram cor própria: aparecem sempre com a tela dividida 50/50 entre a cor de cada um dos 2 tipos simples que os compõem (gradiente CSS no HTML; gradiente real desenhado no `<canvas>`, que não entende a sintaxe `linear-gradient()` do CSS).
 - Aparece em: badge de "Tipo de Montagem" no Registro de Baterias, gráfico "Montagem × Atrasos" da Análise Operacional, e uma bolinha de pré-visualização na própria tela de admin.
 
+### Definir Paletes
+
+Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado **Esquerdo** — que vão pra paletes diferentes no Setor de Qualidade (Palete 01–04). Configurações → Bateria e Montagem → "Definir Paletes" deixa o Administrador escolher, com 4 selects, qual palete recebe cada **quadrante** (1ª/2ª metade da bateria × lado Direito/Esquerdo):
+
+- Uma **prévia visual** (mesma grade de berços do card "Bateria Atual") mostra o resultado ao vivo, com abas pra cada dimensão de bateria cadastrada (18/20/22 berços etc.) — o rótulo `P{n}` no topo de cada célula é o lado Direito, embaixo é o Esquerdo.
+- Validado como uma **permutação**: os 4 paletes (01–04) precisam ser usados exatamente 1 vez cada — não dá para dois quadrantes apontarem pro mesmo palete, nem deixar um de fora. Um erro inline aparece e bloqueia o salvamento até corrigir.
+- Persistido em `config.json` (chave `paletes`) junto com o resto desta aba, mesmo botão "✓ Salvar Configurações" — sem essa chave (instalação anterior a esta funcionalidade), o sistema usa um valor padrão de fábrica.
+- `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — direcionamento de painéis (`_paleteDoBerco`), rótulo de origem no drag-and-drop (`_bercoDoSlot`) e os subtítulos "Berços X–Y · Esq./Dir." de cada palete se ajustam automaticamente a qualquer configuração escolhida.
+
 ### Quem pode controlar operações
 
 Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: o Administrador Master e o perfil cadastrado "Administrador" sempre podem controlar; os demais perfis com a área de edição da Injetora (Operador de Injetora, Encarregado, Supervisão) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm essa área liberada, ver *Perfis de usuário*). Perfis sem a área da Injetora (Assistente de Qualidade, Manutenção) nunca controlam operações, independente da marcação.

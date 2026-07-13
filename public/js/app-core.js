@@ -1851,6 +1851,11 @@
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
+      // "Definir Paletes" (ver public/js/paletes-config.js) — zera o
+      // rascunho toda vez que Configurações reabre, pra sempre partir do
+      // que está de fato salvo (LW.PALETES_CONFIG), nunca de uma edição
+      // esquecida de uma sessão anterior do modal sem ter salvo.
+      if (typeof _pcRascunho !== 'undefined') _pcRascunho = null;
       cfgRenderTudo();
       _cfgAplicarVisibilidadeDeAbas();
       // Abre na primeira aba que este perfil realmente tem acesso — nem
@@ -2411,6 +2416,12 @@
       }).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum tipo cadastrado.</span>';
 
       cfgPopularSelectsHibrida();
+
+      // "Definir Paletes" (ver public/js/paletes-config.js) — função
+      // global definida naquele arquivo, chamável daqui porque scripts
+      // sem módulo compartilham o mesmo escopo global da página (mesmo
+      // padrão de cfgRenderPerfisCustomizados, perfis-customizados.js).
+      if (typeof pcRenderTudo === 'function') pcRenderTudo();
     }
 
     function cfgAdicionarBateria() {
@@ -2616,6 +2627,20 @@
       if (!_cfgDados.baterias.length) { LW.mostrarAlerta('Adicione ao menos uma bateria.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.montagens.length) { LW.mostrarAlerta('Adicione ao menos um tipo de montagem.', { tipo: 'aviso' }); return; }
 
+      // "Definir Paletes" (ver public/js/paletes-config.js) — valida
+      // ANTES de tentar salvar (mesmo raciocínio das duas checagens
+      // acima): evita gravar um config.json com 2 quadrantes apontando
+      // pro mesmo palete, ou um palete sem quadrante nenhum.
+      let paletesConfig = null;
+      if (typeof pcColetarValores === 'function') {
+        try {
+          paletesConfig = pcColetarValores();
+        } catch (e) {
+          LW.mostrarAlerta('Definir Paletes: ' + e.message, { tipo: 'aviso' });
+          return;
+        }
+      }
+
       // Nova estrutura: dimensão e berços ficam dentro de cada bateria
       // Reconstruímos DIMENSAO_OPTS a partir das baterias (para retrocompatibilidade)
       const dimensoesOpcoes = _derivarDimensoesDeBaterias(_cfgDados.baterias);
@@ -2652,6 +2677,11 @@
           // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.
           volume_por_placa: cfgAtual.volume_por_placa || LW.VOLUME_POR_PLACA,
+          // "Definir Paletes" — null (pcColetarValores ausente/tela
+          // ainda não carregada) preserva o que já estava salvo, via
+          // ...cfgAtual acima, em vez de apagar a configuração de
+          // paletes de alguém que só veio mexer em Baterias/Montagem.
+          ...(paletesConfig ? { paletes: paletesConfig } : {}),
         };
       } catch (e) {
         LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
