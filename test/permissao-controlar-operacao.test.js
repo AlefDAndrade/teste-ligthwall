@@ -1,19 +1,20 @@
 // ─── test/permissao-controlar-operacao.test.js ──────────────────────────────
-// Testa a substituição do sistema de "dispositivo autorizado" (deviceId
-// numa lista em config.json, editável em Configurações → Autorizados —
-// removido) pela permissão de PERFIL (podeIniciarOperacao no cadastro de
-// usuário, ver Configurações → Usuários / lib/perfis.js), aplicada em
+// Testa quem pode CONTROLAR operações (iniciar/encerrar/registrar) —
 // podeControlarOperacao() (server.js) — usada por POST /registrar-operacao,
 // POST /registrar-relatorio-injecao, POST /salvar-operacao-andamento,
 // POST /marcar-berco-andamento, POST /confirmar-tracos-hoje.
 //
-// Regras:
+// Regras (modelo novo, ver lib/perfis.js):
 //   - Sem sessão de usuário nenhuma -> nunca pode controlar.
-//   - "Administrativo" -> sempre pode, independente do campo
+//   - Perfil de admin (Administrador master OU perfil cadastrado
+//     "Administrativo") -> sempre pode, independente do campo
 //     podeIniciarOperacao no cadastro.
-//   - Qualquer outro perfil -> só pode se podeIniciarOperacao:true no
-//     cadastro (e só perfis com a página "operacao" liberada podem ter
-//     essa marcação — ver lib/perfis.js, PERFIS_COM_PAGINA_OPERACAO).
+//   - Qualquer outro perfil -> precisa das DUAS coisas: ter a área
+//     'injetora' de edição (OperadorInjetora, Encarregado, Supervisao — ver
+//     PERFIS_COM_CONTROLE_DE_OPERACAO) E podeIniciarOperacao:true no
+//     cadastro.
+//   - Perfil sem a área 'injetora' (AssistenteQualidade, Manutencao) nunca
+//     ganha a marcação, mesmo que o payload tente forçar.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -76,8 +77,8 @@ test('sem nenhuma sessao, POST /salvar-operacao-andamento e recusado (403)', asy
   assert.match(data.erro, /autorizado/i);
 });
 
-test('Operador SEM podeIniciarOperacao e recusado', async () => {
-  const cookie = await cadastrarECriarSessao('joao.sem.permissao', 'Operador', false);
+test('OperadorInjetora SEM podeIniciarOperacao e recusado', async () => {
+  const cookie = await cadastrarECriarSessao('joao.sem.permissao', 'OperadorInjetora', false);
   const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -86,8 +87,8 @@ test('Operador SEM podeIniciarOperacao e recusado', async () => {
   assert.equal(resp.status, 403);
 });
 
-test('Operador COM podeIniciarOperacao consegue controlar', async () => {
-  const cookie = await cadastrarECriarSessao('maria.com.permissao', 'Operador', true);
+test('OperadorInjetora COM podeIniciarOperacao consegue controlar', async () => {
+  const cookie = await cadastrarECriarSessao('maria.com.permissao', 'OperadorInjetora', true);
   const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -98,21 +99,41 @@ test('Operador COM podeIniciarOperacao consegue controlar', async () => {
   assert.equal(data.ok, true);
 });
 
-test('Analista (perfil sem pagina operacao) nunca ganha podeIniciarOperacao, mesmo tentando forcar', async () => {
+test('Encarregado COM podeIniciarOperacao consegue controlar (tem área injetora)', async () => {
+  const cookie = await cadastrarECriarSessao('elton.encarregado', 'Encarregado', true);
+  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ dados: { id_bateria: 'B1', tipo_montagem: 'SP', status: 'ativa' }, clientId: 'x' }),
+  });
+  assert.equal(resp.status, 200);
+});
+
+test('Supervisao COM podeIniciarOperacao consegue controlar (tem área injetora)', async () => {
+  const cookie = await cadastrarECriarSessao('sonia.supervisao', 'Supervisao', true);
+  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ dados: { id_bateria: 'B1', tipo_montagem: 'SP', status: 'ativa' }, clientId: 'x' }),
+  });
+  assert.equal(resp.status, 200);
+});
+
+test('AssistenteQualidade (sem área injetora) nunca ganha podeIniciarOperacao, mesmo tentando forcar', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   const respSalvar = await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify([{ nomeUsuario: 'carla.analista', senha: 'senhateste1234', perfil: 'Analista', podeIniciarOperacao: true }]),
+    body: JSON.stringify([{ nomeUsuario: 'carla.qualidade', senha: 'senhateste1234', perfil: 'AssistenteQualidade', podeIniciarOperacao: true }]),
   });
   const dataSalvar = await respSalvar.json();
-  const carla = dataSalvar.usuarios.find(u => u.nomeUsuario === 'carla.analista');
-  assert.equal(carla.podeIniciarOperacao, false, 'Analista nao tem a pagina operacao, entao nunca deveria ganhar essa permissao');
+  const carla = dataSalvar.usuarios.find(u => u.nomeUsuario === 'carla.qualidade');
+  assert.equal(carla.podeIniciarOperacao, false, 'AssistenteQualidade não tem área injetora, entao nunca deveria ganhar essa permissao');
 
   const respLogin = await fetch(`${servidor.baseUrl}/login-usuario`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nomeUsuario: 'carla.analista', senha: 'senhateste1234' }),
+    body: JSON.stringify({ nomeUsuario: 'carla.qualidade', senha: 'senhateste1234' }),
   });
   const cookie = extrairCookie(respLogin);
 

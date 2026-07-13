@@ -88,7 +88,7 @@ test('POST /salvar-meus-atalhos exige sessao de usuario', async () => {
 });
 
 test('usuario novo comeca com atalhos vazios, salva, e GET reflete', async () => {
-  const cookie = await cadastrarELogar('rita.atalhos', 'Operador');
+  const cookie = await cadastrarELogar('rita.atalhos', 'OperadorInjetora');
 
   const respVazio = await fetch(`${servidor.baseUrl}/meus-atalhos`, { headers: { Cookie: cookie } });
   const dataVazio = await respVazio.json();
@@ -111,8 +111,8 @@ test('usuario novo comeca com atalhos vazios, salva, e GET reflete', async () =>
 });
 
 test('atalhos de um usuario nao vazam pra outro', async () => {
-  const cookieCarlos = await cadastrarELogar('carlos.atalhos', 'Analista');
-  const cookieMaria = await cadastrarELogar('maria.atalhos', 'Analista');
+  const cookieCarlos = await cadastrarELogar('carlos.atalhos', 'Supervisao');
+  const cookieMaria = await cadastrarELogar('maria.atalhos', 'Supervisao');
 
   await fetch(`${servidor.baseUrl}/salvar-meus-atalhos`, {
     method: 'POST',
@@ -154,7 +154,7 @@ test('POST /salvar-usuarios (Admin Master editando cadastro) preserva os atalhos
 });
 
 test('valor nao-string em algum atalho e recusado', async () => {
-  const cookie = await cadastrarELogar('paulo.invalido', 'Qualidade');
+  const cookie = await cadastrarELogar('paulo.invalido', 'AssistenteQualidade');
   const resp = await fetch(`${servidor.baseUrl}/salvar-meus-atalhos`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -191,9 +191,9 @@ async function carregarSpaComo(cookieUsuario, perfil) {
 }
 
 test('atalho personalizado por um usuario aparece numa sessao nova do mesmo usuario (persistiu no servidor)', async () => {
-  const cookie = await cadastrarELogar('fernanda.persistencia', 'Operador');
+  const cookie = await cadastrarELogar('fernanda.persistencia', 'OperadorInjetora');
 
-  const dom1 = await carregarSpaComo(cookie, 'Operador');
+  const dom1 = await carregarSpaComo(cookie, 'OperadorInjetora');
   try {
     const resultado = dom1.window.LWKeyboard.definirAtalho('nav_operacao', 'Ctrl+Shift+7');
     assert.equal(resultado.ok, true);
@@ -202,7 +202,7 @@ test('atalho personalizado por um usuario aparece numa sessao nova do mesmo usua
     dom1.window.close();
   }
 
-  const dom2 = await carregarSpaComo(cookie, 'Operador');
+  const dom2 = await carregarSpaComo(cookie, 'OperadorInjetora');
   try {
     await new Promise(r => setTimeout(r, 500));
     const lista = dom2.window.LWKeyboard.listarAtalhos();

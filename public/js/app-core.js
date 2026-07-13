@@ -56,6 +56,25 @@
     // assim, então não é uma brecha real de segurança, só evita a tela
     // "piscar" escondendo/mostrando itens de novo depois de carregar).
     let _paginasPermitidas = null; // null = ainda não carregou; Array = já carregou
+    // Áreas de edição do perfil atual (ver lib/perfis.js) — usado pelo
+    // resto do front (paradas.js, setor-qualidade.js, manutencao.js,
+    // operacao.js) pra desabilitar formulários/botões de registro nas
+    // páginas em que o perfil só visualiza. null = Administrador (master)
+    // ou ainda carregando = tudo liberado; Array = lista real de áreas.
+    let _areasDeEdicao = null;
+
+    // Confere se o perfil atual pode EDITAR a `area` (ver AREAS_DE_EDICAO,
+    // lib/perfis.js: 'injetora', 'paradas', 'qualidade', 'manutencao',
+    // 'manutencao-chamado') — usado só pra ESCONDER/DESABILITAR controles
+    // no front; a validação que importa de verdade é sempre a do servidor
+    // (cada rota de escrita confere de novo, ver podeEditarArea() em
+    // server.js).
+    function _perfilPodeEditar(area) {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return true; // master: irrestrito
+      if (!_areasDeEdicao) return true; // ainda carregando — fail-open temporário, ver _paginaPermitida
+      return _areasDeEdicao.includes(area);
+    }
 
     // "Administrador" (botão do topo, senha mestra — ver login.html) é
     // irrestrito por definição, igual sempre foi — nunca passa pela
@@ -69,16 +88,18 @@
 
     async function _carregarPermissoesDoServidor() {
       const role = sessionStorage.getItem('lw_role');
-      if (role === 'Administrador') { _paginasPermitidas = null; return; } // irrestrito, nunca precisa da lista
+      if (role === 'Administrador') { _paginasPermitidas = null; _areasDeEdicao = null; return; } // irrestrito, nunca precisa da lista
       try {
         const res = await fetch('/perfis');
         const data = await res.json();
         _paginasPermitidas = (data.ok && data.paginasPorPerfil[role]) || [];
+        _areasDeEdicao = (data.ok && data.areasEdicaoPorPerfil && data.areasEdicaoPorPerfil[role]) || [];
       } catch (e) {
         // Sem servidor/rede — mantém null (fail-open temporário, ver
         // comentário em _paginaPermitida) em vez de travar a pessoa fora
         // de tudo por causa de uma falha de rede pontual.
         _paginasPermitidas = null;
+        _areasDeEdicao = null;
       }
     }
 
@@ -508,7 +529,14 @@
       // (Qualidade/Manutencao/Administrativo — Administrativo é "quase
       // tudo", ver PAGINAS_POR_PERFIL, mas não tem senha mestra: também é
       // um perfil comum, só com lista de páginas bem mais ampla).
-      const PERFIS_VALIDOS = ['Operador', 'Analista', 'Qualidade', 'Manutencao', 'Administrativo', 'Administrador'];
+      // 7 perfis no total (ver lib/perfis.js, server.js): a senha mestra
+      // ("Administrador") + os 6 perfis novos que vêm do cadastro
+      // (OperadorInjetora, AssistenteQualidade, Encarregado, Manutencao,
+      // Supervisao, Administrativo — "Administrativo" tem rótulo
+      // "Administrador" na tela, mas o id interno continua diferente do
+      // master pra não colidir com a checagem `role === 'Administrador'`
+      // usada em todo o resto do app pra identificar a sessão mestra).
+      const PERFIS_VALIDOS = ['OperadorInjetora', 'AssistenteQualidade', 'Encarregado', 'Manutencao', 'Supervisao', 'Administrativo', 'Administrador'];
       if (!PERFIS_VALIDOS.includes(role)) {
         sessionStorage.clear();
         window.location.href = 'login.html';
@@ -577,11 +605,11 @@
         const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
         document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
 
-        if (role === 'Operador') {
-          // Operador sempre entra direto na tela de trabalho (Registrar
-          // Operação), mesmo comportamento de sempre — os outros perfis
-          // (Analista, Qualidade, Manutencao, Administrativo) restauram
-          // a última página vista, ou caem no Menu Principal na 1ª vez.
+        if (role === 'OperadorInjetora') {
+          // Operador de Injetora sempre entra direto na tela de trabalho
+          // (Registrar Operação), mesmo comportamento de sempre — os
+          // outros perfis restauram a última página vista, ou caem no
+          // Menu Principal na 1ª vez.
           showPage('operacao');
         } else {
           _restaurarUltimaPagina();
@@ -589,7 +617,7 @@
       }
 
       const roleEl = document.getElementById('topbar-role');
-      if (roleEl) roleEl.textContent = role || '';
+      if (roleEl) roleEl.textContent = role === 'Administrador' ? 'Administrador' : (role ? _rotuloPerfil(role) : '');
 
       // Badge de nome no topbar — substituiu a Identidade Leve de
       // Operador (perguntava "quem está operando" via PIN — ver
@@ -2776,34 +2804,44 @@
     // (ver lib/perfis.js, server.js). Lista em cache local (nunca inclui
     // senhaHash — GET /usuarios só devolve {id, nomeUsuario, perfil}).
     let _usuariosCache = [];
-    let _perfisInfoCache = null; // { paginasPorPerfil, perfisCadastraveis, perfisComPaginaOperacao } — carregado 1x
+    let _perfisInfoCache = null; // { paginasPorPerfil, areasEdicaoPorPerfil, perfisCadastraveis, perfisComControleDeOperacao } — carregado 1x
 
-    const RÓTULO_PERFIL = {
-      Operador: 'Operador',
-      Analista: 'Analista',
-      Qualidade: 'Setor Qualidade',
+    // Rótulos vêm do servidor (perfis.ROTULO_POR_PERFIL, lib/perfis.js) —
+    // fallback local só pra não quebrar a badge antes da 1ª resposta de
+    // GET /perfis chegar (ver cfgAtualizarCampoPodeIniciarOperacao).
+    const RÓTULO_PERFIL_FALLBACK = {
+      OperadorInjetora: 'Operador de Injetora',
+      AssistenteQualidade: 'Assistente de Qualidade',
+      Encarregado: 'Encarregado',
       Manutencao: 'Manutenção',
-      Administrativo: 'Administrativo',
+      Supervisao: 'Supervisão',
+      Administrativo: 'Administrador',
     };
+    function _rotuloPerfil(perfil) {
+      return (_perfisInfoCache && _perfisInfoCache.rotulosPorPerfil && _perfisInfoCache.rotulosPorPerfil[perfil])
+        || RÓTULO_PERFIL_FALLBACK[perfil] || perfil;
+    }
 
     // Mostra/esconde o checkbox "Pode iniciar/encerrar operações" — só
-    // faz sentido pra perfis que de fato têm a página "operacao"
-    // liberada (ver lib/perfis.js, PERFIS_COM_PAGINA_OPERACAO); pros
-    // outros, a marcação não significaria nada, então nem mostra o
-    // campo. Chamado ao trocar o <select> de perfil (ver onchange no
-    // HTML, modal-config.html) e também no boot da seção (cfgRenderUsuarios).
+    // faz sentido pra perfis com controle de operação de verdade (ver
+    // lib/perfis.js, PERFIS_COM_CONTROLE_DE_OPERACAO: quem tem a área
+    // 'injetora' de edição sem já ser administrador irrestrito); pros
+    // outros, a marcação não significaria nada (ou é redundante), então
+    // nem mostra o campo. Chamado ao trocar o <select> de perfil (ver
+    // onchange no HTML, modal-config.html) e também no boot da seção
+    // (cfgRenderUsuarios).
     async function cfgAtualizarCampoPodeIniciarOperacao() {
       if (!_perfisInfoCache) {
         try {
           const res = await fetch('/perfis');
           _perfisInfoCache = await res.json();
         } catch (e) {
-          _perfisInfoCache = { perfisComPaginaOperacao: [] };
+          _perfisInfoCache = { perfisComControleDeOperacao: [] };
         }
       }
       const perfil = document.getElementById('cfg-usuario-perfil').value;
       const wrap = document.getElementById('cfg-usuario-pode-iniciar-wrap');
-      const podeMostrar = (_perfisInfoCache.perfisComPaginaOperacao || []).includes(perfil);
+      const podeMostrar = (_perfisInfoCache.perfisComControleDeOperacao || []).includes(perfil);
       wrap.style.display = podeMostrar ? 'block' : 'none';
       if (!podeMostrar) document.getElementById('cfg-usuario-pode-iniciar').checked = false;
     }
@@ -2831,7 +2869,7 @@
       elLista.innerHTML = _usuariosCache.map(u => `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
       <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(u.nomeUsuario)}</span>
-      <span class="badge badge-blue">${_escaparHtmlLocal(RÓTULO_PERFIL[u.perfil] || u.perfil)}</span>
+      <span class="badge badge-blue">${_escaparHtmlLocal(_rotuloPerfil(u.perfil))}</span>
       ${u.podeIniciarOperacao ? '<span class="badge badge-green" title="Pode iniciar/encerrar operações">▶ Inicia Operação</span>' : ''}
       <button onclick="cfgRemoverUsuario('${_escaparHtmlLocal(u.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
     </div>
@@ -2905,7 +2943,7 @@
 
       inputNome.value = '';
       inputSenha.value = '';
-      selectPerfil.value = 'Operador';
+      selectPerfil.value = 'OperadorInjetora';
       chkPodeIniciar.checked = false;
       cfgRenderUsuarios();
     }

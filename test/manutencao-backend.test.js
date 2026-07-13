@@ -7,12 +7,32 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
 
+// Rotas de ESCRITA de Manutenção agora exigem a área 'manutencao'/
+// 'manutencao-chamado' de edição (modelo novo, ver lib/perfis.js) — a
+// sessão de Administrador Master sempre passa em qualquer área, então os
+// testes deste arquivo (que só querem exercitar o CRUD em si, não a
+// matriz de permissões — essa já está coberta em
+// test/manutencao-permissoes.test.js) logam como master uma vez e anexam
+// o cookie em toda chamada de escrita.
+const SENHA_ADMIN = 'senha-admin-manutencao-backend-999';
+const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').digest('hex');
+
 let servidor;
+let cookieAdmin;
 
 before(async () => {
-  servidor = await iniciarServidorDeTeste();
+  servidor = await iniciarServidorDeTeste({
+    seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+  });
+  const respAdmin = await fetch(`${servidor.baseUrl}/verificar-senha`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ senha: SENHA_ADMIN }),
+  });
+  cookieAdmin = (respAdmin.headers.get('set-cookie') || '').split(';')[0];
 });
 
 after(async () => {
@@ -27,7 +47,7 @@ test('criar, listar e excluir um chamado de manutencao corretiva', async () => {
   const id = 'MAN-' + Date.now();
   const respCriar = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({
       id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 1',
       observador: 'Carlos', prioridade: 'Alta', anomalia: 'Vazamento de oleo',
@@ -46,7 +66,7 @@ test('criar, listar e excluir um chamado de manutencao corretiva', async () => {
 
   const respExcluir = await fetch(`${servidor.baseUrl}/manutencao/excluir-corretiva`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id }),
   });
   assert.equal(respExcluir.status, 200);
@@ -64,10 +84,10 @@ test('POST /manutencao/corretiva com upsert (mesmo id) atualiza em vez de duplic
     tipoManutencao: 'Eletrica',
   };
   await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(base),
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin }, body: JSON.stringify(base),
   });
   await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ ...base, situacao: 'Concluido' }),
   });
 
@@ -81,7 +101,7 @@ test('POST /manutencao/corretiva com upsert (mesmo id) atualiza em vez de duplic
 test('POST /manutencao/corretiva recusa sem campos obrigatorios', async () => {
   const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id: 'MAN-invalido' }),
   });
   assert.equal(resp.status, 400);
@@ -97,7 +117,7 @@ test('criar, listar e excluir um agendamento de manutencao programada', async ()
   const id = 'PRG-' + Date.now();
   const respCriar = await fetch(`${servidor.baseUrl}/manutencao/programada`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 3', solicitante: 'Maria' }),
   });
   assert.equal(respCriar.status, 200);
@@ -108,7 +128,7 @@ test('criar, listar e excluir um agendamento de manutencao programada', async ()
   assert.ok((await respListar.json()).agendamentos.some(a => a.id === id));
 
   const respExcluir = await fetch(`${servidor.baseUrl}/manutencao/excluir-programada`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin }, body: JSON.stringify({ id }),
   });
   assert.equal(respExcluir.status, 200);
 });
@@ -116,7 +136,7 @@ test('criar, listar e excluir um agendamento de manutencao programada', async ()
 test('agendamento guarda o objeto execucao (JSON) corretamente', async () => {
   const id = 'PRG-exec-' + Date.now();
   await fetch(`${servidor.baseUrl}/manutencao/programada`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 4', solicitante: 'Maria' }),
   });
 
@@ -125,7 +145,7 @@ test('agendamento guarda o objeto execucao (JSON) corretamente', async () => {
     tempoGasto: 90, executado: 'Sim', tecnicoResponsavel: 'Joao', tipoExecucao: 'Interno',
   };
   await fetch(`${servidor.baseUrl}/manutencao/programada`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 4', solicitante: 'Maria', status: 'Concluido', execucao }),
   });
 
@@ -142,7 +162,7 @@ test('agendamento guarda o objeto execucao (JSON) corretamente', async () => {
 test('criar peca com quantidade inicial NAO duplica o saldo (bug encontrado e corrigido durante a implementacao)', async () => {
   const id = 'PEC-' + Date.now();
   const respCriar = await fetch(`${servidor.baseUrl}/manutencao/estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-' + Date.now(), nome: 'Rolamento', quantidade: 10 }),
   });
   const dataCriar = await respCriar.json();
@@ -158,19 +178,19 @@ test('criar peca com quantidade inicial NAO duplica o saldo (bug encontrado e co
 test('movimentacao de Entrada/Saida ajusta o saldo corretamente', async () => {
   const id = 'PEC-mov-' + Date.now();
   await fetch(`${servidor.baseUrl}/manutencao/estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-mov-' + Date.now(), nome: 'Parafuso', quantidade: 10 }),
   });
 
   const respSaida = await fetch(`${servidor.baseUrl}/manutencao/movimentacoes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id: 'MOV-' + Date.now(), pecaId: id, tipo: 'Saída', quantidade: 3, motivo: 'Uso em reparo' }),
   });
   const dataSaida = await respSaida.json();
   assert.equal(dataSaida.novoSaldo, 7);
 
   const respEntrada = await fetch(`${servidor.baseUrl}/manutencao/movimentacoes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id: 'MOV-' + Date.now() + '-2', pecaId: id, tipo: 'Entrada', quantidade: 5, motivo: 'Compra' }),
   });
   const dataEntrada = await respEntrada.json();
@@ -180,12 +200,12 @@ test('movimentacao de Entrada/Saida ajusta o saldo corretamente', async () => {
 test('movimentacao de Saida maior que o saldo e recusada, sem alterar o estoque', async () => {
   const id = 'PEC-excesso-' + Date.now();
   await fetch(`${servidor.baseUrl}/manutencao/estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-excesso-' + Date.now(), nome: 'Correia', quantidade: 5 }),
   });
 
   const resp = await fetch(`${servidor.baseUrl}/manutencao/movimentacoes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id: 'MOV-excesso-' + Date.now(), pecaId: id, tipo: 'Saída', quantidade: 1000, motivo: 'teste' }),
   });
   assert.equal(resp.status, 400);
@@ -200,12 +220,12 @@ test('movimentacao de Saida maior que o saldo e recusada, sem alterar o estoque'
 test('editar dados cadastrais de uma peca NAO altera a quantidade', async () => {
   const id = 'PEC-editar-' + Date.now();
   await fetch(`${servidor.baseUrl}/manutencao/estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-editar-' + Date.now(), nome: 'Mangueira', quantidade: 8 }),
   });
 
   const resp = await fetch(`${servidor.baseUrl}/manutencao/editar-estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-editada', nome: 'Mangueira Hidraulica', estoqueMinimo: 3 }),
   });
   const data = await resp.json();
@@ -217,7 +237,7 @@ test('editar dados cadastrais de uma peca NAO altera a quantidade', async () => 
 test('excluir uma peca remove tambem suas movimentacoes (cascata)', async () => {
   const id = 'PEC-cascata-' + Date.now();
   await fetch(`${servidor.baseUrl}/manutencao/estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id, codigo: 'C-cascata-' + Date.now(), nome: 'Filtro', quantidade: 4 }),
   });
 
@@ -226,7 +246,7 @@ test('excluir uma peca remove tambem suas movimentacoes (cascata)', async () => 
   assert.equal(totalAntes, 1, 'deveria ter 1 movimentacao de estoque inicial antes de excluir');
 
   await fetch(`${servidor.baseUrl}/manutencao/excluir-estoque`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin }, body: JSON.stringify({ id }),
   });
 
   const respDepois = await fetch(`${servidor.baseUrl}/manutencao/movimentacoes`);
@@ -236,7 +256,7 @@ test('excluir uma peca remove tambem suas movimentacoes (cascata)', async () => 
 
 test('movimentacao recusa peca inexistente', async () => {
   const resp = await fetch(`${servidor.baseUrl}/manutencao/movimentacoes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ id: 'MOV-inexistente', pecaId: 'PEC-nao-existe', tipo: 'Entrada', quantidade: 1 }),
   });
   assert.equal(resp.status, 400);
@@ -266,12 +286,12 @@ test('Backup de Dados inclui as 4 tabelas de manutencao com os dados corretos', 
 
     const idChamado = 'MAN-bkp-' + Date.now();
     await fetch(`${servidorLocal.baseUrl}/manutencao/corretiva`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
       body: JSON.stringify({ id: idChamado, data: '2026-07-12', setor: 'Produção', maquina: 'M1', observador: 'X', prioridade: 'Alta', anomalia: 'Y', tipoManutencao: 'Mecânica' }),
     });
     const idPeca = 'PEC-bkp-' + Date.now();
     await fetch(`${servidorLocal.baseUrl}/manutencao/estoque`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
       body: JSON.stringify({ id: idPeca, codigo: 'C-BKP', nome: 'Peça Backup', quantidade: 12 }),
     });
 
@@ -316,7 +336,7 @@ test('restaurar Backup de Dados restaura manutencao corretamente, sem duplicar q
 
     const idPeca = 'PEC-restaurar-' + Date.now();
     await fetch(`${servidorLocal.baseUrl}/manutencao/estoque`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
       body: JSON.stringify({ id: idPeca, codigo: 'C-REST', nome: 'Peça Restaurar', quantidade: 25 }),
     });
 
@@ -330,7 +350,7 @@ test('restaurar Backup de Dados restaura manutencao corretamente, sem duplicar q
     }
 
     const respRestaurar = await fetch(`${servidorLocal.baseUrl}/restaurar-backup-dados`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
       body: JSON.stringify({ senha: SENHA, arquivos: arquivosParaRestaurar }),
     });
     assert.equal(respRestaurar.status, 200);

@@ -71,7 +71,7 @@
     <!-- Loading transition -->
     <div class="loading-overlay" id="loading-overlay">
         <span class="logo-hex" style="font-size:2.4rem">⬡</span>
-        <div class="loading-role" id="loading-role-label">Operador</div>
+        <div class="loading-role" id="loading-role-label">Entrando</div>
         <div class="loading-bar">
             <div class="loading-fill" id="loading-fill"></div>
         </div>
@@ -98,7 +98,7 @@
             if (overlay) overlay.classList.remove('active');
             if (fill) fill.style.width = '0%';
             if (lbl) lbl.textContent = 'Carregando sistema...';
-            if (roleLabel) roleLabel.textContent = 'Operador';
+            if (roleLabel) roleLabel.textContent = 'Entrando';
             if (btnEntrar) { btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar'; }
             if (erroEl) erroEl.style.display = 'none';
         });
@@ -190,6 +190,21 @@
 
         senhaInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') _tentarLogin(); });
 
+        // Rótulos amigáveis pra tela de transição — mesmos ids internos de
+        // lib/perfis.js (ROTULO_POR_PERFIL), duplicados aqui só pra exibição
+        // porque esta página não carrega app-core.js/perfis.js (é
+        // standalone, roda antes do login). "Administrador" (master) usa o
+        // próprio id como rótulo, sempre foi assim.
+        const ROTULO_PERFIL_LOGIN = {
+            OperadorInjetora: 'Operador de Injetora',
+            AssistenteQualidade: 'Assistente de Qualidade',
+            Encarregado: 'Encarregado',
+            Manutencao: 'Manutenção',
+            Supervisao: 'Supervisão',
+            Administrativo: 'Administrador',
+            Administrador: 'Administrador',
+        };
+
         function _iniciarTransicao(role) {
             const overlay = document.getElementById('loading-overlay');
             const roleLabel = document.getElementById('loading-role-label');
@@ -202,7 +217,7 @@
             // (mesmo comportamento de sempre pro botão mestre).
             if (role === 'Administrador') sessionStorage.setItem('lw_role', role);
 
-            roleLabel.textContent = role;
+            roleLabel.textContent = ROTULO_PERFIL_LOGIN[role] || role;
             overlay.classList.add('active');
 
             requestAnimationFrame(() => {
