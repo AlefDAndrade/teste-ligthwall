@@ -45,64 +45,85 @@
   }
 
   // ============================================================
-  // 1. BANCO DE DADOS
-  // ============================================================
+  // 1. DADOS — Fase 2: backend real (SQLite via HTTP), não mais
+  // localStorage (ver conversa que motivou a migração — Fase 1 salvava
+  // tudo só neste navegador, sem sincronizar entre computadores nem
+  // entrar em backup).
+  //
+  // As 4 listas continuam em memória, exatamente como na Fase 1 (o
+  // resto do arquivo — render*, cálculos, etc. — usa esses arrays
+  // diretamente) — só a ORIGEM dos dados mudou: em vez de
+  // localStorage.getItem() síncrono no boot, agora é
+  // carregarTudoDoServidor() assíncrono, chamado de dentro de init()
+  // (ver final do arquivo). Cada ação de escrita (salvarManutencao(),
+  // verificarEAgendiar(), etc.) manda a mudança pro servidor via fetch()
+  // e, se aceita, RECARREGA a lista correspondente do servidor antes de
+  // re-renderizar — nunca confia só no que já está em memória depois de
+  // escrever, pra sempre refletir o que realmente foi persistido (e
+  // pegar mudanças de outros computadores, se a pessoa atualizar a
+  // página).
   let manutencoes = [];
   let agendamentos = [];
   let estoque = [];
   let movimentacoes = [];
-  
-  try {
-    const rawManut = localStorage.getItem('lightwall_manutencao');
-    if (rawManut) {
-      const parsed = JSON.parse(rawManut);
-      if (Array.isArray(parsed)) manutencoes = parsed;
-    }
-  } catch (e) {}
 
-  try {
-    const rawAgend = localStorage.getItem('lightwall_agendamentos');
-    if (rawAgend) {
-      const parsed = JSON.parse(rawAgend);
-      if (Array.isArray(parsed)) agendamentos = parsed;
+  async function carregarManutencoesDoServidor() {
+    try {
+      const res = await fetch('/manutencao/corretiva');
+      const json = await res.json();
+      manutencoes = (json.ok && json.chamados) || [];
+    } catch (e) {
+      console.error('[Manutenção] Falha ao carregar chamados corretivos:', e);
+      manutencoes = [];
     }
-  } catch (e) {}
+  }
 
-  try {
-    const rawEstoque = localStorage.getItem('lightwall_estoque');
-    if (rawEstoque) {
-      const parsed = JSON.parse(rawEstoque);
-      if (Array.isArray(parsed)) estoque = parsed;
+  async function carregarAgendamentosDoServidor() {
+    try {
+      const res = await fetch('/manutencao/programada');
+      const json = await res.json();
+      agendamentos = (json.ok && json.agendamentos) || [];
+    } catch (e) {
+      console.error('[Manutenção] Falha ao carregar agendamentos:', e);
+      agendamentos = [];
     }
-  } catch (e) {}
+  }
 
-  try {
-    const rawMov = localStorage.getItem('lightwall_movimentacoes');
-    if (rawMov) {
-      const parsed = JSON.parse(rawMov);
-      if (Array.isArray(parsed)) movimentacoes = parsed;
+  async function carregarEstoqueDoServidor() {
+    try {
+      const res = await fetch('/manutencao/estoque');
+      const json = await res.json();
+      estoque = (json.ok && json.itens) || [];
+    } catch (e) {
+      console.error('[Manutenção] Falha ao carregar estoque:', e);
+      estoque = [];
     }
-  } catch (e) {}
+  }
+
+  async function carregarMovimentacoesDoServidor() {
+    try {
+      const res = await fetch('/manutencao/movimentacoes');
+      const json = await res.json();
+      movimentacoes = (json.ok && json.movimentacoes) || [];
+    } catch (e) {
+      console.error('[Manutenção] Falha ao carregar movimentações:', e);
+      movimentacoes = [];
+    }
+  }
+
+  /** Carrega as 4 listas do servidor em paralelo — chamada uma vez no boot (init()). */
+  async function carregarTudoDoServidor() {
+    await Promise.all([
+      carregarManutencoesDoServidor(),
+      carregarAgendamentosDoServidor(),
+      carregarEstoqueDoServidor(),
+      carregarMovimentacoesDoServidor(),
+    ]);
+  }
 
   let pageCorretiva = 0;
   let pageProgramada = 0;
   const ITEMS_PER_PAGE = 10;
-
-  function salvarDados() {
-    try {
-      localStorage.setItem('lightwall_manutencao', JSON.stringify(manutencoes));
-      localStorage.setItem('lightwall_agendamentos', JSON.stringify(agendamentos));
-      localStorage.setItem('lightwall_estoque', JSON.stringify(estoque));
-      localStorage.setItem('lightwall_movimentacoes', JSON.stringify(movimentacoes));
-    } catch (e) {
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        alert('❌ Limite de armazenamento do navegador atingido!\n\nExporte seus dados usando o botão "Exportar Excel" e depois exclua chamados antigos para liberar espaço.');
-      } else {
-        console.error('Erro ao salvar no localStorage:', e);
-        toast('Erro ao salvar dados. Verifique o console.', 'error');
-      }
-    }
-  }
 
   function toast(msg, tipo='success') {
     const container = document.getElementById('man-toastContainer');
@@ -355,7 +376,7 @@
     } else if (btnFechar) btnFechar.style.display = 'none';
   }
 
-  function salvarManutencao() {
+  async function salvarManutencao() {
     try {
       if (document.getElementById('man-manEtiquetaFechada')?.value === 'true') {
         toast('Etiqueta fechada. Não pode ser alterada.', 'error');
@@ -447,23 +468,32 @@
         custoPecas: parseFloat(document.getElementById('man-manCustoPecas')?.value) || 0,
         custoMaoObra: parseFloat(document.getElementById('man-manCustoMaoObra')?.value) || 0,
         etiquetaFechada: false,
-        dataModificacao: new Date().toISOString()
+        autorNome: LW.nomeDeQuemEstaLogado(),
       };
 
-      const manId = document.getElementById('man-manId')?.value;
-      if (manId) {
-        const idx = manutencoes.findIndex(m => m.id === obj.id);
-        if (idx > -1) manutencoes[idx] = obj;
-      } else {
-        manutencoes.unshift(obj);
-      }
+      const btnSalvar = document.getElementById('man-btnSalvarManutencao');
+      if (btnSalvar) btnSalvar.disabled = true;
 
-      salvarDados();
-      toast('Chamado salvo com sucesso!');
-      fecharFormulario(); 
-      pageCorretiva = 0;
-      renderCorretiva();
-      renderDashboard();
+      try {
+        const res = await fetch('/manutencao/corretiva', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(obj),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao salvar chamado.');
+
+        await carregarManutencoesDoServidor();
+        toast('Chamado salvo com sucesso!');
+        fecharFormulario();
+        pageCorretiva = 0;
+        renderCorretiva();
+        renderDashboard();
+      } catch (erroServidor) {
+        toast('Erro ao salvar: ' + erroServidor.message, 'error');
+      } finally {
+        if (btnSalvar) btnSalvar.disabled = false;
+      }
 
     } catch (error) {
       console.error("Erro fatal na função salvarManutencao:", error);
@@ -507,7 +537,7 @@
 
   function fecharModal() { document.getElementById('man-modalFechamento').style.display = 'none'; }
 
-  function confirmarFechamento() {
+  async function confirmarFechamento() {
     const id = document.getElementById('man-manId')?.value;
     const chamado = manutencoes.find(m => m.id === id);
     if(!chamado) return;
@@ -518,13 +548,24 @@
       chamado.dataFim = agora.toISOString().split('T')[0];
       chamado.horaFim = agora.toLocaleTimeString('pt-BR', { hour12: false });
     }
-    salvarDados();
-    fecharModal();
-    fecharFormulario();
-    pageCorretiva = 0;
-    renderCorretiva();
-    renderDashboard();
-    toast('Chamado fechado! Etiqueta bloqueada.');
+    try {
+      const res = await fetch('/manutencao/corretiva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chamado),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao fechar chamado.');
+      await carregarManutencoesDoServidor();
+      fecharModal();
+      fecharFormulario();
+      pageCorretiva = 0;
+      renderCorretiva();
+      renderDashboard();
+      toast('Chamado fechado! Etiqueta bloqueada.');
+    } catch (e) {
+      toast('Erro ao fechar chamado: ' + e.message, 'error');
+    }
   }
 
   function limparFiltrosCorretiva() {
@@ -844,19 +885,29 @@
     }
   }
 
-  function excluirManutencao(id) { 
+  async function excluirManutencao(id) { 
     const m = manutencoes.find(x => x.id === id); 
     if (m && (m.etiquetaFechada || m.situacao !== 'Aguardando')) { 
       toast('Este chamado não pode mais ser excluído (já foi processado).', 'error'); 
       return; 
     } 
     if(!confirm('Excluir este chamado permanentemente?')) return; 
-    manutencoes = manutencoes.filter(m => m.id !== id); 
-    salvarDados(); 
-    pageCorretiva = 0; 
-    renderCorretiva(); 
-    renderDashboard(); 
-    toast('Chamado excluído.'); 
+    try {
+      const res = await fetch('/manutencao/excluir-corretiva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao excluir chamado.');
+      await carregarManutencoesDoServidor();
+      pageCorretiva = 0; 
+      renderCorretiva(); 
+      renderDashboard(); 
+      toast('Chamado excluído.'); 
+    } catch (e) {
+      toast('Erro ao excluir: ' + e.message, 'error');
+    }
   }
 
   // ============================================================
@@ -936,7 +987,7 @@
     return ocorrencias;
   }
 
-  function verificarEAgendiar() {
+  async function verificarEAgendiar() {
     if(!verificarConflito()) return;
     const data = document.getElementById('man-progData')?.value || '';
     const hora = document.getElementById('man-progHora')?.value || '';
@@ -968,16 +1019,33 @@
         observacoes: obs,
         status: 'Pendente',
         justificativa: '',
+        autorNome: LW.nomeDeQuemEstaLogado(),
         dataCriacao: new Date().toISOString().split('T')[0]
     }));
 
-    agendamentos.unshift(...novosAgendamentos);
-    salvarDados();
-    document.getElementById('man-progSolicitante').value = ''; document.getElementById('man-progObs').value = ''; 
-    const msg = document.getElementById('man-progMensagem');
-    if (msg) msg.innerHTML = '';
-    pageProgramada = 0;
-    renderProgramada(); renderDashboard();
+    try {
+      // Recorrência gera várias ocorrências (até 10) — manda cada uma
+      // em paralelo (Promise.all), já que são registros independentes,
+      // sem nenhuma relação de dependência entre si no servidor.
+      const resultados = await Promise.all(novosAgendamentos.map(a =>
+        fetch('/manutencao/programada', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(a),
+        }).then(r => r.json())
+      ));
+      const falhas = resultados.filter(r => !r.ok);
+      if (falhas.length) throw new Error(falhas[0].erro || 'Erro ao agendar.');
+
+      await carregarAgendamentosDoServidor();
+      document.getElementById('man-progSolicitante').value = ''; document.getElementById('man-progObs').value = ''; 
+      const msg = document.getElementById('man-progMensagem');
+      if (msg) msg.innerHTML = '';
+      pageProgramada = 0;
+      renderProgramada(); renderDashboard();
+    } catch (e) {
+      toast('Erro ao agendar: ' + e.message, 'error');
+    }
   }
 
   function abrirDetalhesProgramada(id) {
@@ -1087,7 +1155,36 @@
     document.getElementById('man-modalInicioProgramada').style.display = 'flex';
   }
   function fecharModalInicio() { document.getElementById('man-modalInicioProgramada').style.display = 'none'; }
-  function confirmarInicio() {
+
+  /**
+   * Envia um agendamento (já modificado em memória, ver `a` nos
+   * chamadores) pro servidor via upsert — mesmo objeto que já está em
+   * `agendamentos`, só reenviado inteiro (POST /manutencao/programada
+   * sempre substitui a linha inteira, não faz PATCH parcial). Usada por
+   * confirmarInicio/confirmarFinalizar/confirmarAprovacao/
+   * confirmarReprovacao — todas seguem o mesmo padrão: editam campos do
+   * objeto local, chamam isto, e só continuam (fechar modal, toast de
+   * sucesso, re-renderizar) se a resposta confirmar sucesso.
+   * @returns {Promise<boolean>} true se salvou com sucesso.
+   */
+  async function _salvarAgendamentoNoServidor(a) {
+    try {
+      const res = await fetch('/manutencao/programada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(a),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao salvar agendamento.');
+      await carregarAgendamentosDoServidor();
+      return true;
+    } catch (e) {
+      toast('Erro ao salvar: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  async function confirmarInicio() {
     const id = document.getElementById('man-inicioId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
     const dtI = document.getElementById('man-inicioData')?.value, hrI = document.getElementById('man-inicioHora')?.value;
     if(!dtI || !hrI) { toast('Defina o horário de início.', 'error'); return; }
@@ -1095,7 +1192,8 @@
     a.execucaoHoraInicio = hrI;
     a.status = 'Em Execucao';
     a.justificativa = `Iniciado em ${dtI} às ${hrI}`;
-    salvarDados(); toast('Tarefa marcada como Em Execução!'); fecharModalInicio(); pageProgramada = 0; renderProgramada(); renderDashboard();
+    if (!(await _salvarAgendamentoNoServidor(a))) return;
+    toast('Tarefa marcada como Em Execução!'); fecharModalInicio(); pageProgramada = 0; renderProgramada(); renderDashboard();
   }
 
   function abrirModalFinalizar(id) {
@@ -1135,7 +1233,7 @@
     const executado = document.getElementById('man-execExecutado')?.value; const group = document.getElementById('man-execMotivoGroup');
     if (executado === 'Nao' && group) { group.style.display = 'block'; } else if (group) { group.style.display = 'none'; }
   }
-  function salvarExecucao() {
+  async function salvarExecucao() {
     const id = document.getElementById('man-execId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
     const executado = document.getElementById('man-execExecutado')?.value, tecnico = document.getElementById('man-execTecnico')?.value?.trim() || '';
     const motivo = document.getElementById('man-execMotivo')?.value?.trim() || '', obs = document.getElementById('man-execObs')?.value?.trim() || '';
@@ -1152,7 +1250,8 @@
     a.execucao = { dataInicio: dtI, horaInicio: hrI, dataFim: dtF, horaFim: hrF, tempoGasto: tempoGasto, executado: executado, motivoNaoExecutado: motivo, tecnicoResponsavel: tecnico, observacoes: obs, tipoExecucao: tipoExecucao, empresaExterna: empresaExterna };
     if(executado === 'Sim') { a.status = 'Concluido'; a.justificativa = `Executado por ${tipoExecucao === 'Externo' ? 'Empresa: ' + empresaExterna : tecnico} em ${dtF} às ${hrF}. Tempo: ${tempoGastoStr}.`; } 
     else { a.status = 'Nao Executado'; a.justificativa = `Não executado. Motivo: ${motivo}. Registrado por ${tecnico}.`; }
-    salvarDados(); fecharModalFinalizar(); pageProgramada = 0; renderProgramada(); renderDashboard(); toast('Execução finalizada!');
+    if (!(await _salvarAgendamentoNoServidor(a))) return;
+    fecharModalFinalizar(); pageProgramada = 0; renderProgramada(); renderDashboard(); toast('Execução finalizada!');
   }
 
   function aprovarAgendamento(id) { abrirModalAprovacao(id); }
@@ -1170,7 +1269,7 @@
     document.getElementById('man-modalReprovacaoProgramada').style.display = 'none';
   }
 
-  function confirmarReprovacao() {
+  async function confirmarReprovacao() {
     const id = document.getElementById('man-reprovacaoId').value;
     const justificativa = document.getElementById('man-reprovacaoJustificativa').value.trim();
     const a = agendamentos.find(x => x.id === id);
@@ -1181,7 +1280,7 @@
     }
     a.status = 'Reprovado';
     a.justificativa = justificativa;
-    salvarDados();
+    if (!(await _salvarAgendamentoNoServidor(a))) return;
     fecharModalReprovacao();
     pageProgramada = 0;
     renderProgramada();
@@ -1189,19 +1288,29 @@
     toast('Agendamento reprovado com justificativa registrada.');
   }
 
-  function excluirAgendamento(id) { 
+  async function excluirAgendamento(id) { 
     const a = agendamentos.find(x => x.id === id); 
     if (a && a.status !== 'Pendente') { 
       toast('Este agendamento não pode mais ser excluído (já foi processado).', 'error'); 
       return; 
     } 
     if(!confirm('Excluir este agendamento?')) return; 
-    agendamentos = agendamentos.filter(a => a.id !== id); 
-    salvarDados(); 
-    pageProgramada = 0; 
-    renderProgramada(); 
-    renderDashboard(); 
-    toast('Agendamento excluído.'); 
+    try {
+      const res = await fetch('/manutencao/excluir-programada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao excluir agendamento.');
+      await carregarAgendamentosDoServidor();
+      pageProgramada = 0; 
+      renderProgramada(); 
+      renderDashboard(); 
+      toast('Agendamento excluído.'); 
+    } catch (e) {
+      toast('Erro ao excluir: ' + e.message, 'error');
+    }
   }
 
   function abrirModalAprovacao(id) {
@@ -1229,7 +1338,7 @@
       display.value = formatarTempo(diffMin);
     } else if (display) display.value = '';
   }
-  function confirmarAprovacao() {
+  async function confirmarAprovacao() {
     const id = document.getElementById('man-aprId')?.value; const a = agendamentos.find(x => x.id === id); if(!a) return;
     const dtI = document.getElementById('man-aprDataInicio')?.value, hrI = document.getElementById('man-aprHoraInicio')?.value;
     const dtF = document.getElementById('man-aprDataFim')?.value, hrF = document.getElementById('man-aprHoraFim')?.value;
@@ -1238,7 +1347,8 @@
     if(!responsavel) { toast('Informe o Responsável pela Aprovação.', 'error'); return; }
     a.dataInicioEstimado = dtI; a.horaInicioEstimado = hrI; a.dataFimEstimado = dtF; a.horaFimEstimado = hrF;
     a.status = 'Aprovado'; a.justificativa = `Aprovado por ${responsavel}. Previsto: ${dtI} ${hrI} a ${dtF} ${hrF}`;
-    salvarDados(); toast('Aprovada!'); fecharModalAprovacao(); pageProgramada = 0; renderProgramada(); renderDashboard();
+    if (!(await _salvarAgendamentoNoServidor(a))) return;
+    toast('Aprovada!'); fecharModalAprovacao(); pageProgramada = 0; renderProgramada(); renderDashboard();
   }
 
   function renderProgramada() {
@@ -1436,7 +1546,7 @@
     document.getElementById('man-modalCadastroEstoque').style.display = 'none';
   }
 
-  function salvarItemEstoque() {
+  async function salvarItemEstoque() {
     const id = document.getElementById('man-estoqueEditId').value;
     const codigo = document.getElementById('man-estoqueCodigo').value.trim();
     const nome = document.getElementById('man-estoqueNome').value.trim();
@@ -1452,58 +1562,54 @@
       return;
     }
 
-    if (id) {
-      const idx = estoque.findIndex(p => p.id === id);
-      if (idx > -1) {
-        estoque[idx].codigo = codigo;
-        estoque[idx].nome = nome;
-        estoque[idx].categoria = categoria;
-        estoque[idx].localizacao = localizacao;
-        estoque[idx].fornecedor = fornecedor;
-        estoque[idx].preco = preco;
-        estoque[idx].estoqueMinimo = estoqueMinimo;
-        toast('Peça atualizada!');
-      }
-    } else {
-      const novoItem = {
-        id: gerarId('PEC-'),
-        codigo: codigo,
-        nome: nome,
-        categoria: categoria,
-        localizacao: localizacao,
-        fornecedor: fornecedor,
-        preco: preco,
-        quantidade: qtdInicial,
-        estoqueMinimo: estoqueMinimo,
-        dataCriacao: new Date().toISOString()
-      };
-      estoque.push(novoItem);
-      
-      if (qtdInicial > 0) {
-        movimentacoes.push({
-          id: gerarId('MOV-'),
-          pecaId: novoItem.id,
-          tipo: 'Entrada',
-          quantidade: qtdInicial,
-          motivo: 'Estoque inicial',
-          data: new Date().toISOString()
+    try {
+      if (id) {
+        const res = await fetch('/manutencao/editar-estoque', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, codigo, nome, categoria, localizacao, fornecedor, preco, estoqueMinimo }),
         });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao atualizar peça.');
+        toast('Peça atualizada!');
+      } else {
+        const res = await fetch('/manutencao/estoque', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: gerarId('PEC-'), codigo, nome, categoria, localizacao, fornecedor, preco,
+            quantidade: qtdInicial, estoqueMinimo, autorNome: LW.nomeDeQuemEstaLogado(),
+          }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao cadastrar peça.');
+        toast('Peça cadastrada com sucesso!');
       }
-      toast('Peça cadastrada com sucesso!');
-    }
 
-    salvarDados();
-    fecharModalEstoque();
-    renderAlmoxarifado();
+      await Promise.all([carregarEstoqueDoServidor(), carregarMovimentacoesDoServidor()]);
+      fecharModalEstoque();
+      renderAlmoxarifado();
+    } catch (e) {
+      toast('Erro ao salvar: ' + e.message, 'error');
+    }
   }
 
-  function excluirItemEstoque(id) {
+  async function excluirItemEstoque(id) {
     if (!confirm('Excluir esta peça permanentemente? Isso também apagará seu histórico.')) return;
-    estoque = estoque.filter(p => p.id !== id);
-    movimentacoes = movimentacoes.filter(m => m.pecaId !== id);
-    salvarDados();
-    renderAlmoxarifado();
-    toast('Peça removida.');
+    try {
+      const res = await fetch('/manutencao/excluir-estoque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao excluir peça.');
+      await Promise.all([carregarEstoqueDoServidor(), carregarMovimentacoesDoServidor()]);
+      renderAlmoxarifado();
+      toast('Peça removida.');
+    } catch (e) {
+      toast('Erro ao excluir: ' + e.message, 'error');
+    }
   }
 
   function abrirModalMovimentacao(id) {
@@ -1518,7 +1624,7 @@
     document.getElementById('man-modalMovimentacaoEstoque').style.display = 'none';
   }
 
-  function confirmarMovimentacao() {
+  async function confirmarMovimentacao() {
     const id = document.getElementById('man-movEstoqueId').value;
     const tipo = document.getElementById('man-movTipo').value;
     const qtd = parseInt(document.getElementById('man-movQuantidade').value) || 0;
@@ -1527,30 +1633,25 @@
     if (qtd <= 0) { toast('Quantidade inválida.', 'error'); return; }
     if (!motivo) { toast('Informe o motivo da movimentação.', 'error'); return; }
 
-    const item = estoque.find(p => p.id === id);
-    if (!item) { toast('Item não encontrado.', 'error'); return; }
+    try {
+      const res = await fetch('/manutencao/movimentacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: gerarId('MOV-'), pecaId: id, tipo, quantidade: qtd, motivo,
+          autorNome: LW.nomeDeQuemEstaLogado(),
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao registrar movimentação.');
 
-    if (tipo === 'Saída' && qtd > item.quantidade) {
-      toast('Quantidade insuficiente em estoque.', 'error');
-      return;
+      await Promise.all([carregarEstoqueDoServidor(), carregarMovimentacoesDoServidor()]);
+      fecharModalMovimentacao();
+      renderAlmoxarifado();
+      toast('Movimentação registrada!');
+    } catch (e) {
+      toast('Erro ao registrar: ' + e.message, 'error');
     }
-
-    if (tipo === 'Entrada') item.quantidade = (item.quantidade || 0) + qtd;
-    else if (tipo === 'Saída') item.quantidade = (item.quantidade || 0) - qtd;
-
-    movimentacoes.push({
-      id: gerarId('MOV-'),
-      pecaId: id,
-      tipo: tipo,
-      quantidade: qtd,
-      motivo: motivo,
-      data: new Date().toISOString()
-    });
-
-    salvarDados();
-    fecharModalMovimentacao();
-    renderAlmoxarifado();
-    toast('Movimentação registrada!');
   }
 
   // ============================================================
@@ -1791,28 +1892,56 @@
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       try {
         const data = JSON.parse(e.target.result);
         if (!data.corretivas || !data.programadas) {
           toast('Arquivo inválido.', 'error');
           return;
         }
-        if (confirm('Deseja SUBSTITUIR os dados atuais? (Cancelar = mesclar)')) {
-          manutencoes = data.corretivas;
-          agendamentos = data.programadas;
-          if (data.estoque) estoque = data.estoque;
-          if (data.movimentacoes) movimentacoes = data.movimentacoes;
-        } else {
-          manutencoes = manutencoes.concat(data.corretivas);
-          agendamentos = agendamentos.concat(data.programadas);
-          if (data.estoque) estoque = estoque.concat(data.estoque);
-          if (data.movimentacoes) movimentacoes = movimentacoes.concat(data.movimentacoes);
+        const substituir = confirm('Deseja SUBSTITUIR os dados atuais? (Cancelar = mesclar)');
+        // "Substituir" aqui, diferente da Fase 1 (localStorage, onde dava
+        // pra simplesmente sobrescrever o array inteiro): o servidor não
+        // tem uma rota de "apagar tudo e recriar" — cada item importado é
+        // enviado individualmente via upsert (mesmo endpoint de sempre,
+        // ver salvarManutencaoCorretiva/salvarManutencaoProgramada/etc,
+        // db.js). Se "substituir" foi escolhido, os registros que já
+        // existiam no servidor e NÃO estão no arquivo importado
+        // continuam lá (limitação conhecida — diferente do comportamento
+        // exato de antes, onde "substituir" realmente esvaziava tudo
+        // primeiro); "mesclar" sempre foi assim mesmo (soma, nunca apaga).
+        const itensCorretivas = data.corretivas || [];
+        const itensProgramadas = data.programadas || [];
+        // Estoque/movimentações do arquivo importado NÃO são migrados
+        // aqui — diferente de corretivas/programadas, essas duas rotas
+        // não têm um "upsert" genérico (criarManutencaoEstoque só serve
+        // pra peça NOVA, e cada movimentação precisa reverificar saldo).
+        // Se o arquivo importado tiver isso, fica só ignorado por
+        // enquanto (nenhum erro, mas também nada é importado) —
+        // registrado como limitação conhecida, não implementado nesta
+        // primeira versão do backend real.
+        if (data.estoque?.length || data.movimentacoes?.length) {
+          console.warn('[Manutenção] Importação de estoque/movimentações do arquivo ainda não suportada pelo backend — ignorado.');
         }
-        salvarDados();
+
+        const resultados = await Promise.all([
+          ...itensCorretivas.map(m => fetch('/manutencao/corretiva', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m),
+          }).then(r => r.json())),
+          ...itensProgramadas.map(a => fetch('/manutencao/programada', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
+          }).then(r => r.json())),
+        ]);
+        const falhas = resultados.filter(r => !r.ok);
+        if (falhas.length) {
+          toast(`Importação parcial: ${falhas.length} item(ns) falharam. Veja o console.`, 'error');
+          console.error('[Manutenção] Falhas na importação:', falhas);
+        }
+
+        await carregarTudoDoServidor();
         pageCorretiva = 0; pageProgramada = 0;
         renderCorretiva(); renderProgramada(); renderDashboard(); renderPecas(); renderAlmoxarifado();
-        toast('Importação realizada com sucesso!');
+        toast(falhas.length ? 'Importação concluída com algumas falhas.' : 'Importação realizada com sucesso!');
       } catch (err) {
         toast('Erro ao ler o arquivo.', 'error');
         console.error(err);
@@ -1830,10 +1959,17 @@
   // quando o usuário navega até ela pela 1ª vez — mesmo padrão de
   // MAN.init(), chamado de dentro de showPage() (ver app-core.js e
   // SQ.init() do Setor de Qualidade, que segue a mesma lógica).
-  function init() {
+  //
+  // async desde a Fase 2 (backend real) — antes os dados já estavam
+  // disponíveis de forma síncrona (localStorage); agora tem que esperar
+  // as 4 listas chegarem do servidor (ver carregarTudoDoServidor(),
+  // início do arquivo) ANTES de renderizar qualquer coisa, senão a
+  // primeira renderização mostraria tudo vazio por um instante.
+  async function init() {
     const progData = document.getElementById('man-progData');
     if (progData) progData.valueAsDate = new Date();
     navegar('manutencao');
+    await carregarTudoDoServidor();
     renderDashboard(); renderCorretiva(); renderProgramada();
     renderPecas(); renderAlmoxarifado();
   }

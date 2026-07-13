@@ -223,6 +223,17 @@ Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
 
 O app também funciona como **PWA** (manifest + service worker, cobrindo só a casca estática — HTML/CSS/JS/ícones, nunca dado de produção): dá pra "Adicionar à tela inicial" num tablet e abrir sem barra de endereço, com alguma tolerância a queda rápida de rede.
 
+## Setor de Manutenção
+
+Chamados corretivos, manutenção programada (agendamentos), almoxarifado (estoque de peças) e histórico de movimentações — 4 domínios, cada um com backend real em SQLite (`manutencao_corretiva`, `manutencao_programada`, `manutencao_estoque`, `manutencao_movimentacoes`, ver `db.js` e `lib/rotas/manutencao.js`). Antes vivia inteiro em `localStorage` do navegador (protótipo inicial) — sem sincronizar entre computadores, sem entrar em backup; agora sincroniza normalmente e entra tanto no Backup de Dados quanto no Backup Geral.
+
+Pontos específicos desse domínio:
+- **`autor_nome`/`autorNome`** grava automaticamente quem registrou (mesmo mecanismo de *Autoria automática de registro*, acima).
+- **Estoque nunca é ajustado diretamente** — toda mudança de quantidade passa por uma movimentação (Entrada/Saída), numa transação que ajusta o saldo e grava o histórico juntos. Cadastrar uma peça nova com quantidade inicial grava só o registro histórico (sem duplicar o saldo — a quantidade já nasce certa no cadastro).
+- **Excluir uma peça** remove também todo o seu histórico de movimentações (cascata manual, já que `foreign_keys` está ativado no banco).
+- **Upload de foto/PDF** ainda é só visual — os campos existem na tela mas não fazem upload de verdade (limitação conhecida, ver abaixo).
+- Só `GET`/`POST` (nunca `DELETE`/`PUT`) — mesmo padrão do resto do sistema; exclusão/edição usam rotas próprias com o verbo no path (`/manutencao/excluir-corretiva`, `/manutencao/editar-estoque`), pra ficarem cobertas pela mesma proteção de tamanho máximo de corpo que `server.js` só aplica a `POST`.
+
 ## Autoria automática de registro
 
 Registrar Operação, Registro de Paradas e Avaliações do Setor de Qualidade gravam automaticamente **quem registrou** (`operador_nome`/`avaliadorNome`) — não é login nem controle de acesso, é só um rótulo de auditoria (`LW.nomeDeQuemEstaLogado()`, `data.js`). O nome vem de quem já está logado no sistema (usuário cadastrado — ver *Perfis de usuário*) ou `"ADM"` para o Administrador Master (senha mestra, sem usuário próprio). Ninguém precisa escolher/confirmar identidade separadamente — substituiu a antiga "Identidade Leve de Operador" (perguntava PIN à parte do login, toda vez que algo era registrado).
@@ -335,7 +346,7 @@ Um único card no menu ("💾 Backup e Restauração") abre um painel com todas 
 
 | Opção | O que faz |
 |---|---|
-| **Backup de Dados** | Baixa um `.zip` só com dados de produção (histórico, traços, paradas, avaliações de qualidade etc. — 13 arquivos, alguns reconstruídos a partir do SQLite). Gerado no servidor. |
+| **Backup de Dados** | Baixa um `.zip` só com dados de produção (histórico, traços, paradas, avaliações de qualidade, manutenção etc. — 17 arquivos, alguns reconstruídos a partir do SQLite). Gerado no servidor. |
 | **Backup Geral** | Baixa um `.zip` com dados de produção + `config.json` (baterias, tipos de montagem, automação) + `security.json`/`usuarios.json`/`operadores.json` (identidade e acesso — senhas sempre em hash). Gerado no servidor. Sem código-fonte (esse tem controle de versão próprio — ver Git). |
 | **Restaurar Dados** | Sobrescreve os dados de produção a partir de um backup de dados. |
 | **Restaurar Geral** | Sobrescreve dados de produção + config a partir de um backup geral. `security.json`/`usuarios.json`/`operadores.json` são **opcionais** — se o backup não os incluir (ex: veio de uma instalação mais antiga, sem esses arquivos), o cadastro atual de usuários/senha de administrador é **preservado**, não apagado. |

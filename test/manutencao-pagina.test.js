@@ -9,9 +9,11 @@
 // a ponta — tudo isso rodando o servidor HTTP REAL (ver
 // test/helpers/servidor-teste.js), não um mock.
 //
-// Persistência nesta fase ainda é localStorage (ver comentário em
-// manutencao.js, "1. BANCO DE DADOS") — a migração pra SQLite fica pra uma
-// fase futura, combinada explicitamente com o usuário antes de mexer.
+// Persistência desde a Fase 2 (ver conversa que motivou a migração) é
+// backend real (SQLite via HTTP, ver lib/rotas/manutencao.js), não mais
+// localStorage — os testes abaixo confirmam persistência batendo direto
+// nas rotas do servidor (GET /manutencao/corretiva, GET /manutencao/estoque),
+// não mais lendo localStorage do navegador.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -36,6 +38,14 @@ before(async () => {
       // scrollIntoView não é implementado pelo jsdom (API puramente
       // visual) — stub vazio; roda normalmente num navegador real.
       win.Element.prototype.scrollIntoView = function () {};
+      // window.fetch não é implementado pelo jsdom (só o fetch global do
+      // Node, fora do window, funciona) — necessário desde a Fase 2
+      // (backend real de Manutenção, ver lib/rotas/manutencao.js), que
+      // faz fetch() de dentro da página pra persistir os dados.
+      win.fetch = (url, opts) => {
+        const absoluta = new URL(url, win.location.href).toString();
+        return fetch(absoluta, opts);
+      };
     },
   });
   window = dom.window;
@@ -85,7 +95,7 @@ test('navegar por todas as 5 abas internas não lança exceção e cada uma ativ
   }
 });
 
-test('criar um chamado corretivo: preencher o formulário e salvar reflete na tabela e no localStorage', async () => {
+test('criar um chamado corretivo: preencher o formulário e salvar reflete na tabela e no servidor', async () => {
   window.MAN.navegar('manutencao');
   window.novoChamado();
   await new Promise(r => setTimeout(r, 50));
@@ -97,15 +107,16 @@ test('criar um chamado corretivo: preencher o formulário e salvar reflete na ta
   window.document.getElementById('man-manTipoManutencao').value = 'Mecânica';
   window.setPrioridade('ALTA');
 
-  window.salvarManutencao();
-  await new Promise(r => setTimeout(r, 100));
+  await window.salvarManutencao();
+  await new Promise(r => setTimeout(r, 300));
 
   const tbody = window.document.getElementById('man-corretivaTableBody');
   assert.ok(tbody.innerHTML.includes('Injetora Teste'), 'o chamado deveria aparecer na tabela de Corretiva');
   assert.ok(tbody.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer na tabela');
 
-  const salvo = window.localStorage.getItem('lightwall_manutencao');
-  assert.ok(salvo && salvo.includes('Injetora Teste'), 'o chamado deveria persistir em localStorage (lightwall_manutencao)');
+  const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
+  const data = await resp.json();
+  assert.ok(data.chamados.some(c => c.setor === 'Injetora Teste'), 'o chamado deveria persistir no servidor (GET /manutencao/corretiva)');
 });
 
 test('salvarManutencao recusa salvar sem os campos obrigatórios preenchidos', async () => {
@@ -114,15 +125,19 @@ test('salvarManutencao recusa salvar sem os campos obrigatórios preenchidos', a
   await new Promise(r => setTimeout(r, 50));
   // Deixa tudo em branco de propósito — sem setor/máquina/observador/
   // anomalia/prioridade/tipo, a validação (ver salvarManutencao,
-  // manutencao.js) deve recusar salvar.
-  const totalAntes = JSON.parse(window.localStorage.getItem('lightwall_manutencao') || '[]').length;
-  window.salvarManutencao();
-  await new Promise(r => setTimeout(r, 50));
-  const totalDepois = JSON.parse(window.localStorage.getItem('lightwall_manutencao') || '[]').length;
+  // manutencao.js) deve recusar salvar ANTES de sequer chamar o servidor.
+  const respAntes = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
+  const totalAntes = (await respAntes.json()).chamados.length;
+
+  await window.salvarManutencao();
+  await new Promise(r => setTimeout(r, 100));
+
+  const respDepois = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
+  const totalDepois = (await respDepois.json()).chamados.length;
   assert.equal(totalDepois, totalAntes, 'não deveria adicionar nenhum registro sem os campos obrigatórios');
 });
 
-test('cadastrar uma peça no Almoxarifado reflete na tabela e no localStorage', async () => {
+test('cadastrar uma peça no Almoxarifado reflete na tabela e no servidor', async () => {
   window.MAN.navegar('almoxarifado');
   window.abrirModalCadastroEstoque();
   await new Promise(r => setTimeout(r, 50));
@@ -133,15 +148,18 @@ test('cadastrar uma peça no Almoxarifado reflete na tabela e no localStorage', 
   window.document.getElementById('man-estoqueQtdInicial').value = '10';
   window.document.getElementById('man-estoqueMinimo').value = '2';
 
-  window.salvarItemEstoque();
-  await new Promise(r => setTimeout(r, 100));
+  await window.salvarItemEstoque();
+  await new Promise(r => setTimeout(r, 300));
 
   const almoxBody = window.document.getElementById('man-almoxarifadoBody');
   assert.ok(almoxBody.innerHTML.includes('PEC-TEST-01'), 'a peça deveria aparecer na tabela do Almoxarifado');
   assert.ok(almoxBody.innerHTML.includes('Rolamento de Teste'));
 
-  const estoqueSalvo = window.localStorage.getItem('lightwall_estoque');
-  assert.ok(estoqueSalvo && estoqueSalvo.includes('PEC-TEST-01'), 'a peça deveria persistir em localStorage (lightwall_estoque)');
+  const resp = await fetch(`${servidor.baseUrl}/manutencao/estoque`);
+  const data = await resp.json();
+  const peca = data.itens.find(p => p.codigo === 'PEC-TEST-01');
+  assert.ok(peca, 'a peça deveria persistir no servidor (GET /manutencao/estoque)');
+  assert.equal(peca.quantidade, 10, 'a quantidade inicial deveria ser exatamente 10, sem duplicar');
 });
 
 test('o menu lateral e o menu principal têm um item/card pra Manutenção', () => {

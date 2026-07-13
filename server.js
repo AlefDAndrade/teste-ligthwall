@@ -83,6 +83,7 @@ const perfis = require('./lib/perfis.js');
 // extraídas (ver o loop logo no início do callback).
 const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao, sessaoUsuario, perfis });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db });
+const rotasManutencao = require('./lib/rotas/manutencao.js')({ db });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
@@ -110,7 +111,7 @@ const rotasBackup = require('./lib/rotas/backup.js')({
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

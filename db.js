@@ -397,6 +397,174 @@ db.exec(`
     id_operacao TEXT PRIMARY KEY REFERENCES operacoes(id),
     avaliado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- ============================================================
+  --  SETOR DE MANUTENÇÃO — Fase 2 (backend real)
+  --
+  --  Antes vivia inteiro em localStorage do navegador (Fase 1, ver
+  --  public/js/manutencao.js) — sem sincronizar entre computadores, sem
+  --  entrar em nenhum backup. Ver conversa que motivou esta migração.
+  --  4 "tabelas" no protótipo original (arrays em localStorage), viram
+  --  4 tabelas SQL de verdade:
+  --    manutencoes (JS)     -> manutencao_corretiva
+  --    agendamentos (JS)    -> manutencao_programada
+  --    estoque (JS)         -> manutencao_estoque
+  --    movimentacoes (JS)   -> manutencao_movimentacoes
+  --  Nomes de tabela prefixados com "manutencao_" (diferente do resto do
+  --  schema) só aqui, de propósito — evita colisão com nomes genéricos
+  --  já em uso por outros domínios (ex: uma futura tabela "estoque" de
+  --  outro contexto não colidiria com esta).
+  -- ============================================================
+
+  -- Chamados de manutenção corretiva — 1 linha por chamado. Campos
+  -- fielmente replicados do protótipo original (ver salvarManutencao(),
+  -- public/js/manutencao.js) — nomenclatura em português mantida de
+  -- propósito, mesma convenção que o resto deste arquivo já quebra em
+  -- alguns lugares (ex: colunas de paradas), por já ser assim desde a
+  -- Fase 1 e não valer a pena renomear só por rigor.
+  --
+  -- foto_operador/foto_tecnico continuam TEXT com o conteúdo em
+  -- base64/data-URI embutido direto na linha (mesmo formato de sempre —
+  -- upload de foto/PDF de verdade ainda é uma pendência à parte, ver
+  -- README). tipos é um array JSON (ex: ["Elétrica","Mecânica"]).
+  CREATE TABLE IF NOT EXISTS manutencao_corretiva (
+    id                TEXT PRIMARY KEY,
+    data              TEXT,
+    setor             TEXT NOT NULL,
+    maquina           TEXT NOT NULL,
+    turno             TEXT,
+    observador        TEXT NOT NULL,
+    prioridade        TEXT NOT NULL,
+    anomalia          TEXT NOT NULL,
+    local             TEXT,
+    tipos             TEXT,  -- JSON: array de strings
+    tipo_manutencao   TEXT NOT NULL,
+    tipo_etiqueta     TEXT DEFAULT 'Azul',
+    tipo_execucao     TEXT DEFAULT 'Interno',
+    empresa_externa   TEXT,
+    responsavel       TEXT,
+    foto_operador     TEXT,
+    foto_tecnico      TEXT,
+    data_inicio       TEXT,
+    hora_inicio       TEXT,
+    data_fim          TEXT,
+    hora_fim          TEXT,
+    tempo_gasto       INTEGER DEFAULT 0,  -- minutos
+    situacao          TEXT DEFAULT 'Aguardando',
+    em_manutencao     TEXT DEFAULT 'Nao',
+    aguardando_pecas  TEXT DEFAULT 'Nao',
+    pecas_avariadas   TEXT,
+    pecas_comprar     TEXT,
+    rotina            TEXT,
+    sup_data_inicio   TEXT,
+    sup_hora_inicio   TEXT,
+    sup_data_fim      TEXT,
+    sup_hora_fim      TEXT,
+    sup_tempo_gasto   INTEGER DEFAULT 0,  -- minutos
+    status_compra     TEXT,
+    previsao_chegada  TEXT,
+    fornecedor        TEXT,
+    resp_supervisor   TEXT,
+    obs_supervisor    TEXT,
+    custo_pecas       REAL DEFAULT 0,
+    custo_mao_obra    REAL DEFAULT 0,
+    etiqueta_fechada  INTEGER NOT NULL DEFAULT 0,
+    -- Nome de quem registrou/alterou (ver LW.nomeDeQuemEstaLogado(),
+    -- data.js) — mesmo raciocínio de operacoes.operador_nome: puramente
+    -- informativo, nunca controle de acesso.
+    autor_nome        TEXT,
+    data_criacao      TEXT NOT NULL DEFAULT (datetime('now')),
+    data_modificacao  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_manutencao_corretiva_data ON manutencao_corretiva(data);
+  CREATE INDEX IF NOT EXISTS idx_manutencao_corretiva_situacao ON manutencao_corretiva(situacao);
+
+  -- Manutenção programada (agendamentos) — 1 linha por ocorrência (uma
+  -- recorrência gera várias linhas, uma por data — mesmo comportamento
+  -- do protótipo original, ver gerarOcorrenciasRecorrentes()).
+  --
+  -- execucao é um objeto JSON opcional (só existe depois que alguém
+  -- preenche o formulário de execução, ver salvarExecucao()) — não vale
+  -- a pena normalizar numa tabela própria: é sempre 1-pra-1 com o
+  -- agendamento, nunca consultado separadamente, e tem uma estrutura
+  -- própria fixa (dataInicio/horaInicio/dataFim/horaFim/tempoGasto/
+  -- executado/motivoNaoExecutado/tecnicoResponsavel/observacoes/
+  -- tipoExecucao/empresaExterna).
+  --
+  -- execucao_data_inicio/execucao_hora_inicio são DIFERENTES do que tem
+  -- dentro de "execucao" (JSON) — mesma duplicação/inconsistência que já
+  -- existia no protótipo original (Fase 1), mantida de propósito
+  -- (replicar o comportamento exato, não redesenhar a lógica de
+  -- negócio): confirmarInicio() (status "Pendente" -> "Em Execucao")
+  -- grava só esses 2 campos soltos; só depois, ao FINALIZAR
+  -- (salvarExecucao(), status "Em Execucao" -> "Concluido"/"Nao
+  -- Executado"), o objeto "execucao" completo é preenchido (incluindo um
+  -- "dataInicio"/"horaInicio" própria dele, que pode ou não bater com os
+  -- 2 campos soltos, dependendo do que a pessoa digitou no formulário de
+  -- finalização).
+  CREATE TABLE IF NOT EXISTS manutencao_programada (
+    id                    TEXT PRIMARY KEY,
+    data                  TEXT NOT NULL,
+    hora                  TEXT,
+    turno                 TEXT,
+    setor                 TEXT NOT NULL,
+    maquina               TEXT NOT NULL,
+    tipo                  TEXT,
+    solicitante           TEXT NOT NULL,
+    observacoes           TEXT,
+    status                TEXT NOT NULL DEFAULT 'Pendente',
+    justificativa         TEXT,
+    -- Preenchidos só depois de Aprovado (ver confirmarAprovacao()).
+    data_inicio_estimado  TEXT,
+    hora_inicio_estimado  TEXT,
+    data_fim_estimado     TEXT,
+    hora_fim_estimado     TEXT,
+    -- Preenchidos só depois de "Em Execução" (ver confirmarInicio()) —
+    -- ver comentário acima sobre a duplicação com o JSON "execucao".
+    execucao_data_inicio  TEXT,
+    execucao_hora_inicio  TEXT,
+    -- JSON opcional — ver comentário acima da tabela.
+    execucao              TEXT,
+    autor_nome            TEXT,
+    data_criacao          TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_manutencao_programada_data ON manutencao_programada(data);
+  CREATE INDEX IF NOT EXISTS idx_manutencao_programada_status ON manutencao_programada(status);
+
+  -- Peças do almoxarifado — 1 linha por peça cadastrada. "quantidade" é o
+  -- saldo atual (ajustado a cada movimentação, ver
+  -- manutencao_movimentacoes, abaixo) — não é recalculado por soma a
+  -- cada leitura, é mantido diretamente (mesmo padrão do protótipo
+  -- original, onde item.quantidade era editado na hora de cada
+  -- Entrada/Saída).
+  CREATE TABLE IF NOT EXISTS manutencao_estoque (
+    id              TEXT PRIMARY KEY,
+    codigo          TEXT NOT NULL,
+    nome            TEXT NOT NULL,
+    categoria       TEXT,
+    localizacao     TEXT,
+    fornecedor      TEXT,
+    preco           REAL DEFAULT 0,
+    quantidade      INTEGER NOT NULL DEFAULT 0,
+    estoque_minimo  INTEGER DEFAULT 0,
+    data_criacao    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_manutencao_estoque_codigo ON manutencao_estoque(codigo);
+
+  -- Movimentações de estoque (Entrada/Saída) — 1 linha por movimentação,
+  -- histórico nunca editado/apagado individualmente (só em cascata, se a
+  -- peça em si for excluída — ver DELETE FROM manutencao_movimentacoes
+  -- WHERE peca_id = ? nas rotas).
+  CREATE TABLE IF NOT EXISTS manutencao_movimentacoes (
+    id          TEXT PRIMARY KEY,
+    peca_id     TEXT NOT NULL REFERENCES manutencao_estoque(id),
+    tipo        TEXT NOT NULL CHECK(tipo IN ('Entrada', 'Saída')),
+    quantidade  INTEGER NOT NULL,
+    motivo      TEXT,
+    autor_nome  TEXT,
+    data        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_manutencao_movimentacoes_peca ON manutencao_movimentacoes(peca_id);
 `);
 
 // ------------------------------------------------------------
@@ -563,6 +731,16 @@ const _colunasAvaliacoesQualidade = db.prepare("PRAGMA table_info(avaliacoes_qua
 if (!_colunasAvaliacoesQualidade.includes('avaliador_nome')) {
   db.exec('ALTER TABLE avaliacoes_qualidade ADD COLUMN avaliador_nome TEXT');
   console.log('[migração] Coluna "avaliador_nome" adicionada à tabela avaliacoes_qualidade.');
+}
+// execucao_data_inicio/execucao_hora_inicio — ver comentário na
+// CREATE TABLE manutencao_programada (acima) sobre a duplicação com o
+// JSON "execucao". Adicionadas depois da primeira versão da tabela
+// (criada só com a coluna "execucao"), daí a migração.
+const _colunasManutencaoProgramada = db.prepare("PRAGMA table_info(manutencao_programada)").all().map(c => c.name);
+if (!_colunasManutencaoProgramada.includes('execucao_data_inicio')) {
+  db.exec('ALTER TABLE manutencao_programada ADD COLUMN execucao_data_inicio TEXT');
+  db.exec('ALTER TABLE manutencao_programada ADD COLUMN execucao_hora_inicio TEXT');
+  console.log('[migração] Colunas "execucao_data_inicio"/"execucao_hora_inicio" adicionadas à tabela manutencao_programada.');
 }
 
 // ------------------------------------------------------------
@@ -2253,3 +2431,463 @@ function mesclarTracosEAjustes(relatorioArray, ajustesArray) {
 }
 
 module.exports.mesclarTracosEAjustes = mesclarTracosEAjustes;
+
+// ════════════════════════════════════════════════════════════════════════
+//  SETOR DE MANUTENÇÃO — Fase 2 (backend real)
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Manutenção Corretiva ──────────────────────────────────────────────
+
+function _rowParaManutencaoCorretiva(row) {
+  return {
+    id: row.id,
+    data: row.data,
+    setor: row.setor,
+    maquina: row.maquina,
+    turno: row.turno,
+    observador: row.observador,
+    prioridade: row.prioridade,
+    anomalia: row.anomalia,
+    local: row.local,
+    tipos: row.tipos ? JSON.parse(row.tipos) : [],
+    tipoManutencao: row.tipo_manutencao,
+    tipoEtiqueta: row.tipo_etiqueta,
+    tipoExecucao: row.tipo_execucao,
+    empresaExterna: row.empresa_externa,
+    responsavel: row.responsavel,
+    fotoOperador: row.foto_operador,
+    fotoTecnico: row.foto_tecnico,
+    dataInicio: row.data_inicio,
+    horaInicio: row.hora_inicio,
+    dataFim: row.data_fim,
+    horaFim: row.hora_fim,
+    tempoGasto: row.tempo_gasto,
+    situacao: row.situacao,
+    emManutencao: row.em_manutencao,
+    aguardandoPecas: row.aguardando_pecas,
+    pecasAvariadas: row.pecas_avariadas,
+    pecasComprar: row.pecas_comprar,
+    rotina: row.rotina,
+    supDataInicio: row.sup_data_inicio,
+    supHoraInicio: row.sup_hora_inicio,
+    supDataFim: row.sup_data_fim,
+    supHoraFim: row.sup_hora_fim,
+    supTempoGasto: row.sup_tempo_gasto,
+    statusCompra: row.status_compra,
+    previsaoChegada: row.previsao_chegada,
+    fornecedor: row.fornecedor,
+    respSupervisor: row.resp_supervisor,
+    obsSupervisor: row.obs_supervisor,
+    custoPecas: row.custo_pecas,
+    custoMaoObra: row.custo_mao_obra,
+    etiquetaFechada: !!row.etiqueta_fechada,
+    autorNome: row.autor_nome,
+    dataCriacao: row.data_criacao,
+    dataModificacao: row.data_modificacao,
+  };
+}
+
+const SQL_UPSERT_MANUTENCAO_CORRETIVA = `
+  INSERT INTO manutencao_corretiva (
+    id, data, setor, maquina, turno, observador, prioridade, anomalia, local,
+    tipos, tipo_manutencao, tipo_etiqueta, tipo_execucao, empresa_externa,
+    responsavel, foto_operador, foto_tecnico, data_inicio, hora_inicio,
+    data_fim, hora_fim, tempo_gasto, situacao, em_manutencao,
+    aguardando_pecas, pecas_avariadas, pecas_comprar, rotina,
+    sup_data_inicio, sup_hora_inicio, sup_data_fim, sup_hora_fim,
+    sup_tempo_gasto, status_compra, previsao_chegada, fornecedor,
+    resp_supervisor, obs_supervisor, custo_pecas, custo_mao_obra,
+    etiqueta_fechada, autor_nome, data_criacao, data_modificacao
+  ) VALUES (
+    @id, @data, @setor, @maquina, @turno, @observador, @prioridade, @anomalia, @local,
+    @tipos, @tipo_manutencao, @tipo_etiqueta, @tipo_execucao, @empresa_externa,
+    @responsavel, @foto_operador, @foto_tecnico, @data_inicio, @hora_inicio,
+    @data_fim, @hora_fim, @tempo_gasto, @situacao, @em_manutencao,
+    @aguardando_pecas, @pecas_avariadas, @pecas_comprar, @rotina,
+    @sup_data_inicio, @sup_hora_inicio, @sup_data_fim, @sup_hora_fim,
+    @sup_tempo_gasto, @status_compra, @previsao_chegada, @fornecedor,
+    @resp_supervisor, @obs_supervisor, @custo_pecas, @custo_mao_obra,
+    @etiqueta_fechada, @autor_nome, @data_criacao, @data_modificacao
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    data=@data, setor=@setor, maquina=@maquina, turno=@turno, observador=@observador,
+    prioridade=@prioridade, anomalia=@anomalia, local=@local, tipos=@tipos,
+    tipo_manutencao=@tipo_manutencao, tipo_etiqueta=@tipo_etiqueta, tipo_execucao=@tipo_execucao,
+    empresa_externa=@empresa_externa, responsavel=@responsavel, foto_operador=@foto_operador,
+    foto_tecnico=@foto_tecnico, data_inicio=@data_inicio, hora_inicio=@hora_inicio,
+    data_fim=@data_fim, hora_fim=@hora_fim, tempo_gasto=@tempo_gasto, situacao=@situacao,
+    em_manutencao=@em_manutencao, aguardando_pecas=@aguardando_pecas,
+    pecas_avariadas=@pecas_avariadas, pecas_comprar=@pecas_comprar, rotina=@rotina,
+    sup_data_inicio=@sup_data_inicio, sup_hora_inicio=@sup_hora_inicio,
+    sup_data_fim=@sup_data_fim, sup_hora_fim=@sup_hora_fim, sup_tempo_gasto=@sup_tempo_gasto,
+    status_compra=@status_compra, previsao_chegada=@previsao_chegada, fornecedor=@fornecedor,
+    resp_supervisor=@resp_supervisor, obs_supervisor=@obs_supervisor, custo_pecas=@custo_pecas,
+    custo_mao_obra=@custo_mao_obra, etiqueta_fechada=@etiqueta_fechada, autor_nome=@autor_nome,
+    data_modificacao=@data_modificacao
+`;
+
+function listarManutencaoCorretiva() {
+  const rows = db.prepare('SELECT * FROM manutencao_corretiva ORDER BY data_criacao DESC').all();
+  return rows.map(_rowParaManutencaoCorretiva);
+}
+
+function salvarManutencaoCorretiva(m) {
+  const agora = new Date().toISOString();
+  db.prepare(SQL_UPSERT_MANUTENCAO_CORRETIVA).run({
+    id: m.id,
+    data: m.data ?? null,
+    setor: m.setor,
+    maquina: m.maquina,
+    turno: m.turno ?? null,
+    observador: m.observador,
+    prioridade: m.prioridade,
+    anomalia: m.anomalia,
+    local: m.local ?? null,
+    tipos: m.tipos ? JSON.stringify(m.tipos) : '[]',
+    tipo_manutencao: m.tipoManutencao,
+    tipo_etiqueta: m.tipoEtiqueta || 'Azul',
+    tipo_execucao: m.tipoExecucao || 'Interno',
+    empresa_externa: m.empresaExterna ?? null,
+    responsavel: m.responsavel ?? null,
+    foto_operador: m.fotoOperador ?? null,
+    foto_tecnico: m.fotoTecnico ?? null,
+    data_inicio: m.dataInicio ?? null,
+    hora_inicio: m.horaInicio ?? null,
+    data_fim: m.dataFim ?? null,
+    hora_fim: m.horaFim ?? null,
+    tempo_gasto: m.tempoGasto ?? 0,
+    situacao: m.situacao || 'Aguardando',
+    em_manutencao: m.emManutencao || 'Nao',
+    aguardando_pecas: m.aguardandoPecas || 'Nao',
+    pecas_avariadas: m.pecasAvariadas ?? null,
+    pecas_comprar: m.pecasComprar ?? null,
+    rotina: m.rotina ?? null,
+    sup_data_inicio: m.supDataInicio ?? null,
+    sup_hora_inicio: m.supHoraInicio ?? null,
+    sup_data_fim: m.supDataFim ?? null,
+    sup_hora_fim: m.supHoraFim ?? null,
+    sup_tempo_gasto: m.supTempoGasto ?? 0,
+    status_compra: m.statusCompra ?? null,
+    previsao_chegada: m.previsaoChegada ?? null,
+    fornecedor: m.fornecedor ?? null,
+    resp_supervisor: m.respSupervisor ?? null,
+    obs_supervisor: m.obsSupervisor ?? null,
+    custo_pecas: m.custoPecas ?? 0,
+    custo_mao_obra: m.custoMaoObra ?? 0,
+    etiqueta_fechada: m.etiquetaFechada ? 1 : 0,
+    autor_nome: m.autorNome ?? null,
+    data_criacao: m.dataCriacao || agora,
+    data_modificacao: agora,
+  });
+}
+
+function excluirManutencaoCorretiva(id) {
+  db.prepare('DELETE FROM manutencao_corretiva WHERE id = ?').run(id);
+}
+
+// ─── Manutenção Programada (agendamentos) ──────────────────────────────
+
+function _rowParaManutencaoProgramada(row) {
+  return {
+    id: row.id,
+    data: row.data,
+    hora: row.hora,
+    turno: row.turno,
+    setor: row.setor,
+    maquina: row.maquina,
+    tipo: row.tipo,
+    solicitante: row.solicitante,
+    observacoes: row.observacoes,
+    status: row.status,
+    justificativa: row.justificativa,
+    dataInicioEstimado: row.data_inicio_estimado,
+    horaInicioEstimado: row.hora_inicio_estimado,
+    dataFimEstimado: row.data_fim_estimado,
+    horaFimEstimado: row.hora_fim_estimado,
+    execucaoDataInicio: row.execucao_data_inicio,
+    execucaoHoraInicio: row.execucao_hora_inicio,
+    ...(row.execucao ? { execucao: JSON.parse(row.execucao) } : {}),
+    autorNome: row.autor_nome,
+    dataCriacao: row.data_criacao,
+  };
+}
+
+const SQL_UPSERT_MANUTENCAO_PROGRAMADA = `
+  INSERT INTO manutencao_programada (
+    id, data, hora, turno, setor, maquina, tipo, solicitante, observacoes,
+    status, justificativa, data_inicio_estimado, hora_inicio_estimado,
+    data_fim_estimado, hora_fim_estimado, execucao_data_inicio, execucao_hora_inicio,
+    execucao, autor_nome, data_criacao
+  ) VALUES (
+    @id, @data, @hora, @turno, @setor, @maquina, @tipo, @solicitante, @observacoes,
+    @status, @justificativa, @data_inicio_estimado, @hora_inicio_estimado,
+    @data_fim_estimado, @hora_fim_estimado, @execucao_data_inicio, @execucao_hora_inicio,
+    @execucao, @autor_nome, @data_criacao
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    data=@data, hora=@hora, turno=@turno, setor=@setor, maquina=@maquina, tipo=@tipo,
+    solicitante=@solicitante, observacoes=@observacoes, status=@status,
+    justificativa=@justificativa, data_inicio_estimado=@data_inicio_estimado,
+    hora_inicio_estimado=@hora_inicio_estimado, data_fim_estimado=@data_fim_estimado,
+    hora_fim_estimado=@hora_fim_estimado, execucao_data_inicio=@execucao_data_inicio,
+    execucao_hora_inicio=@execucao_hora_inicio, execucao=@execucao, autor_nome=@autor_nome
+`;
+
+function listarManutencaoProgramada() {
+  const rows = db.prepare('SELECT * FROM manutencao_programada ORDER BY data_criacao DESC').all();
+  return rows.map(_rowParaManutencaoProgramada);
+}
+
+function salvarManutencaoProgramada(a) {
+  db.prepare(SQL_UPSERT_MANUTENCAO_PROGRAMADA).run({
+    id: a.id,
+    data: a.data,
+    hora: a.hora ?? null,
+    turno: a.turno ?? null,
+    setor: a.setor,
+    maquina: a.maquina,
+    tipo: a.tipo ?? null,
+    solicitante: a.solicitante,
+    observacoes: a.observacoes ?? null,
+    status: a.status || 'Pendente',
+    justificativa: a.justificativa ?? null,
+    data_inicio_estimado: a.dataInicioEstimado ?? null,
+    hora_inicio_estimado: a.horaInicioEstimado ?? null,
+    data_fim_estimado: a.dataFimEstimado ?? null,
+    hora_fim_estimado: a.horaFimEstimado ?? null,
+    execucao_data_inicio: a.execucaoDataInicio ?? null,
+    execucao_hora_inicio: a.execucaoHoraInicio ?? null,
+    execucao: a.execucao ? JSON.stringify(a.execucao) : null,
+    autor_nome: a.autorNome ?? null,
+    data_criacao: a.dataCriacao || new Date().toISOString().split('T')[0],
+  });
+}
+
+function excluirManutencaoProgramada(id) {
+  db.prepare('DELETE FROM manutencao_programada WHERE id = ?').run(id);
+}
+
+// ─── Almoxarifado (estoque + movimentações) ────────────────────────────
+
+function _rowParaManutencaoEstoque(row) {
+  return {
+    id: row.id,
+    codigo: row.codigo,
+    nome: row.nome,
+    categoria: row.categoria,
+    localizacao: row.localizacao,
+    fornecedor: row.fornecedor,
+    preco: row.preco,
+    quantidade: row.quantidade,
+    estoqueMinimo: row.estoque_minimo,
+    dataCriacao: row.data_criacao,
+  };
+}
+
+function listarManutencaoEstoque() {
+  const rows = db.prepare('SELECT * FROM manutencao_estoque ORDER BY nome ASC').all();
+  return rows.map(_rowParaManutencaoEstoque);
+}
+
+function criarManutencaoEstoque(p) {
+  db.prepare(`
+    INSERT INTO manutencao_estoque (id, codigo, nome, categoria, localizacao, fornecedor, preco, quantidade, estoque_minimo, data_criacao)
+    VALUES (@id, @codigo, @nome, @categoria, @localizacao, @fornecedor, @preco, @quantidade, @estoque_minimo, @data_criacao)
+  `).run({
+    id: p.id,
+    codigo: p.codigo,
+    nome: p.nome,
+    categoria: p.categoria ?? null,
+    localizacao: p.localizacao ?? null,
+    fornecedor: p.fornecedor ?? null,
+    preco: p.preco ?? 0,
+    quantidade: p.quantidade ?? 0,
+    estoque_minimo: p.estoqueMinimo ?? 0,
+    data_criacao: p.dataCriacao || new Date().toISOString(),
+  });
+}
+
+function atualizarManutencaoEstoque(id, dados) {
+  db.prepare(`
+    UPDATE manutencao_estoque
+    SET codigo=@codigo, nome=@nome, categoria=@categoria, localizacao=@localizacao,
+        fornecedor=@fornecedor, preco=@preco, estoque_minimo=@estoque_minimo
+    WHERE id=@id
+  `).run({
+    id,
+    codigo: dados.codigo,
+    nome: dados.nome,
+    categoria: dados.categoria ?? null,
+    localizacao: dados.localizacao ?? null,
+    fornecedor: dados.fornecedor ?? null,
+    preco: dados.preco ?? 0,
+    estoque_minimo: dados.estoqueMinimo ?? 0,
+  });
+}
+
+function excluirManutencaoEstoque(id) {
+  const excluirTudo = db.transaction(() => {
+    db.prepare('DELETE FROM manutencao_movimentacoes WHERE peca_id = ?').run(id);
+    db.prepare('DELETE FROM manutencao_estoque WHERE id = ?').run(id);
+  });
+  excluirTudo();
+}
+
+function _rowParaManutencaoMovimentacao(row) {
+  return {
+    id: row.id,
+    pecaId: row.peca_id,
+    tipo: row.tipo,
+    quantidade: row.quantidade,
+    motivo: row.motivo,
+    autorNome: row.autor_nome,
+    data: row.data,
+  };
+}
+
+function listarManutencaoMovimentacoes() {
+  const rows = db.prepare('SELECT * FROM manutencao_movimentacoes ORDER BY data DESC').all();
+  return rows.map(_rowParaManutencaoMovimentacao);
+}
+
+function registrarManutencaoMovimentacao(mov) {
+  const item = db.prepare('SELECT quantidade FROM manutencao_estoque WHERE id = ?').get(mov.pecaId);
+  if (!item) throw new Error('Peça não encontrada.');
+
+  const delta = mov.tipo === 'Entrada' ? mov.quantidade : -mov.quantidade;
+  const novoSaldo = (item.quantidade || 0) + delta;
+  if (novoSaldo < 0) throw new Error('Quantidade insuficiente em estoque.');
+
+  const gravarTudo = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO manutencao_movimentacoes (id, peca_id, tipo, quantidade, motivo, autor_nome, data)
+      VALUES (@id, @peca_id, @tipo, @quantidade, @motivo, @autor_nome, @data)
+    `).run({
+      id: mov.id,
+      peca_id: mov.pecaId,
+      tipo: mov.tipo,
+      quantidade: mov.quantidade,
+      motivo: mov.motivo ?? null,
+      autor_nome: mov.autorNome ?? null,
+      data: mov.data || new Date().toISOString(),
+    });
+    db.prepare('UPDATE manutencao_estoque SET quantidade = ? WHERE id = ?').run(novoSaldo, mov.pecaId);
+  });
+  gravarTudo();
+
+  return novoSaldo;
+}
+
+/**
+ * Grava uma movimentação SÓ NO HISTÓRICO, sem ajustar
+ * manutencao_estoque.quantidade — usada exclusivamente pela "Entrada"
+ * automática de "Estoque inicial" ao CRIAR uma peça nova (ver POST
+ * /manutencao/estoque, lib/rotas/manutencao.js): nesse caso o saldo já
+ * nasce correto dentro do próprio INSERT de criarManutencaoEstoque(), a
+ * movimentação aqui é só o REGISTRO auditável de onde veio a quantidade
+ * inicial — chamar registrarManutencaoMovimentacao() (acima) nesse
+ * momento SOMARIA de novo em cima do saldo que já nasceu certo,
+ * duplicando o valor (bug real encontrado e corrigido nos testes desta
+ * implementação). Fora esse caso específico, toda Entrada/Saída de
+ * verdade (peça já existente, com saldo anterior) usa
+ * registrarManutencaoMovimentacao(), que ajusta o saldo corretamente.
+ */
+function registrarManutencaoMovimentacaoHistorico(mov) {
+  db.prepare(`
+    INSERT INTO manutencao_movimentacoes (id, peca_id, tipo, quantidade, motivo, autor_nome, data)
+    VALUES (@id, @peca_id, @tipo, @quantidade, @motivo, @autor_nome, @data)
+  `).run({
+    id: mov.id,
+    peca_id: mov.pecaId,
+    tipo: mov.tipo,
+    quantidade: mov.quantidade,
+    motivo: mov.motivo ?? null,
+    autor_nome: mov.autorNome ?? null,
+    data: mov.data || new Date().toISOString(),
+  });
+}
+
+module.exports.listarManutencaoCorretiva = listarManutencaoCorretiva;
+module.exports.salvarManutencaoCorretiva = salvarManutencaoCorretiva;
+module.exports.excluirManutencaoCorretiva = excluirManutencaoCorretiva;
+module.exports.listarManutencaoProgramada = listarManutencaoProgramada;
+module.exports.salvarManutencaoProgramada = salvarManutencaoProgramada;
+module.exports.excluirManutencaoProgramada = excluirManutencaoProgramada;
+module.exports.listarManutencaoEstoque = listarManutencaoEstoque;
+module.exports.criarManutencaoEstoque = criarManutencaoEstoque;
+module.exports.atualizarManutencaoEstoque = atualizarManutencaoEstoque;
+module.exports.excluirManutencaoEstoque = excluirManutencaoEstoque;
+module.exports.listarManutencaoMovimentacoes = listarManutencaoMovimentacoes;
+module.exports.registrarManutencaoMovimentacao = registrarManutencaoMovimentacao;
+module.exports.registrarManutencaoMovimentacaoHistorico = registrarManutencaoMovimentacaoHistorico;
+/**
+ * Substitui TODOS os chamados de manutenção corretiva pelos da lista —
+ * usada só por POST /restaurar-backup-dados e /restaurar-backup-geral
+ * (ver lib/rotas/backup.js). Mesmo padrão de substituirAvaliacoesQualidade
+ * (acima): apaga tudo, reinsere.
+ */
+function substituirManutencaoCorretiva(lista) {
+  db.prepare('DELETE FROM manutencao_corretiva').run();
+  for (const m of (lista || [])) salvarManutencaoCorretiva(m);
+}
+
+/** Substitui TODOS os agendamentos de manutenção programada pelos da lista. */
+function substituirManutencaoProgramada(lista) {
+  db.prepare('DELETE FROM manutencao_programada').run();
+  for (const a of (lista || [])) salvarManutencaoProgramada(a);
+}
+
+/**
+ * Substitui TODO o estoque de manutenção pelo da lista — diferente de
+ * criarManutencaoEstoque() (INSERT puro, falharia com id duplicado numa
+ * restauração), usa INSERT direto, preservando a "quantidade" exata que
+ * veio no backup (não passa pela lógica de
+ * registrarManutencaoMovimentacao, que dependeria de um saldo anterior
+ * que não existe mais depois do DELETE).
+ *
+ * Apaga manutencao_movimentacoes ANTES de manutencao_estoque, de
+ * propósito — foreign_keys está ATIVADO neste banco
+ * (manutencao_movimentacoes.peca_id REFERENCES manutencao_estoque(id)),
+ * então apagar o estoque com movimentações antigas ainda apontando pra
+ * ele falha com "FOREIGN KEY constraint failed" (bug real encontrado e
+ * corrigido durante os testes desta implementação). As movimentações
+ * "antigas" apagadas aqui sempre voltam logo em seguida, via
+ * substituirManutencaoMovimentacoes() (chamada sempre depois desta, ver
+ * lib/rotas/backup.js) — se o backup não tiver
+ * manutencao_movimentacoes.json, o histórico simplesmente fica vazio
+ * (mesmo comportamento de qualquer campo ausente num backup).
+ */
+function substituirManutencaoEstoque(lista) {
+  db.prepare('DELETE FROM manutencao_movimentacoes').run();
+  db.prepare('DELETE FROM manutencao_estoque').run();
+  const inserir = db.prepare(`
+    INSERT INTO manutencao_estoque (id, codigo, nome, categoria, localizacao, fornecedor, preco, quantidade, estoque_minimo, data_criacao)
+    VALUES (@id, @codigo, @nome, @categoria, @localizacao, @fornecedor, @preco, @quantidade, @estoque_minimo, @data_criacao)
+  `);
+  for (const p of (lista || [])) {
+    inserir.run({
+      id: p.id, codigo: p.codigo, nome: p.nome, categoria: p.categoria ?? null,
+      localizacao: p.localizacao ?? null, fornecedor: p.fornecedor ?? null,
+      preco: p.preco ?? 0, quantidade: p.quantidade ?? 0, estoque_minimo: p.estoqueMinimo ?? 0,
+      data_criacao: p.dataCriacao || new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * Substitui TODO o histórico de movimentações de estoque pelo da lista —
+ * grava só o HISTÓRICO (registrarManutencaoMovimentacaoHistorico, não
+ * registrarManutencaoMovimentacao), já que os saldos já vêm certos de
+ * substituirManutencaoEstoque() (chamada sempre antes desta, ver
+ * lib/rotas/backup.js) — reprocessar cada movimentação ajustando saldo
+ * de novo duplicaria as quantidades.
+ */
+function substituirManutencaoMovimentacoes(lista) {
+  db.prepare('DELETE FROM manutencao_movimentacoes').run();
+  for (const m of (lista || [])) registrarManutencaoMovimentacaoHistorico(m);
+}
+
+module.exports.substituirManutencaoCorretiva = substituirManutencaoCorretiva;
+module.exports.substituirManutencaoProgramada = substituirManutencaoProgramada;
+module.exports.substituirManutencaoEstoque = substituirManutencaoEstoque;
+module.exports.substituirManutencaoMovimentacoes = substituirManutencaoMovimentacoes;
