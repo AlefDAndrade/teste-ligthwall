@@ -225,6 +225,25 @@
               já entra direto com as permissões definidas neste cadastro.
             </p>
 
+            <!-- ========== Tipos de Perfil (fixos + customizados) ========== -->
+            <!-- Além dos 6 perfis fixos do sistema, o Administrador pode
+                 CRIAR novos tipos de perfil com um mapa de permissões
+                 próprio, item por item (ver modal-criar-perfil.html,
+                 lib/perfis-customizados.js). Esta lista mostra só os
+                 perfis CUSTOMIZADOS já criados — os 6 fixos não aparecem
+                 aqui (não são editáveis/excluíveis, sempre existem). -->
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">
+                  Tipos de Perfil Customizados</div>
+                <button class="btn btn-outline-accent btn-sm" onclick="abrirCriarPerfil()">+ Criar novo tipo de perfil</button>
+              </div>
+              <div id="cfg-perfis-customizados-lista" style="display:flex;flex-direction:column;gap:8px">
+                <span style="color:var(--text-3);font-size:.82rem">Nenhum perfil customizado criado ainda.</span>
+              </div>
+            </div>
+            <!-- ========== /Tipos de Perfil ========== -->
+
             <div id="cfg-usuarios-status" style="margin-bottom:18px"></div>
 
             <div id="cfg-usuarios-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
@@ -244,13 +263,12 @@
                 </div>
                 <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
                   <label class="form-label">Perfil</label>
+                  <!-- Opções preenchidas dinamicamente por
+                       _cfgPopularSelectPerfil() (app-core.js), a partir de
+                       GET /perfis (rotulosPorPerfil + perfisCadastraveis)
+                       — inclui os 6 fixos E qualquer perfil customizado já
+                       criado, sem precisar hardcodar <option> nenhuma aqui. -->
                   <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()">
-                    <option value="OperadorInjetora">Operador de Injetora</option>
-                    <option value="AssistenteQualidade">Assistente de Qualidade</option>
-                    <option value="Encarregado">Encarregado</option>
-                    <option value="Manutencao">Manutenção</option>
-                    <option value="Supervisao">Supervisão</option>
-                    <option value="Administrativo">Administrador</option>
                   </select>
                 </div>
               </div>

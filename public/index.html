@@ -2742,7 +2742,7 @@
       Gestão de Manutenção
     </div>
     <div class="man-actions">
-      <button class="man-btn man-btn-primary" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
+      <button class="man-btn man-btn-primary" data-manut-area="manutencao-chamado" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
       <button class="man-btn man-btn-outline" onclick="exportarCSV()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
       <button class="man-btn man-btn-outline" onclick="gerarRelatorioPDF()"><i class="fas fa-file-pdf"></i> Relatório PDF</button>
       <button class="man-btn man-btn-outline" onclick="document.getElementById('man-importFile').click()"><i class="fas fa-upload"></i> Importar Backup</button>
@@ -2910,8 +2910,8 @@
         
         <!-- BOTÕES INFERIORES -->
         <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
-          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
+          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" data-manut-area="manutencao-chamado" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
+          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" data-manut-area="manutencao" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
         </div>
       </form>
@@ -2988,7 +2988,7 @@
           </div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações</div><div class="man-form-field"><textarea id="man-progObs" placeholder="Descreva o motivo ou necessidade..."></textarea></div></div>
           <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-            <button type="button" class="man-btn man-btn-primary" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
+            <button type="button" class="man-btn man-btn-primary" data-manut-area="manutencao" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
             <div id="man-progMensagem" style="font-size:13px; display:flex; align-items:center; color:var(--man-text-secondary);"></div>
           </div>
         </div>
@@ -3059,7 +3059,7 @@
           <option value="Outros">Outros</option>
         </select>
       </div>
-      <button class="man-btn man-btn-success" onclick="abrirModalCadastroEstoque()"><i class="fas fa-plus-circle"></i> Cadastrar Peça</button>
+      <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="abrirModalCadastroEstoque()"><i class="fas fa-plus-circle"></i> Cadastrar Peça</button>
     </div>
 
     <div class="man-card">
@@ -3096,7 +3096,7 @@
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Qtd. Inicial</div><div class="man-form-field"><input type="number" id="man-estoqueQtdInicial" step="1" placeholder="0"></div></div>
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-exclamation-triangle"></i> Estoque Mínimo</div><div class="man-form-field"><input type="number" id="man-estoqueMinimo" step="1" placeholder="Ex: 5"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="salvarItemEstoque()"><i class="fas fa-save"></i> Salvar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarItemEstoque()"><i class="fas fa-save"></i> Salvar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalEstoque()">Cancelar</button>
         </div>
       </form>
@@ -3112,7 +3112,7 @@
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-cubes"></i> Quantidade</div><div class="man-form-field"><input type="number" id="man-movQuantidade" step="1" placeholder="1"></div></div>
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Motivo / Chamado</div><div class="man-form-field"><input type="text" id="man-movMotivo" placeholder="Ex: Utilizado no chamado MAN-123 ou Compra direta"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarMovimentacao()"><i class="fas fa-check"></i> Confirmar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarMovimentacao()"><i class="fas fa-check"></i> Confirmar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalMovimentacao()">Cancelar</button>
         </div>
       </form>
@@ -3138,7 +3138,7 @@
       <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Revise o resumo antes de finalizar:</p>
       <div id="man-modalResumoBody"></div>
       <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-        <button class="man-btn man-btn-success" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
+        <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
         <button class="man-btn man-btn-outline" onclick="fecharModal()">Cancelar</button>
       </div>
     </div>
@@ -3163,7 +3163,7 @@
         <input type="hidden" id="man-inicioId">
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-inicioData" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-inicioHora" onchange="calcularTempoEstimado()"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalInicio()">Cancelar</button>
         </div>
       </form>
@@ -3194,7 +3194,7 @@
         <div class="man-form-row"><div class="man-form-label">Técnico Responsável:</div><div class="man-form-field"><input type="text" id="man-execTecnico" placeholder="Nome do técnico que executou" style="width:100%;"></div></div>
         <div class="man-form-row"><div class="man-form-label">Observações:</div><div class="man-form-field"><textarea id="man-execObs" placeholder="Informações adicionais sobre a execução..." style="width:100%;"></textarea></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalFinalizar()">Cancelar</button>
         </div>
       </form>
@@ -3213,7 +3213,7 @@
         <div class="man-form-row"><div class="man-form-label">Duração Estimada:</div><div class="man-form-field"><input type="text" id="man-aprTempoEstimado" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
         <div class="man-form-row"><div class="man-form-label">Responsável pela Aprovação:</div><div class="man-form-field"><input type="text" id="man-aprResponsavel" placeholder="Nome do técnico/supervisor que aprova" style="width:100%;"></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalAprovacao()">Cancelar</button>
         </div>
       </form>
@@ -3240,7 +3240,7 @@
         <input type="hidden" id="man-reprovacaoId">
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Justificativa</div><div class="man-form-field"><textarea id="man-reprovacaoJustificativa" placeholder="Ex: Não será possível realizar nesta data devido a falta de peças..."></textarea></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-danger" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
+          <button type="button" class="man-btn man-btn-danger" data-manut-area="manutencao" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharModalReprovacao()">Cancelar</button>
         </div>
       </form>
@@ -3538,6 +3538,25 @@
               já entra direto com as permissões definidas neste cadastro.
             </p>
 
+            <!-- ========== Tipos de Perfil (fixos + customizados) ========== -->
+            <!-- Além dos 6 perfis fixos do sistema, o Administrador pode
+                 CRIAR novos tipos de perfil com um mapa de permissões
+                 próprio, item por item (ver modal-criar-perfil.html,
+                 lib/perfis-customizados.js). Esta lista mostra só os
+                 perfis CUSTOMIZADOS já criados — os 6 fixos não aparecem
+                 aqui (não são editáveis/excluíveis, sempre existem). -->
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">
+                  Tipos de Perfil Customizados</div>
+                <button class="btn btn-outline-accent btn-sm" onclick="abrirCriarPerfil()">+ Criar novo tipo de perfil</button>
+              </div>
+              <div id="cfg-perfis-customizados-lista" style="display:flex;flex-direction:column;gap:8px">
+                <span style="color:var(--text-3);font-size:.82rem">Nenhum perfil customizado criado ainda.</span>
+              </div>
+            </div>
+            <!-- ========== /Tipos de Perfil ========== -->
+
             <div id="cfg-usuarios-status" style="margin-bottom:18px"></div>
 
             <div id="cfg-usuarios-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
@@ -3557,12 +3576,12 @@
                 </div>
                 <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
                   <label class="form-label">Perfil</label>
+                  <!-- Opções preenchidas dinamicamente por
+                       _cfgPopularSelectPerfil() (app-core.js), a partir de
+                       GET /perfis (rotulosPorPerfil + perfisCadastraveis)
+                       — inclui os 6 fixos E qualquer perfil customizado já
+                       criado, sem precisar hardcodar <option> nenhuma aqui. -->
                   <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()">
-                    <option value="Operador">Operador</option>
-                    <option value="Analista">Analista</option>
-                    <option value="Qualidade">Setor Qualidade</option>
-                    <option value="Manutencao">Manutenção</option>
-                    <option value="Administrativo">Administrativo</option>
                   </select>
                 </div>
               </div>
@@ -3672,6 +3691,51 @@
 
     </div>
   </div>
+<!-- ============ MODAL: Criar / Editar Tipo de Perfil ============ -->
+<!-- Aberto por abrirCriarPerfil()/abrirEditarPerfil(id) (ver
+     public/js/perfis-customizados.js), de dentro de Configurações →
+     Usuários. O catálogo de itens (páginas, dashboards, sub-itens,
+     "Outros", Configurações) vem de GET /catalogo-permissoes — nada aqui
+     é hardcoded em HTML, pra nunca ficar dessincronizado da fonte única de
+     verdade (lib/itens-permissao.js). z-index maior que o de
+     Configurações (999) porque abre POR CIMA dele, sem fechá-lo. -->
+<div id="criar-perfil-modal"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1050;align-items:center;justify-content:center">
+  <div
+    style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:760px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-shrink:0">
+      <h2 id="cp-titulo" style="font-family:var(--font-display);font-size:1.3rem;color:var(--accent);letter-spacing:.08em">
+        ➕ CRIAR NOVO TIPO DE PERFIL</h2>
+      <button onclick="fecharCriarPerfil()"
+        style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+
+    <div style="overflow-y:auto;flex:1;padding-right:4px">
+      <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+        Marque, item por item, o que este perfil pode fazer: <strong>Acesso Total</strong> (vê e edita/registra),
+        <strong>Apenas Visualizar</strong> (vê a tela, sem poder editar/registrar) ou <strong>Ocultar</strong>
+        (nem aparece pra esse perfil). Item não marcado fica <strong>Oculto</strong> por padrão.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Nome do Perfil</label>
+        <input class="form-input" id="cp-nome" placeholder="Ex: Líder de Turno">
+      </div>
+      <div id="cp-erro" style="display:none;color:var(--red);font-size:.82rem;margin:10px 0"></div>
+
+      <div id="cp-catalogo" style="margin-top:12px;display:flex;flex-direction:column;gap:20px">
+        <span style="color:var(--text-3);font-size:.82rem">Carregando catálogo de permissões...</span>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-shrink:0">
+      <button class="btn btn-ghost" onclick="fecharCriarPerfil()">Cancelar</button>
+      <button class="btn btn-primary" id="cp-btn-salvar" onclick="salvarPerfilCustomizado()">Salvar Perfil</button>
+    </div>
+  </div>
+</div>
+<!-- ============ /MODAL: Criar / Editar Tipo de Perfil ============ -->
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -3692,6 +3756,7 @@
   <script src="js/setor-qualidade.js"></script>
   <script src="js/manutencao.js"></script>
   <script src="js/app-core.js"></script>
+  <script src="js/perfis-customizados.js"></script>
 <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
   <div id="editar-operacao-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">

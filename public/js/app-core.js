@@ -2848,6 +2848,13 @@
 
     async function cfgRenderUsuarios() {
       await cfgAtualizarCampoPodeIniciarOperacao(); // garante _perfisInfoCache pronto e o campo certo já visível
+      // Preenche o <select> de perfil (fixos + customizados — ver
+      // lib/perfis-customizados.js) e a lista de perfis customizados já
+      // criados (ver public/js/perfis-customizados.js) — funções globais
+      // definidas naquele arquivo, chamáveis daqui porque todo script sem
+      // módulo compartilha o mesmo escopo global da página.
+      if (typeof _cfgPopularSelectPerfil === 'function') _cfgPopularSelectPerfil();
+      if (typeof cfgRenderPerfisCustomizados === 'function') cfgRenderPerfisCustomizados();
 
       const elStatus = document.getElementById('cfg-usuarios-status');
       const elLista = document.getElementById('cfg-usuarios-lista');
