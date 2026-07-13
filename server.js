@@ -76,6 +76,15 @@ const sessaoUsuario = require('./lib/sessao-usuario.js')();
 // (rotas de escrita de cada domínio).
 const perfis = require('./lib/perfis.js');
 
+// Catálogo de itens permissionáveis (páginas, dashboards, sub-itens,
+// "Outros", abas de Configurações — ver lib/itens-permissao.js) e o
+// módulo que guarda os perfis CRIADOS pelo Administrador em Configurações
+// → Usuários → "+ Criar novo tipo de perfil" (ver
+// lib/perfis-customizados.js) — somam-se aos 6 perfis fixos acima, nunca
+// os substituem.
+const itensPermissao = require('./lib/itens-permissao.js');
+const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, PRIVATE_DIR, perfis, itensPermissao });
+
 // ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
 // Todas as páginas são abertas pra VISUALIZAÇÃO; o que cada perfil pode
 // EDITAR/registrar é validado aqui, rota a rota, por área ('injetora',
@@ -85,11 +94,17 @@ const perfis = require('./lib/perfis.js');
 // const (hoisting).
 
 // A sessão do Administrador Master (lib/sessao.js) edita qualquer área;
-// pros usuários cadastrados, decide o perfil (ver perfis.podeEditar).
+// pros usuários cadastrados, decide o perfil — primeiro os 6 fixos (ver
+// perfis.podeEditar), e se não for nenhum deles, tenta um perfil
+// CUSTOMIZADO (ver perfisCustomizados.podeEditar, que faz a ponte entre o
+// nível granular "Acesso Total" escolhido no catálogo e esta mesma área).
 function podeEditarArea(req, area) {
   if (sessao.requestTemSessaoValida(req)) return true; // Admin Master
   const dados = sessaoUsuario.dadosDaSessao(req);
-  return !!dados && perfis.podeEditar(dados.perfil, area);
+  if (!dados) return false;
+  if (perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)) return perfis.podeEditar(dados.perfil, area);
+  const customizado = perfisCustomizados.obter(dados.perfil);
+  return !!customizado && perfisCustomizados.podeEditar(customizado, area);
 }
 
 function negarEdicao(res, oQue) {
@@ -122,7 +137,8 @@ const sessaoOuAdmin = { requestTemSessaoValida: temPoderesDeAdmin };
 // devolve true se já respondeu. Chamadas em sequência dentro do
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
-const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis });
+const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados });
+const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ fs, path, PRIVATE_DIR, sessao: sessaoOuAdmin, perfisCustomizados, itensPermissao });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
 const rotasManutencao = require('./lib/rotas/manutencao.js')({ db, podeEditarArea, negarEdicao });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
@@ -152,7 +168,7 @@ const rotasBackup = require('./lib/rotas/backup.js')({
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -463,10 +479,18 @@ function podeControlarOperacao(req) {
   if (!dados) return false; // sem sessão de usuário válida, sem acesso
   if (perfis.ehPerfilDeAdmin(dados.perfil)) return true; // Administrativo = igual ao master
   // Pros demais perfis, duas condições juntas: o perfil precisa ter a área
-  // 'injetora' de edição (Operador de Injetora, Encarregado, Supervisão —
-  // ver lib/perfis.js) E o usuário específico precisa ter sido marcado com
-  // o checkbox "pode iniciar/encerrar operações" no cadastro.
-  return perfis.podeEditar(dados.perfil, 'injetora') && !!dados.podeIniciarOperacao;
+  // 'injetora' de edição (Operador de Injetora, Encarregado, Supervisão,
+  // ou um perfil CUSTOMIZADO com o item "Registrar Operação" marcado
+  // "Acesso Total" — ver lib/perfis.js / lib/perfis-customizados.js) E o
+  // usuário específico precisa ter sido marcado com o checkbox "pode
+  // iniciar/encerrar operações" no cadastro.
+  const temAreaInjetora = perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)
+    ? perfis.podeEditar(dados.perfil, 'injetora')
+    : (() => {
+        const customizado = perfisCustomizados.obter(dados.perfil);
+        return !!customizado && perfisCustomizados.podeEditar(customizado, 'injetora');
+      })();
+  return temAreaInjetora && !!dados.podeIniciarOperacao;
 }
 
 function negarControleDeOperacao(res) {

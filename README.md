@@ -206,6 +206,15 @@ O checkbox **"Pode iniciar/encerrar operações em Registrar Operação"** conti
 
 O mapa de permissões (páginas e áreas de edição) é definido num lugar só (`lib/perfis.js`) e validado tanto no front (esconde/desabilita controles de edição) quanto no back (cada rota de escrita confere de novo — nunca confia só no que o navegador mandou).
 
+### Perfis customizados
+
+Além dos 6 perfis fixos acima, o Administrador pode **criar novos tipos de perfil** em Configurações → Usuários → "+ Criar novo tipo de perfil" (ver `lib/itens-permissao.js`, `lib/perfis-customizados.js`, `lib/rotas/perfis-customizados.js`). Cada perfil customizado tem seu próprio mapa, item por item, sobre o catálogo inteiro (páginas, dashboards, sub-itens de Setor de Qualidade e Manutenção — inclusive as 4 seções do formulário de chamado corretivo — e "Outros"), marcando cada um como **Acesso Total**, **Apenas Visualizar** ou **Ocultar**. Item não marcado fica oculto por padrão (perfil novo é restritivo, ao contrário dos 6 fixos, que são "visualização aberta").
+
+- **Enforcement real no servidor**: só as 5 áreas já validadas de verdade (injetora, paradas, qualidade, manutenção, manutenção-chamado) — marcar "Acesso Total" num item ligado a uma dessas áreas (ex: "Registrar Operação" → área injetora) concede a permissão de escrita de verdade, com a mesma validação server-side que os 6 perfis fixos já têm.
+- **Só front-end por enquanto**: os itens de "Outros" (Importar, Exportações, Edição de Dados, Backup/Restauração) e as abas de Configurações (exceto Atalhos) continuam sendo, no backend, exclusivos do Administrador Master e do perfil fixo "Administrador" — marcá-los num perfil customizado ainda não libera acesso de verdade a essas rotas. Por isso ficam travados em "Ocultar" no formulário de criação, com um aviso explicando o motivo — chegam numa próxima etapa.
+- Perfis customizados não podem usar um nome já reservado (os 6 fixos, ou "Administrador"), nem duplicar o nome de outro customizado.
+- Excluir um perfil customizado é bloqueado enquanto algum usuário cadastrado ainda o estiver usando.
+
 A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.js`) — cobre um turno inteiro sem precisar logar de novo no meio do expediente. A sessão do Administrador Master dura 30min (`lib/sessao.js`), mais curta de propósito por ser uma ação administrativa pontual, não "ficar logado o dia todo".
 
 **Atalhos de teclado por usuário**: cada usuário cadastrado tem seus próprios atalhos personalizados (Configurações → Atalhos de Teclado), persistidos no servidor associados ao cadastro (`GET`/`POST /meus-atalhos`, `lib/rotas/usuarios.js`) — a personalização segue a pessoa entre computadores, não fica presa a um navegador. O Administrador Master (sem usuário próprio) continua com os atalhos salvos só em `localStorage` deste navegador, como sempre foi.
