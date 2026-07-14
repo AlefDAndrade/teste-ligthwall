@@ -281,6 +281,8 @@ Cada ajuste salvo também é registrado em `ajustes_tracos.json`, indexado pelo 
 
 Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — **durante a operação em si**, não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes. Isso muda ao **editar** um traço já registrado — ver seção dedicada, abaixo.
 
+**Um campo preenchido só via ajuste conta como preenchido.** Bug relatado: Flow/Densidade preenchidos exclusivamente pelo painel de Remedição (sem nunca ter um valor original) apareciam certinho na tela, mas a checagem de pendência só olhava o valor original — o traço ficava marcado como pendente mesmo com o dado visivelmente lá, bloqueando "Registrar". Corrigido: `tracoCompleto()`/`_statusDoTraco()` (`operacao.js`) agora consideram um insumo preenchido se tiver valor original **ou** pelo menos 1 ajuste — mesmo critério que `totalInsumo()` já usava pra decidir o que mostrar na tela.
+
 ## Montagem Personalizada (Registrar Operação)
 
 Além de **Simples** (todos os berços do mesmo tipo) e **Híbrida** (cada berço produz painéis de 2 tipos ao mesmo tempo, numa proporção fixa), existe **🔧 Personalizado**: cada berço da bateria tem seu próprio tipo, escolhido individualmente — pra baterias que misturam tipos em quantidades quaisquer (ex: 4 berços de 3T, 5 de S/P, 7 de 2/P e o resto de 1T).
