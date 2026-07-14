@@ -46,7 +46,6 @@ test('clicar 3x na mesma placa com a mesma cor+forma adiciona 3 marcas (repetiç
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
   slab.click(); slab.click(); slab.click();
 
@@ -58,7 +57,6 @@ test('clique direito (contextmenu) remove UMA ocorrência da cor+forma seleciona
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
   slab.click(); slab.click();
 
@@ -82,7 +80,6 @@ test('toque longo (>=500ms parado) remove uma marca; toque curto ou com moviment
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-2"]');
   slab.click();
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 1);
@@ -113,7 +110,6 @@ test('limite de 6 marcas por placa é respeitado, com aviso', async () => {
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
   for (let i = 0; i < 10; i++) slab.click();
 
@@ -127,7 +123,6 @@ test('marcar X substitui qualquer marca real existente, e vice-versa', async () 
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
   slab.click(); slab.click();
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-circle').length, 2);
@@ -137,6 +132,8 @@ test('marcar X substitui qualquer marca real existente, e vice-versa', async () 
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-circle').length, 0, 'X deveria substituir as marcas reais');
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-x').length, 1);
 
+  // Clicar numa forma real (círculo) sai do modo "×" — só depois disso
+  // um clique na placa volta a marcar validação normal.
   window.document.querySelector('.sq-btn-shape.circle').click();
   slab.click();
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-x').length, 0, 'marcar uma marca real deveria remover o X');
@@ -148,7 +145,6 @@ test('botão Limpar do pallet apaga só as marcações daquele pallet, com confi
   await abrirFormulario(window);
 
   window.document.querySelector('.sq-btn-color.verde').click();
-  window.document.querySelector('.sq-btn-shape.circle').click();
   window.document.querySelector('.sq-slab[data-id="stack1-1"]').click();
   window.document.querySelector('.sq-slab[data-id="stack2-1"]').click();
 

@@ -354,9 +354,15 @@ Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado *
 
 - **Adicionar**: clique normal numa placa sempre adiciona uma marca com a cor+forma selecionada na paleta — inclusive repetida (até **6 marcas por placa**; a 7ª tentativa mostra um aviso e não adiciona).
 - **Apagar**: clique com o botão direito (mouse) ou toque e segure por ~500ms (touch) remove uma ocorrência da cor+forma *atualmente selecionada* — não precisa ser a última marcada, já que marcas idênticas são visualmente indistinguíveis entre si. Toque longo cancela se o dedo mover (evita conflito com scroll) ou soltar antes da hora.
-- **"×" (painel não preenchido)** continua exclusivo: marcá-lo substitui qualquer marca real que já existisse na placa, e marcar qualquer marca real remove o "×" que estivesse lá.
+- **"×" (painel não preenchido)** continua exclusivo: marcá-lo substitui qualquer marca real que já existisse na placa (inclusive a de identificação automática, abaixo), e marcar qualquer marca real remove o "×" que estivesse lá.
 - **"🧹 Limpar" por pallet**: no cabeçalho de cada pallet, ao lado de "⚡ Todas" — apaga só as marcações daquele pallet (com confirmação). Substituiu o dropdown de seleção rápida de cor por pallet (🎨), que era redundante com "⚡ Todas" combinado com a paleta principal.
 - O Desfazer geral (Ctrl+Z / botão "Desfazer") continua cobrindo a última ação em qualquer lugar da tela, sem mudança — o gesto de apagar acima é para remover uma marca específica, não necessariamente a mais recente.
+
+**Identificação automática por tipo de montagem** (em teste): o sistema já sabe o tipo de cada placa (mesma fonte que mostra o texto "SP"/"2P"/etc. no canto dela, `getExpectedType`) — a marca que identifica esse tipo (mesma "combinação" de sempre, `combinacaoAvaliacao`/`COMBINACOES_PADRAO`) nasce sozinha, sem o operador precisar escolher nada, adiantando o trabalho. **A paleta continua completa** (5 cores + 3 formas, exatamente como sempre foi) — o preenchimento automático só poupa cliques no caso comum; o operador pode marcar, corrigir ou apagar qualquer combinação normalmente a qualquer momento, inclusive as marcas automáticas. Regenerada a cada reset da grade (troca de Tipo de Montagem, Espessura, pré-preenchimento — `_marcasDeIdentificacao`/`_preencherMarcasDeIdentificacao`, `setor-qualidade.js`), preservando qualquer validação que o operador já tenha dado.
+
+- **Tipos de forma COMBINADA** (círculo+traço, ex: 3T/1T): só o **traço** (identificação, cor modificadora — amarelo/laranja) nasce automático; o **círculo** é sempre a marca de validação do operador, e entra **na frente** do traço (`unshift`, não `push`).
+- **Tipos de forma ÚNICA** (círculo só = 2P, traço só = SP): **não recebem nada automático** — uma marca só já identifica tipo e status ao mesmo tempo, então não tem o que pré-preencher. O operador marca normalmente, na única forma daquele tipo.
+- Avaliações antigas continuam lidas com a lógica de classificação de sempre, sem migração.
 
 ### Quem pode controlar operações
 

@@ -348,6 +348,80 @@
     return doConfig.length ? doConfig : COMBINACOES_PADRAO;
   }
 
+  // ── Marcas de IDENTIFICAÇÃO automáticas (ver conversa que motivou:
+  // "as placas já vão chegar marcadas conforme os tipos de montagem" —
+  // adianta a identificação sozinha, mas a PALETA CONTINUA COMPLETA (cor
+  // + forma manuais, como sempre foi) — o operador pode marcar, apagar
+  // ou corrigir qualquer combinação normalmente, inclusive as marcas
+  // automáticas; isso aqui só poupa cliques no caso comum). Ainda em
+  // fase de teste da ideia, por isso ficou o mais simples possível: essas
+  // marcas usam a MESMA gramática de sempre (forma + corModificadora,
+  // ver COMBINACOES_PADRAO/combinacaoAvaliacao) — como toggleMark insere
+  // a marca do operador na FRENTE (índice 0, ver unshift) e classifyMarks
+  // só lê a primeira marca de cada forma pra decidir a cor do status, a
+  // classificação continua funcionando sem nenhuma mudança nela: pro
+  // sistema, é como se o operador tivesse marcado a identificação
+  // manualmente, do jeito de sempre.
+  //
+  // Tipos de forma COMBINADA (circle+dash, ex: 3T/1T): só o TRAÇO
+  // (corModificadora, cor fixa que identifica o tipo) nasce automático —
+  // o círculo continua 100% a marca de validação do operador, como
+  // sempre foi (a cor do círculo É o status). Tipos de forma ÚNICA
+  // (circle OU dash sozinho, ex: 2P/SP): NÃO recebem nada automático
+  // (decisão explícita da conversa) — uma marca só já identifica tipo E
+  // status ao mesmo tempo (é a forma que diz o tipo), então o operador
+  // marca a única forma daquele tipo, com a cor de status, exatamente
+  // como sempre foi antes desta mudança.
+  //
+  // `auto: true` marca a origem — usado só por
+  // _preencherMarcasDeIdentificacao (abaixo) pra saber quais marcas
+  // regenerar a cada reset da grade, nunca lido por classifyMarks/
+  // renderMarks (tratadas como qualquer outra marca pra tudo o mais,
+  // inclusive apagável pelo gesto de apagar — de propósito, ainda em
+  // fase de teste, ver conversa).
+  function _marcasDeIdentificacao(id) {
+    const tipo = (getExpectedType(id) || '').toLowerCase();
+    if (!tipo) return [];
+    const combo = _combinacoesEfetivas().find(c => c.tipo === tipo);
+    if (!combo) return [];
+    // Só tipos COMBINADOS (círculo+traço, ex: 3T/1T) recebem
+    // preenchimento automático — o traço com a cor modificadora
+    // identifica o tipo, sobrando só o círculo livre pra validação.
+    // Tipos de forma ÚNICA (círculo só = 2P,
+    // traço só = SP) NÃO recebem nada automático — decisão explícita da
+    // conversa que motivou: uma marca só já basta pra identificar tipo E
+    // status ao mesmo tempo (é a forma que já diz o tipo), então não tem
+    // o que pré-preencher; o operador marca a única forma daquele tipo,
+    // com a cor de status, igual sempre foi.
+    if (combo.forma === 'circle+dash') {
+      return [{ color: combo.corModificadora, shape: 'dash', auto: true }];
+    }
+    return [];
+  }
+
+  // Regenera as marcas automáticas de TODAS as placas em escopo agora —
+  // chamada ao final de _resetStacksParaPadrao (troca de Tipo de
+  // Montagem, Espessura, pré-preenchimento a partir de uma operação
+  // real...), mesmo ponto que já reconstrói a grade do zero. Preserva
+  // qualquer marca que o operador já tenha adicionado (filtra só as
+  // antigas `auto`, mantém o resto) — troca de tipo só atualiza a
+  // identificação, nunca mexe na validação que já foi dada. "X" (painel
+  // não preenchido) é sempre sozinho — nunca emenda identificação nele.
+  function _preencherMarcasDeIdentificacao() {
+    _stackIds().forEach(sid => {
+      const n = stackCounts[sid] || 0;
+      for (let i = 1; i <= n; i++) {
+        const id = `${sid}-${i}`;
+        const atuais = slabState[id] || [];
+        if (atuais.some(m => m.shape === 'x')) continue;
+        const semAuto = atuais.filter(m => !m.auto);
+        const novasAuto = _marcasDeIdentificacao(id);
+        const combinado = [...semAuto, ...novasAuto];
+        if (combinado.length) slabState[id] = combinado; else delete slabState[id];
+      }
+    });
+  }
+
   /* ── Classificação de marcas ──────────────────────────── */
   function classifyMarks(marks) {
     // "X" é sempre sozinho (garantido em toggleMark/applyMarksToPallet —
@@ -714,6 +788,7 @@
     // Espessura) devolveria pra grade os painéis que o operador já
     // marcou como "não enchido" em Bateria Atual.
     _removerPaineisNaoEnchidosDaGrade();
+    _preencherMarcasDeIdentificacao();
   }
 
   // Espelha extraStacks no DOM: cria a coluna do pallet (grade de placas
@@ -1210,7 +1285,7 @@
         return;
       }
       el.className = m.shape === 'dash' ? 'sq-mark-dash' : 'sq-mark-circle';
-      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
+      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja', cinza:'--sq-cor-identificacao-auto' };
       el.style.backgroundColor = root.getPropertyValue(varMap[m.color] || '--sq-cor-verde').trim();
       c.appendChild(el);
     });
@@ -1220,7 +1295,12 @@
   // selecionada (modelo novo, ver conversa que motivou a mudança: antes,
   // clicar de novo na MESMA combinação apagava — isso impedia repetir a
   // mesma combinação na mesma placa, então separamos "adicionar" (aqui) de
-  // "apagar" (toggleMarkErase, abaixo) em dois gestos diferentes).
+  // "apagar" (toggleMarkErase, abaixo) em dois gestos diferentes). A
+  // paleta continua completa (5 cores + 3 formas) — o operador escolhe
+  // cor E forma manualmente, como sempre foi; a identificação automática
+  // (ver _marcasDeIdentificacao) só faz o trabalho de PRÉ-preencher pra
+  // adiantar, nunca tira a possibilidade de marcar/apagar manualmente
+  // qualquer combinação.
   function toggleMark(el) {
     if (viewMode) return;
     const id = el.dataset.id;
@@ -1251,7 +1331,11 @@
 
     pushState();
     if (jaTinhaX) slabState[id] = []; // marca real substitui o X que estava lá
-    slabState[id].push({ color, shape });
+    // unshift (não push): a marca do operador sempre entra NA FRENTE das
+    // marcas de identificação automáticas (ver conversa que motivou —
+    // _preencherMarcasDeIdentificacao/_resetStacksParaPadrao, que sempre
+    // APPEND/push as delas, nunca na frente).
+    slabState[id].unshift({ color, shape });
     renderMarks(el, slabState[id]);
     validateAllSlabs();
     _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
@@ -1263,8 +1347,13 @@
   // (mesmo seletor de sempre — só muda o que o gesto faz com ele). Como
   // marcas idênticas são visualmente indistinguíveis entre si, remove
   // sempre a primeira que encontrar — não importa qual das repetidas
-  // some, o resultado visual é o mesmo. Ver _ligarGestoApagar, que liga
-  // isso no elemento da placa (contextmenu + long-press por touch).
+  // some, o resultado visual é o mesmo. Apaga também marcas de
+  // IDENTIFICAÇÃO automáticas (auto: true) — a paleta continua completa
+  // de propósito (ver conversa que motivou: manter cor+forma manuais)
+  // exatamente pra permitir reconstruir a combinação certa (ex:
+  // amarelo+traço) e apagar uma identificação automática, se precisar.
+  // Ver _ligarGestoApagar, que liga isso no elemento da placa (contextmenu
+  // + long-press por touch).
   function toggleMarkErase(el) {
     if (viewMode) return;
     const id = el.dataset.id;
@@ -1520,8 +1609,10 @@
         slabState[id] = [{ color: corFinal, shape: 'x' }];
       } else {
         slabState[id] = slabState[id].filter(m => m.shape !== 'x');
+        // unshift — mesmo motivo do clique individual (ver toggleMark):
+        // marca de validação sempre na frente das de identificação.
         if (!slabState[id].find(m => m.color === corFinal && m.shape === shape))
-          slabState[id].push({ color: corFinal, shape });
+          slabState[id].unshift({ color: corFinal, shape });
       }
       renderMarks(slab, slabState[id]);
       _renderBadgeMotivo(id);
@@ -2923,7 +3014,7 @@
         return `<span class="sq-mini-mark sq-mini-mark-x" title="Painel não preenchido">×</span>`;
       const w = m.shape==='dash' ? '12px' : '6px', h = m.shape==='dash' ? '2px' : '6px';
       const r = m.shape==='circle' ? '50%' : '2px';
-      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
+      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja', cinza:'--sq-cor-identificacao-auto' };
       return `<span class="sq-mini-mark" style="background:var(${varMap[m.color]||'--sq-cor-verde'});width:${w};height:${h};border-radius:${r};margin:0 1px;display:inline-block;"></span>`;
     }).join('');
   }

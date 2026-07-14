@@ -194,7 +194,7 @@
       combo: 'Toque longo / Clique direito',
       contexto: 'Setor de Qualidade → Avaliação',
       page: 'setor-qualidade',
-      descricao: 'Apaga uma marca da cor/forma atualmente selecionada na paleta — clique normal sempre adiciona (até 6 marcas por placa).',
+      descricao: 'Apaga uma marca da cor/forma atualmente selecionada na paleta (inclusive marcas de identificação automáticas) — clique normal sempre adiciona (até 6 marcas por placa).',
     },
     {
       icon: '🔲',
