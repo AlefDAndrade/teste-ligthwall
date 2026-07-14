@@ -324,8 +324,8 @@
         ['Cimento', _fmtKg(t.original.cimento), 'kg'],
         ['Água', _fmtKg(t.original.agua), 'kg'],
         ['EPS', _fmtKg(t.original.eps), 'kg'],
-        ['Superplast.', _fmtKg(t.original.superplast, 3), 'kg'],
-        ['Incorp. de Ar', _fmtKg(t.original.incorporador, 3), 'kg'],
+        ['Superplast.', _fmtKg(t.original.superplast), 'kg'],
+        ['Incorp. de Ar', _fmtKg(t.original.incorporador), 'kg'],
         ['Tempo de Batida', _fmtTempoBatidaOriginal(t.original.tempo_batida), ''],
         ['Densidade', t.densidade ?? null, 'kg/m³'],
         ['Flow', t.flow ?? null, ''],
@@ -345,8 +345,8 @@
                  ${a.cimento ? `<span>Cimento +${_fmtKg(a.cimento)}kg</span>` : ''}
                  ${a.agua ? `<span>Água +${_fmtKg(a.agua)}kg</span>` : ''}
                  ${a.eps ? `<span>EPS +${_fmtKg(a.eps)}kg</span>` : ''}
-                 ${a.superplast ? `<span>Superplast. +${_fmtKg(a.superplast, 3)}kg</span>` : ''}
-                 ${a.incorporador ? `<span>Incorp. +${_fmtKg(a.incorporador, 3)}kg</span>` : ''}
+                 ${a.superplast ? `<span>Superplast. +${_fmtKg(a.superplast)}kg</span>` : ''}
+                 ${a.incorporador ? `<span>Incorp. +${_fmtKg(a.incorporador)}kg</span>` : ''}
                </div>`).join('')}
            </div>`;
 
