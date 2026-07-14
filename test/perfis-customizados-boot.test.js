@@ -120,6 +120,76 @@ test('usuário com perfil customizado consegue logar e o boot NÃO manda de volt
   }
 });
 
+test('abas de Configurações não permitidas ficam realmente escondidas (bug: cfgMostrarSecao sobrescrevia o display:none)', async () => {
+  const cookieAdmin = await logarComoAdminMaster();
+  const respCriar = await fetch(`${servidor.baseUrl}/criar-perfil-customizado`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ nome: 'So Atalhos Config', permissoes: { 'config-atalhos': 'total' } }),
+  });
+  const { perfil } = await respCriar.json();
+
+  await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify([{ nomeUsuario: 'so.atalhos.config', senha: 'senhateste1234', perfil: perfil.id }]),
+  });
+  const respLogin = await fetch(`${servidor.baseUrl}/login-usuario`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nomeUsuario: 'so.atalhos.config', senha: 'senhateste1234' }),
+  });
+  const dataLogin = await respLogin.json();
+  const cookieUsuario = extrairCookie(respLogin);
+
+  const dom = await JSDOM.fromURL(`${servidor.baseUrl}/index.html`, {
+    runScripts: 'dangerously',
+    resources: 'usable',
+    pretendToBeVisual: true,
+    beforeParse(win) {
+      win.Chart = function () { this.destroy = () => {}; };
+      win.HTMLElement.prototype.scrollIntoView = function () {};
+      win.fetch = (url, opts) => {
+        const absoluta = new URL(url, win.location.href).toString();
+        const headers = { ...(opts && opts.headers), Cookie: cookieUsuario };
+        return fetch(absoluta, { ...opts, headers });
+      };
+    },
+  });
+  const { window } = dom;
+  window.sessionStorage.setItem('lw_role', dataLogin.perfil);
+  await new Promise(r => setTimeout(r, 2500));
+
+  try {
+    window.abrirConfig();
+    await new Promise(r => setTimeout(r, 300));
+    const document = window.document;
+
+    // Bug real: _cfgAplicarVisibilidadeDeAbas() escondia tudo certinho,
+    // mas cfgMostrarSecao() (chamada logo em seguida, dentro do próprio
+    // abrirConfig) usava navX.style.cssText = ... pra destacar a aba
+    // ativa — isso SUBSTITUI o style inteiro do botão, apagando o
+    // display:none que tinha acabado de ser aplicado, reexibindo TODAS
+    // as abas pra qualquer perfil não-admin.
+    assert.equal(document.getElementById('cfg-nav-dados').style.display, 'none', 'Bateria e Montagem deveria estar escondida');
+    assert.equal(document.getElementById('cfg-nav-usuarios').style.display, 'none', 'Usuários deveria estar escondida');
+    assert.equal(document.getElementById('cfg-nav-autorizados').style.display, 'none', 'Operação em Andamento deveria estar escondida');
+    assert.equal(document.getElementById('cfg-nav-automacao').style.display, 'none', 'Automação deveria estar escondida');
+    assert.equal(document.getElementById('cfg-nav-sql').style.display, 'none', 'Dados SQL deveria estar escondida');
+    assert.notEqual(document.getElementById('cfg-nav-atalhos').style.display, 'none', 'Atalhos de Teclado é a única liberada — deveria continuar visível');
+
+    // Trocar de aba (cfgMostrarSecao chamada de novo, fora do fluxo de
+    // abrirConfig) não pode reabrir as escondidas — mesma causa raiz,
+    // testada num segundo ponto de entrada.
+    window.cfgMostrarSecao('atalhos');
+    await new Promise(r => setTimeout(r, 100));
+    assert.equal(document.getElementById('cfg-nav-dados').style.display, 'none', 'trocar de aba não deveria reabrir Bateria e Montagem');
+    assert.equal(document.getElementById('cfg-nav-sql').style.display, 'none', 'trocar de aba não deveria reabrir Dados SQL');
+  } finally {
+    window.close();
+  }
+});
+
 test('cards do Menu Principal respeitam a visibilidade por perfil customizado', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   const respCriar = await fetch(`${servidor.baseUrl}/criar-perfil-customizado`, {
