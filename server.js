@@ -586,14 +586,35 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ server, path: '/ws/operacao-andamento' });
 const clientesOperacaoAndamento = new Set();
 
+// Número de revisão da operação em andamento — só em memória (reseta com
+// o servidor, junto de clientesOperacaoAndamento; não precisa sobreviver
+// a um restart, já que todo cliente reconecta e recebe um snapshot novo
+// de qualquer forma). Incrementado a cada broadcastOperacaoAndamento(),
+// nunca decrementado — é o jeito do CLIENTE (ver _aplicarEstadoExterno,
+// operacao.js) saber "essa atualização que chegou é mais nova que a que
+// eu já tenho, ou é uma atualização atrasada/velha que devo ignorar".
+//
+// Motivação (ver conversa que motivou): antes, qualquer atualização
+// recebida por WebSocket SUBSTITUÍA o estado local inteiro, sem checar
+// se era mais recente — duas ABAS (não só dois computadores; abas do
+// MESMO navegador compartilham deviceId via localStorage, então o
+// mecanismo de "dono" já existente, baseado em deviceId, não protege
+// contra isso) editando a mesma operação podiam se sobrescrever uma à
+// outra silenciosamente, apagando dados recém-preenchidos sem aviso
+// nenhum — um traço "cheio" podia voltar a aparecer como pendente do
+// nada, se uma aba mais atrasada mandasse a própria versão por cima.
+let _revisaoOperacaoAndamento = 0;
+
 wss.on('connection', (ws) => {
   clientesOperacaoAndamento.add(ws);
 
   // Ao conectar, manda na hora o snapshot atual — é assim que a tela
   // carrega já mostrando uma operação que outra pessoa tenha deixado
-  // rodando (ou null, se não houver nenhuma).
+  // rodando (ou null, se não houver nenhuma). Inclui a revisão ATUAL
+  // (não 0) — pra esta aba já nascer sabendo a partir de qual ponto
+  // futuras atualizações contam como "mais novas".
   try {
-    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento() }));
+    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento(), revisao: _revisaoOperacaoAndamento }));
   } catch (_) { /* conexão pode ter caído nesse exato instante — ignora */ }
 
   ws.on('close', () => clientesOperacaoAndamento.delete(ws));
@@ -609,8 +630,16 @@ function _enviarWsParaTodos(msg) {
   }
 }
 
+// Devolve o novo número de revisão pra quem chamou (ver POST
+// /salvar-operacao-andamento, lib/rotas/operacao-andamento.js) poder
+// incluir na RESPOSTA HTTP também — o próprio autor da mudança nunca vê
+// o eco do seu WebSocket (filtrado por origemClientId, ver data.js),
+// então é só pela resposta HTTP que ele fica sabendo sua própria
+// revisão mais recente.
 function broadcastOperacaoAndamento(dados, origemClientId) {
-  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId });
+  _revisaoOperacaoAndamento++;
+  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId, revisao: _revisaoOperacaoAndamento });
+  return _revisaoOperacaoAndamento;
 }
 
 // Avisa todo mundo "ligado" no sistema (exceto quem registrou — esse já
