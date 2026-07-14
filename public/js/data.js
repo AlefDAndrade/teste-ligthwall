@@ -718,13 +718,6 @@ function _agendarReconexaoOperacaoAndamento() {
  * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
  * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
  * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
- * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
- */
-/**
- * Manda o estado atual da operação pro servidor — debounced por padrão
- * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
- * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
- * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
  * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de uma
  * pessoa autorizada limpar uma operação que outra pessoa autorizada
  * começou (ver dono da operação, em server.js).
