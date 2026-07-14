@@ -614,6 +614,13 @@ let _opAndamentoOnFinalizadaPorOutro = null;
 let _opAndamentoReconectarTimeout = null;
 let _opAndamentoEnviarTimeout = null;
 let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
+// Última revisão (número atribuído pelo servidor, ver server.js) aceita
+// desta aba — começa em -1 (nenhuma ainda) pra aceitar a 1ª mensagem que
+// chegar, seja qual for o valor. Ver checagem em _abrirWsOperacaoAndamento
+// (recusa mensagem 'estado' com revisão <= esta) e em _postOperacaoAndamento
+// (atualiza com a revisão da PRÓPRIA mudança, já que o eco via WebSocket
+// dela mesma é filtrado e nunca passaria por ali).
+let _opAndamentoUltimaRevisaoConhecida = -1;
 
 // Callback pra "uma linha foi excluída em Configurações → Dados SQL, em
 // QUALQUER dispositivo" — ver broadcastDadosSqlExcluidos, server.js.
@@ -671,6 +678,21 @@ function _abrirWsOperacaoAndamento() {
       if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, em todos os tipos de mensagem
 
       if (msg.tipo === 'estado') {
+        // Recusa atualização ATRASADA/velha (ver conversa que motivou):
+        // antes, QUALQUER mensagem 'estado' substituía o estado local
+        // inteiro, sem checar se era mais recente — duas ABAS na mesma
+        // operação (o mecanismo de "dono" em server.js usa deviceId, que
+        // é compartilhado entre abas do MESMO navegador via localStorage,
+        // então não protege contra isso) podiam se sobrescrever
+        // silenciosamente, apagando um traço recém-preenchido sem aviso
+        // nenhum. `msg.revisao` é atribuído pelo SERVIDOR (nunca pelo
+        // cliente — evita relógios de dispositivos diferentes brigarem),
+        // sempre crescente — só aceita se for mais nova que a última
+        // aplicada aqui. Mensagem sem `revisao` (não deveria acontecer,
+        // mas por segurança) cai no fail-open: aceita mesmo assim, pra
+        // nunca travar a tela por causa só desta checagem.
+        if (typeof msg.revisao === 'number' && msg.revisao <= _opAndamentoUltimaRevisaoConhecida) return;
+        if (typeof msg.revisao === 'number') _opAndamentoUltimaRevisaoConhecida = msg.revisao;
         if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
       } else if (msg.tipo === 'operacao_finalizada') {
         if (_opAndamentoOnFinalizadaPorOutro) _opAndamentoOnFinalizadaPorOutro(msg.resumo);
@@ -736,6 +758,16 @@ async function _postOperacaoAndamento(dados, forcar = false) {
       _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
       const json = await res.json().catch(() => null);
       mostrarAlerta(json?.erro || 'Você não está autorizado a controlar a operação.', { tipo: 'erro' });
+      return;
+    }
+    // Registra a revisão da PRÓPRIA mudança — o eco desta mesma mudança
+    // via WebSocket é filtrado (origemClientId bate com o desta aba, ver
+    // _abrirWsOperacaoAndamento), então é só por aqui que esta aba fica
+    // sabendo sua revisão mais recente, pra comparar corretamente com a
+    // PRÓXIMA atualização que chegar de outra aba/dispositivo.
+    const json = await res.json().catch(() => null);
+    if (json && typeof json.revisao === 'number' && json.revisao > _opAndamentoUltimaRevisaoConhecida) {
+      _opAndamentoUltimaRevisaoConhecida = json.revisao;
     }
   } catch (_) {
     _opAndamentoUltimoEnviado = undefined;
