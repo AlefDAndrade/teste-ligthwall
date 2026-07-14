@@ -219,6 +219,8 @@ A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.
 
 **Atalhos de teclado por usuário**: cada usuário cadastrado tem seus próprios atalhos personalizados (Configurações → Atalhos de Teclado), persistidos no servidor associados ao cadastro (`GET`/`POST /meus-atalhos`, `lib/rotas/usuarios.js`) — a personalização segue a pessoa entre computadores, não fica presa a um navegador. O Administrador Master (sem usuário próprio) continua com os atalhos salvos só em `localStorage` deste navegador, como sempre foi.
 
+A lista de atalhos exibida (em Configurações → Atalhos de Teclado e no modal de ajuda, F1) mostra só os atalhos das páginas que o perfil logado realmente acessa — um perfil sem acesso ao Setor de Qualidade, por exemplo, não vê os atalhos de lá (ver `lib/perfis.js` / `lib/perfis-customizados.js`, campo `page` em `NAV_CONFIG`/`ACTION_CONFIG`/`REFERENCIA_CONFIG`, `public/js/keyboard-shortcuts.js`). Atalhos globais (Sair, abrir Configurações, Debriefing do Dia, filtro/atualizar/exportar) continuam aparecendo pra todo mundo, já que vivem na topbar, compartilhada por todas as telas.
+
 ## Páginas
 
 - **Registrar Operação** — fluxo de injeção: seleção de bateria/tipo de montagem, traços, tempos, atrasos, sobra de traço entre operações.

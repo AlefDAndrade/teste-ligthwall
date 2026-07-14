@@ -70,6 +70,7 @@
       comboPadrao: 'Ctrl+Shift+A',
       description: 'Adicionar novo traço',
       icon: '➕',
+      page: 'operacao', // LWOp.addTraco() — ver _addNewTraco, abaixo
       handler: () => _addNewTraco(),
     },
     {
@@ -77,6 +78,8 @@
       comboPadrao: 'Alt+D',
       description: 'Abrir Debriefing do Dia',
       icon: '📓',
+      // sem `page` de propósito — funciona em QUALQUER página (vive na
+      // topbar, compartilhada por todas as telas — ver _toggleDebriefing)
       handler: () => _toggleDebriefing(),
     },
     {
@@ -84,6 +87,7 @@
       comboPadrao: 'Ctrl+Space',
       description: 'Iniciar/Finalizar cronômetro',
       icon: '▶',
+      page: 'operacao',
       handler: () => _startInjectionTimer(),
     },
     {
@@ -91,6 +95,7 @@
       comboPadrao: 'Ctrl+R',
       description: 'Resetar operação',
       icon: '↺',
+      page: 'operacao',
       handler: () => _resetOperation(),
     },
     {
@@ -98,6 +103,7 @@
       comboPadrao: 'Ctrl+Enter',
       description: 'Registrar operação',
       icon: '✓',
+      page: 'operacao',
       handler: () => _registerOperation(),
     },
     {
@@ -105,6 +111,7 @@
       comboPadrao: 'Alt+C',
       description: 'Abrir Configurações',
       icon: '⚙',
+      // sem `page` — vive na topbar, compartilhada por todas as telas
       handler: () => _openConfig(),
     },
     {
@@ -112,6 +119,7 @@
       comboPadrao: 'Alt+V',
       description: 'Alternar Berços: Tabela ↔ Modo Visual',
       icon: '🎨',
+      page: 'relatorio-bercos', // ver _toggleModoVisualBercos — só funciona nessa página
       handler: () => _toggleModoVisualBercos(),
     },
     {
@@ -119,6 +127,7 @@
       comboPadrao: 'Alt+E',
       description: 'Sair (logout)',
       icon: '🚪',
+      // sem `page` — vive na topbar, compartilhada por todas as telas
       handler: () => _logout(),
     },
     {
@@ -126,6 +135,7 @@
       comboPadrao: '', // sem atalho de fábrica de propósito — ver _sqRegistrarAvaliacao
       description: 'Setor de Qualidade: Registrar Avaliação',
       icon: '✓',
+      page: 'setor-qualidade',
       handler: () => _sqRegistrarAvaliacao(),
     },
     {
@@ -133,6 +143,7 @@
       comboPadrao: '', // sem atalho de fábrica de propósito — ver _sqDesfazerMarca
       description: 'Setor de Qualidade: Desfazer Última Marca',
       icon: '↺',
+      page: 'setor-qualidade',
       handler: () => _sqDesfazerMarca(),
     },
   ];
@@ -154,30 +165,35 @@
       icon: '🔎',
       combo: 'Ctrl + clique',
       contexto: 'Registro de Baterias',
+      page: 'registro',
       descricao: 'Abre a Análise Focada da operação clicada — funciona em qualquer modo (normal, foco ou edição).',
     },
     {
       icon: '🖱',
       combo: 'Segurar Ctrl',
       contexto: 'Relatório de Berços',
+      page: 'relatorio-bercos',
       descricao: 'Com o mouse sobre uma linha, mostra o popover de detalhes daquela operação (só em dispositivos com mouse/ponteiro fino).',
     },
     {
       icon: '🎨',
       combo: '1, 2, 3...',
       contexto: 'Setor de Qualidade → Avaliação',
+      page: 'setor-qualidade',
       descricao: 'Seleciona a cor de marcação, na ordem em que as cores aparecem na tela.',
     },
     {
       icon: '◆',
       combo: 'Ctrl + 1, 2, 3...',
       contexto: 'Setor de Qualidade → Avaliação',
+      page: 'setor-qualidade',
       descricao: 'Seleciona a forma de marcação (círculo, traço...), na ordem em que aparecem na tela.',
     },
     {
       icon: '🔲',
       combo: '1-9, 0, Ctrl+1-9, Ctrl+0',
       contexto: 'Registro de Operação → Grade de Montagem Personalizada',
+      page: 'operacao',
       descricao: 'Seleciona o tipo de montagem simples cadastrado (até 20 tipos), na ordem em que aparecem nas abas.',
     },
   ];
@@ -290,15 +306,50 @@
 
   /** Lista plana de todos os atalhos remapeáveis (navegação + ações), cada
    * um já com seu combo efetivo calculado — usada pela tela de Configurações. */
+  /**
+   * Confere se a PÁGINA associada a um atalho (campo `page`, quando
+   * presente) está acessível ao perfil logado — usado só pra FILTRAR A
+   * EXIBIÇÃO dos atalhos (Configurações → Atalhos de Teclado e o modal de
+   * ajuda, F1), não a ativação em si: showPage() já recusa sozinha
+   * navegar pra uma página fora da lista permitida (ver app-core.js), e
+   * as ações contextuais (_sqRegistrarAvaliacao, _resetOperation etc.) já
+   * checam a página atual antes de fazer qualquer coisa — um atalho pra
+   * uma página vetada já era inofensivo mesmo sem este filtro. O que
+   * mudou aqui foi só a EXIBIÇÃO: não faz sentido listar atalhos de uma
+   * página que o perfil não acessa (ex: perfil sem acesso ao Setor de
+   * Qualidade não precisa ver atalhos de lá).
+   *
+   * `_paginaPermitida` é uma função GLOBAL definida em app-core.js
+   * (script clássico, sem módulo — mesmo escopo global desta IIFE, os
+   * dois arquivos compartilham o mesmo topo de página) — referenciada só
+   * em tempo de EXECUÇÃO (nunca no parse deste arquivo), então a ordem
+   * de carregamento dos <script> não importa de verdade. Se por algum
+   * motivo não existir (ex: este módulo rodando fora do contexto normal
+   * do app), cai pra "mostra tudo" — fail-open, nunca esconde por engano.
+   */
+  function _paginaAcessivelAoPerfil(pageId) {
+    if (!pageId) return true; // atalho global (sem página específica, ex: Sair/Configurações) — sempre mostra
+    if (typeof _paginaPermitida !== 'function') return true;
+    try {
+      return _paginaPermitida(pageId);
+    } catch (_) {
+      return true;
+    }
+  }
+
   function _todosAtalhos() {
-    const nav = NAV_CONFIG.map(n => ({
-      id: n.id, grupo: 'navegacao', label: n.label, icon: n.icon,
-      comboPadrao: n.comboPadrao, comboAtual: _comboEfetivo(n.id, n.comboPadrao),
-    }));
-    const acoes = ACTION_CONFIG.map(a => ({
-      id: a.id, grupo: 'acao', label: a.description, icon: a.icon,
-      comboPadrao: a.comboPadrao, comboAtual: _comboEfetivo(a.id, a.comboPadrao),
-    }));
+    const nav = NAV_CONFIG
+      .filter(n => _paginaAcessivelAoPerfil(n.page))
+      .map(n => ({
+        id: n.id, grupo: 'navegacao', label: n.label, icon: n.icon, page: n.page,
+        comboPadrao: n.comboPadrao, comboAtual: _comboEfetivo(n.id, n.comboPadrao),
+      }));
+    const acoes = ACTION_CONFIG
+      .filter(a => _paginaAcessivelAoPerfil(a.page))
+      .map(a => ({
+        id: a.id, grupo: 'acao', label: a.description, icon: a.icon, page: a.page || null,
+        comboPadrao: a.comboPadrao, comboAtual: _comboEfetivo(a.id, a.comboPadrao),
+      }));
     return [...nav, ...acoes];
   }
 
@@ -786,7 +837,7 @@
     // última vez que esse modal foi aberto (tela de Configurações).
     document.getElementById('kb-help-modal')?.remove();
 
-    const navRows = NAV_CONFIG.map(n => {
+    const navRows = NAV_CONFIG.filter(n => _paginaAcessivelAoPerfil(n.page)).map(n => {
       const combo = _comboEfetivo(n.id, n.comboPadrao);
       const kbds = combo === ''
         ? '<span class="kb-help-sem-atalho">Sem atalho</span>'
@@ -807,7 +858,7 @@
         <td class="kb-help-desc">↪ Próxima página</td>
       </tr>`;
 
-    const actionRows = ACTION_CONFIG.map(a => {
+    const actionRows = ACTION_CONFIG.filter(a => _paginaAcessivelAoPerfil(a.page)).map(a => {
       const combo = _comboEfetivo(a.id, a.comboPadrao);
       const kbds = combo === ''
         ? '<span class="kb-help-sem-atalho">Sem atalho</span>'
@@ -821,7 +872,7 @@
     // Atalhos não-editáveis (ver REFERENCIA_CONFIG) — cada linha aqui é só
     // documentação; quem trata a tecla de verdade é a tela indicada em
     // "contexto", não este módulo.
-    const refRows = REFERENCIA_CONFIG.map(r => `
+    const refRows = REFERENCIA_CONFIG.filter(r => _paginaAcessivelAoPerfil(r.page)).map(r => `
       <tr>
         <td><kbd>${r.combo}</kbd></td>
         <td class="kb-help-desc"><strong>${r.icon} ${r.contexto}</strong><br>${r.descricao}</td>
@@ -1187,7 +1238,7 @@
     /** Lista os atalhos NÃO-editáveis catalogados só como referência/guia
      * (ver REFERENCIA_CONFIG, acima) — cada um vive de verdade em outra
      * tela; aqui é só a documentação central deles. */
-    listarReferencia: () => REFERENCIA_CONFIG.slice(),
+    listarReferencia: () => REFERENCIA_CONFIG.filter(r => _paginaAcessivelAoPerfil(r.page)),
     /** Define um novo combo pra um atalho (por id). Se houver conflito,
      * devolve { ok:false, conflito } em vez de aplicar — passe
      * { substituirConflito: true } pra confirmar e liberar o atalho antigo. */
