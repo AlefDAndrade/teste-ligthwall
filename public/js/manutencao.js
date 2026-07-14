@@ -363,7 +363,15 @@
     const situacao = document.getElementById('man-manSituacao')?.value;
     const etiquetaFechada = document.getElementById('man-manEtiquetaFechada')?.value === 'true';
     const btnFechar = document.getElementById('man-btnFecharEtiqueta');
-    if (situacao === 'Concluido' && !etiquetaFechada && btnFechar) {
+    // Mesma checagem de permissão de editarManutencao() (linha ~882) e do
+    // reset do formulário (linha ~298) — sem isso, mudar a Situação pra
+    // "Concluído" reexibia o botão pra QUALQUER perfil, mesmo um
+    // Encarregado (só tem 'manutencao-chamado', não 'manutencao'
+    // completa) — o clique acabava dando erro do servidor (que já
+    // bloqueia certinho), mas a experiência ficava confusa: botão
+    // aparecendo pra quem nunca poderia usá-lo de verdade.
+    const podeFechar = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+    if (situacao === 'Concluido' && !etiquetaFechada && podeFechar && btnFechar) {
       btnFechar.style.display = 'inline-block';
       const dataFim = document.getElementById('man-manDataFim');
       const horaFim = document.getElementById('man-manHoraFim');
@@ -502,6 +510,17 @@
   }
 
   function abrirModalFechamento() {
+    // Segunda camada de proteção (o botão que chama isso já deveria estar
+    // escondido pra quem não tem a área 'manutencao' completa — ver
+    // data-manut-area="manutencao" no HTML, e a checagem em
+    // aoMudarSituacao()/editarManutencao() — mas confere de novo aqui,
+    // igual ao resto do app faz: nunca confia só no que já foi escondido
+    // na tela). A validação de verdade continua sendo a do servidor, em
+    // POST /manutencao/corretiva.
+    if (typeof _perfilPodeEditar === 'function' && !_perfilPodeEditar('manutencao')) {
+      toast('Seu perfil não pode fechar chamados de manutenção.', 'error');
+      return;
+    }
     const id = document.getElementById('man-manId')?.value;
     if(!id) { toast('Salve o chamado antes de fechá-lo.', 'error'); return; }
     const chamado = manutencoes.find(m => m.id === id);
