@@ -294,6 +294,14 @@
   // 'reprovado'` do dashboard/relatórios reconhece).
   const COR_NAO_PREENCHIDO = 'cinza';
 
+  // Limite de marcas repetidas numa mesma placa — decidido na conversa
+  // que motivou essa mudança (ver toggleMark/toggleMarkErase, abaixo):
+  // antes só existia NO MÁXIMO 1 marca por combinação cor+forma (a lógica
+  // de apagar era clicar de novo na mesma combinação); agora a mesma
+  // combinação pode se repetir na placa, mas até este teto — evita uma
+  // placa pequena (30px de altura) virando uma bagunça visual ilegível.
+  const MAX_MARCAS_POR_PLACA = 6;
+
   // Motivo do defeito — obrigatório sempre que uma placa vira 2ª linha
   // (azul) ou reprovada (vermelho): ver _corExigeMotivo/_abrirSeletorMotivo,
   // mais abaixo. Lista fixa (não configurável em Configurações — diferente
@@ -756,15 +764,8 @@
         <span class="sq-pallet-label">PALLET ${n}</span>
         <div class="sq-pallet-actions">
           <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('${sid}')">⚡ Todas</button>
-          <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'${sid}')">🎨</button>
+          <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('${sid}')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
           <button class="sq-btn-remove-pallet" onclick="SQ.removerPalletExtra(${n})" title="Excluir este pallet">✕</button>
-          <div class="sq-color-dropdown" id="sq-dd-${sid}">
-            <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('${sid}','verde')"></button>
-            <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('${sid}','vermelho')"></button>
-            <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('${sid}','azul')"></button>
-            <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('${sid}','amarelo')"></button>
-            <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('${sid}','laranja')"></button>
-          </div>
         </div>
       </div>
       <div class="sq-slab-stack sq-slab-stack-extra" id="${sid}"></div>`;
@@ -1121,6 +1122,7 @@
 
         if (slabState[id]) renderMarks(slab, slabState[id]);
         slab.addEventListener('click', () => toggleMark(slab));
+        _ligarGestoApagar(slab);
 
         // Segurar-e-arrastar pra mover a placa de pallet (ver
         // _ativarDropZone/_moverPainel) — desligado em modo visualização.
@@ -1214,31 +1216,126 @@
     });
   }
 
+  // Clique normal na placa — SEMPRE adiciona uma marca com a cor+forma
+  // selecionada (modelo novo, ver conversa que motivou a mudança: antes,
+  // clicar de novo na MESMA combinação apagava — isso impedia repetir a
+  // mesma combinação na mesma placa, então separamos "adicionar" (aqui) de
+  // "apagar" (toggleMarkErase, abaixo) em dois gestos diferentes).
   function toggleMark(el) {
     if (viewMode) return;
-    pushState();
     const id = el.dataset.id;
     if (!slabState[id]) slabState[id] = [];
     const shape = selectedShape;
     // X nunca usa a cor escolhida na paleta — é sempre cinza fixo
     // (COR_NAO_PREENCHIDO), ver comentário na constante.
     const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
-    const idx = slabState[id].findIndex(m => m.color === color && m.shape === shape);
-    if (idx !== -1) {
-      slabState[id].splice(idx, 1);
-      _atualizarMotivoAposDesmarcar(id);
-    } else {
-      // X é sempre sozinho: marcar X apaga qualquer marca real que já
-      // existisse na placa; e marcar uma marca real remove um X que já
-      // estivesse lá (não faz sentido as duas coexistirem — X significa
-      // justamente que não há nenhuma marcação real).
-      slabState[id] = shape === 'x' ? [] : slabState[id].filter(m => m.shape !== 'x');
-      slabState[id].push({ color, shape });
-      _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+
+    // X é sempre sozinho: marcar X substitui qualquer marca real que já
+    // existisse na placa (não conta pro limite de repetições — só faz
+    // sentido existir 1 X por placa mesmo). Marcar uma marca REAL quando
+    // já existia um X, remove o X (não faz sentido as duas coexistirem).
+    if (shape === 'x') {
+      pushState();
+      slabState[id] = [{ color, shape }];
+      renderMarks(el, slabState[id]);
+      validateAllSlabs();
+      _renderBadgeMotivo(id);
+      return;
     }
+
+    const jaTinhaX = slabState[id].some(m => m.shape === 'x');
+    if (!jaTinhaX && slabState[id].length >= MAX_MARCAS_POR_PLACA) {
+      toast(`Limite de ${MAX_MARCAS_POR_PLACA} marcas por placa atingido.`, 'error');
+      return;
+    }
+
+    pushState();
+    if (jaTinhaX) slabState[id] = []; // marca real substitui o X que estava lá
+    slabState[id].push({ color, shape });
     renderMarks(el, slabState[id]);
     validateAllSlabs();
-    if (idx === -1 && _corExigeMotivo(color)) _abrirSeletorMotivo(id);
+    _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+    if (_corExigeMotivo(color)) _abrirSeletorMotivo(id);
+  }
+
+  // Apagar — toque longo (touch) ou clique direito (mouse) numa placa.
+  // Remove UMA ocorrência da cor+forma ATUALMENTE SELECIONADA na paleta
+  // (mesmo seletor de sempre — só muda o que o gesto faz com ele). Como
+  // marcas idênticas são visualmente indistinguíveis entre si, remove
+  // sempre a primeira que encontrar — não importa qual das repetidas
+  // some, o resultado visual é o mesmo. Ver _ligarGestoApagar, que liga
+  // isso no elemento da placa (contextmenu + long-press por touch).
+  function toggleMarkErase(el) {
+    if (viewMode) return;
+    const id = el.dataset.id;
+    const shape = selectedShape;
+    const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
+    const marcas = slabState[id] || [];
+    const idx = marcas.findIndex(m => m.color === color && m.shape === shape);
+    if (idx === -1) {
+      toast('Essa placa não tem uma marca dessa cor/forma pra apagar.', 'error');
+      return;
+    }
+    pushState();
+    marcas.splice(idx, 1);
+    renderMarks(el, marcas);
+    validateAllSlabs();
+    _atualizarMotivoAposDesmarcar(id);
+  }
+
+  // Liga o gesto de apagar (toque longo / clique direito) num elemento de
+  // placa — chamada 1x por placa, na criação (ver renderStacks). Clique
+  // direito: usa o evento nativo 'contextmenu' (mais confiável entre
+  // navegadores do que checar e.button===2 em 'click'), suprime o menu de
+  // contexto do navegador. Toque longo: temporizador de 500ms armado no
+  // 'touchstart', cancelado se o dedo mover mais que uma folga pequena
+  // (evita disparar sem querer durante um scroll) ou soltar antes da hora.
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_TOLERANCIA_PX = 10;
+  function _ligarGestoApagar(el) {
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      toggleMarkErase(el);
+    });
+
+    let timer = null;
+    let origem = null;
+    let disparou = false;
+
+    function limpar() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      origem = null;
+    }
+
+    el.addEventListener('touchstart', e => {
+      if (viewMode) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return; // evento de toque sem dados de posição — não dá pra medir movimento, ignora com segurança
+      origem = { x: t.clientX, y: t.clientY };
+      disparou = false;
+      timer = setTimeout(() => {
+        disparou = true;
+        toggleMarkErase(el);
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', e => {
+      if (!origem) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const dx = Math.abs(t.clientX - origem.x);
+      const dy = Math.abs(t.clientY - origem.y);
+      if (dx > LONG_PRESS_TOLERANCIA_PX || dy > LONG_PRESS_TOLERANCIA_PX) limpar();
+    }, { passive: true });
+
+    el.addEventListener('touchend', e => {
+      // O toque longo já disparou o apagar — impede que o 'click'
+      // sintético que o navegador dispara em seguida também adicione
+      // uma marca (senão apagava uma e adicionava outra na sequência).
+      if (disparou) e.preventDefault();
+      limpar();
+    });
+    el.addEventListener('touchcancel', limpar);
   }
 
   // Desmarcar uma cor azul/vermelho pode deixar o painel sem NENHUMA marca
@@ -1439,27 +1536,35 @@
     if (_corExigeMotivo(corFinal)) _abrirSeletorMotivo(null, stackId);
   }
   function selectAllPallet(sid) { applyMarksToPallet(sid, selectedColor, selectedShape); }
-  function applyColorToPallet(sid, color) { closeAllDropdowns(); applyMarksToPallet(sid, color, selectedShape); }
 
-  /* ── Dropdowns de cor por pallet ──────────────────────── */
-  function toggleDropdown(btn, sid) {
+  // Botão "🧹 Limpar" no cabeçalho do pallet — substituiu o dropdown de
+  // cores por pallet (🎨), que era redundante: a mesma cor já pode ser
+  // aplicada em massa via "⚡ Todas" (escolhendo a cor na paleta principal
+  // primeiro). Limpa SÓ as placas deste pallet — marcas e motivo — com a
+  // mesma confirmação de "Limpar" geral (clearAllMarks), só que com
+  // escopo menor.
+  function clearPallet(sid) {
     if (viewMode) return;
-    const menu = document.getElementById(`sq-dd-${sid}`);
-    const open = menu.classList.contains('open');
-    closeAllDropdowns();
-    if (!open) menu.classList.add('open');
-    event.stopPropagation();
+    const col = document.getElementById(sid);
+    if (!col) return;
+    showConfirm('Limpar Pallet', `Apagar todas as marcações do ${sid.replace('stack', 'Pallet ')}?`, () => {
+      pushState();
+      col.querySelectorAll('.sq-slab').forEach(slab => {
+        const id = slab.dataset.id;
+        delete slabState[id];
+        delete slabMotivo[id];
+        delete slabMotivoDescricao[id];
+        renderMarks(slab, []);
+      });
+      document.querySelectorAll(`#${sid} .sq-slab-motivo`).forEach(b => { b.textContent = ''; b.style.display = 'none'; });
+      validateAllSlabs();
+    });
   }
-  function closeAllDropdowns() {
-    document.querySelectorAll('.sq-color-dropdown').forEach(el => el.classList.remove('open'));
-  }
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.sq-pallet-header')) closeAllDropdowns();
-  });
 
   // ── "Em Andamento" e "Fila" — retraídos por padrão, mesmo padrão de
-  // toggle/fechar-ao-clicar-fora do toggleDropdown acima. Só 1 aberto por
-  // vez (closeAllCollapsibles fecha o outro antes de abrir o clicado).
+  // toggle/fechar-ao-clicar-fora usado por outros elementos flutuantes
+  // desta tela. Só 1 aberto por vez (closeAllCollapsibles fecha o outro
+  // antes de abrir o clicado).
   // nome: 'andamento' ou 'fila' -> alvo #sq-andamento-wrap / #sq-fila-wrap.
   function toggleCollapsible(nome) {
     if (viewMode) return;
@@ -3981,6 +4086,22 @@
   }
 
   /* ── Modal genérico (usa o modal do Lightwall se disponível) */
+  // Toast leve — avisos rápidos e não-bloqueantes (diferente de
+  // showAlert, que é um modal e exige clicar OK). Usado por
+  // engatilhamentos frequentes/esperados que não merecem interromper o
+  // fluxo (ver toggleMark/toggleMarkErase: limite de marcas por placa,
+  // nada pra apagar). Mesmo padrão de toast(), manutencao.js — arquivo
+  // diferente, IIFE separada, sem colisão de nome.
+  function toast(msg, tipo = 'success') {
+    const container = document.getElementById('sq-toastContainer');
+    if (!container) return; // container não existe (ex: tela ainda não montada) — silenciosamente ignora, não é crítico
+    const t = document.createElement('div');
+    t.className = `sq-toast ${tipo === 'error' ? 'error' : ''}`;
+    t.innerHTML = `<span>${tipo === 'error' ? '<i class="fas fa-exclamation-circle"></i>' : '<i class="fas fa-check-circle"></i>'}</span><span>${_escaparHtml(msg)}</span>`;
+    container.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
   function showAlert(title, msg) {
     if (typeof LW !== 'undefined' && LW.mostrarAlerta) { LW.mostrarAlerta(msg, { titulo: title }); return; }
     _modal(title, msg, 'alert');
@@ -4026,8 +4147,7 @@
     exportDashboardPDF,
     exportDashboardHTML,
     selectColor, selectShape,
-    selectAllPallet, applyColorToPallet,
-    toggleDropdown,
+    selectAllPallet, clearPallet,
     toggleCollapsible,
     togglePopover,
     abrirDefinirCombinacao,

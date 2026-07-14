@@ -739,19 +739,6 @@
 }
 .sq-btn-select-all:hover { background: var(--blue); color: #fff; }
 
-.sq-btn-dropdown {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: .65rem;
-  display: flex; align-items: center; justify-content: center;
-  transition: border-color .15s;
-}
-.sq-btn-dropdown:hover { border-color: var(--blue); color: var(--text); }
-
 .sq-btn-remove-pallet {
   background: transparent;
   border: 1px solid var(--border);
@@ -765,31 +752,22 @@
 }
 .sq-btn-remove-pallet:hover { border-color: var(--sq-cor-vermelho); color: var(--sq-cor-vermelho); background: rgba(239,68,68,.08); }
 
-.sq-color-dropdown {
-  position: absolute; top: 110%; right: 0; z-index: 999;
-  background: var(--bg-card);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-lg);
-  padding: 8px;
-  display: none;
-  box-shadow: var(--sq-shadow);
-  flex-wrap: wrap; gap: 4px; justify-content: center;
-  min-width: 104px;
-}
-.sq-color-dropdown.open { display: flex; }
-.sq-dropdown-color {
+/* "🧹 Limpar" por pallet — substituiu o dropdown de cores (🎨), que era
+   redundante com "⚡ Todas" + a paleta principal (ver clearPallet,
+   setor-qualidade.js). Mesmo tamanho/formato de .sq-btn-remove-pallet,
+   cor de destaque igual ao botão "Limpar" geral (btn-danger). */
+.sq-btn-clear-pallet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
   width: 22px; height: 22px;
   border-radius: 50%;
-  border: 2px solid transparent;
   cursor: pointer;
-  transition: transform .15s;
+  font-size: .6rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, color .15s, background .15s;
 }
-.sq-dropdown-color:hover { transform: scale(1.2); border-color: var(--text); }
-.sq-dropdown-color.verde   { background: var(--sq-cor-verde); }
-.sq-dropdown-color.vermelho { background: var(--sq-cor-vermelho); }
-.sq-dropdown-color.azul    { background: var(--sq-cor-azul); }
-.sq-dropdown-color.amarelo { background: var(--sq-cor-amarelo); }
-.sq-dropdown-color.laranja { background: var(--sq-cor-laranja); }
+.sq-btn-clear-pallet:hover { border-color: var(--sq-cor-vermelho); color: var(--sq-cor-vermelho); background: rgba(239,68,68,.08); }
 
 /* Placa individual */
 .sq-slab-stack { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 8px; }
@@ -1108,3 +1086,10 @@
      em vez de 4+ colunas espremidas. */
   .sq-pallet-col, .sq-info-col { min-width: calc(50% - 6px); }
 }
+/* Toast leve (ver toast(), setor-qualidade.js) — mesmo padrão visual de
+   .man-toast-container/.man-toast (manutencao.css), escopado só pra esta
+   página. */
+.sq-toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 10200; display: flex; flex-direction: column; gap: 8px; }
+.sq-toast { background: var(--bg-card); border-left: 6px solid var(--green); padding: 14px 22px; border-radius: 8px; box-shadow: var(--sq-shadow); display: flex; align-items: center; gap: 12px; color: var(--text); animation: sqToastIn .3s ease; font-size: .85rem; }
+.sq-toast.error { border-left-color: var(--sq-cor-vermelho); }
+@keyframes sqToastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }

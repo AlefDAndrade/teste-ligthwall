@@ -190,6 +190,13 @@
       descricao: 'Seleciona a forma de marcação (círculo, traço...), na ordem em que aparecem na tela.',
     },
     {
+      icon: '🗑',
+      combo: 'Toque longo / Clique direito',
+      contexto: 'Setor de Qualidade → Avaliação',
+      page: 'setor-qualidade',
+      descricao: 'Apaga uma marca da cor/forma atualmente selecionada na paleta — clique normal sempre adiciona (até 6 marcas por placa).',
+    },
+    {
       icon: '🔲',
       combo: '1-9, 0, Ctrl+1-9, Ctrl+0',
       contexto: 'Registro de Operação → Grade de Montagem Personalizada',

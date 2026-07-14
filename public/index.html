@@ -2422,6 +2422,8 @@
               <div class="sq-tools-sep"></div>
               <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
               <div class="sq-tools-sep"></div>
+              <span class="sq-tools-hint" title="Clique normal sempre adiciona uma marca (até 6 por placa). Pra apagar, segure o toque ou clique com o botão direito — remove uma marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: toque longo / clique direito</span>
+              <div class="sq-tools-sep"></div>
 
               <!-- Referência visual dos marcadores — mesmo padrão do botão
                    "📖 Referências" da página Registrar Operação (popover
@@ -2502,14 +2504,7 @@
                   <span class="sq-pallet-sub" id="sq-pallet-sub-1"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack1')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack1')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack1">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack1','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack1','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack1','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack1','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack1','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack1')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack1"></div>
@@ -2521,14 +2516,7 @@
                   <span class="sq-pallet-sub" id="sq-pallet-sub-2"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack2')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack2')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack2">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack2','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack2','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack2','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack2','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack2','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack2')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack2"></div>
@@ -2540,14 +2528,7 @@
                   <span class="sq-pallet-sub" id="sq-pallet-sub-3"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack3')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack3')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack3">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack3','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack3','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack3','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack3','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack3','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack3')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack3"></div>
@@ -2559,14 +2540,7 @@
                   <span class="sq-pallet-sub" id="sq-pallet-sub-4"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack4')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack4')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack4">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack4','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack4','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack4','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack4','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack4','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack4')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack4"></div>
@@ -2721,6 +2695,14 @@
         </div>
 
       </div><!-- .sq-container -->
+
+      <!-- Toast leve (avisos rápidos, não-bloqueantes) — ver toast(),
+           setor-qualidade.js. Mesmo padrão de .man-toast-container
+           (page-manutencao.html/manutencao.css), só que escopado pra esta
+           página: usado por engatilhamentos frequentes/esperados (ex:
+           limite de marcas por placa atingido, nada pra apagar) que não
+           merecem um modal bloqueante (showAlert). -->
+      <div class="sq-toast-container" id="sq-toastContainer"></div>
       </div>
     </main>
 <!-- ============ PAGE: MANUTENÇÃO ============ -->
