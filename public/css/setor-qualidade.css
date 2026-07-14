@@ -22,6 +22,15 @@
      5 cores de marcação (verde/vermelho/azul/amarelo/laranja, que o
      usuário escolhe na paleta). */
   --sq-cor-cinza:   red;
+  /* Cor NEUTRA (cinza de verdade, apesar do nome de --sq-cor-cinza acima
+     já estar "ocupado" com vermelho por razão histórica — ver comentário
+     dele) usada só nas marcas de IDENTIFICAÇÃO AUTOMÁTICA (tipos de forma
+     simples, sem corModificadora — ver COR_IDENTIFICACAO_AUTO,
+     _marcasDeIdentificacao, setor-qualidade.js). Precisa ser visualmente
+     BEM diferente de verde/azul/vermelho (as cores de status) — senão a
+     marca automática (que ainda não é uma validação de ninguém) pareceria
+     uma aprovação de verdade antes mesmo do operador agir. */
+  --sq-cor-identificacao-auto: #8a94a6;
   /* Antes eram cores fixas (#23354a/#2a4054) — só faziam sentido no tema
      escuro padrão. bg-3/border-2 já existem no sistema principal (ver
      css/styles.css) e mudam com o tema selecionado, então a "placa" some
