@@ -350,6 +350,14 @@ Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado *
 - Persistido em `config.json` (chave `paletes`) junto com o resto desta aba, mesmo botão "✓ Salvar Configurações" — sem essa chave (instalação anterior a esta funcionalidade), o sistema usa um valor padrão de fábrica.
 - `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — direcionamento de painéis (`_paleteDoBerco`), rótulo de origem no drag-and-drop (`_bercoDoSlot`) e os subtítulos "Berços X–Y · Esq./Dir." de cada palete se ajustam automaticamente a qualquer configuração escolhida.
 
+### Marcação de placas (Setor de Qualidade → Avaliação)
+
+- **Adicionar**: clique normal numa placa sempre adiciona uma marca com a cor+forma selecionada na paleta — inclusive repetida (até **6 marcas por placa**; a 7ª tentativa mostra um aviso e não adiciona).
+- **Apagar**: clique com o botão direito (mouse) ou toque e segure por ~500ms (touch) remove uma ocorrência da cor+forma *atualmente selecionada* — não precisa ser a última marcada, já que marcas idênticas são visualmente indistinguíveis entre si. Toque longo cancela se o dedo mover (evita conflito com scroll) ou soltar antes da hora.
+- **"×" (painel não preenchido)** continua exclusivo: marcá-lo substitui qualquer marca real que já existisse na placa, e marcar qualquer marca real remove o "×" que estivesse lá.
+- **"🧹 Limpar" por pallet**: no cabeçalho de cada pallet, ao lado de "⚡ Todas" — apaga só as marcações daquele pallet (com confirmação). Substituiu o dropdown de seleção rápida de cor por pallet (🎨), que era redundante com "⚡ Todas" combinado com a paleta principal.
+- O Desfazer geral (Ctrl+Z / botão "Desfazer") continua cobrindo a última ação em qualquer lugar da tela, sem mudança — o gesto de apagar acima é para remover uma marca específica, não necessariamente a mais recente.
+
 ### Quem pode controlar operações
 
 Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: o Administrador Master e o perfil cadastrado "Administrador" sempre podem controlar; os demais perfis com a área de edição da Injetora (Operador de Injetora, Encarregado, Supervisão) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm essa área liberada, ver *Perfis de usuário*). Perfis sem a área da Injetora (Assistente de Qualidade, Manutenção) nunca controlam operações, independente da marcação.
