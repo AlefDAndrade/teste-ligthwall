@@ -1768,39 +1768,8 @@
   }
 
   // ============================================================
-  // 7. RELATÓRIO PDF E DASHBOARD
+  // 7. DASHBOARD (Visão Executiva)
   // ============================================================
-  function gerarRelatorioPDF() {
-    const dashboard = document.getElementById('man-dashboard');
-    if (!dashboard.classList.contains('active')) {
-      toast('Por favor, vá até a aba "Visão Executiva" para gerar o PDF.', 'error');
-      return;
-    }
-
-    toast('Gerando PDF... aguarde um momento.', 'success');
-
-    html2canvas(dashboard, {
-      scale: 2,
-      backgroundColor: '#0b121a',
-      useCORS: true,
-      logging: false
-    }).then(canvas => {
-      const imgData = canvas.toDataURL('image/png');
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`lightwall_relatorio_executivo_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast('Relatório PDF gerado com sucesso!');
-    }).catch(err => {
-      console.error("Erro ao gerar PDF:", err);
-      toast('Erro ao gerar PDF. Verifique o console.', 'error');
-    });
-  }
-
   let chartInstance = null;
 
   function renderDashboard() {
@@ -1871,7 +1840,7 @@
   }
 
   // ============================================================
-  // 8. EXPORTAÇÃO E IMPORTAÇÃO (COM ESCAPE DE CSV ROBUSTO)
+  // 8. EXPORTAÇÃO (COM ESCAPE DE CSV ROBUSTO)
   // ============================================================
   function escapeCSV(text) {
     if (!text) return '';
@@ -1894,69 +1863,6 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `lightwall_${new Date().toISOString().split('T')[0]}.csv`;
     a.click(); URL.revokeObjectURL(url); toast('Exportação CSV concluída!');
-  }
-
-  function importarDados(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async function(e) {
-      try {
-        const data = JSON.parse(e.target.result);
-        if (!data.corretivas || !data.programadas) {
-          toast('Arquivo inválido.', 'error');
-          return;
-        }
-        const substituir = confirm('Deseja SUBSTITUIR os dados atuais? (Cancelar = mesclar)');
-        // "Substituir" aqui, diferente da Fase 1 (localStorage, onde dava
-        // pra simplesmente sobrescrever o array inteiro): o servidor não
-        // tem uma rota de "apagar tudo e recriar" — cada item importado é
-        // enviado individualmente via upsert (mesmo endpoint de sempre,
-        // ver salvarManutencaoCorretiva/salvarManutencaoProgramada/etc,
-        // db.js). Se "substituir" foi escolhido, os registros que já
-        // existiam no servidor e NÃO estão no arquivo importado
-        // continuam lá (limitação conhecida — diferente do comportamento
-        // exato de antes, onde "substituir" realmente esvaziava tudo
-        // primeiro); "mesclar" sempre foi assim mesmo (soma, nunca apaga).
-        const itensCorretivas = data.corretivas || [];
-        const itensProgramadas = data.programadas || [];
-        // Estoque/movimentações do arquivo importado NÃO são migrados
-        // aqui — diferente de corretivas/programadas, essas duas rotas
-        // não têm um "upsert" genérico (criarManutencaoEstoque só serve
-        // pra peça NOVA, e cada movimentação precisa reverificar saldo).
-        // Se o arquivo importado tiver isso, fica só ignorado por
-        // enquanto (nenhum erro, mas também nada é importado) —
-        // registrado como limitação conhecida, não implementado nesta
-        // primeira versão do backend real.
-        if (data.estoque?.length || data.movimentacoes?.length) {
-          console.warn('[Manutenção] Importação de estoque/movimentações do arquivo ainda não suportada pelo backend — ignorado.');
-        }
-
-        const resultados = await Promise.all([
-          ...itensCorretivas.map(m => fetch('/manutencao/corretiva', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m),
-          }).then(r => r.json())),
-          ...itensProgramadas.map(a => fetch('/manutencao/programada', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a),
-          }).then(r => r.json())),
-        ]);
-        const falhas = resultados.filter(r => !r.ok);
-        if (falhas.length) {
-          toast(`Importação parcial: ${falhas.length} item(ns) falharam. Veja o console.`, 'error');
-          console.error('[Manutenção] Falhas na importação:', falhas);
-        }
-
-        await carregarTudoDoServidor();
-        pageCorretiva = 0; pageProgramada = 0;
-        renderCorretiva(); renderProgramada(); renderDashboard(); renderPecas(); renderAlmoxarifado();
-        toast(falhas.length ? 'Importação concluída com algumas falhas.' : 'Importação realizada com sucesso!');
-      } catch (err) {
-        toast('Erro ao ler o arquivo.', 'error');
-        console.error(err);
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
   }
 
   // ============================================================
@@ -2061,8 +1967,6 @@
     fecharModalInicio,
     fecharModalMovimentacao,
     fecharModalReprovacao,
-    gerarRelatorioPDF,
-    importarDados,
     limparFiltrosCorretiva,
     navegar,
     novoChamado,
@@ -2120,8 +2024,6 @@
   window.fecharModalInicio = MAN.fecharModalInicio;
   window.fecharModalMovimentacao = MAN.fecharModalMovimentacao;
   window.fecharModalReprovacao = MAN.fecharModalReprovacao;
-  window.gerarRelatorioPDF = MAN.gerarRelatorioPDF;
-  window.importarDados = MAN.importarDados;
   window.limparFiltrosCorretiva = MAN.limparFiltrosCorretiva;
   window.navegar = MAN.navegar;
   window.novoChamado = MAN.novoChamado;
