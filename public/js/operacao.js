@@ -664,10 +664,50 @@
   }
 
   /**
+   * Valida a faixa de berços de UM traço (índice `i` dentro de `tracos`):
+   *   - Berço início/fim precisam ser MAIORES QUE ZERO (não aceita 0 nem
+   *     negativo).
+   *   - Berço fim não pode ser MENOR que berço início.
+   *   - O berço início deste traço não pode ser MENOR que o berço fim do
+   *     traço ANTERIOR (`tracos[i-1]`) — pode ser IGUAL, de propósito
+   *     (um berço pode ter ficado pela metade, dividido entre os dois
+   *     traços; só não pode "voltar" pra trás).
+   * Devolve a mensagem de erro (string) ou `null` se estiver tudo certo.
+   * Só valida quando os campos JÁ TÊM algum valor — campo vazio é coberto
+   * pela checagem de "campos obrigatórios" de tracoCompleto, separada
+   * desta (aqui é só sobre a LÓGICA da faixa, não se foi preenchido).
+   */
+  function _erroBercos(tracos, i) {
+    const t = tracos?.[i];
+    if (!t) return null;
+    const paraNumero = (v) => (v === '' || v === null || v === undefined) ? null : Number(v);
+    const ini = paraNumero(t.berco_ini);
+    const fim = paraNumero(t.berco_fim);
+
+    if (ini !== null && (isNaN(ini) || ini <= 0)) return 'Berço início precisa ser maior que zero.';
+    if (fim !== null && (isNaN(fim) || fim <= 0)) return 'Berço fim precisa ser maior que zero.';
+    if (ini !== null && fim !== null && !isNaN(ini) && !isNaN(fim) && fim < ini) {
+      return 'Berço fim não pode ser menor que o berço início.';
+    }
+    if (ini !== null && !isNaN(ini) && i > 0) {
+      const fimAnterior = paraNumero(tracos[i - 1]?.berco_fim);
+      if (fimAnterior !== null && !isNaN(fimAnterior) && ini < fimAnterior) {
+        return `Berço início não pode ser menor que o berço fim do traço anterior (${fimAnterior}).`;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Verifica se um traço tem TODOS os campos obrigatórios preenchidos.
    * Único campo opcional é "Observações" (obs) — não entra nesta checagem.
+   * `i`/`tracos` são opcionais (default: sem checar a faixa de berços
+   * contra o traço anterior) — quando chamada via `state.tracos.every(
+   * tracoCompleto)`, o próprio `.every()` já passa (elemento, índice,
+   * array) automaticamente, então a validação completa acontece sem
+   * precisar mudar esse call site.
    */
-  function tracoCompleto(t) {
+  function tracoCompleto(t, i, tracos) {
     const insumoPreenchido = (key) => {
       const insumo = t[key];
       if (!insumo) return false;
@@ -684,7 +724,9 @@
       const temAjuste = Array.isArray(insumo.ajustes) && insumo.ajustes.length > 0;
       return temOriginal || temAjuste;
     };
+    const semErroBerco = tracos === undefined || !_erroBercos(tracos, i ?? 0);
     return !!t.berco_ini && !!t.berco_fim && !!t.silo && !!t.expansao && !!t.densidadeEPS
+      && semErroBerco
       && insumoPreenchido('cimento_real')
       && insumoPreenchido('agua_real')
       && insumoPreenchido('eps_real')
@@ -706,8 +748,8 @@
    * preenchido, até algo maior disparar um render completo (trocar de
    * aba, adicionar traço...) — bug relatado numa conversa.
    */
-  function _statusDoTraco(t) {
-    const isComplete = tracoCompleto(t);
+  function _statusDoTraco(t, i, tracos) {
+    const isComplete = tracoCompleto(t, i, tracos);
     // Mesmo critério de tracoCompleto/insumoPreenchido: conta valor
     // ORIGINAL ou pelo menos 1 AJUSTE — sem isso, um traço com
     // Flow/Densidade preenchidos só via Ajustar Receita (sem original)
@@ -727,6 +769,42 @@
     };
   }
 
+  // Atualiza SÓ a borda vermelha + mensagem de erro da faixa de berços de
+  // cada traço já existente no DOM, sem re-renderizar o formulário —
+  // mesmo motivo/técnica de _atualizarStatusAbasTracos (acima): sem isso,
+  // digitar um berço inválido só mostrava a borda vermelha/mensagem no
+  // PRÓXIMO re-render completo (trocar de aba, adicionar traço...), não
+  // na hora — mesmo que o painel de pendências (que já é recalculado do
+  // zero a cada persist()) já soubesse que tinha erro.
+  function _atualizarErroBercos() {
+    const linhas = document.querySelectorAll('.traco-row');
+    if (!linhas.length) return;
+    state.tracos.forEach((t, i) => {
+      const linha = linhas[i];
+      if (!linha) return;
+      const erro = _erroBercos(state.tracos, i);
+      const inputIni = linha.querySelector('[data-campo="berco_ini"]');
+      const inputFim = linha.querySelector('[data-campo="berco_fim"]');
+      if (inputIni) inputIni.classList.toggle('campo-invalido', !!erro);
+      if (inputFim) inputFim.classList.toggle('campo-invalido', !!erro);
+      let divErro = linha.querySelector('.traco-erro-bercos');
+      if (erro) {
+        if (!divErro) {
+          divErro = document.createElement('div');
+          divErro.className = 'traco-erro-bercos';
+          // Mesma posição de sempre: logo depois do campo Berço Fim, antes
+          // do Silo (ver renderTracos) — insere depois do .form-group que
+          // contém o input de berço fim.
+          const grupoFim = inputFim?.closest('.form-group');
+          if (grupoFim) grupoFim.after(divErro);
+        }
+        divErro.textContent = '⚠ ' + erro;
+      } else if (divErro) {
+        divErro.remove();
+      }
+    });
+  }
+
   // Atualiza SÓ o ícone/classe de cada aba já existente no DOM, sem
   // re-renderizar o formulário do traço em si — chamada a cada
   // persist() (ver updatePendencias), continuamente, enquanto o
@@ -740,7 +818,7 @@
     state.tracos.forEach((t, i) => {
       const aba = abas[i];
       if (!aba) return;
-      const { icon, cls } = _statusDoTraco(t);
+      const { icon, cls } = _statusDoTraco(t, i, state.tracos);
       aba.classList.remove('complete', 'pending', 'empty');
       aba.classList.add(cls);
       const iconEl = aba.querySelector('.status-icon');
@@ -1906,7 +1984,7 @@
       html += `<div class="traco-tabs-nav">`;
       state.tracos.forEach((t, i) => {
         const isExpanded = i === expandedTracoIndex;
-        const { icon: statusIcon, cls: statusClass } = _statusDoTraco(t);
+        const { icon: statusIcon, cls: statusClass } = _statusDoTraco(t, i, state.tracos);
 
         html += `
           <div class="traco-tab ${isExpanded ? 'active' : ''} ${statusClass}" 
@@ -1923,6 +2001,7 @@
       // Garante migração de traços antigos
       migrarTraco(t);
       const isExpanded = i === expandedTracoIndex;
+      const erroBerco = _erroBercos(state.tracos, i);
 
       html += `
       <div class="traco-row ${isExpanded ? '' : ' collapsed'}">
@@ -1938,14 +2017,15 @@
           <div class="traco-header-fields" onclick="if(${isExpanded}) event.stopPropagation()">
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Início <span class="required">*</span></label>
-                <input class="form-input" type="number" min="1" max="22" value="${t.berco_ini}"
+                <input class="form-input ${erroBerco ? 'campo-invalido' : ''}" data-campo="berco_ini" type="number" min="1" max="22" value="${t.berco_ini}"
                 oninput="LWOp.updateTraco(${i},\'berco_ini\',this.value)" placeholder="—">
             </div>
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Fim <span class="required">*</span></label>
-                <input class="form-input" type="number" min="1" max="22" value="${t.berco_fim}"
-                oninput="LWOp.updateTraco(${i},\'berco_fim\',this.value)" placeholder="—"}>
+                <input class="form-input ${erroBerco ? 'campo-invalido' : ''}" data-campo="berco_fim" type="number" min="1" max="22" value="${t.berco_fim}"
+                oninput="LWOp.updateTraco(${i},\'berco_fim\',this.value)" placeholder="—">
             </div>
+            ${erroBerco ? `<div class="traco-erro-bercos">⚠ ${LW.escaparHtml(erroBerco)}</div>` : ''}
             <div class="form-group traco-header-field">
               <label class="form-label">Silo do EPS <span class="required">*</span></label>
                 <select class="form-select ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" 
@@ -2016,12 +2096,20 @@
   function updatePendencias() {
     const tracosCompletos = state.tracos.length > 0 && state.tracos.every(tracoCompleto);
     const tracosComAjusteSemTempo = state.tracos.filter(tracoTemAjusteSemTempoBatida);
+    // Item dedicado pra faixa de berços — mais específico que "todos os
+    // campos obrigatórios" (que também cobre isso, via tracoCompleto):
+    // sem esse item à parte, um berço fora da faixa (0/negativo, fim <
+    // início, ou sobrepondo o traço anterior pra trás) ficaria só
+    // genericamente marcado como "campo obrigatório faltando", mesmo
+    // com os campos preenchidos — confuso pra quem for corrigir.
+    const tracosComErroBerco = state.tracos.filter((t, i) => !!_erroBercos(state.tracos, i));
     // Mantém os ícones das abas de traço em dia com a checagem acima —
     // sem isso, a aba podia continuar mostrando ⚠️ (pendente) mesmo
     // depois do último campo do traço ser preenchido, já que
     // renderTracos() (que antes era o único lugar calculando esse
     // ícone) só roda em eventos maiores, não a cada tecla digitada.
     _atualizarStatusAbasTracos();
+    _atualizarErroBercos();
     const checks = [
       { label: 'Turno definido', ok: !!state.turno },
       { label: 'Dimensão da bateria', ok: !!state.dimensao },
@@ -2032,6 +2120,7 @@
       { label: 'Motivo do atraso', ok: state.houve_atraso === 'NÃO' || !!state.motivo_atraso },
       { label: 'Ao menos 1 traço', ok: state.tracos.length > 0 },
       { label: 'Informações do traço (todos os campos obrigatórios)', ok: tracosCompletos },
+      { label: 'Faixa de berços válida em todos os traços', ok: tracosComErroBerco.length === 0 },
       { label: 'Tempo de batida para todos os ajustes de insumo', ok: tracosComAjusteSemTempo.length === 0 }
     ];
 
