@@ -670,7 +670,19 @@
   function tracoCompleto(t) {
     const insumoPreenchido = (key) => {
       const insumo = t[key];
-      return !!(insumo && insumo.original !== '' && insumo.original !== null && insumo.original !== undefined);
+      if (!insumo) return false;
+      // Preenchido se tem valor ORIGINAL ou pelo menos 1 AJUSTE — bug
+      // relatado numa conversa: Flow/Densidade preenchidos só através do
+      // "Ajustar Receita" (Remedição), sem nunca ter um valor original,
+      // apareciam certinho na tela (totalInsumo já soma/pega o último
+      // ajuste pra exibição), mas essa checagem só olhava .original,
+      // ignorando os ajustes por completo — o traço ficava marcado como
+      // pendente mesmo com o dado visivelmente preenchido. Mesmo
+      // raciocínio vale pra qualquer insumo (cimento, água...): também é
+      // possível ajustar um insumo que nunca teve valor original.
+      const temOriginal = insumo.original !== '' && insumo.original !== null && insumo.original !== undefined;
+      const temAjuste = Array.isArray(insumo.ajustes) && insumo.ajustes.length > 0;
+      return temOriginal || temAjuste;
     };
     return !!t.berco_ini && !!t.berco_fim && !!t.silo && !!t.expansao && !!t.densidadeEPS
       && insumoPreenchido('cimento_real')
@@ -696,10 +708,19 @@
    */
   function _statusDoTraco(t) {
     const isComplete = tracoCompleto(t);
+    // Mesmo critério de tracoCompleto/insumoPreenchido: conta valor
+    // ORIGINAL ou pelo menos 1 AJUSTE — sem isso, um traço com
+    // Flow/Densidade preenchidos só via Ajustar Receita (sem original)
+    // ficava mostrando ⚪ (vazio) nesse campo específico, mesmo tendo
+    // dado de verdade.
+    const temAjuste = (campo) => Array.isArray(t[campo]?.ajustes) && t[campo].ajustes.length > 0;
     const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
       || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
       || !!t.superplast_real?.original || !!t.incorporador_real?.original
-      || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original;
+      || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original
+      || temAjuste('cimento_real') || temAjuste('agua_real') || temAjuste('eps_real')
+      || temAjuste('superplast_real') || temAjuste('incorporador_real')
+      || temAjuste('tempo_batida') || temAjuste('densidade_insumo') || temAjuste('flow_insumo');
     return {
       icon: isComplete ? '✅' : (hasData ? '⚠️' : '⚪'),
       cls: isComplete ? 'complete' : (hasData ? 'pending' : 'empty'),
