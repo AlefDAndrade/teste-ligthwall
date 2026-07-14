@@ -237,16 +237,23 @@
     }
 
     el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
-      const dirMarcado = b.estado_direita === 'baixou';
-      const esqMarcado = b.estado_esquerda === 'baixou';
+      // "✕" (não enchido) é um estado À PARTE de "baixou" (vazamento) —
+      // mesma distinção de bateria-atual.js: o painel nunca existiu pra
+      // avaliar, diferente de um vazamento observado. Sem checar os dois
+      // estados, um lado marcado como não enchido aparecia como se
+      // estivesse tudo normal (bug relatado).
+      const dirNaoEnchido = b.estado_direita === 'nao_enchido';
+      const esqNaoEnchido = b.estado_esquerda === 'nao_enchido';
+      const dirMarcado = b.estado_direita === 'baixou' || dirNaoEnchido;
+      const esqMarcado = b.estado_esquerda === 'baixou' || esqNaoEnchido;
       const numero = String(b.ordem).padStart(2, '0');
       const tipoBerco = ehPersonalizada ? (gradePersonalizada[b.ordem - 1] || null) : (op ? op.tipo_montagem : null);
       const cor = _corPorTipoBerco(ehPersonalizada, tipoBerco);
       return `
         <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${dirNaoEnchido ? 'Direito — Não enchido' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
         </div>`;
     }).join('')}</div>`;
   }
