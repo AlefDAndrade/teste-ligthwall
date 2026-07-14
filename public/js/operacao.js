@@ -1926,8 +1926,8 @@
             ${renderCampoInsumo(t, i, 'cimento_real', 'Cimento (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'eps_real', 'EPS (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'agua_real', 'Água (kg)', '0.01', 2, 'kg', t._reaproveitado)}
-            ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 3, 'kg', t._reaproveitado)}
-            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 3, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 2, 'kg', t._reaproveitado)}
             ${renderCampoTempoBatida(t, i, t._reaproveitado)}
           </div>
 
