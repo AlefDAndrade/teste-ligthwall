@@ -684,6 +684,50 @@
   }
 
   /**
+   * Calcula o ícone/classe de status de UM traço pra aba de navegação —
+   * função ÚNICA usada tanto no render completo da aba (renderTracos)
+   * quanto na atualização leve (_atualizarStatusAbasTracos, abaixo).
+   * Antes essa lógica vivia só dentro de renderTracos, duplicada
+   * implicitamente: como updatePendencias() (chamada a cada campo
+   * preenchido, via persist()) nunca re-executava renderTracos(), a
+   * aba podia ficar mostrando ⚠️ (pendente) mesmo com o traço já 100%
+   * preenchido, até algo maior disparar um render completo (trocar de
+   * aba, adicionar traço...) — bug relatado numa conversa.
+   */
+  function _statusDoTraco(t) {
+    const isComplete = tracoCompleto(t);
+    const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
+      || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
+      || !!t.superplast_real?.original || !!t.incorporador_real?.original
+      || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original;
+    return {
+      icon: isComplete ? '✅' : (hasData ? '⚠️' : '⚪'),
+      cls: isComplete ? 'complete' : (hasData ? 'pending' : 'empty'),
+    };
+  }
+
+  // Atualiza SÓ o ícone/classe de cada aba já existente no DOM, sem
+  // re-renderizar o formulário do traço em si — chamada a cada
+  // persist() (ver updatePendencias), continuamente, enquanto o
+  // operador digita. Importante ser um update CIRÚRGICO (não um
+  // innerHTML do formulário inteiro): reconstruir o formulário a cada
+  // tecla apagaria o foco/cursor do campo que a pessoa está digitando
+  // agora mesmo.
+  function _atualizarStatusAbasTracos() {
+    const abas = document.querySelectorAll('.traco-tabs-nav .traco-tab');
+    if (!abas.length) return;
+    state.tracos.forEach((t, i) => {
+      const aba = abas[i];
+      if (!aba) return;
+      const { icon, cls } = _statusDoTraco(t);
+      aba.classList.remove('complete', 'pending', 'empty');
+      aba.classList.add(cls);
+      const iconEl = aba.querySelector('.status-icon');
+      if (iconEl) iconEl.textContent = icon;
+    });
+  }
+
+  /**
    * Verifica se algum ajuste de insumo do traço ficou sem o tempo de batida
    * correspondente. Rede de segurança — o fluxo normal (modal "Ajuste de
    * Receita") sempre grava os dois juntos, mas isso cobre traços antigos
@@ -1841,14 +1885,7 @@
       html += `<div class="traco-tabs-nav">`;
       state.tracos.forEach((t, i) => {
         const isExpanded = i === expandedTracoIndex;
-        const isComplete = tracoCompleto(t);
-        const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
-          || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
-          || !!t.superplast_real?.original || !!t.incorporador_real?.original
-          || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original;
-
-        const statusIcon = isComplete ? '✅' : (hasData ? '⚠️' : '⚪');
-        const statusClass = isComplete ? 'complete' : (hasData ? 'pending' : 'empty');
+        const { icon: statusIcon, cls: statusClass } = _statusDoTraco(t);
 
         html += `
           <div class="traco-tab ${isExpanded ? 'active' : ''} ${statusClass}" 
@@ -1958,6 +1995,12 @@
   function updatePendencias() {
     const tracosCompletos = state.tracos.length > 0 && state.tracos.every(tracoCompleto);
     const tracosComAjusteSemTempo = state.tracos.filter(tracoTemAjusteSemTempoBatida);
+    // Mantém os ícones das abas de traço em dia com a checagem acima —
+    // sem isso, a aba podia continuar mostrando ⚠️ (pendente) mesmo
+    // depois do último campo do traço ser preenchido, já que
+    // renderTracos() (que antes era o único lugar calculando esse
+    // ícone) só roda em eventos maiores, não a cada tecla digitada.
+    _atualizarStatusAbasTracos();
     const checks = [
       { label: 'Turno definido', ok: !!state.turno },
       { label: 'Dimensão da bateria', ok: !!state.dimensao },
