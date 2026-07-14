@@ -213,6 +213,75 @@ test('atalho personalizado por um usuario aparece numa sessao nova do mesmo usua
   }
 });
 
+test('atalhos de navegação e ações mostram só as páginas que o perfil customizado realmente acessa', async () => {
+  const cookieAdmin = await logarComoAdminMaster();
+  const respCriar = await fetch(`${servidor.baseUrl}/criar-perfil-customizado`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({
+      nome: 'So Paradas Teste Atalhos',
+      permissoes: { paradas: 'total', 'config-atalhos': 'total' },
+    }),
+  });
+  const { perfil } = await respCriar.json();
+
+  await fetch(`${servidor.baseUrl}/salvar-usuarios`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify([{ nomeUsuario: 'perfil.so.paradas.atalhos', senha: 'senhateste1234', perfil: perfil.id }]),
+  });
+  const respLogin = await fetch(`${servidor.baseUrl}/login-usuario`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nomeUsuario: 'perfil.so.paradas.atalhos', senha: 'senhateste1234' }),
+  });
+  const cookieUsuario = extrairCookie(respLogin);
+
+  const dom = await JSDOM.fromURL(`${servidor.baseUrl}/index.html`, {
+    runScripts: 'dangerously',
+    resources: 'usable',
+    pretendToBeVisual: true,
+    beforeParse(win) {
+      win.Chart = function () { this.destroy = () => {}; };
+      win.HTMLElement.prototype.scrollIntoView = function () {};
+      win.fetch = (url, opts) => {
+        const absoluta = new URL(url, win.location.href).toString();
+        const headers = { ...(opts && opts.headers), Cookie: cookieUsuario };
+        return fetch(absoluta, { ...opts, headers });
+      };
+    },
+  });
+  const { window } = dom;
+  window.sessionStorage.setItem('lw_role', perfil.id);
+  await new Promise(r => setTimeout(r, 2500));
+
+  try {
+    const atalhos = window.LWKeyboard.listarAtalhos();
+    const paginasDeNavegacaoVisiveis = Array.from(atalhos.filter(a => a.grupo === 'navegacao').map(a => a.page));
+
+    // Só 'menu' (sempre) e 'paradas' (o único liberado) — nada de
+    // 'setor-qualidade', 'operacao', 'manutencao', etc.
+    assert.deepEqual(paginasDeNavegacaoVisiveis.sort(), ['menu', 'paradas']);
+
+    // Ações GLOBAIS (sem página específica — vivem na topbar) continuam
+    // aparecendo mesmo assim.
+    assert.ok(atalhos.some(a => a.id === 'acao_sair'), 'ação global (Sair) deveria continuar visível');
+    assert.ok(atalhos.some(a => a.id === 'acao_config'), 'ação global (Configurações) deveria continuar visível');
+
+    // Ações ESPECÍFICAS de uma página que o perfil não acessa somem.
+    assert.ok(!atalhos.some(a => a.id === 'acao_registrar'), '"Registrar operação" é específico da página Operação — não deveria aparecer');
+    assert.ok(!atalhos.some(a => a.id === 'acao_sq_registrar'), '"Registrar Avaliação" é específico do Setor de Qualidade — não deveria aparecer');
+    assert.ok(!atalhos.some(a => a.id === 'acao_modo_visual_bercos'), '"Modo Visual" é específico do Relatório de Berços — não deveria aparecer');
+
+    // Referência (REFERENCIA_CONFIG) também filtrada — nenhuma delas é da
+    // página 'paradas', então a lista fica vazia pra este perfil.
+    const referencia = window.LWKeyboard.listarReferencia();
+    assert.equal(referencia.length, 0, 'nenhum item de referência é da página Paradas — lista deveria ficar vazia');
+  } finally {
+    window.close();
+  }
+});
+
 test('Administrador Master nunca chama /meus-atalhos — continua em localStorage', async () => {
   let chamouMeusAtalhos = false;
   const dom = await JSDOM.fromURL(`${servidor.baseUrl}/index.html`, {
