@@ -1840,7 +1840,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-sql')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-sql')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -1861,7 +1861,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'atalhos', 'usuarios', 'autorizados', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -1880,7 +1880,10 @@
     function _cfgAplicarVisibilidadeDeAbas() {
       const role = sessionStorage.getItem('lw_role');
       if (role === 'Administrador') return; // vê tudo, nada pra esconder
-      const MAPA = { dados: 'cfg-nav-dados', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
+      // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
+      // era escondida de ninguém, pra nenhum perfil (bug separado, pego
+      // na mesma revisão do bug do cssText, acima).
+      const MAPA = { dados: 'cfg-nav-dados', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -1961,6 +1964,17 @@
       if (secao === 'autorizados') cfgRenderAutorizados();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
+
+      // Reaplica por último, de propósito: os `navX.style.cssText = ...`
+      // acima SUBSTITUEM o style inteiro do botão (é assim que o destaque
+      // visual da aba ativa funciona) — isso apaga sem querer o
+      // `display:none` que _cfgAplicarVisibilidadeDeAbas() tinha aplicado,
+      // reexibindo TODAS as abas de Configurações pra qualquer perfil
+      // não-admin (bug real, pego numa conversa: um perfil customizado só
+      // com Atalhos liberado via visto TODAS as outras abas mesmo assim).
+      // Reforçar aqui, toda vez que uma seção é mostrada, corrige na
+      // raiz — não importa quantas vezes cfgMostrarSecao for chamada.
+      _cfgAplicarVisibilidadeDeAbas();
     }
 
     // ---- Automação (Configurações → Automação) ────────────────────────
