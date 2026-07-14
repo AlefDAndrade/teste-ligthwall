@@ -283,6 +283,16 @@ Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de bati
 
 **Um campo preenchido só via ajuste conta como preenchido.** Bug relatado: Flow/Densidade preenchidos exclusivamente pelo painel de Remedição (sem nunca ter um valor original) apareciam certinho na tela, mas a checagem de pendência só olhava o valor original — o traço ficava marcado como pendente mesmo com o dado visivelmente lá, bloqueando "Registrar". Corrigido: `tracoCompleto()`/`_statusDoTraco()` (`operacao.js`) agora consideram um insumo preenchido se tiver valor original **ou** pelo menos 1 ajuste — mesmo critério que `totalInsumo()` já usava pra decidir o que mostrar na tela.
 
+## Faixa de Berços (Registrar Operação)
+
+Berço Início e Berço Fim de cada traço são validados (`_erroBercos()`, `operacao.js`), com borda vermelha + mensagem inline no campo, em tempo real (a cada tecla, não só no próximo re-render):
+
+- Início e fim precisam ser **maiores que zero** — não aceita 0 nem negativo.
+- Fim não pode ser **menor** que início (pode ser igual — um traço cobrindo 1 berço só).
+- O início de um traço não pode ser **menor** que o fim do traço **anterior** — mas pode ser **igual**, de propósito: um berço pode ter ficado pela metade, dividido entre os dois traços.
+
+Reforçado em 2 lugares: um item dedicado no painel de pendências ("Faixa de berços válida em todos os traços", bloqueia "Registrar") e dentro de `tracoCompleto()` (um traço com berços inválidos nunca conta como completo, mesmo com o resto preenchido).
+
 ## Montagem Personalizada (Registrar Operação)
 
 Além de **Simples** (todos os berços do mesmo tipo) e **Híbrida** (cada berço produz painéis de 2 tipos ao mesmo tempo, numa proporção fixa), existe **🔧 Personalizado**: cada berço da bateria tem seu próprio tipo, escolhido individualmente — pra baterias que misturam tipos em quantidades quaisquer (ex: 4 berços de 3T, 5 de S/P, 7 de 2/P e o resto de 1T).

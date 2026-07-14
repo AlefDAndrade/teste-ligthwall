@@ -1457,6 +1457,29 @@ td.mono {
   min-width: 0;
 }
 
+/* Campo de berço fora da faixa válida (0/negativo, fim < início, ou
+   início menor que o fim do traço anterior — ver _erroBercos,
+   operacao.js). Só a borda muda de cor; o texto explicando o motivo
+   fica em .traco-erro-bercos, logo abaixo dos 2 campos. */
+.form-input.campo-invalido {
+  border-color: var(--red);
+}
+.form-input.campo-invalido:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .15);
+}
+
+/* Mensagem de erro dos berços — ocupa a largura inteira da grade
+   (grid-column: 1 / -1), numa linha própria logo abaixo dos campos de
+   Berço Início/Fim, sem empurrar as colunas dos campos seguintes
+   (Silo, Expansão...) pra posição errada. */
+.traco-erro-bercos {
+  grid-column: 1 / -1;
+  color: var(--red);
+  font-size: .78rem;
+  line-height: 1.3;
+}
+
 .traco-remove-btn {
   padding: 10px;
   color: var(--red);
