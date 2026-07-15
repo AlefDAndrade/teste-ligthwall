@@ -455,7 +455,11 @@
     const paineis = avaliacao.paineis || [];
 
     let html = '<div class="af-paineis-grid">';
-    for (let p = 1; p <= 4; p++) {
+    // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
+    // na 2ª (layout 2x2) — só a ORDEM DE EXIBIÇÃO muda; os dados de cada
+    // pallet continuam vindo do mesmo número de sempre (avaliacao.paineis,
+    // montagem['palletN']), sem nenhuma outra mudança.
+    [2, 1, 3, 4].forEach(p => {
       // Tipo de montagem daquele pallet — "no cantinho", cabeçalho do
       // próprio card do pallet, não em cada painel individual.
       const tipoMontPallet = montagem['pallet' + p] || '—';
@@ -469,7 +473,7 @@
         </div>`;
       }
       html += '</div></div>';
-    }
+    });
     html += '</div>';
     el.innerHTML = html;
   }
@@ -585,7 +589,7 @@
   .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
   .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
   .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+  .af-paineis-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
   .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
   .af-pallet-tipo { font-size:.66rem; font-weight:600; background:var(--border); color:var(--text-3); padding:2px 8px; border-radius:999px; }

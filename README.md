@@ -362,6 +362,12 @@ Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado *
 - Persistido em `config.json` (chave `paletes`) junto com o resto desta aba, mesmo botão "✓ Salvar Configurações" — sem essa chave (instalação anterior a esta funcionalidade), o sistema usa um valor padrão de fábrica.
 - `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — direcionamento de painéis (`_paleteDoBerco`), rótulo de origem no drag-and-drop (`_bercoDoSlot`) e os subtítulos "Berços X–Y · Esq./Dir." de cada palete se ajustam automaticamente a qualquer configuração escolhida.
 
+### Layout 2x2 dos pallets e arrastar-pra-trocar (Setor de Qualidade → Avaliação)
+
+Os 4 pallets são exibidos em 2x2 (Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4 na 2ª), em vez de uma linha só — mesma ordem de exibição em Análise Focada e no Espelho Visual (histórico). Implementado via CSS `order` (`.sq-pallet-col[data-pallet-id]`, `setor-qualidade.css`) — o número/id de cada pallet (`stack1`...`stack4`) nunca muda de lugar no DOM, só a posição visual; o mapeamento berço→pallet ("Definir Paletes", Configurações) não é afetado.
+
+**Arrastar-pra-trocar**: só no Setor de Qualidade (tela ativa) — Análise Focada e Espelho são histórico só-leitura, sem onde persistir uma troca de posição. Segurar o rótulo "PALLET N" e soltar em cima de outro pallet troca a posição visual dos dois (nunca as placas/dados — isso já existe à parte, arrastando uma placa individual). Usa um tipo de `dataTransfer` próprio (`application/x-lw-pallet`), nunca `text/plain` (já usado pelo drag de placa individual) — evita qualquer ambiguidade entre os dois gestos.
+
 ### Marcação de placas (Setor de Qualidade → Avaliação)
 
 - **Adicionar**: clique normal numa placa sempre adiciona uma marca com a cor+forma selecionada na paleta — inclusive repetida (até **6 marcas por placa**; a 7ª tentativa mostra um aviso e não adiciona).

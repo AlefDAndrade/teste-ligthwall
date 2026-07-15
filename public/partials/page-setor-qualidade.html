@@ -350,9 +350,14 @@
             <!-- Pallets -->
             <div class="sq-stacks">
               <!-- Pallet 1 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack1"
+                ondragover="SQ.permitirDropPallet(event)"
+                ondrop="SQ.soltarPallet(event,'stack1')"
+                ondragenter="this.classList.add('sq-pallet-col-dragover')"
+                ondragleave="this.classList.remove('sq-pallet-col-dragover')">
                 <div class="sq-pallet-header">
-                  <span class="sq-pallet-label">PALLET 1</span>
+                  <span class="sq-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro pallet"
+                    ondragstart="SQ.iniciarArrastarPallet(event,'stack1')">PALLET 1</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-1"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack1')">⚡ Todas</button>
@@ -362,9 +367,14 @@
                 <div class="sq-slab-stack" id="stack1"></div>
               </div>
               <!-- Pallet 2 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack2"
+                ondragover="SQ.permitirDropPallet(event)"
+                ondrop="SQ.soltarPallet(event,'stack2')"
+                ondragenter="this.classList.add('sq-pallet-col-dragover')"
+                ondragleave="this.classList.remove('sq-pallet-col-dragover')">
                 <div class="sq-pallet-header">
-                  <span class="sq-pallet-label">PALLET 2</span>
+                  <span class="sq-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro pallet"
+                    ondragstart="SQ.iniciarArrastarPallet(event,'stack2')">PALLET 2</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-2"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack2')">⚡ Todas</button>
@@ -374,9 +384,14 @@
                 <div class="sq-slab-stack" id="stack2"></div>
               </div>
               <!-- Pallet 3 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack3"
+                ondragover="SQ.permitirDropPallet(event)"
+                ondrop="SQ.soltarPallet(event,'stack3')"
+                ondragenter="this.classList.add('sq-pallet-col-dragover')"
+                ondragleave="this.classList.remove('sq-pallet-col-dragover')">
                 <div class="sq-pallet-header">
-                  <span class="sq-pallet-label">PALLET 3</span>
+                  <span class="sq-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro pallet"
+                    ondragstart="SQ.iniciarArrastarPallet(event,'stack3')">PALLET 3</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-3"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack3')">⚡ Todas</button>
@@ -386,9 +401,14 @@
                 <div class="sq-slab-stack" id="stack3"></div>
               </div>
               <!-- Pallet 4 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack4"
+                ondragover="SQ.permitirDropPallet(event)"
+                ondrop="SQ.soltarPallet(event,'stack4')"
+                ondragenter="this.classList.add('sq-pallet-col-dragover')"
+                ondragleave="this.classList.remove('sq-pallet-col-dragover')">
                 <div class="sq-pallet-header">
-                  <span class="sq-pallet-label">PALLET 4</span>
+                  <span class="sq-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro pallet"
+                    ondragstart="SQ.iniciarArrastarPallet(event,'stack4')">PALLET 4</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-4"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack4')">⚡ Todas</button>
@@ -398,7 +418,7 @@
                 <div class="sq-slab-stack" id="stack4"></div>
               </div>
               <!-- Novo Pallet (vazio, só recebe placas arrastadas — ver SQ.adicionarPalletExtra) -->
-              <button type="button" class="sq-pallet-add" id="sq-btn-add-pallet" onclick="SQ.adicionarPalletExtra()" title="Criar um novo pallet vazio — arraste uma placa até ele para movê-la">
+              <button type="button" class="sq-pallet-add" id="sq-btn-add-pallet" style="order:9999" onclick="SQ.adicionarPalletExtra()" title="Criar um novo pallet vazio — arraste uma placa até ele para movê-la">
                 <i class="fas fa-plus"></i>
               </button>
             </div>

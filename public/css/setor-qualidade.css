@@ -488,7 +488,7 @@
 .sq-mirror-nav button:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
 .sq-mirror-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
-.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sq-mini-stacks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
 .sq-mini-pallet-header { font-size: .68rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 5px; border-bottom: 1px solid var(--border); padding-bottom: 3px; text-transform: uppercase; }
 .sq-mini-slab { height: 24px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 3px; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
@@ -684,7 +684,13 @@
 /* ── Stacks / Pallets ─────────────────────────────────────── */
 /* flex-wrap (não mais grid de 4 colunas fixas) — pallets extras (ver
    SQ.adicionarPalletExtra) quebram linha naturalmente em vez de
-   espremer os 4 originais. */
+   espremer os 4 originais. Largura de ~50% cada faz 2 caberem por linha
+   (layout 2x2 pedido pelo usuário) — a ORDEM visual (que pallet aparece
+   em qual posição) é controlada por `order` (ver .sq-pallet-col-* logo
+   abaixo e _trocarPosicaoVisualPallets, setor-qualidade.js), nunca pela
+   ordem no HTML/DOM — os ids (stack1/stack2/...) e tudo que depende
+   deles (_stackIds, mapeamento de berço→palete) continuam exatamente
+   como sempre, o usuário só está reorganizando a TELA. */
 .sq-stacks {
   display: flex;
   flex-wrap: wrap;
@@ -692,7 +698,23 @@
   gap: 6px;
   margin-bottom: 16px;
 }
-.sq-pallet-col { display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 140px; }
+.sq-pallet-col { display: flex; flex-direction: column; align-items: center; flex: 0 1 calc(50% - 3px); min-width: 140px; }
+/* Ordem visual padrão pedida: Palete 2 e Palete 1 na primeira linha,
+   Palete 3 e Palete 4 na segunda — mesmo que a ordem no HTML continue
+   1,2,3,4 (ver comentário acima). Pallets extras (criados em runtime,
+   ver _criarColunaPallet) recebem order mais alto inline, pra sempre
+   aparecerem DEPOIS destes 4, não importa como o usuário reorganize a
+   posição deles entre si. */
+.sq-pallet-col[data-pallet-id="stack1"] { order: 2; }
+.sq-pallet-col[data-pallet-id="stack2"] { order: 1; }
+.sq-pallet-col[data-pallet-id="stack3"] { order: 3; }
+.sq-pallet-col[data-pallet-id="stack4"] { order: 4; }
+/* Arrastar-pra-trocar (segurando o rótulo "PALLET N") — só troca a
+   POSIÇÃO na tela dos dois pallets envolvidos, nunca os dados/placas
+   (ver soltarPallet/_trocarPosicaoVisualPallets). */
+.sq-pallet-label[draggable="true"] { cursor: grab; }
+.sq-pallet-label[draggable="true"]:active { cursor: grabbing; }
+.sq-pallet-col.sq-pallet-col-dragover { outline: 2px dashed var(--blue); outline-offset: 2px; border-radius: var(--radius-lg); }
 /* Botão discreto de "novo pallet" — ao lado do último, mesma altura
    aproximada da grade de placas (margin-top alinha com o topo dela, não
    com o cabeçalho colorido do pallet). */

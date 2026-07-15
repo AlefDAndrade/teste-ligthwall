@@ -834,6 +834,12 @@
     col.className = 'sq-pallet-col';
     col.dataset.extra = '1';
     col.dataset.pallet = String(n);
+    // Sempre depois dos 4 pallets fixos (order 1-4, ver
+    // .sq-pallet-col[data-pallet-id] em setor-qualidade.css) — não importa
+    // como o usuário reorganize a posição VISUAL deles entre si (ver
+    // _trocarPosicaoVisualPallets), extras continuam nascendo por último.
+    // Extras não participam do arrastar-pra-trocar (só os 4 fixos).
+    col.style.order = String(100 + n);
     col.innerHTML = `
       <div class="sq-pallet-header">
         <span class="sq-pallet-label">PALLET ${n}</span>
@@ -1652,7 +1658,62 @@
     });
   }
 
-  // ── "Em Andamento" e "Fila" — retraídos por padrão, mesmo padrão de
+  // ── Arrastar pallet pra trocar de LUGAR (posição na tela) ──────
+  // Pedido do usuário: segurar o rótulo "PALLET N" e arrastar pra cima de
+  // outro pallet troca a posição visual dos dois — NUNCA os dados/placas
+  // (isso já existe, arrastando uma PLACA — ver _moverPainel/_trocarPlacas,
+  // acima). Implementado via CSS `order` (ver .sq-pallet-col[data-pallet-id]
+  // em setor-qualidade.css) — troca só a posição na tela, os ids
+  // (stack1/stack2/...) e tudo que depende deles (berço→pallet,
+  // _stackIds) continuam exatamente como sempre.
+  //
+  // Usa um tipo de dataTransfer PRÓPRIO ('application/x-lw-pallet'),
+  // nunca 'text/plain' (que já é usado pelo drag de PLACA individual,
+  // ver _ativarDropZone/_ativarDropZonePlaca) — evita qualquer
+  // ambiguidade entre "arrastei uma placa" e "arrastei um pallet
+  // inteiro", sem precisar checar prefixo/formato de string.
+  function iniciarArrastarPallet(e, sid) {
+    if (viewMode) { e.preventDefault(); return; }
+    e.dataTransfer.setData('application/x-lw-pallet', sid);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function permitirDropPallet(e) {
+    if (viewMode) return;
+    // Só aceita o drop se for um arrastar-de-pallet de verdade (não uma
+    // placa individual sendo arrastada por cima por engano) — `.types`
+    // já está disponível durante dragover, mesmo sem poder ler o valor
+    // ainda (isso só é garantido no 'drop').
+    if (Array.from(e.dataTransfer.types || []).includes('application/x-lw-pallet')) {
+      e.preventDefault(); // necessário pro navegador permitir soltar aqui
+    }
+  }
+
+  function soltarPallet(e, destSid) {
+    e.preventDefault();
+    e.currentTarget?.classList.remove('sq-pallet-col-dragover');
+    if (viewMode) return;
+    const origemSid = e.dataTransfer.getData('application/x-lw-pallet');
+    if (!origemSid || origemSid === destSid) return;
+    _trocarPosicaoVisualPallets(origemSid, destSid);
+  }
+
+  function _trocarPosicaoVisualPallets(sidA, sidB) {
+    const colA = document.querySelector(`.sq-pallet-col[data-pallet-id="${sidA}"]`);
+    const colB = document.querySelector(`.sq-pallet-col[data-pallet-id="${sidB}"]`);
+    if (!colA || !colB) return;
+    // Lê a ordem ATUAL de cada um (computedStyle, não .style — a ordem
+    // padrão vem do CSS por atributo, não de style inline, ver
+    // .sq-pallet-col[data-pallet-id="stackN"] em setor-qualidade.css) e
+    // troca, gravando o valor trocado como style inline (que sempre
+    // vence sobre a regra do atributo, sem precisar mexer no CSS de novo).
+    const ordemA = window.getComputedStyle(colA).order;
+    const ordemB = window.getComputedStyle(colB).order;
+    colA.style.order = ordemB;
+    colB.style.order = ordemA;
+  }
+
+
   // toggle/fechar-ao-clicar-fora usado por outros elementos flutuantes
   // desta tela. Só 1 aberto por vez (closeAllCollapsibles fecha o outro
   // antes de abrir o clicado).
@@ -3046,7 +3107,12 @@
     const n = getSlabCount(item.batteryId);
     const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
     let html = '<div class="sq-mini-stacks">';
-    for (let p = 1; p <= 4; p++) {
+    // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
+    // na 2ª (layout 2x2, mesma ordem da grade principal — ver
+    // .sq-pallet-col[data-pallet-id] em setor-qualidade.css). Só a ORDEM
+    // DE EXIBIÇÃO muda; os dados de cada pallet continuam vindo do mesmo
+    // número de sempre.
+    [2, 1, 3, 4].forEach(p => {
       html += `<div class="sq-mini-pallet"><div class="sq-mini-pallet-header">P${p}</div>`;
       for (let i = 1; i <= n; i++) {
         const panel = panels.find(pa => pa.pallet===p && pa.posicao===i);
@@ -3076,7 +3142,7 @@
         html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${rotulo}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
       }
       html += '</div>';
-    }
+    });
     html += '</div>';
     container.innerHTML = html;
   }
@@ -4239,6 +4305,7 @@
     exportDashboardHTML,
     selectColor, selectShape,
     selectAllPallet, clearPallet,
+    iniciarArrastarPallet, permitirDropPallet, soltarPallet,
     toggleCollapsible,
     togglePopover,
     abrirDefinirCombinacao,
