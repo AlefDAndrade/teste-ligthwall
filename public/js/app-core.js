@@ -3065,11 +3065,13 @@
       }).join('');
     }
 
-    /** Botão "✅ Autorizar este dispositivo" — atalho pra não precisar copiar/colar o próprio código. */
+    /** Botão "✅ Autorizar este dispositivo" — lê o nome do campo inline ao lado (sem nome = "sem nome"). */
     async function cfgAutorizarEsteDispositivo() {
-      const nome = window.prompt('Nome pra identificar este computador (opcional, ex: "PC Injetora 1"):') || '';
+      const inputNome = document.getElementById('cfg-dispositivos-meu-nome');
+      const nome = (inputNome?.value || '').trim();
       try {
         await LW.autorizarDispositivo(nome);
+        if (inputNome) inputNome.value = '';
         LW.mostrarAlerta('Dispositivo autorizado com sucesso.', { tipo: 'sucesso' });
         cfgRenderDispositivos();
       } catch (e) {

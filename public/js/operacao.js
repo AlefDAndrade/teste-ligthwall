@@ -467,7 +467,7 @@
     }
     if (motivo === 'dispositivo') {
       LW.mostrarAlerta(
-        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Dispositivos Autorizados — o código deste dispositivo é "${LW.getDeviceId()}".`,
+        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo`,
         { tipo: 'erro' }
       );
       return true;
@@ -534,13 +534,13 @@
     if (podeControlar) {
       aviso.style.display = 'none';
     } else if (motivo === 'perfil') {
-      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações → Usuários</strong>.</span>';
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar.</span>';
       aviso.style.display = 'flex';
     } else if (motivo === 'dispositivo') {
-      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Dispositivos Autorizados</strong>, informando o código <code>${LW.getDeviceId()}</code>.</span>`;
+      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador pra autorizá-lo</span>`;
       aviso.style.display = 'flex';
     } else {
-      aviso.innerHTML = '👀 <span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
+      aviso.innerHTML = '<span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar.</span>';
       aviso.style.display = 'flex';
     }
   }

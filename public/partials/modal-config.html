@@ -473,10 +473,11 @@
             <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
               <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
                 Este computador</div>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <input type="text" id="cfg-dispositivos-meu-nome" placeholder="Nome (opcional, ex: PC Injetora 1)"
+                  style="flex:1;min-width:160px" class="form-input">
                 <code id="cfg-dispositivos-meu-id" style="font-size:.75rem;color:var(--text-2);background:var(--bg-3);padding:6px 10px;border-radius:var(--radius);word-break:break-all"></code>
-                <button type="button" class="btn btn-sm" onclick="cfgAutorizarEsteDispositivo()"
-                  style="margin-left:auto">✅ Autorizar este dispositivo</button>
+                <button type="button" class="btn btn-sm" onclick="cfgAutorizarEsteDispositivo()">✅ Autorizar este dispositivo</button>
               </div>
             </div>
 
