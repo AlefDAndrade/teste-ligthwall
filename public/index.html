@@ -1011,6 +1011,21 @@
             <span style="color:var(--text-3);font-size:.85rem">até</span>
             <input class="form-input" type="date" id="rb-data-fim" style="width:150px" title="Data fim">
             <button class="btn btn-ghost btn-sm" id="btn-rb-filtrar">Filtrar</button>
+            <!-- Populados em JS a partir dos dados carregados (ver
+                 _popularSelect(), relatorio-bercos.js) — só mostram tipos
+                 de montagem/baterias que de fato aparecem nos registros. -->
+            <select class="form-input form-select" id="rb-tipo-montagem" style="width:170px" title="Tipo de Montagem">
+              <option value="">Todas as montagens</option>
+            </select>
+            <select class="form-input form-select" id="rb-tipo-bateria" style="width:150px" title="Bateria">
+              <option value="">Todas as baterias</option>
+            </select>
+            <select class="form-input form-select" id="rb-vazamento" style="width:160px" title="Vazamento">
+              <option value="">Vazamento: todos</option>
+              <option value="com">Com vazamento</option>
+              <option value="sem">Sem vazamento</option>
+            </select>
+            <input class="form-input" type="text" id="rb-id-operacao" placeholder="ID da Operação…" style="width:150px" title="Buscar pelo ID da operação">
             <button class="btn btn-ghost btn-sm" id="btn-rb-limpar">✕ Limpar</button>
             <button class="btn btn-ghost btn-sm" id="btn-rb-modo-visual" title="Mostra o desenho de cada berço, colorido conforme o tipo de montagem, em vez da tabela">🎨 Modo Visual</button>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
@@ -2633,6 +2648,20 @@
                 <option value="3° TURNO">3° Turno</option>
               </select>
             </div>
+            <!-- Período por Data/Hora de DESMOLDAGEM (voltou — ver
+                 conversa que motivou a mudança: "Data/Hora" da tabela
+                 abaixo e este filtro passaram a usar a mesma data, ver
+                 _dataReferenciaAvaliacao(), setor-qualidade.js — antes
+                 era a data de REGISTRO no sistema, que pode ser bem
+                 depois da bateria já ter saído da forma). -->
+            <div class="form-group">
+              <label class="form-label">Desmoldagem de</label>
+              <input class="form-input" type="date" id="sq-hist-start" onchange="SQ.renderHistory()" style="width:150px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Desmoldagem até</label>
+              <input class="form-input" type="date" id="sq-hist-end" onchange="SQ.renderHistory()" style="width:150px;">
+            </div>
           </div>
           <div>
             <div class="sq-empty" id="sq-hist-empty"><i class="fas fa-database"></i>Nenhum registro ainda.</div>
@@ -2640,7 +2669,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Data/Hora</th><th>Bateria</th>
+                    <th>Desmoldagem</th><th>Bateria</th>
                     <th style="background:var(--sq-tipo-sp);color:#fff;">P1</th>
                     <th style="background:var(--sq-tipo-2p);color:#fff;">P2</th>
                     <th style="background:var(--sq-tipo-3t);color:#fff;">P3</th>

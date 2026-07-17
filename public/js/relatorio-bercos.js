@@ -102,26 +102,85 @@
     return true;
   }
 
-  async function render() {
+  // ── Filtros novos (voltou — ver conversa que motivou a mudança) ─────────
+  // Tipo de Montagem e Tipo de Bateria: dropdowns populados com os valores
+  // que REALMENTE aparecem em _cache (não a lista cadastrada em
+  // Configurações inteira) — evita opção vazia sem nenhum registro por
+  // trás, e não depende de entender a forma exata de tipos_montagem.opcoes
+  // (a linha já vem com tipo_montagem como string simples, pronta pra usar).
+  function _valoresUnicos(campo) {
+    return [...new Set(_cache.map(l => l[campo]).filter(Boolean))].sort();
+  }
+
+  // Preenche um <select> com os valores atuais de _cache, preservando a
+  // opção selecionada (se ainda existir) — chamado toda vez que _cache é
+  // recarregado (ver carregar(), abaixo), não só na 1ª vez, porque um
+  // registro novo pode trazer um tipo de montagem/bateria que ainda não
+  // existia na lista.
+  function _popularSelect(id, campo, rotuloTodos) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const atual = sel.value;
+    const valores = _valoresUnicos(campo);
+    sel.innerHTML = `<option value="">${rotuloTodos}</option>` + valores.map(v => `<option value="${LW.escaparHtml(v)}">${LW.escaparHtml(v)}</option>`).join('');
+    if (valores.includes(atual)) sel.value = atual;
+  }
+
+  function _passaNosFiltros(linha, filtros) {
+    if (!_dentroDoPeriodo(linha, filtros.ini, filtros.fim)) return false;
+    if (filtros.montagem && linha.tipo_montagem !== filtros.montagem) return false;
+    if (filtros.bateria && String(linha.id_bateria) !== filtros.bateria) return false;
+    if (filtros.vazamento === 'com' && _contarVazamentos(linha) === 0) return false;
+    if (filtros.vazamento === 'sem' && _contarVazamentos(linha) > 0) return false;
+    if (filtros.idOperacao && !String(linha.id_operacao).toLowerCase().includes(filtros.idOperacao)) return false;
+    return true;
+  }
+
+  function _lerFiltros() {
+    return {
+      ini: document.getElementById('rb-data-inicio')?.value || '',
+      fim: document.getElementById('rb-data-fim')?.value || '',
+      montagem: document.getElementById('rb-tipo-montagem')?.value || '',
+      bateria: document.getElementById('rb-tipo-bateria')?.value || '',
+      vazamento: document.getElementById('rb-vazamento')?.value || '',
+      idOperacao: (document.getElementById('rb-id-operacao')?.value || '').trim().toLowerCase(),
+    };
+  }
+
+  // Busca os dados no servidor 1 vez (ou quando explicitamente pedido) e
+  // guarda em _cache — separado de aplicarFiltros() (abaixo) de propósito:
+  // o campo "ID da Operação" filtra ENQUANTO a pessoa digita (ver init()),
+  // e refazer a requisição a cada tecla seria lento e piscaria
+  // "Carregando..." toda hora à toa — os outros filtros (Montagem,
+  // Bateria, Vazamento, datas) são só um recorte do que já está em
+  // memória também.
+  async function carregar() {
+    const tbody = document.getElementById('relatorio-bercos-tbody');
+    if (tbody) {
+      const colspanTotal = 3 + MAX_BERCOS * 2;
+      tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td></tr>`;
+    }
+    _construirThead();
+    _cache = await LW.getRelatorioBercos();
+    _popularSelect('rb-tipo-montagem', 'tipo_montagem', 'Todas as montagens');
+    _popularSelect('rb-tipo-bateria', 'id_bateria', 'Todas as baterias');
+    aplicarFiltros();
+  }
+
+  // Filtra e redesenha a partir de _cache já carregado — sem tocar a rede.
+  function aplicarFiltros() {
     const tbody = document.getElementById('relatorio-bercos-tbody');
     if (!tbody) return;
 
     const colspanTotal = 3 + MAX_BERCOS * 2; // Data + Montagem + Vazamentos + (E/D de cada berço)
-    tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td></tr>`;
-
-    _construirThead();
-
-    _cache = await LW.getRelatorioBercos();
-
-    const ini = document.getElementById('rb-data-inicio')?.value || '';
-    const fim = document.getElementById('rb-data-fim')?.value || '';
-    const linhas = _cache.filter(l => _dentroDoPeriodo(l, ini, fim));
+    const filtros = _lerFiltros();
+    const linhas = _cache.filter(l => _passaNosFiltros(l, filtros));
 
     const contagem = document.getElementById('rb-count');
     if (contagem) contagem.textContent = linhas.length ? `${linhas.length} bateria${linhas.length > 1 ? 's' : ''}` : '';
 
     if (!linhas.length) {
-      tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro no período.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado com estes filtros.</td></tr>`;
       _renderVisual(linhas);
       return;
     }
@@ -381,21 +440,37 @@
   function init() {
     _construirThead();
 
-    document.getElementById('btn-rb-filtrar')?.addEventListener('click', render);
+    document.getElementById('btn-rb-filtrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btn-rb-limpar')?.addEventListener('click', () => {
       const ini = document.getElementById('rb-data-inicio');
       const fim = document.getElementById('rb-data-fim');
+      const montagem = document.getElementById('rb-tipo-montagem');
+      const bateria = document.getElementById('rb-tipo-bateria');
+      const vazamento = document.getElementById('rb-vazamento');
+      const idOperacao = document.getElementById('rb-id-operacao');
       if (ini) ini.value = '';
       if (fim) fim.value = '';
-      render();
+      if (montagem) montagem.value = '';
+      if (bateria) bateria.value = '';
+      if (vazamento) vazamento.value = '';
+      if (idOperacao) idOperacao.value = '';
+      aplicarFiltros();
     });
     document.getElementById('btn-rb-modo-visual')?.addEventListener('click', () => {
       _modoVisual = !_modoVisual;
       _aplicarModoVisual();
     });
+    // Montagem/Bateria/Vazamento: dropdown, aplica na hora ao escolher.
+    // ID da Operação: busca ENQUANTO digita (ver comentário em carregar(),
+    // acima) — mesmo padrão de "busca" usado em outras telas (ex:
+    // sq-hist-search, Setor de Qualidade → Registros).
+    document.getElementById('rb-tipo-montagem')?.addEventListener('change', aplicarFiltros);
+    document.getElementById('rb-tipo-bateria')?.addEventListener('change', aplicarFiltros);
+    document.getElementById('rb-vazamento')?.addEventListener('change', aplicarFiltros);
+    document.getElementById('rb-id-operacao')?.addEventListener('input', aplicarFiltros);
 
-    render().then(_ligarPopoverLinhas);
+    carregar().then(_ligarPopoverLinhas);
   }
 
-  window.LWBercos = { init, render };
+  window.LWBercos = { init, render: carregar };
 })();
