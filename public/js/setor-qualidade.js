@@ -3161,15 +3161,37 @@
   }
 
   /* ── Render histórico ─────────────────────────────────── */
+  // Data de referência de uma avaliação — voltou a ser a Data/Hora de
+  // DESMOLDAGEM (ver conversa que motivou a mudança), não mais a de
+  // registro no sistema (item.registeredAt, que é só "quando alguém
+  // preencheu o formulário", pode ser bem depois da bateria já ter
+  // saído da forma). Fallback pra registeredAt só quando dtDesmoldagem
+  // não foi preenchida (campo não obrigatório, ver
+  // page-setor-qualidade.html) — sem isso, registros antigos ou
+  // incompletos sumiriam de listas ordenadas/filtradas por data em vez
+  // de aparecer no fim/início. Usada por renderHistory() e
+  // renderDashboard() (+ export), abaixo — a MESMA data em toda tela do
+  // Setor de Qualidade que mostra/filtra "quando" uma avaliação
+  // aconteceu.
+  function _dataReferenciaAvaliacao(item) {
+    return item.dtDesmoldagem || item.registeredAt;
+  }
+
   function renderHistory() {
     const d       = getData();
     const search  = (document.getElementById('sq-hist-search').value || '').toLowerCase();
     const turno   = document.getElementById('sq-hist-turno').value;
-    const filtered = d.avaliacoes.filter(item =>
-      !item.excluidaDaFila &&
-      (item.batteryId||'').toLowerCase().includes(search) &&
-      (!turno || item.turno === turno)
-    ).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt));
+    const sd      = document.getElementById('sq-hist-start')?.value || '';
+    const ed      = document.getElementById('sq-hist-end')?.value || '';
+    const filtered = d.avaliacoes.filter(item => {
+      if (item.excluidaDaFila) return false;
+      if (!(item.batteryId||'').toLowerCase().includes(search)) return false;
+      if (turno && item.turno !== turno) return false;
+      const dt = new Date(_dataReferenciaAvaliacao(item));
+      if (sd && dt < new Date(sd)) return false;
+      if (ed && dt > new Date(ed + 'T23:59:59')) return false;
+      return true;
+    }).sort((a, b) => new Date(_dataReferenciaAvaliacao(b)) - new Date(_dataReferenciaAvaliacao(a)));
 
     document.getElementById('sq-hist-count').textContent = `${filtered.length} registros`;
     const wrap  = document.getElementById('sq-hist-table-wrap');
@@ -3185,7 +3207,7 @@
       const summary = Object.entries(counts).map(([k,n]) => `${k}: ${n}`).join(', ') || '—';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${new Date(item.registeredAt).toLocaleString('pt-BR')}</td>
+        <td>${new Date(_dataReferenciaAvaliacao(item)).toLocaleString('pt-BR')}</td>
         <td><strong>${item.batteryId||'N/I'}</strong></td>
         <td style="color:#66bb6a;font-weight:700;">${item.montagem?.pallet1||'—'}</td>
         <td style="color:#42a5f5;font-weight:700;">${item.montagem?.pallet2||'—'}</td>
@@ -3594,7 +3616,7 @@
     // interno de que a bateria saiu da fila sem ser avaliada.
     const fe = d.avaliacoes.filter(item => {
       if (item.excluidaDaFila) return false;
-      const dt = new Date(item.registeredAt);
+      const dt = new Date(_dataReferenciaAvaliacao(item));
       return (!sd || dt >= new Date(sd)) &&
              (!ed || dt <= new Date(ed + 'T23:59:59')) &&
              (!bf || item.batteryId === bf);
@@ -3800,7 +3822,7 @@
       const bf = document.getElementById('sq-dash-bat').value;
       const avaliacoes = getData().avaliacoes.filter(item => {
         if (item.excluidaDaFila) return false;
-        const dt = new Date(item.registeredAt);
+        const dt = new Date(_dataReferenciaAvaliacao(item));
         return (!sd || dt >= new Date(sd)) &&
                (!ed || dt <= new Date(ed + 'T23:59:59')) &&
                (!bf || item.batteryId === bf);

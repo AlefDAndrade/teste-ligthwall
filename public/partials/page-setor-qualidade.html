@@ -485,6 +485,20 @@
                 <option value="3° TURNO">3° Turno</option>
               </select>
             </div>
+            <!-- Período por Data/Hora de DESMOLDAGEM (voltou — ver
+                 conversa que motivou a mudança: "Data/Hora" da tabela
+                 abaixo e este filtro passaram a usar a mesma data, ver
+                 _dataReferenciaAvaliacao(), setor-qualidade.js — antes
+                 era a data de REGISTRO no sistema, que pode ser bem
+                 depois da bateria já ter saído da forma). -->
+            <div class="form-group">
+              <label class="form-label">Desmoldagem de</label>
+              <input class="form-input" type="date" id="sq-hist-start" onchange="SQ.renderHistory()" style="width:150px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Desmoldagem até</label>
+              <input class="form-input" type="date" id="sq-hist-end" onchange="SQ.renderHistory()" style="width:150px;">
+            </div>
           </div>
           <div>
             <div class="sq-empty" id="sq-hist-empty"><i class="fas fa-database"></i>Nenhum registro ainda.</div>
@@ -492,7 +506,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Data/Hora</th><th>Bateria</th>
+                    <th>Desmoldagem</th><th>Bateria</th>
                     <th style="background:var(--sq-tipo-sp);color:#fff;">P1</th>
                     <th style="background:var(--sq-tipo-2p);color:#fff;">P2</th>
                     <th style="background:var(--sq-tipo-3t);color:#fff;">P3</th>
