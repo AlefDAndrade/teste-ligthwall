@@ -787,7 +787,6 @@
    formulário, ver editarAvaliacaoDoEspelho). Ao lado do tipo (nunca
    sobreposto), dentro do wrapper .sq-mini-slab-canto-info abaixo. */
 .sq-mini-slab-motivo {
-<<<<<<< HEAD
   font-size: .55rem;
   font-weight: 700;
   font-family: var(--font-mono);
@@ -825,17 +824,6 @@
   display: inline-block;
 }
 
-=======
-  font-size: .55rem; font-weight: 700; font-family: var(--font-mono);
-  color: var(--sq-cor-vermelho); background: var(--sq-cor-amarelo);
-  border-radius: 3px; padding: 1px 4px; line-height: 1.4;
-}
-/* 2ª linha (ver _linhaDoPainel/renderMirror) — mesma cor usada no badge
-   equivalente da grade principal, ver .sq-slab-motivo-2linha,
-   setor-qualidade.css. */
-.sq-mini-slab-motivo.sq-mini-slab-motivo-2linha { color: #fff; background: var(--sq-cor-azul); }
-.sq-mini-mark { display: inline-block; }
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
 /* "Sem marcação" (a imensa maioria das placas) — círculo VAZADO (sem
    preenchimento), pra nunca ser confundido com uma marca real (círculo
    ou traço real são sempre preenchidos/sólidos — ver getMirrorMark,
@@ -1463,7 +1451,6 @@
    marcado mas sem motivo escolhido ainda, fica visualmente diferente do
    código já preenchido, pra chamar atenção sem travar nada. */
 .sq-slab-motivo {
-<<<<<<< HEAD
   display: none;
   align-items: center;
   justify-content: center;
@@ -1515,25 +1502,6 @@
 .sq-slab-motivo:hover {
   filter: brightness(1.15);
 }
-=======
-  flex: 0 0 auto;
-  display: none; align-items: center; justify-content: center;
-  min-width: 17px; height: 17px; padding: 0 4px;
-  font-size: .52rem; font-weight: 700; font-family: var(--font-mono);
-  color: var(--sq-cor-vermelho); background: var(--sq-cor-amarelo);
-  border-radius: 3px; cursor: pointer; line-height: 1;
-}
-/* 2ª linha (marca azul, aprovada mesmo exigindo motivo — ver
-   _corExigeMotivo/_renderBadgeMotivo) — cor PRÓPRIA, diferente do
-   amarelo/vermelho de reprovado: letra branca, fundo azul (mesmo azul
-   usado no resto do módulo pra "2ª linha", ver --sq-cor-azul). Vem
-   DEPOIS de .sq-slab-motivo (mesma especificidade — 1 classe cada —
-   então a ordem no arquivo decide; precisa vir depois pra sobrescrever
-   color/background do bloco base). */
-.sq-slab-motivo.sq-slab-motivo-2linha { color: #fff; background: var(--sq-cor-azul); }
-.sq-slab-motivo.sq-slab-motivo-pendente { background: var(--accent); }
-.sq-slab-motivo:hover { filter: brightness(1.15); }
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
 
 .sq-slab.invalid {
   border: 2px solid var(--red) !important;

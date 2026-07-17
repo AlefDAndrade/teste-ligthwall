@@ -364,6 +364,20 @@
     return cor === 'azul' || cor === 'vermelho';
   }
 
+  // Marca que de fato exige motivo de defeito: precisa ser azul/vermelho
+  // E precisa ser a marca de STATUS (role === 'indicador') — uma marca de
+  // IDENTIDADE (role === 'identidade') com cor azul/vermelho "por acaso"
+  // (ex: cor fixa de identificação automática, ou marca manual de
+  // identidade) NUNCA exige motivo, nunca mostra o "?"/código no painel,
+  // e nunca deve abrir o seletor (ver toggleMark/applyMarksToPallet, que
+  // já filtravam certo por role — este helper centraliza o MESMO
+  // critério pros demais pontos que só olhavam a cor, ver conversa que
+  // motivou: marca vermelha de identidade estava sendo tratada como se
+  // fosse indicador de qualidade).
+  function _marcaExigeMotivo(m) {
+    return !!m && m.role === 'indicador' && _corExigeMotivo(m.color);
+  }
+
   // CORRIGIDO (ver conversa que motivou): antes, bastava UM tipo simples
   // ganhar combinacaoAvaliacao própria em Configurações → Paletes →
   // "Combinações de Avaliação" pra TODOS os outros tipos (ainda sem
@@ -812,10 +826,7 @@
     // Espessura) devolveria pra grade os painéis que o operador já
     // marcou como "não enchido" em Bateria Atual.
     _removerPaineisNaoEnchidosDaGrade();
-<<<<<<< HEAD
     _preencherMarcasDeIdentificacao();
-=======
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
   }
 
   // Espelha extraStacks no DOM: cria a coluna do pallet (grade de placas
@@ -1250,7 +1261,7 @@
         mo.addEventListener('click', (e) => {
           e.stopPropagation();
           if (viewMode) return;
-          if ((slabState[id] || []).some(m => _corExigeMotivo(m.color))) _abrirSeletorMotivo(id);
+          if ((slabState[id] || []).some(_marcaExigeMotivo)) _abrirSeletorMotivo(id);
         });
 
         // Motivo + tipo agrupados num único canto (inferior direito),
@@ -1309,7 +1320,7 @@
     // placa — pedido do usuário pra ficar dentro, como no espelho).
     const badge = slab?.querySelector('.sq-slab-motivo');
     if (!badge) return;
-    const marcaQueExigeMotivo = (slabState[id] || []).find(m => _corExigeMotivo(m.color));
+    const marcaQueExigeMotivo = (slabState[id] || []).find(_marcaExigeMotivo);
     const exigeMotivo = !!marcaQueExigeMotivo;
     const codigo = slabMotivo[id];
     // 2ª linha (azul, marca aprovada mesmo exigindo motivo — ver
@@ -1439,7 +1450,7 @@
     // Motivo obrigatório só quando é a marca de STATUS (indicador) —
     // marca de identidade nunca exige, mesmo se a cor escolhida "por
     // acaso" for azul/vermelho (ver _corExigeMotivo).
-    if (role === 'indicador' && _corExigeMotivo(color)) _abrirSeletorMotivo(id);
+    if (_marcaExigeMotivo({ role, color })) _abrirSeletorMotivo(id);
   }
 
   // Apagar — toque longo (touch) ou clique direito (mouse) numa placa.
@@ -1534,7 +1545,7 @@
   // combinação círculo+traço onde as duas contam status — não é o caso
   // hoje, mas não custa checar), mantém o motivo como estava.
   function _atualizarMotivoAposDesmarcar(id) {
-    const aindaExigeMotivo = (slabState[id] || []).some(m => _corExigeMotivo(m.color));
+    const aindaExigeMotivo = (slabState[id] || []).some(_marcaExigeMotivo);
     if (!aindaExigeMotivo) { delete slabMotivo[id]; delete slabMotivoDescricao[id]; }
     _renderBadgeMotivo(id);
   }
@@ -1608,7 +1619,7 @@
       } else {
         document.getElementById(stackId).querySelectorAll('.sq-slab').forEach(slab => {
           const sid = slab.dataset.id;
-          if ((slabState[sid] || []).some(m => _corExigeMotivo(m.color))) {
+          if ((slabState[sid] || []).some(_marcaExigeMotivo)) {
             slabMotivo[sid] = codigo;
             if (codigo === 'OT') slabMotivoDescricao[sid] = descricao; else delete slabMotivoDescricao[sid];
             _renderBadgeMotivo(sid);
@@ -1757,7 +1768,7 @@
     // motivo escolhido em toda placa do pallet que ficou exigindo motivo
     // (sobrescreve qualquer motivo individual anterior — é uma ação em
     // lote deliberada). Só quando a marca em lote é de STATUS (indicador).
-    if (role === 'indicador' && _corExigeMotivo(corFinal)) _abrirSeletorMotivo(null, stackId);
+    if (_marcaExigeMotivo({ role, color: corFinal })) _abrirSeletorMotivo(null, stackId);
   }
   function selectAllPallet(sid) { applyMarksToPallet(sid, selectedColor, selectedShape); }
 

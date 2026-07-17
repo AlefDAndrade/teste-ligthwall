@@ -16,7 +16,6 @@
 // Diferente de test/setor-qualidade-*.test.js (que testam só o SCRIPT DE
 // FRONT-END num DOM headless) — aqui é o servidor de verdade respondendo
 // por HTTP, mesmo padrão de test/auth.test.js.
-<<<<<<< HEAD
 //
 // As rotas de controle de operação (salvar-operacao-andamento,
 // marcar-berco-andamento, registrar-operacao) exigem uma sessão de
@@ -68,18 +67,6 @@ before(async () => {
     body: JSON.stringify({ nomeUsuario: 'operador.teste.ne', senha: 'senhateste123' }),
   });
   cookieUsuario = extrairCookie(respLogin);
-=======
-
-const { test, before, after } = require('node:test');
-const assert = require('node:assert/strict');
-const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
-
-let servidor;
-const DEVICE_ID = 'dispositivo-teste-nao-enchido';
-
-before(async () => {
-  servidor = await iniciarServidorDeTeste();
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
 });
 
 after(async () => {
@@ -96,15 +83,9 @@ const OPERACAO_ANDAMENTO = {
 };
 
 async function iniciarOperacaoEmAndamento() {
-<<<<<<< HEAD
   const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ dados: OPERACAO_ANDAMENTO, clientId: 'teste' }),
   });
   assert.equal(resp.status, 200, 'deveria conseguir iniciar a operação em andamento');
@@ -113,15 +94,9 @@ async function iniciarOperacaoEmAndamento() {
 test('POST /marcar-berco-andamento com estado "nao_enchido" marca o lado, e GET /bercos-andamento reflete', async () => {
   await iniciarOperacaoEmAndamento();
 
-<<<<<<< HEAD
   const respMarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  const respMarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ berco: 'B3', lado: 'esquerda', estado: 'nao_enchido' }),
   });
   assert.equal(respMarcar.status, 200);
@@ -137,15 +112,9 @@ test('POST /marcar-berco-andamento com estado "nao_enchido" marca o lado, e GET 
 test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um "estado" diferente no 2º clique', async () => {
   await iniciarOperacaoEmAndamento();
 
-<<<<<<< HEAD
   await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ berco: 'B9', lado: 'direita', estado: 'nao_enchido' }),
   });
   let bercos = await fetch(`${servidor.baseUrl}/bercos-andamento`).then(r => r.json());
@@ -155,15 +124,9 @@ test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um 
   // tendo sido desligado entre os dois cliques) — mesmo assim, como o lado
   // já estava marcado, deve DESMARCAR, nunca trocar nao_enchido por baixou
   // num clique só (ver comentário em POST /marcar-berco-andamento).
-<<<<<<< HEAD
   const respDesmarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  const respDesmarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ berco: 'B9', lado: 'direita', estado: 'baixou' }),
   });
   const corpoDesmarcar = await respDesmarcar.json();
@@ -175,15 +138,9 @@ test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um 
 
 test('POST /marcar-berco-andamento rejeita um "estado" desconhecido', async () => {
   await iniciarOperacaoEmAndamento();
-<<<<<<< HEAD
   const resp = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  const resp = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ berco: 'B1', lado: 'esquerda', estado: 'xyz' }),
   });
   assert.equal(resp.status, 400);
@@ -194,28 +151,16 @@ test('POST /marcar-berco-andamento rejeita um "estado" desconhecido', async () =
 test('registrar a operação persiste "nao_enchido" em bercos_visuais, e GET /operacoes-nao-avaliadas devolve isso pro Setor de Qualidade', async () => {
   await iniciarOperacaoEmAndamento();
 
-<<<<<<< HEAD
   await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({ berco: 'B4', lado: 'esquerda', estado: 'nao_enchido' }),
   });
 
   const idOperacao = 'op-teste-nao-enchido-' + Date.now();
-<<<<<<< HEAD
   const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
-=======
-  const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
->>>>>>> ba26b4fed70f3360d97e5ca0434311d6d5404118
     body: JSON.stringify({
       id: idOperacao,
       data: '2026-07-01',
