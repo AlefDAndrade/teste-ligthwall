@@ -378,7 +378,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -3160,7 +3160,7 @@
 </div>
 
       </div>
-    </main>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -3255,6 +3255,9 @@
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🟢 Operação em Andamento</button>
+          <button type="button" id="cfg-nav-dispositivos" onclick="cfgMostrarSecao('dispositivos')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔐 Dispositivos Autorizados</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -3630,8 +3633,19 @@
                        GET /perfis (rotulosPorPerfil + perfisCadastraveis)
                        — inclui os 6 fixos E qualquer perfil customizado já
                        criado, sem precisar hardcodar <option> nenhuma aqui. -->
-                  <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()">
-                  </select>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()" style="flex:1">
+                    </select>
+                    <!-- Engrenagem (voltou — ver conversa que motivou a
+                         mudança): abre a mesma tela de "Acesso Total /
+                         Apenas Visualizar / Ocultar" item-a-item pro
+                         perfil selecionado no <select> ao lado — um dos 6
+                         fixos (lib/perfis.js) ou um customizado. Salvar
+                         exige senha de Administrador (ver
+                         perfis-customizados.js). -->
+                    <button type="button" onclick="abrirPermissoesDoPerfilSelecionado()" title="Ver/editar permissões deste perfil"
+                      style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-2);cursor:pointer;font-size:1rem">⚙️</button>
+                  </div>
                 </div>
               </div>
               <!-- Só aparece pra perfis que de fato têm a página "Registrar
@@ -3670,6 +3684,55 @@
             <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
           </div>
           <!-- ========== /SEÇÃO: Operação em Andamento ========== -->
+
+          <!-- ========== SEÇÃO: Dispositivos Autorizados ========== -->
+          <!-- Reintroduzida (ver conversa que motivou a mudança): volta a
+               existir uma trava por DISPOSITIVO, além da trava por PESSOA
+               (perfil/podeIniciarOperacao — aba Usuários). Pra controlar
+               operações (iniciar/encerrar/registrar), agora é preciso das
+               duas coisas ao mesmo tempo, sem exceção — nem o
+               Administrador Master escapa desta checagem. Ver
+               dispositivoAutorizado() em server.js. -->
+          <div id="cfg-secao-dispositivos" style="display:none">
+            <div class="card-title">🔐 Dispositivos Autorizados</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Além da permissão por pessoa (aba <strong>Usuários</strong>), controlar operações em
+              <strong>Registrar Operação</strong> agora também exige que ESTE COMPUTADOR esteja autorizado — vale
+              pra qualquer perfil, inclusive o Administrador. Autorize aqui cada computador que vai operar a
+              injetora.
+            </p>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+                Este computador</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <input type="text" id="cfg-dispositivos-meu-nome" placeholder="Nome (opcional, ex: PC Injetora 1)"
+                  style="flex:1;min-width:160px" class="form-input">
+                <code id="cfg-dispositivos-meu-id" style="font-size:.75rem;color:var(--text-2);background:var(--bg-3);padding:6px 10px;border-radius:var(--radius);word-break:break-all"></code>
+                <button type="button" class="btn btn-sm" onclick="cfgAutorizarEsteDispositivo()">✅ Autorizar este dispositivo</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+                Autorizar outro dispositivo pelo código</div>
+              <p style="font-size:.75rem;color:var(--text-3);margin-bottom:10px;line-height:1.5">
+                Peça pra pessoa no outro computador abrir <strong>Registrar Operação</strong> — o código dele
+                aparece no aviso de bloqueio. Cole aqui pra autorizar.
+              </p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <input type="text" id="cfg-dispositivos-novo-id" placeholder="Código do dispositivo"
+                  style="flex:1;min-width:200px" class="form-input">
+                <input type="text" id="cfg-dispositivos-novo-nome" placeholder="Nome (opcional, ex: PC Injetora 1)"
+                  style="flex:1;min-width:160px" class="form-input">
+                <button type="button" class="btn btn-sm" onclick="cfgAutorizarDispositivoPorId()">+ Autorizar</button>
+              </div>
+            </div>
+
+            <div class="card-title" style="font-size:.85rem">Autorizados agora</div>
+            <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+          <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
@@ -3767,9 +3830,17 @@
         (nem aparece pra esse perfil). Item não marcado fica <strong>Oculto</strong> por padrão.
       </p>
 
-      <div class="form-group">
+      <div class="form-group" id="cp-nome-grupo">
         <label class="form-label">Nome do Perfil</label>
         <input class="form-input" id="cp-nome" placeholder="Ex: Líder de Turno">
+      </div>
+      <!-- Editando um dos 6 perfis FIXOS (voltou — ver conversa que
+           motivou a mudança: engrenagem ao lado do campo "Perfil" em
+           Configurações → Usuários) — o nome não é editável (é sempre o
+           rótulo fixo do sistema), então o campo acima some e este aviso
+           aparece no lugar. -->
+      <div id="cp-aviso-fixo" style="display:none;font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+        Este é um dos 6 perfis fixos do sistema — o nome não muda, só as permissões abaixo.
       </div>
       <div id="cp-erro" style="display:none;color:var(--red);font-size:.82rem;margin:10px 0"></div>
 
@@ -3779,12 +3850,13 @@
     </div>
 
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-shrink:0">
+      <button class="btn btn-ghost" id="cp-btn-restaurar" onclick="restaurarPermissoesFixoAtual()" style="display:none;margin-right:auto">↺ Restaurar Padrão</button>
       <button class="btn btn-ghost" onclick="fecharCriarPerfil()">Cancelar</button>
       <button class="btn btn-primary" id="cp-btn-salvar" onclick="salvarPerfilCustomizado()">Salvar Perfil</button>
     </div>
   </div>
 </div>
-<!-- ============ /MODAL: Criar / Editar Tipo de Perfil ============ -->
+<!-- ============ /MODAL: Criar / Editar Tipo de Perfil ============ -->
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
