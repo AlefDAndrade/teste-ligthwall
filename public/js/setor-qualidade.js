@@ -51,6 +51,19 @@
   /* ── Estado global ────────────────────────────────────── */
   let selectedColor  = 'verde';
   let selectedShape  = 'circle';
+  // Botão "I" (indicador de qualidade) — ver toggleIndicadorAtivo, mais
+  // abaixo. ATIVADO por padrão: o gesto normal do operador (marcar a cor
+  // de status — verde/azul/vermelho) já funciona sem precisar tocar em
+  // nada além da paleta de sempre. Só precisa DESATIVAR o "I" pra um
+  // gesto raro: adicionar/corrigir manualmente uma marca de IDENTIDADE
+  // (tipo de montagem), sem que ela conte como avaliação de status.
+  // Cada marca nasce com essa informação gravada nela mesma (`role`:
+  // 'indicador' | 'identidade') — é isso que resolve a fragilidade
+  // antiga de reconstruir por eliminação/comparação quem era quem (ver
+  // conversa que motivou: classifyMarks/_combinarComMarcas mais abaixo
+  // agora têm um caminho novo, por papel, e um fallback antigo só pra
+  // avaliações registradas antes desta mudança).
+  let indicadorAtivo = true;
   let slabState      = {};
   // Motivo do defeito (código, ver MOTIVOS_DEFEITO) por placa — só
   // preenchido quando a placa vira 2ª linha (azul) ou reprovada
@@ -117,6 +130,7 @@
   let _editandoAvaliacaoId      = null;
   let _editandoRegistradoEm     = null;
   let _editandoLinkedOperacaoId = null;
+  let _editandoAvaliadorNome    = null;
 
   // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
   // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
@@ -125,19 +139,18 @@
   // usado internamente aqui (ex: "SP") — ver _codigoMontagemPorLabel.
   let _montagemOpcoesCache = [];
 
-  // ── Combinações cor+forma → tipo simples (Referência de Marcadores) —
-  // Antes: combinação cor+forma vivia numa lista À PARTE
-  // (marcadores_qualidade.opcoes), casada com o tipo só na hora de usar
-  // (por código `tipo`, ver _combinacoesEfetivas mais abaixo). Agora cada
-  // tipo SIMPLES carrega sua própria combinação junto (campo
+  // ── Combinações de marcação → tipo simples (Referência de Marcadores) —
+  // cada tipo SIMPLES carrega sua própria combinação (campo
   // `combinacaoAvaliacao` dentro do próprio item de
   // tipos_montagem.opcoes) — nasce vazia (null) quando o tipo é criado em
   // Configurações → Montagem (ver cfgAdicionarMontagemSimples, app-
-  // core.js), e só é preenchida aqui, pelo Setor de Qualidade (ver
-  // salvarCombinacaoTipo, abaixo). _configBrutoCache guarda o config.json
-  // inteiro (não só tipos_montagem) porque salvar de volta usa /salvar-
-  // config, que substitui o arquivo inteiro — precisa reenviar tudo, não
-  // só o pedaço que mudou.
+  // core.js), e é preenchida em Configurações → Paletes → "Combinações
+  // de Avaliação" (ver public/js/paletes-combinacoes.js). Este arquivo só
+  // LÊ o campo (_combinacoesEfetivas, mais abaixo) pra usar na avaliação
+  // de verdade. _configBrutoCache guarda o config.json inteiro (não só
+  // tipos_montagem) porque a migração de formato antigo
+  // (_migrarCombinacoesParaTiposMontagem, abaixo) pode precisar persistir
+  // de volta via /salvar-config, que substitui o arquivo inteiro.
   let _configBrutoCache = null;
 
   /**
@@ -173,6 +186,7 @@
       sel.innerHTML = html;
       _renderAvisoCombinacoesFaltando();
       _renderTabelaCombinacoes();
+      _renderBotoesTipoModal();
 
       // Migração é feita só uma vez por instalação: persiste de volta pro
       // config.json assim que detectada, pra outros dispositivos/abas já
@@ -198,6 +212,7 @@
       // mesmo texto que sempre apareceu (2P/SP/3T/1T), só que agora
       // gerado, não mais hardcoded no HTML.
       _renderTabelaCombinacoes();
+      _renderBotoesTipoModal();
     }
   }
 
@@ -216,6 +231,10 @@
     let mudou = false;
     antigas.forEach(c => {
       const alvo = tipos.find(o => o && o.modo === 'simples' && o.tipo === c.tipo);
+      // Grava no formato ANTIGO (forma/corModificadora) de propósito —
+      // _normalizarCombinacao (ver _combinacoesEfetivas, mais abaixo)
+      // converte pro formato novo (marcas[]/indicadorIndex) na leitura,
+      // então não precisa reescrever isso aqui também.
       if (alvo && !alvo.combinacaoAvaliacao) {
         alvo.combinacaoAvaliacao = { forma: c.forma, corModificadora: c.corModificadora };
         mudou = true;
@@ -242,41 +261,46 @@
   // renderDashboard(). Sem canvas, sem estado de instância pra
   // destruir entre re-renders.)
 
-  /* ── Combinações cor+forma → tipo simples ─────────────────
-     Antes 100% fixo no código (só reconhecia 2P/SP/3T/1T). Agora vem do
-     campo combinacaoAvaliacao de cada item em config.json
-     (tipos_montagem.opcoes) — qualquer tipo simples novo cadastrado em
-     Configurações → Montagem nasce com combinacaoAvaliacao vazio (null),
-     e só ganha uma combinação de marcação quando alguém definir uma
-     explicitamente (ver "📖 Referência" → "Tipos sem marcação
-     definida", mais abaixo). Até lá, ou enquanto config.json ainda não
-     carregou, usa exatamente o comportamento de sempre (COMBINACOES_PADRAO) — ninguém que já usa
+  /* ── Combinações de marcação → tipo simples ────────────────
+     Modelo novo (ver conversa que motivou — painel visual em
+     Configurações → Paletes → "Combinações de Avaliação",
+     paletes-combinacoes.js): cada combinação é uma LISTA de marcas
+     (`marcas`: [{shape, color}, ...], até MAX_MARCAS_POR_PLACA), com UM
+     índice (`indicadorIndex`) marcando qual delas é o INDICADOR DE
+     QUALIDADE — a posição onde a cor real (verde/azul/vermelho,
+     aprovado 1ª linha / 2ª linha / reprovado) entra na hora da
+     avaliação de verdade. Todo o RESTO das marcas (a "identidade") tem
+     cor FIXA e nasce sozinho, automático (ver _marcasDeIdentificacao) —
+     o indicador nunca é pré-preenchido, é sempre o operador quem marca.
+     O indicador pode ser QUALQUER shape (círculo OU traço — não é mais
+     sempre o círculo como antes desta mudança).
+     
+     Vem do campo combinacaoAvaliacao de cada item em config.json
+     (tipos_montagem.opcoes) — qualquer tipo simples novo cadastrado
+     nasce com combinacaoAvaliacao vazio (null), e só ganha uma
+     combinação quando alguém definir uma em Configurações → Paletes.
+     Até lá, ou enquanto config.json ainda não carregou, usa exatamente
+     o comportamento de sempre (COMBINACOES_PADRAO) — ninguém que já usa
      2P/SP/3T/1T é afetado por esta mudança. */
   const COMBINACOES_PADRAO = [
-    { tipo: '2p', forma: 'circle',      corModificadora: null },
-    { tipo: 'sp', forma: 'dash',        corModificadora: null },
-    { tipo: '3t', forma: 'circle+dash', corModificadora: 'amarelo' },
-    { tipo: '1t', forma: 'circle+dash', corModificadora: 'laranja' },
+    { tipo: '2p', marcas: [{ shape: 'circle', color: null }], indicadorIndex: 0 },
+    { tipo: 'sp', marcas: [{ shape: 'dash', color: null }], indicadorIndex: 0 },
+    { tipo: '3t', marcas: [{ shape: 'circle', color: null }, { shape: 'dash', color: 'amarelo' }], indicadorIndex: 0 },
+    { tipo: '1t', marcas: [{ shape: 'circle', color: null }, { shape: 'dash', color: 'laranja' }], indicadorIndex: 0 },
   ];
-  // Vermelho NUNCA entra aqui — é sempre o círculo de "reprovado" em
-  // QUALQUER combinação (regra fixa, não configurável). Verde/azul
-  // também são sempre o par "aprovado 1ª/2ª linha" em toda combinação —
-  // a única coisa que realmente varia de tipo pra tipo é a FORMA (círculo
-  // sozinho / traço sozinho / círculo+traço) e, quando combinada, a COR
-  // do traço modificador.
+  // Vermelho NUNCA entra numa marca de IDENTIDADE (regra fixa, não
+  // configurável) — é sempre a cor de "reprovado" no INDICADOR, em
+  // QUALQUER combinação. Verde/azul também são sempre o par "aprovado
+  // 1ª/2ª linha" no indicador — a única coisa que realmente varia de
+  // tipo pra tipo é QUANTAS marcas tem, QUAIS formas/cores são a
+  // identidade fixa, e qual posição é o indicador.
   //
-  // IMPORTANTE — a cor do TRAÇO dentro de uma combinação círculo+traço é
-  // livre: qualquer uma das 5 cores serve pra IDENTIFICAR um tipo (não
-  // só amarelo/laranja). Ex: um traço verde usado SOZINHO continua
-  // significando exatamente o que já significava (aprovado do tipo que
-  // ocupa "traço sozinho" hoje — SP); mas o MESMO traço verde, quando
-  // vem ACOMPANHADO de um círculo, pode identificar um tipo diferente
-  // (ex: 5T) — quem dita aprovado/reprovado nesse caso é a cor do
-  // CÍRCULO, não a do traço (ver classifyMarks(), logo abaixo: já trata
-  // "só traço" e "círculo+traço" em branches totalmente separados, sem
-  // nenhuma ambiguidade entre as duas leituras da mesma cor).
-  const CORES_MARCACAO = ['verde', 'vermelho', 'azul', 'amarelo', 'laranja'];
-  const CORES_RESERVADAS_APROVACAO = ['verde', 'azul', 'vermelho'];
+  // IMPORTANTE — a cor de uma marca de IDENTIDADE é livre: qualquer uma
+  // das 5 cores serve pra identificar um tipo (não só amarelo/laranja),
+  // incluindo verde/azul/vermelho — um traço verde usado como identidade
+  // FIXA (não como indicador) não significa "aprovado", só identifica o
+  // tipo; quem dita aprovado/reprovado é sempre a cor da marca no slot do
+  // INDICADOR (ver _combinarComMarcas(), logo abaixo).
 
   // ── Marcador "X" — Painel não preenchido ──────────────────────────
   // Forma extra, fora do sistema círculo/traço de COMBINACOES_PADRAO:
@@ -292,6 +316,14 @@
   // "não_preenchido", que nenhum filtro `resultado==='aprovado'/
   // 'reprovado'` do dashboard/relatórios reconhece).
   const COR_NAO_PREENCHIDO = 'cinza';
+
+  // Limite de marcas repetidas numa mesma placa — decidido na conversa
+  // que motivou essa mudança (ver toggleMark/toggleMarkErase, abaixo):
+  // antes só existia NO MÁXIMO 1 marca por combinação cor+forma (a lógica
+  // de apagar era clicar de novo na mesma combinação); agora a mesma
+  // combinação pode se repetir na placa, mas até este teto — evita uma
+  // placa pequena (30px de altura) virando uma bagunça visual ilegível.
+  const MAX_MARCAS_POR_PLACA = 6;
 
   // Motivo do defeito — obrigatório sempre que uma placa vira 2ª linha
   // (azul) ou reprovada (vermelho): ver _corExigeMotivo/_abrirSeletorMotivo,
@@ -332,53 +364,250 @@
     return cor === 'azul' || cor === 'vermelho';
   }
 
+  // CORRIGIDO (ver conversa que motivou): antes, bastava UM tipo simples
+  // ganhar combinacaoAvaliacao própria em Configurações → Paletes →
+  // "Combinações de Avaliação" pra TODOS os outros tipos (ainda sem
+  // combinação própria) perderem COMBINACOES_PADRAO de uma vez — o
+  // antigo `doConfig.length ? doConfig : COMBINACOES_PADRAO` era
+  // tudo-ou-nada pro array inteiro, não por tipo. Na prática: definir a
+  // combinação de 1 tipo (ex.: 3T) fazia os painéis de outro tipo nunca
+  // configurado (ex.: 2P, S/P) pararem de bater com qualquer combinação
+  // — caíam em "Outros" e o painel ficava vermelho (inválido) mesmo
+  // marcado do jeito de sempre.
+  //
+  // Agora a resolução é POR TIPO: cada tipo simples cadastrado usa a
+  // própria combinacaoAvaliacao se ela existir (a nova é a única válida
+  // pra ele — a antiga, seja o padrão fixo ou uma combinação anterior,
+  // deixa de valer só PRA ESSE TIPO); na ausência dela, cai no padrão
+  // fixo (COMBINACOES_PADRAO) só se esse tipo for um dos 4 códigos
+  // legados (2p/sp/3t/1t) — sem afetar os demais tipos.
   function _combinacoesEfetivas() {
-    const doConfig = (_montagemOpcoesCache || [])
-      .filter(o => o && o.modo === 'simples' && o.tipo && o.combinacaoAvaliacao)
-      .map(o => ({ tipo: o.tipo, forma: o.combinacaoAvaliacao.forma, corModificadora: o.combinacaoAvaliacao.corModificadora }));
-    return doConfig.length ? doConfig : COMBINACOES_PADRAO;
+    const simples = (_montagemOpcoesCache || []).filter(o => o && o.modo === 'simples' && o.tipo);
+    // Cache ainda vazio (config.json não carregou, ou nenhum tipo simples
+    // cadastrado) — mantém o comportamento de sempre pra não quebrar
+    // instalação nova/testes que não simulam config.json real.
+    if (!simples.length) return COMBINACOES_PADRAO;
+    return simples
+      .map(o => {
+        if (o.combinacaoAvaliacao) {
+          const normalizada = _normalizarCombinacao(o.tipo, o.combinacaoAvaliacao);
+          if (normalizada) return normalizada;
+        }
+        return COMBINACOES_PADRAO.find(c => c.tipo === o.tipo) || null;
+      })
+      .filter(Boolean);
+  }
+
+  // Aceita tanto o formato NOVO (marcas[]/indicadorIndex) quanto formatos
+  // antigos, salvos por versões anteriores desta funcionalidade — migração
+  // silenciosa só em memória (não regrava o config.json sozinha; a próxima
+  // vez que alguém salvar uma combinação de verdade em Configurações, já
+  // grava no formato novo). Formatos antigos:
+  //   - { forma: 'circle'|'dash', corModificadora } — marca única.
+  //   - { forma: 'circle+dash', corModificadora, posicaoIndicador } —
+  //     círculo sempre indicador, traço sempre identidade fixa.
+  function _normalizarCombinacao(tipo, c) {
+    if (!c) return null;
+    if (Array.isArray(c.marcas) && c.marcas.length && Number.isInteger(c.indicadorIndex)) {
+      return { tipo, marcas: c.marcas, indicadorIndex: c.indicadorIndex };
+    }
+    if (c.forma === 'circle' || c.forma === 'dash') {
+      return { tipo, marcas: [{ shape: c.forma, color: null }], indicadorIndex: 0 };
+    }
+    if (c.forma === 'circle+dash') {
+      // No formato antigo, o círculo sempre era o indicador — só a
+      // ORDEM visual variava (posicaoIndicador). 'antes' (ou ausente,
+      // formato bem antigo de antes dessa posição existir) = círculo
+      // primeiro; 'depois' = traço primeiro.
+      const antes = c.posicaoIndicador !== 'depois';
+      return antes
+        ? { tipo, marcas: [{ shape: 'circle', color: null }, { shape: 'dash', color: c.corModificadora }], indicadorIndex: 0 }
+        : { tipo, marcas: [{ shape: 'dash', color: c.corModificadora }, { shape: 'circle', color: null }], indicadorIndex: 1 };
+    }
+    return null;
+  }
+
+  // ── Marcas de IDENTIDADE automáticas (ver conversa que motivou:
+  // "as placas já vão chegar marcadas conforme os tipos de montagem" —
+  // adianta a identidade sozinha, mas a PALETA CONTINUA COMPLETA (cor +
+  // forma manuais, como sempre foi) — o operador pode marcar, apagar ou
+  // corrigir qualquer combinação normalmente, inclusive as marcas
+  // automáticas; isso aqui só poupa cliques no caso comum).
+  //
+  // Toda marca da combinação EXCETO a do índice `indicadorIndex` nasce
+  // automática, com a cor FIXA definida na configuração — o indicador
+  // nunca é pré-preenchido (não tem cor fixa: é onde a cor de STATUS do
+  // operador entra, ver conversa que motivou o painel visual em
+  // Configurações → Paletes → "Combinações de Avaliação"). Tipos de
+  // marca ÚNICA (indicadorIndex é a única marca que existe) não recebem
+  // nada automático — uma marca só já identifica tipo E status ao mesmo
+  // tempo, então não tem o que pré-preencher.
+  //
+  // `auto: true` marca a origem — usado só por
+  // _preencherMarcasDeIdentificacao (abaixo) pra saber quais marcas
+  // regenerar a cada reset da grade, nunca lido por classifyMarks/
+  // renderMarks (tratadas como qualquer outra marca pra tudo o mais,
+  // inclusive apagável pelo gesto de apagar — de propósito, ainda em
+  // fase de teste, ver conversa).
+  function _marcasDeIdentificacao(id) {
+    const tipo = (getExpectedType(id) || '').toLowerCase();
+    if (!tipo) return [];
+    const combo = _combinacoesEfetivas().find(c => c.tipo === tipo);
+    if (!combo) return [];
+    return combo.marcas
+      .filter((_, i) => i !== combo.indicadorIndex)
+      .map(m => ({ color: m.color, shape: m.shape, auto: true, role: 'identidade' }));
+  }
+
+  // Regenera as marcas automáticas de TODAS as placas em escopo agora —
+  // chamada ao final de _resetStacksParaPadrao (troca de Tipo de
+  // Montagem, Espessura, pré-preenchimento a partir de uma operação
+  // real...), mesmo ponto que já reconstrói a grade do zero. Preserva
+  // qualquer marca que o operador já tenha adicionado (filtra só as
+  // antigas `auto`, mantém o resto) — troca de tipo só atualiza a
+  // identificação, nunca mexe na validação que já foi dada. "X" (painel
+  // não preenchido) é sempre sozinho — nunca emenda identificação nele.
+  function _preencherMarcasDeIdentificacao() {
+    _stackIds().forEach(sid => {
+      const n = stackCounts[sid] || 0;
+      for (let i = 1; i <= n; i++) {
+        const id = `${sid}-${i}`;
+        const atuais = slabState[id] || [];
+        if (atuais.some(m => m.shape === 'x')) continue;
+        const semAuto = atuais.filter(m => !m.auto);
+        const novasAuto = _marcasDeIdentificacao(id);
+        const combinado = [...semAuto, ...novasAuto];
+        if (combinado.length) slabState[id] = combinado; else delete slabState[id];
+      }
+    });
   }
 
   /* ── Classificação de marcas ──────────────────────────── */
+  // CAMINHO NOVO (ver conversa que motivou o botão "I"/toggleIndicadorAtivo):
+  // cada marca já nasce sabendo o próprio papel (`role`: 'indicador' ou
+  // 'identidade') — não precisa mais RECONSTRUIR por eliminação quem é
+  // quem comparando o conjunto inteiro contra a combinação cadastrada
+  // (isso que deixava a classificação frágil: qualquer marca a mais/a
+  // menos, ou duas marcas parecidas, e nada batia — o painel ficava
+  // vermelho sem pista do motivo). Agora:
+  //   1. Separa as marcas por `role` (indicador vs identidade) — direto,
+  //      sem ambiguidade.
+  //   2. As marcas de indicador precisam ser todas da MESMA forma e
+  //      MESMA cor entre si (repetir a mesma marca de status é permitido;
+  //      cores diferentes = o operador clicou 2 status diferentes na
+  //      mesma placa, aí é "Múltiplas" mesmo).
+  //   3. Procura a combinação cadastrada cujo indicador tenha essa forma
+  //      E cujas marcas de identidade batam EXATAMENTE com as marcas que
+  //      o operador (ou o preenchimento automático) marcou como
+  //      'identidade' — nem faltando, nem sobrando.
+  // Devolve a combinação encontrada + a cor real do indicador, 'ambiguo'
+  // se houver mais de 1 cor de indicador na mesma placa, ou null se não
+  // bater com nenhuma combinação cadastrada.
+  function _combinarPorPapel(marks) {
+    const indicadores = marks.filter(m => m.role === 'indicador');
+    if (!indicadores.length) return null; // ainda não tem marca de status nessa placa
+    const formaIndicador = indicadores[0].shape;
+    const coresIndicador = new Set(indicadores.map(m => m.color));
+    if (coresIndicador.size > 1 || indicadores.some(m => m.shape !== formaIndicador)) return 'ambiguo';
+    const corIndicador = indicadores[0].color;
+
+    const marcasIdentidade = marks.filter(m => m.role === 'identidade');
+    const combinacoes = _combinacoesEfetivas();
+    for (const combo of combinacoes) {
+      const marcasCombo = combo.marcas || [];
+      const indicadorDef = marcasCombo[combo.indicadorIndex];
+      if (!indicadorDef || indicadorDef.shape !== formaIndicador) continue;
+      const identidadeDef = marcasCombo.filter((_, i) => i !== combo.indicadorIndex);
+      const restantes = [...marcasIdentidade];
+      let bateu = true;
+      for (const idm of identidadeDef) {
+        const idx = restantes.findIndex(m => m.shape === idm.shape && m.color === idm.color);
+        if (idx === -1) { bateu = false; break; }
+        restantes.splice(idx, 1);
+      }
+      // Não pode faltar NEM sobrar marca de identidade — diferente do
+      // modelo antigo, aqui não tem ambiguidade nenhuma pra tolerar
+      // (cada marca já diz o que é), então exigir o conjunto exato ajuda
+      // a pegar erro de configuração/operador na hora, em vez de deixar
+      // passar silenciosamente.
+      if (bateu && !restantes.length) return { combo, corIndicador };
+    }
+    return null;
+  }
+
+  // FALLBACK ANTIGO — só usado quando alguma marca da placa não tem
+  // `role` (avaliação registrada ANTES desta mudança, sem o campo
+  // salvo). Tenta casar as marcas de UMA placa com alguma combinação
+  // cadastrada: separa a marca do "slot indicador" (a que carrega a cor
+  // de status) das marcas de "identidade" (cor+forma fixas, que
+  // precisam bater exatamente) por eliminação — devolve a combinação
+  // encontrada + a cor real que caiu no slot indicador, ou null se as
+  // marcas não baterem com nenhuma combinação cadastrada.
+  function _combinarComMarcas(marks) {
+    const combinacoes = _combinacoesEfetivas();
+    for (const combo of combinacoes) {
+      const marcasCombo = combo.marcas || [];
+      const indicadorDef = marcasCombo[combo.indicadorIndex];
+      if (!indicadorDef) continue;
+      const identidade = marcasCombo.filter((_, i) => i !== combo.indicadorIndex);
+      const restantes = [...marks];
+      let bateu = true;
+      for (const idm of identidade) {
+        const idx = restantes.findIndex(m => m.shape === idm.shape && m.color === idm.color);
+        if (idx === -1) { bateu = false; break; }
+        restantes.splice(idx, 1);
+      }
+      // Precisa sobrar pelo menos 1 marca (a do operador, no slot
+      // indicador) e TUDO que sobrou precisa ser da MESMA FORMA do
+      // indicador (repetições da mesma marca são permitidas — decide
+      // pela 1ª, mesmo raciocínio de sempre: a 1ª marca de cada forma
+      // dita a classificação).
+      if (!bateu || !restantes.length) continue;
+      if (!restantes.every(m => m.shape === indicadorDef.shape)) continue;
+      return { combo, corIndicador: restantes[0].color };
+    }
+    return null;
+  }
+
+  // CORRIGIDO (ver conversa que motivou): combinações com mais de 1 marca
+  // têm um componente de IDENTIDADE que nasce sozinho, automático, assim
+  // que o Tipo de Montagem é escolhido — ANTES de o operador marcar o
+  // indicador de verdade em qualquer placa (ver _preencherMarcasDeIdentificacao/
+  // _marcasDeIdentificacao, mais acima). Sem este helper, uma placa com
+  // SÓ as marcas automáticas (nenhuma marca do operador ainda) não batia
+  // com NENHUMA combinação cadastrada (falta o indicador) e virava
+  // "Outros"/"Múltiplas" — TODAS as placas do tipo escolhido, ainda nem
+  // tocadas pelo operador, ficavam vermelhas (.invalid, ver
+  // validateAllSlabs) na hora, só de selecionar o Tipo de Montagem. Uma
+  // placa só conta como "com marcação de verdade" quando tem pelo menos
+  // 1 marca que NÃO é `auto` (ou seja, o operador já clicou nela).
+  function _somenteMarcasAuto(marks) {
+    return marks.length > 0 && marks.every(m => m.auto);
+  }
+
   function classifyMarks(marks) {
     // "X" é sempre sozinho (garantido em toggleMark/applyMarksToPallet —
     // adicionar um X limpa qualquer outra marca da placa, e vice-versa),
     // então basta checar a presença dele antes de qualquer outra coisa.
     if (marks.some(m => m.shape === 'x')) return 'Não preenchido';
-    const circles = marks.filter(m => m.shape === 'circle');
-    const dashes  = marks.filter(m => m.shape === 'dash');
-    const cor     = arr => arr.length ? arr[0].color : null;
-    const ok      = c => c === 'verde' || c === 'azul';
-    const combinacoes = _combinacoesEfetivas();
+    if (!marks.length || _somenteMarcasAuto(marks)) return 'Sem marcação';
+    const ok = c => c === 'verde' || c === 'azul';
 
-    if (circles.length && dashes.length) {
-      const cc = cor(circles), dc = cor(dashes);
-      const combo = combinacoes.find(c => c.forma === 'circle+dash' && c.corModificadora === dc);
-      if (combo) {
-        if (ok(cc)) return `${combo.tipo.toUpperCase()} aprovado`;
-        if (cc === 'vermelho') return `${combo.tipo.toUpperCase()} reprovado`;
-      }
-      return 'Múltiplas';
+    // Modelo novo (todas as marcas já têm `role`) vs fallback antigo
+    // (avaliação registrada antes do botão "I" existir — ver
+    // _combinarPorPapel/_combinarComMarcas, mais acima).
+    const temRole = marks.every(m => m.role);
+    const achado = temRole ? _combinarPorPapel(marks) : _combinarComMarcas(marks);
+    if (achado === 'ambiguo') return 'Múltiplas'; // >1 cor de indicador na mesma placa
+    if (achado) {
+      if (ok(achado.corIndicador)) return `${achado.combo.tipo.toUpperCase()} aprovado`;
+      if (achado.corIndicador === 'vermelho') return `${achado.combo.tipo.toUpperCase()} reprovado`;
+      return 'Outros'; // combinação bateu, mas a cor no slot indicador não é uma cor de status válida
     }
-    if (circles.length) {
-      const combo = combinacoes.find(c => c.forma === 'circle');
-      const c = cor(circles);
-      if (combo) {
-        if (ok(c)) return `${combo.tipo.toUpperCase()} aprovado`;
-        if (c === 'vermelho') return `${combo.tipo.toUpperCase()} reprovado`;
-      }
-      return 'Outros';
-    }
-    if (dashes.length) {
-      const combo = combinacoes.find(c => c.forma === 'dash');
-      const c = cor(dashes);
-      if (combo) {
-        if (ok(c)) return `${combo.tipo.toUpperCase()} aprovado`;
-        if (c === 'vermelho') return `${combo.tipo.toUpperCase()} reprovado`;
-      }
-      return 'Outros';
-    }
-    return 'Sem marcação';
+    // Nenhuma combinação bateu: mais de 1 marca sem bater = "Múltiplas"
+    // (mistura estranha); 1 marca só sem bater com nenhum tipo = "Outros"
+    // (forma reconhecida, mas sem combinação cadastrada pra ela).
+    return marks.length > 1 ? 'Múltiplas' : 'Outros';
   }
   function getClassifiedInfo(marks) {
     const s = classifyMarks(marks);
@@ -395,14 +624,14 @@
   }
 
   // Verde = 1ª linha, Azul = 2ª linha — mesma cor que decidiu "aprovado"
-  // em classifyMarks() (a do círculo quando existe — cobre 2P sozinho e
-  // 3T/1T combinado; a do próprio traço quando só há traço — cobre SP).
+  // em classifyMarks() (a do slot INDICADOR — ver _combinarComMarcas,
+  // acima — pode ser círculo ou traço, depende da combinação).
   function _linhaDoAprovado(marks) {
-    const circles = marks.filter(m => m.shape === 'circle');
-    const dashes  = marks.filter(m => m.shape === 'dash');
-    const corAprovacao = circles.length ? circles[0].color : (dashes.length ? dashes[0].color : null);
-    if (corAprovacao === 'verde') return '1ª';
-    if (corAprovacao === 'azul')  return '2ª';
+    const temRole = marks.every(m => m.role);
+    const achado = temRole ? _combinarPorPapel(marks) : _combinarComMarcas(marks);
+    const cor = (achado && achado !== 'ambiguo') ? achado.corIndicador : null;
+    if (cor === 'verde') return '1ª';
+    if (cor === 'azul')  return '2ª';
     return null;
   }
 
@@ -410,67 +639,40 @@
      Verifica os tipos simples cadastrados em Configurações → Montagem
      (tipos_montagem.opcoes) cujo campo combinacaoAvaliacao ainda está
      vazio (null — estado de quando o tipo foi criado) — qualquer tipo
-     simples cadastrado que ainda não tenha uma combinação aparece aqui,
-     com a opção de definir uma (só entre as que ainda não estão em uso
-     por outro tipo — nunca duas combinações pro mesmo par cor+forma). */
+     simples cadastrado que ainda não tenha uma combinação aparece aqui
+     como aviso. Definir a combinação de verdade agora é só em
+     Configurações → Paletes → "Combinações de Avaliação" (ver
+     paletes-combinacoes.js — painel visual com marcas + indicador "i");
+     o picker rápido que existia aqui (círculo sozinho/traço sozinho/
+     círculo+traço com 1 cor) foi removido porque não dava pra
+     representar o modelo novo (marcas em qualquer quantidade, indicador
+     em qualquer uma delas) sem duplicar toda a lógica do painel visual
+     numa 2ª tela — mais simples ter 1 lugar só pra definir. */
   function _tiposSimplesSemCombinacao() {
     const simples = (_montagemOpcoesCache || []).filter(o => o && o.modo === 'simples' && o.tipo && o.label);
     const combinacoes = _combinacoesEfetivas();
     return simples.filter(o => !combinacoes.some(c => c.tipo === o.tipo));
   }
 
-  // Combinações "de slot" ainda livres — círculo sozinho, traço sozinho,
-  // e círculo+traço com uma cor no TRAÇO que ainda não está em uso.
-  //
-  // "Círculo sozinho" e "traço sozinho" continuam sendo 1 slot ÚNICO
-  // cada (nunca variam por cor — a cor de uma marca sozinha sempre
-  // dita aprovado/reprovado, então só cabe 1 tipo em cada forma). Já
-  // dentro de círculo+traço, a cor do TRAÇO é livre — QUALQUER uma das
-  // 5 cores pode identificar um tipo novo, incluindo verde/azul/
-  // vermelho (antes só amarelo/laranja eram aceitas aqui, sem motivo
-  // real: um traço verde sozinho continua significando exatamente o
-  // que já significava — ver comentário de CORES_RESERVADAS_APROVACAO,
-  // acima — só quando vem ACOMPANHADO de um círculo é que passa a valer
-  // como identidade de tipo, com o círculo ditando o status).
-  function _combinacoesDisponiveis() {
-    const combinacoes = _combinacoesEfetivas();
-    const disponiveis = [];
-    if (!combinacoes.some(c => c.forma === 'circle'))
-      disponiveis.push({ forma: 'circle', corModificadora: null, label: 'Círculo sozinho' });
-    if (!combinacoes.some(c => c.forma === 'dash'))
-      disponiveis.push({ forma: 'dash', corModificadora: null, label: 'Traço sozinho' });
-    CORES_MARCACAO.forEach(corMod => {
-      if (!combinacoes.some(c => c.forma === 'circle+dash' && c.corModificadora === corMod)) {
-        disponiveis.push({ forma: 'circle+dash', corModificadora: corMod, label: `Círculo + traço ${corMod}` });
-      }
-    });
-    return disponiveis;
-  }
-
   // Monta a seção dinâmica dentro do popover "📖 Referência" — chamada
-  // sempre que config.json é recarregado (_carregarOpcoesMontagem) e
-  // depois de salvar uma combinação nova (ver salvarCombinacaoTipo).
+  // sempre que config.json é recarregado (_carregarOpcoesMontagem).
   function _renderAvisoCombinacoesFaltando() {
     const el = document.getElementById('sq-ref-sem-combinacao');
     if (!el) return;
     const semCombinacao = _tiposSimplesSemCombinacao();
     if (!semCombinacao.length) { el.innerHTML = ''; return; }
 
-    const disponiveis = _combinacoesDisponiveis();
     el.innerHTML = `
       <hr class="divider" style="margin:10px 0">
       <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:700;margin-bottom:8px">
         ⚠️ Tipos sem marcação definida
       </div>
+      <p style="font-size:.76rem;color:var(--text-3);margin-bottom:8px">
+        Defina em Configurações → Paletes → "Combinações de Avaliação":
+      </p>
       ${semCombinacao.map(o => `
         <div class="sq-ref-tipo-pendente" id="sq-ref-pendente-${o.tipo}">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:.82rem"><strong>${_escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
-            ${disponiveis.length
-              ? `<button type="button" class="btn btn-ghost btn-sm" onclick="SQ.abrirDefinirCombinacao('${o.tipo}')">Definir combinação</button>`
-              : `<span style="font-size:.72rem;color:var(--text-3)">Nenhuma combinação disponível</span>`}
-          </div>
-          <div id="sq-ref-picker-${o.tipo}" style="display:none;margin-top:8px"></div>
+          <span style="font-size:.82rem"><strong>${_escaparHtml(o.label)}</strong> (${String(o.tipo).toUpperCase()})</span>
         </div>`).join('')}
     `;
   }
@@ -504,36 +706,28 @@
     const linhas = [];
     _combinacoesEfetivas().forEach(combo => {
       const label = _escaparHtml(_labelDoTipoMontagem(combo.tipo));
+      const marcasCombo = combo.marcas || [];
+      const indicadorDef = marcasCombo[combo.indicadorIndex];
+      if (!indicadorDef) return;
 
-      if (combo.forma === 'circle') {
-        linhas.push([
-          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul')} Círculo verde ou azul`,
-          `Painel <strong>${label}</strong> aprovado`,
-        ]);
-        linhas.push([
-          `${marca('circle', 'vermelho')} Círculo vermelho`,
-          `Painel <strong>${label}</strong> reprovado`,
-        ]);
-      } else if (combo.forma === 'dash') {
-        linhas.push([
-          `${marca('dash', 'verde', 'margin-right:2px')}${marca('dash', 'azul')} Traço verde ou azul`,
-          `Painel <strong>${label}</strong> aprovado`,
-        ]);
-        linhas.push([
-          `${marca('dash', 'vermelho')} Traço vermelho`,
-          `Painel <strong>${label}</strong> reprovado`,
-        ]);
-      } else if (combo.forma === 'circle+dash') {
-        const cm = combo.corModificadora;
-        linhas.push([
-          `${marca('circle', 'verde', 'margin-right:2px')}${marca('circle', 'azul', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo (verde/azul) + traço ${cm}`,
-          `Painel <strong>${label}</strong> aprovado`,
-        ]);
-        linhas.push([
-          `${marca('circle', 'vermelho', 'margin-right:4px')}+${marca('dash', cm, 'margin-left:4px')} Círculo vermelho + traço ${cm}`,
-          `Painel <strong>${label}</strong> reprovado`,
-        ]);
-      }
+      // Monta a combinação visual na ORDEM de combo.marcas (a mesma
+      // ordem escolhida no painel de Configurações → Paletes →
+      // "Combinações de Avaliação") — cada marca de identidade usa sua
+      // cor fixa; a marca do indicador mostra as 2 opções possíveis
+      // (verde/azul juntas pra "aprovado", vermelho sozinho pra
+      // "reprovado").
+      const descricaoFormas = marcasCombo.map((m, i) =>
+        i === combo.indicadorIndex ? `${m.shape === 'circle' ? 'círculo' : 'traço'} (indicador)` : `${m.shape === 'circle' ? 'círculo' : 'traço'} ${m.color}`
+      ).join(' + ');
+
+      linhas.push([
+        `${marca(indicadorDef.shape, 'verde', 'margin-right:1px')}${marca(indicadorDef.shape, 'azul', 'margin-right:4px')}${marcasCombo.length > 1 ? '+' + marcasCombo.filter((_, i) => i !== combo.indicadorIndex).map(m => marca(m.shape, m.color, 'margin:0 2px')).join('+') : ''} ${descricaoFormas}`,
+        `Painel <strong>${label}</strong> aprovado`,
+      ]);
+      linhas.push([
+        `${marca(indicadorDef.shape, 'vermelho', 'margin-right:4px')}${marcasCombo.length > 1 ? '+' + marcasCombo.filter((_, i) => i !== combo.indicadorIndex).map(m => marca(m.shape, m.color, 'margin:0 2px')).join('+') : ''} ${descricaoFormas}`,
+        `Painel <strong>${label}</strong> reprovado`,
+      ]);
     });
 
     if (!linhas.length) {
@@ -569,93 +763,6 @@
           <div style="display:flex;gap:8px"><strong style="min-width:26px;color:var(--accent)">${m.codigo}</strong><span>${_escaparHtml(m.nome)}${m.codigo === 'OT' ? ' — descrição livre, veja no hover do código' : ''}</span></div>
         `).join('')}
       </div>`;
-  }
-
-  // Abre o seletor de combinação disponível pra um tipo específico —
-  // aparece embutido, logo abaixo do tipo, dentro do próprio popover.
-  function abrirDefinirCombinacao(tipo) {
-    const picker = document.getElementById(`sq-ref-picker-${tipo}`);
-    if (!picker) return;
-    const disponiveis = _combinacoesDisponiveis();
-    if (!disponiveis.length) return; // botão nem deveria existir nesse caso
-    const opcoesHtml = disponiveis.map((c, i) =>
-      `<option value="${i}">${c.label}</option>`
-    ).join('');
-    picker.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center">
-        <select class="form-input form-select" id="sq-ref-select-${tipo}" style="font-size:.78rem;flex:1">${opcoesHtml}</select>
-        <button type="button" class="btn btn-primary btn-sm" onclick="SQ.salvarCombinacaoTipo('${tipo}')">Salvar</button>
-      </div>`;
-    picker.style.display = 'block';
-    picker.dataset.disponiveis = JSON.stringify(disponiveis);
-  }
-
-  // Grava a combinação escolhida DENTRO do próprio tipo, em
-  // cfg.tipos_montagem.opcoes[i].combinacaoAvaliacao — via /salvar-config
-  // (mesma rota que Configurações usa pra qualquer alteração; reenvia o
-  // config.json INTEIRO, não só o pedaço que mudou, porque é assim que
-  // /salvar-config funciona: substitui o arquivo por completo). Revalida
-  // contra o config.json mais recente antes de gravar — se ALGUÉM MAIS
-  // já tiver usado essa combinação, ou definido uma pro mesmo tipo,
-  // enquanto o picker estava aberto aqui, recusa e avisa, em vez de
-  // gravar 2 tipos na mesma combinação.
-  async function salvarCombinacaoTipo(tipo) {
-    const picker = document.getElementById(`sq-ref-picker-${tipo}`);
-    const select = document.getElementById(`sq-ref-select-${tipo}`);
-    if (!picker || !select) return;
-    const disponiveis = JSON.parse(picker.dataset.disponiveis || '[]');
-    const escolhida = disponiveis[parseInt(select.value, 10)];
-    if (!escolhida) return;
-
-    try {
-      const res = await fetch('/db/config.json');
-      if (!res.ok) throw new Error('Falha ao buscar config.json atualizado.');
-      const cfg = await res.json();
-      _migrarCombinacoesParaTiposMontagem(cfg); // idempotente — cobre o caso de outro dispositivo ainda não migrado
-      const tipos = Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : [];
-      const alvo = tipos.find(o => o && o.modo === 'simples' && o.tipo === tipo);
-      if (!alvo) {
-        showAlert('Aviso', 'Este tipo não existe mais em Configurações → Montagem. Recarregando a referência...');
-        _carregarOpcoesMontagem();
-        return;
-      }
-      // Revalidação: já existe combinação pra este tipo, ou a combinação
-      // escolhida já foi usada por outro tipo enquanto o picker estava
-      // aberto? Nos 2 casos, recusa — só pode existir 1 combinação por
-      // tipo, e 1 tipo por combinação.
-      if (alvo.combinacaoAvaliacao) {
-        showAlert('Aviso', 'Este tipo já ganhou uma combinação (talvez em outra aba/dispositivo). Recarregando a referência...');
-        _carregarOpcoesMontagem();
-        return;
-      }
-      const emUsoPorOutro = tipos.some(o => o !== alvo && o?.combinacaoAvaliacao
-        && o.combinacaoAvaliacao.forma === escolhida.forma
-        && o.combinacaoAvaliacao.corModificadora === escolhida.corModificadora);
-      if (emUsoPorOutro) {
-        showAlert('Aviso', 'Essa combinação acabou de ser usada por outro tipo (talvez em outra aba/dispositivo). Escolha outra.');
-        abrirDefinirCombinacao(tipo); // reabre com a lista de disponíveis já atualizada
-        _carregarOpcoesMontagem();
-        return;
-      }
-
-      alvo.combinacaoAvaliacao = { forma: escolhida.forma, corModificadora: escolhida.corModificadora };
-
-      const salvar = await fetch('/salvar-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
-      });
-      if (!salvar.ok) throw new Error('O servidor recusou salvar.');
-
-      _configBrutoCache = cfg;
-      _montagemOpcoesCache = tipos;
-      _renderAvisoCombinacoesFaltando();
-      _renderTabelaCombinacoes();
-      showAlert('Salvo', `Combinação definida para ${tipo.toUpperCase()} — já pode marcar painéis desse tipo.`);
-    } catch (err) {
-      console.error('Falha ao salvar combinação de marcação:', err);
-      showAlert('Erro', 'Não consegui salvar a combinação agora (' + err.message + '). Tente de novo.');
-    }
   }
 
   /* ── Pallets extras — infraestrutura ──────────────────── */
@@ -705,6 +812,7 @@
     // Espessura) devolveria pra grade os painéis que o operador já
     // marcou como "não enchido" em Bateria Atual.
     _removerPaineisNaoEnchidosDaGrade();
+    _preencherMarcasDeIdentificacao();
   }
 
   // Espelha extraStacks no DOM: cria a coluna do pallet (grade de placas
@@ -740,6 +848,23 @@
     _atualizarBotaoAdicionarPallet();
   }
 
+  // Aplica a posição visual configurada em Configurações → Paletes →
+  // "Ordem dos Paletes" (ver LW.PALETES_ORDEM, data.js, e
+  // public/js/paletes-ordem.js) aos 4 pallets FIXOS (stack1..stack4) —
+  // as colunas já nascem com a ordem default do CSS
+  // (.sq-pallet-col[data-pallet-id], setor-qualidade.css); isso só
+  // sobrescreve via style inline quando o Administrador salvou uma
+  // ordem diferente do default. Pallets extras (ver _criarColunaPallet,
+  // abaixo) não entram aqui — eles sempre nascem depois dos 4 fixos,
+  // não fazem parte desta configuração.
+  function _aplicarOrdemPaletes() {
+    const ordem = (typeof LW !== 'undefined' && LW.PALETES_ORDEM) ? LW.PALETES_ORDEM : { stack1: 2, stack2: 1, stack3: 3, stack4: 4 };
+    Object.entries(ordem).forEach(([sid, posicao]) => {
+      const col = document.querySelector(`.sq-pallet-col[data-pallet-id="${sid}"]`);
+      if (col) col.style.order = String(posicao);
+    });
+  }
+
   // Mesma estrutura das 4 colunas de pallet originais (ver
   // page-setor-qualidade.html) — só que montada por código, já que o
   // número de pallets agora é variável. draggable/ondrop ligam essa
@@ -750,20 +875,17 @@
     col.className = 'sq-pallet-col';
     col.dataset.extra = '1';
     col.dataset.pallet = String(n);
+    // Sempre depois dos 4 pallets fixos (order 1-4, ver
+    // .sq-pallet-col[data-pallet-id] em setor-qualidade.css) — extras
+    // continuam nascendo por último.
+    col.style.order = String(100 + n);
     col.innerHTML = `
       <div class="sq-pallet-header">
         <span class="sq-pallet-label">PALLET ${n}</span>
         <div class="sq-pallet-actions">
           <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('${sid}')">⚡ Todas</button>
-          <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'${sid}')">🎨</button>
+          <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('${sid}')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
           <button class="sq-btn-remove-pallet" onclick="SQ.removerPalletExtra(${n})" title="Excluir este pallet">✕</button>
-          <div class="sq-color-dropdown" id="sq-dd-${sid}">
-            <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('${sid}','verde')"></button>
-            <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('${sid}','vermelho')"></button>
-            <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('${sid}','azul')"></button>
-            <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('${sid}','amarelo')"></button>
-            <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('${sid}','laranja')"></button>
-          </div>
         </div>
       </div>
       <div class="sq-slab-stack sq-slab-stack-extra" id="${sid}"></div>`;
@@ -1019,20 +1141,29 @@
 
   /* ── Validação de consistência ────────────────────────── */
   // Todas as placas do formulário atual (todo pallet ativo — base ou
-  // extra, ver _stackIds/stackCounts) que ainda NÃO têm nenhuma marca em
-  // slabState — nem uma marca real (círculo/traço) nem o X de "painel
-  // não preenchido". Usada só na hora de registrar (ver
-  // registerEvaluation) pra impedir de fato o registro enquanto sobrar
-  // alguma — substitui o antigo checkbox de confirmação manual ("confirmo
-  // que avaliei todos os painéis"), que dependia da pessoa lembrar de
-  // marcar e não impedia nada por si só.
+  // extra, ver _stackIds/stackCounts) que ainda NÃO têm nenhuma marca DE
+  // VERDADE (do operador) em slabState — nem uma marca real (círculo/
+  // traço) nem o X de "painel não preenchido". Usada só na hora de
+  // registrar (ver registerEvaluation) pra impedir de fato o registro
+  // enquanto sobrar alguma — substitui o antigo checkbox de confirmação
+  // manual ("confirmo que avaliei todos os painéis"), que dependia da
+  // pessoa lembrar de marcar e não impedia nada por si só.
+  //
+  // CORRIGIDO (ver _somenteMarcasAuto/classifyMarks, mais acima): uma
+  // placa com SÓ as marcas de identidade automáticas (auto:true — nasceram
+  // sozinhas ao escolher o Tipo de Montagem, ver
+  // _preencherMarcasDeIdentificacao) e nenhuma marca do operador ainda NÃO
+  // conta como avaliada — `slabState[id].length` sozinho não distinguia
+  // isso (auto conta como marca pra esse length), deixando passar pro
+  // registro placas que o operador nunca chegou a olhar de verdade.
   function _paineisNaoMarcados() {
     const faltando = [];
     _stackIds().forEach(sid => {
       const n = stackCounts[sid] || 0;
       for (let i = 1; i <= n; i++) {
         const id = `${sid}-${i}`;
-        if (!slabState[id] || !slabState[id].length) faltando.push(id);
+        const marcas = slabState[id];
+        if (!marcas || !marcas.length || _somenteMarcasAuto(marcas)) faltando.push(id);
       }
     });
     return faltando;
@@ -1096,15 +1227,16 @@
           const classMap = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
           if (classMap[exp]) tp.classList.add(classMap[exp]);
         }
-        slab.appendChild(tp);
 
         const mc = document.createElement('div');
         mc.className = 'sq-slab-marks';
         slab.appendChild(mc);
 
-        // Badge do código de motivo (ex: "BC") — ao LADO do painel (não
-        // sobreposto em cima dele), mesma ideia visual do Espelho Visual
-        // (ver .sq-mini-slab-motivo/renderMirror) — só aparece quando a
+        // Badge do código de motivo (ex: "BC") — DENTRO do desenho da
+        // placa, AO LADO da identificação de tipo (nunca sobreposto),
+        // mesma ideia visual do Espelho Visual (ver
+        // .sq-mini-slab-motivo/renderMirror, que também mostra o código
+        // logo antes do tipo, na mesma linha) — só aparece quando a
         // placa tem um motivo salvo/pendente (ver _renderBadgeMotivo).
         // Clique reabre o seletor pra trocar, SEM alternar a marca
         // (stopPropagation — o clique na placa em si continua
@@ -1118,8 +1250,23 @@
           if ((slabState[id] || []).some(m => _corExigeMotivo(m.color))) _abrirSeletorMotivo(id);
         });
 
+        // Motivo + tipo agrupados num único canto (inferior direito),
+        // lado a lado — mesma ordem visual do Espelho (motivo antes do
+        // tipo). Nem "mo" nem "tp" têm posição própria (ver
+        // .sq-slab-canto-info, setor-qualidade.css); é o WRAPPER quem
+        // fica absolute no canto — assim o tipo nunca fica embaixo do
+        // motivo, os dois simplesmente ocupam espaços diferentes lado a
+        // lado, com o motivo empurrando o tipo pra esquerda quando
+        // aparece (em vez de cobrir/sobrepor).
+        const canto = document.createElement('span');
+        canto.className = 'sq-slab-canto-info';
+        canto.appendChild(mo);
+        canto.appendChild(tp);
+        slab.appendChild(canto);
+
         if (slabState[id]) renderMarks(slab, slabState[id]);
         slab.addEventListener('click', () => toggleMark(slab));
+        _ligarGestoApagar(slab);
 
         // Segurar-e-arrastar pra mover a placa de pallet (ver
         // _ativarDropZone/_moverPainel) — desligado em modo visualização.
@@ -1133,15 +1280,7 @@
         slab.addEventListener('dragend', () => slab.classList.remove('sq-slab-dragging'));
         _ativarDropZonePlaca(slab, id); // solto EM CIMA desta placa — troca de posição (mesmo pallet) ou move (pallet diferente), ver _tratarSolturaPlaca
 
-        // Linha = placa + badge de motivo lado a lado (ver comentário no
-        // "mo", acima) — o wrapper existe só pra isso; toda busca por
-        // ".sq-slab" (validação, seleção em lote, drag) continua achando
-        // o slab normalmente, mesmo com esse nível extra por cima.
-        const linha = document.createElement('div');
-        linha.className = 'sq-slab-linha';
-        linha.appendChild(slab);
-        linha.appendChild(mo);
-        stack.appendChild(linha);
+        stack.appendChild(slab);
         // SÓ AGORA (depois de slab/mo estarem de fato no documento) —
         // _renderBadgeMotivo procura o slab por querySelector no
         // document inteiro; chamado antes disso, com o slab ainda
@@ -1161,9 +1300,11 @@
   // (renderStacks, acima).
   function _renderBadgeMotivo(id) {
     const slab = document.querySelector(`.sq-slab[data-id="${id}"]`);
-    // O badge é IRMÃO do slab (dentro de .sq-slab-linha, ver
-    // renderStacks), não filho dele — fica ao lado da placa.
-    const badge = slab?.parentElement?.querySelector('.sq-slab-motivo');
+    // O badge é FILHO do slab (dentro de .sq-slab, ver renderStacks) —
+    // fica DENTRO do desenho da placa, mesma ideia visual do Espelho
+    // Visual (antes era irmão, num wrapper .sq-slab-linha, ao lado da
+    // placa — pedido do usuário pra ficar dentro, como no espelho).
+    const badge = slab?.querySelector('.sq-slab-motivo');
     if (!badge) return;
     const marcaQueExigeMotivo = (slabState[id] || []).find(m => _corExigeMotivo(m.color));
     const exigeMotivo = !!marcaQueExigeMotivo;
@@ -1207,37 +1348,180 @@
         return;
       }
       el.className = m.shape === 'dash' ? 'sq-mark-dash' : 'sq-mark-circle';
-      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
+      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja', cinza:'--sq-cor-identificacao-auto' };
       el.style.backgroundColor = root.getPropertyValue(varMap[m.color] || '--sq-cor-verde').trim();
       c.appendChild(el);
     });
   }
 
+  // Clique normal na placa — SEMPRE adiciona uma marca com a cor+forma
+  // selecionada (modelo novo, ver conversa que motivou a mudança: antes,
+  // clicar de novo na MESMA combinação apagava — isso impedia repetir a
+  // mesma combinação na mesma placa, então separamos "adicionar" (aqui) de
+  // "apagar" (toggleMarkErase, abaixo) em dois gestos diferentes). A
+  // paleta continua completa (5 cores + 3 formas) — o operador escolhe
+  // cor E forma manualmente, como sempre foi; a identificação automática
+  // (ver _marcasDeIdentificacao) só faz o trabalho de PRÉ-preencher pra
+  // adiantar, nunca tira a possibilidade de marcar/apagar manualmente
+  // qualquer combinação.
   function toggleMark(el) {
     if (viewMode) return;
-    pushState();
     const id = el.dataset.id;
     if (!slabState[id]) slabState[id] = [];
     const shape = selectedShape;
     // X nunca usa a cor escolhida na paleta — é sempre cinza fixo
     // (COR_NAO_PREENCHIDO), ver comentário na constante.
     const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
-    const idx = slabState[id].findIndex(m => m.color === color && m.shape === shape);
-    if (idx !== -1) {
-      slabState[id].splice(idx, 1);
-      _atualizarMotivoAposDesmarcar(id);
-    } else {
-      // X é sempre sozinho: marcar X apaga qualquer marca real que já
-      // existisse na placa; e marcar uma marca real remove um X que já
-      // estivesse lá (não faz sentido as duas coexistirem — X significa
-      // justamente que não há nenhuma marcação real).
-      slabState[id] = shape === 'x' ? [] : slabState[id].filter(m => m.shape !== 'x');
-      slabState[id].push({ color, shape });
-      _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+
+    // X é sempre sozinho: marcar X substitui qualquer marca real que já
+    // existisse na placa (não conta pro limite de repetições — só faz
+    // sentido existir 1 X por placa mesmo). Marcar uma marca REAL quando
+    // já existia um X, remove o X (não faz sentido as duas coexistirem).
+    if (shape === 'x') {
+      pushState();
+      slabState[id] = [{ color, shape }];
+      renderMarks(el, slabState[id]);
+      validateAllSlabs();
+      _renderBadgeMotivo(id);
+      return;
     }
+
+    const jaTinhaX = slabState[id].some(m => m.shape === 'x');
+    if (!jaTinhaX && slabState[id].length >= MAX_MARCAS_POR_PLACA) {
+      toast(`Limite de ${MAX_MARCAS_POR_PLACA} marcas por placa atingido.`, 'error');
+      return;
+    }
+
+    pushState();
+    if (jaTinhaX) slabState[id] = []; // marca real substitui o X que estava lá
+
+    // CADA MARCA JÁ NASCE COM O PAPEL DELA (`role`) — ver toggleIndicadorAtivo/
+    // botão "I": 'indicador' (padrão, "I" ativado) é a marca de STATUS de
+    // verdade; 'identidade' (com "I" desativado) é uma marca manual de
+    // tipo/identidade, que nunca conta como avaliação pra motivo/1ª-2ª
+    // linha. Isso substitui a lógica antiga de reconstruir por eliminação
+    // quem era quem (ver classifyMarks/_combinarComMarcas, mais abaixo).
+    const role = indicadorAtivo ? 'indicador' : 'identidade';
+    const novaMarca = { color, shape, role };
+
+    if (role === 'indicador') {
+      // Onde a marca do operador entra (em qual posição, entre as marcas
+      // de identidade automáticas) depende de `indicadorIndex` da
+      // combinação do tipo esperado desta placa (ver Configurações →
+      // Paletes → "Combinações de Avaliação", paletes-combinacoes.js) —
+      // só efeito VISUAL (ordem no DOM bate com a ordem configurada);
+      // classifyMarks não depende mais de posição, só de `role`. Só
+      // relevante pra combinações com mais de 1 marca (marca única não
+      // tem "posição", é a mesma marca que já identifica tipo E status ao
+      // mesmo tempo). As marcas de identidade automáticas preservam a
+      // ORDEM RELATIVA de combo.marcas (ver _marcasDeIdentificacao) — como
+      // só o índice do indicador foi removido delas, o índice
+      // `indicadorIndex` do combo já é exatamente a posição certa pra
+      // inserir a marca do operador de volta nesse "buraco" (splice).
+      const tipoEsperado = String((typeof getExpectedType === 'function' ? getExpectedType(id) : '') || '').toLowerCase();
+      const comboAtual = tipoEsperado ? _combinacoesEfetivas().find(c => c.tipo === tipoEsperado) : null;
+      const posicaoInsercao = (comboAtual && comboAtual.marcas && comboAtual.marcas.length > 1)
+        ? Math.min(comboAtual.indicadorIndex, slabState[id].length)
+        : 0;
+      slabState[id].splice(posicaoInsercao, 0, novaMarca);
+    } else {
+      // Marca manual de identidade (gesto raro, "I" desativado de
+      // propósito) — não tem "slot" fixo pra ocupar, só empilha.
+      slabState[id].push(novaMarca);
+    }
+
     renderMarks(el, slabState[id]);
     validateAllSlabs();
-    if (idx === -1 && _corExigeMotivo(color)) _abrirSeletorMotivo(id);
+    _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+    // Motivo obrigatório só quando é a marca de STATUS (indicador) —
+    // marca de identidade nunca exige, mesmo se a cor escolhida "por
+    // acaso" for azul/vermelho (ver _corExigeMotivo).
+    if (role === 'indicador' && _corExigeMotivo(color)) _abrirSeletorMotivo(id);
+  }
+
+  // Apagar — toque longo (touch) ou clique direito (mouse) numa placa.
+  // Remove UMA ocorrência da cor+forma ATUALMENTE SELECIONADA na paleta
+  // (mesmo seletor de sempre — só muda o que o gesto faz com ele). Como
+  // marcas idênticas são visualmente indistinguíveis entre si, remove
+  // sempre a primeira que encontrar — não importa qual das repetidas
+  // some, o resultado visual é o mesmo. Apaga também marcas de
+  // IDENTIFICAÇÃO automáticas (auto: true) — a paleta continua completa
+  // de propósito (ver conversa que motivou: manter cor+forma manuais)
+  // exatamente pra permitir reconstruir a combinação certa (ex:
+  // amarelo+traço) e apagar uma identificação automática, se precisar.
+  // Ver _ligarGestoApagar, que liga isso no elemento da placa (contextmenu
+  // + long-press por touch).
+  function toggleMarkErase(el) {
+    if (viewMode) return;
+    const id = el.dataset.id;
+    const shape = selectedShape;
+    const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
+    const marcas = slabState[id] || [];
+    const idx = marcas.findIndex(m => m.color === color && m.shape === shape);
+    if (idx === -1) {
+      toast('Essa placa não tem uma marca dessa cor/forma pra apagar.', 'error');
+      return;
+    }
+    pushState();
+    marcas.splice(idx, 1);
+    renderMarks(el, marcas);
+    validateAllSlabs();
+    _atualizarMotivoAposDesmarcar(id);
+  }
+
+  // Liga o gesto de apagar (toque longo / clique direito) num elemento de
+  // placa — chamada 1x por placa, na criação (ver renderStacks). Clique
+  // direito: usa o evento nativo 'contextmenu' (mais confiável entre
+  // navegadores do que checar e.button===2 em 'click'), suprime o menu de
+  // contexto do navegador. Toque longo: temporizador de 500ms armado no
+  // 'touchstart', cancelado se o dedo mover mais que uma folga pequena
+  // (evita disparar sem querer durante um scroll) ou soltar antes da hora.
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_TOLERANCIA_PX = 10;
+  function _ligarGestoApagar(el) {
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      toggleMarkErase(el);
+    });
+
+    let timer = null;
+    let origem = null;
+    let disparou = false;
+
+    function limpar() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      origem = null;
+    }
+
+    el.addEventListener('touchstart', e => {
+      if (viewMode) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return; // evento de toque sem dados de posição — não dá pra medir movimento, ignora com segurança
+      origem = { x: t.clientX, y: t.clientY };
+      disparou = false;
+      timer = setTimeout(() => {
+        disparou = true;
+        toggleMarkErase(el);
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', e => {
+      if (!origem) return;
+      const t = e.touches && e.touches[0];
+      if (!t) return;
+      const dx = Math.abs(t.clientX - origem.x);
+      const dy = Math.abs(t.clientY - origem.y);
+      if (dx > LONG_PRESS_TOLERANCIA_PX || dy > LONG_PRESS_TOLERANCIA_PX) limpar();
+    }, { passive: true });
+
+    el.addEventListener('touchend', e => {
+      // O toque longo já disparou o apagar — impede que o 'click'
+      // sintético que o navegador dispara em seguida também adicione
+      // uma marca (senão apagava uma e adicionava outra na sequência).
+      if (disparou) e.preventDefault();
+      limpar();
+    });
+    el.addEventListener('touchcancel', limpar);
   }
 
   // Desmarcar uma cor azul/vermelho pode deixar o painel sem NENHUMA marca
@@ -1370,6 +1654,24 @@
     document.querySelectorAll('.sq-btn-color').forEach(b => b.classList.toggle('sq-btn-color-disabled', shape === 'x'));
   }
 
+  // Liga/desliga o botão "I" — decide o PAPEL (`role`) da próxima marca
+  // que o operador clicar na placa: 'indicador' (ativado, padrão) é a
+  // marca de STATUS de verdade, a que carrega a cor de aprovado/2ª
+  // linha/reprovado e por isso é a única que exige motivo de defeito
+  // (ver toggleMark, _corExigeMotivo); 'identidade' (desativado) é uma
+  // marca manual de identidade/tipo — não conta como avaliação de
+  // status pra nada (nem motivo, nem 1ª/2ª linha). Simples toggle: sem
+  // "modo armado esperando 1 clique" como o "i" de Configurações →
+  // Paletes (pcaAtivarModoIndicador) — aqui fica ligado/desligado até a
+  // pessoa clicar de novo, porque normalmente o operador faz várias
+  // marcas de status seguidas (uma placa por vez), não 1 marca isolada.
+  function toggleIndicadorAtivo(btn) {
+    if (viewMode) return;
+    indicadorAtivo = !indicadorAtivo;
+    const alvo = btn ? [btn] : Array.from(document.querySelectorAll('.sq-btn-indicador'));
+    alvo.forEach(b => b.classList.toggle('active', indicadorAtivo));
+  }
+
   // ── Atalhos de teclado: nº = cor, Ctrl+nº = forma ───────────────────
   // Numeração segue a ORDEM que os botões aparecem na tela (mesma ordem
   // do DOM — ver querySelectorAll abaixo), não uma lista fixa aqui: hoje
@@ -1415,6 +1717,9 @@
     // Mesma regra de toggleMark: X nunca usa a cor recebida (sempre
     // cinza fixo) e é sempre sozinho na placa.
     const corFinal = shape === 'x' ? COR_NAO_PREENCHIDO : color;
+    // Mesmo papel (`role`) do botão "I" vale pra marcação em lote — ver
+    // toggleMark/toggleIndicadorAtivo.
+    const role = indicadorAtivo ? 'indicador' : 'identidade';
     document.getElementById(stackId).querySelectorAll('.sq-slab').forEach(slab => {
       const id = slab.dataset.id;
       if (!slabState[id]) slabState[id] = [];
@@ -1422,8 +1727,22 @@
         slabState[id] = [{ color: corFinal, shape: 'x' }];
       } else {
         slabState[id] = slabState[id].filter(m => m.shape !== 'x');
-        if (!slabState[id].find(m => m.color === corFinal && m.shape === shape))
-          slabState[id].push({ color: corFinal, shape });
+        // Mesmo raciocínio de toggleMark: a marca de validação entra na
+        // posição do indicador da combinação do tipo esperado desta
+        // placa — ver Configurações → Paletes → "Combinações de
+        // Avaliação".
+        if (!slabState[id].find(m => m.color === corFinal && m.shape === shape && m.role === role)) {
+          if (role === 'indicador') {
+            const tipoEsperado = String((typeof getExpectedType === 'function' ? getExpectedType(id) : '') || '').toLowerCase();
+            const comboAtual = tipoEsperado ? _combinacoesEfetivas().find(c => c.tipo === tipoEsperado) : null;
+            const posicaoInsercao = (comboAtual && comboAtual.marcas && comboAtual.marcas.length > 1)
+              ? Math.min(comboAtual.indicadorIndex, slabState[id].length)
+              : 0;
+            slabState[id].splice(posicaoInsercao, 0, { color: corFinal, shape, role });
+          } else {
+            slabState[id].push({ color: corFinal, shape, role });
+          }
+        }
       }
       renderMarks(slab, slabState[id]);
       _renderBadgeMotivo(id);
@@ -1434,31 +1753,38 @@
     // (ex: "esse pallet inteiro veio com falha de traço"). Aplica o
     // motivo escolhido em toda placa do pallet que ficou exigindo motivo
     // (sobrescreve qualquer motivo individual anterior — é uma ação em
-    // lote deliberada).
-    if (_corExigeMotivo(corFinal)) _abrirSeletorMotivo(null, stackId);
+    // lote deliberada). Só quando a marca em lote é de STATUS (indicador).
+    if (role === 'indicador' && _corExigeMotivo(corFinal)) _abrirSeletorMotivo(null, stackId);
   }
   function selectAllPallet(sid) { applyMarksToPallet(sid, selectedColor, selectedShape); }
-  function applyColorToPallet(sid, color) { closeAllDropdowns(); applyMarksToPallet(sid, color, selectedShape); }
 
-  /* ── Dropdowns de cor por pallet ──────────────────────── */
-  function toggleDropdown(btn, sid) {
+  // Botão "🧹 Limpar" no cabeçalho do pallet — substituiu o dropdown de
+  // cores por pallet (🎨), que era redundante: a mesma cor já pode ser
+  // aplicada em massa via "⚡ Todas" (escolhendo a cor na paleta principal
+  // primeiro). Limpa SÓ as placas deste pallet — marcas e motivo — com a
+  // mesma confirmação de "Limpar" geral (clearAllMarks), só que com
+  // escopo menor.
+  function clearPallet(sid) {
     if (viewMode) return;
-    const menu = document.getElementById(`sq-dd-${sid}`);
-    const open = menu.classList.contains('open');
-    closeAllDropdowns();
-    if (!open) menu.classList.add('open');
-    event.stopPropagation();
+    const col = document.getElementById(sid);
+    if (!col) return;
+    showConfirm('Limpar Pallet', `Apagar todas as marcações do ${sid.replace('stack', 'Pallet ')}?`, () => {
+      pushState();
+      col.querySelectorAll('.sq-slab').forEach(slab => {
+        const id = slab.dataset.id;
+        delete slabState[id];
+        delete slabMotivo[id];
+        delete slabMotivoDescricao[id];
+        renderMarks(slab, []);
+      });
+      document.querySelectorAll(`#${sid} .sq-slab-motivo`).forEach(b => { b.textContent = ''; b.style.display = 'none'; });
+      validateAllSlabs();
+    });
   }
-  function closeAllDropdowns() {
-    document.querySelectorAll('.sq-color-dropdown').forEach(el => el.classList.remove('open'));
-  }
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.sq-pallet-header')) closeAllDropdowns();
-  });
 
-  // ── "Em Andamento" e "Fila" — retraídos por padrão, mesmo padrão de
-  // toggle/fechar-ao-clicar-fora do toggleDropdown acima. Só 1 aberto por
-  // vez (closeAllCollapsibles fecha o outro antes de abrir o clicado).
+  // toggle/fechar-ao-clicar-fora usado por outros elementos flutuantes
+  // desta tela. Só 1 aberto por vez (closeAllCollapsibles fecha o outro
+  // antes de abrir o clicado).
   // nome: 'andamento' ou 'fila' -> alvo #sq-andamento-wrap / #sq-fila-wrap.
   function toggleCollapsible(nome) {
     if (viewMode) return;
@@ -1528,8 +1854,29 @@
   }
 
   /* ── Modal de configuração personalizada de pallet ────── */
+  // Botões de tipo do modal "Personalizada" — antes eram 4 <button>
+  // hardcoded no HTML (SP/2P/3T/1T, ver page-setor-qualidade.html),
+  // então qualquer tipo simples cadastrado além desses 4 (ex: "5T")
+  // simplesmente não aparecia aqui pra ser escolhido (mesmo já
+  // existindo em Configurações e no dropdown principal #sq-mountType).
+  // Agora gera 1 botão por tipo simples de _montagemOpcoesCache, com a
+  // cor de verdade do tipo (LW.corPorTipoSimples, mesma usada em
+  // Registrar Operação) — funciona pra qualquer tipo, sem lista fixa.
+  function _renderBotoesTipoModal() {
+    const box = document.getElementById('sq-modal-tipos-botoes');
+    if (!box) return;
+    const simples = (_montagemOpcoesCache || []).filter(o => o && o.modo === 'simples' && o.tipo && o.label);
+    box.innerHTML = simples.map(o => {
+      const codigo = String(o.tipo).toUpperCase();
+      const cor = (typeof LW !== 'undefined' && LW.corPorTipoSimples) ? LW.corPorTipoSimples(o.tipo) : null;
+      const ativo = modalTipoSel === codigo;
+      return `<button type="button" class="sq-btn-tipo${ativo ? ' active' : ''}" data-tipo="${codigo}" style="background:${cor ? cor.cor : '#5c6475'}" onclick="SQ.setModalTipo('${codigo}')">${codigo}</button>`;
+    }).join('');
+  }
+
   function openPalletModal() {
     tempSlabConfig = { ...slabConfig };
+    _renderBotoesTipoModal(); // sempre atualizado, caso um tipo tenha sido cadastrado/removido desde a última abertura
     const n   = parseInt(document.getElementById('sq-thickness').value);
     const box = document.getElementById('sq-modal-slabs-grid');
     box.innerHTML = '';
@@ -1548,16 +1895,21 @@
         const num = document.createElement('span'); num.className = 'sq-m-num'; num.textContent = i; slab.appendChild(num);
         const tp  = document.createElement('span'); tp.className  = 'sq-m-tp';
         const val = tempSlabConfig[id] || '';
-        if (val) { tp.textContent = val; const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' }; if (cm[val]) tp.classList.add(cm[val]); }
+        if (val) {
+          tp.textContent = val;
+          const cor = (typeof LW !== 'undefined' && LW.corPorTipoSimples) ? LW.corPorTipoSimples(val.toLowerCase()) : null;
+          if (cor) tp.style.color = cor.cor;
+        }
         slab.appendChild(tp);
         slab.addEventListener('click', function () {
           const key = this.dataset.id, tpEl = this.querySelector('.sq-m-tp');
           if (tempSlabConfig[key] === modalTipoSel) {
-            delete tempSlabConfig[key]; tpEl.textContent = ''; tpEl.className = 'sq-m-tp'; this.classList.remove('sel');
+            delete tempSlabConfig[key]; tpEl.textContent = ''; tpEl.style.color = ''; this.classList.remove('sel');
           } else {
             tempSlabConfig[key] = modalTipoSel; tpEl.textContent = modalTipoSel;
-            const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
-            tpEl.className = `sq-m-tp ${cm[modalTipoSel] || ''}`; this.classList.add('sel');
+            const cor = (typeof LW !== 'undefined' && LW.corPorTipoSimples) ? LW.corPorTipoSimples(modalTipoSel.toLowerCase()) : null;
+            tpEl.style.color = cor ? cor.cor : '';
+            this.classList.add('sel');
           }
         });
         col.appendChild(slab);
@@ -1569,9 +1921,7 @@
   function closePalletModal() { document.getElementById('sq-modal-pallet').classList.remove('open'); }
   function setModalTipo(type) {
     modalTipoSel = type;
-    const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
-    document.querySelectorAll('.sq-btn-tipo').forEach(b => b.classList.remove('active'));
-    document.querySelector(`.sq-btn-tipo.${cm[type]}`).classList.add('active');
+    document.querySelectorAll('#sq-modal-tipos-botoes .sq-btn-tipo').forEach(b => b.classList.toggle('active', b.dataset.tipo === type));
   }
   function clearModalPlates() {
     tempSlabConfig = {};
@@ -1595,6 +1945,7 @@
       _editandoAvaliacaoId = null;
       _editandoRegistradoEm = null;
       _editandoLinkedOperacaoId = null;
+      _editandoAvaliadorNome = null;
     }
     document.querySelectorAll('.sq-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sq-nav-btn').forEach(el => el.classList.remove('active'));
@@ -1824,20 +2175,28 @@
   }
 
   // ── Direcionamento de painéis por palete ──────────────────────────────
-  // Cada berço da bateria enche 2 painéis — um do lado ESQUERDO, um do
-  // lado DIREITO. A capacidade (nº de berços configurado, nunca
-  // bercos_reais — ver capacidadeOperacaoAtual) é dividida em duas
-  // metades; qual metade + qual lado determina o palete de destino:
-  //   Esquerdo, 1ª metade  (berço 1..metade)            → Palete 3
-  //   Esquerdo, 2ª metade  (berço metade+1..capacidade)  → Palete 1
-  //   Direito,  1ª metade  (berço 1..metade)             → Palete 4
-  //   Direito,  2ª metade  (berço metade+1..capacidade)  → Palete 2
-  // Capacidade ímpar: a 1ª metade fica com o berço extra (Math.ceil) —
-  // convenção simples, não especificada à parte pelo pedido original.
-  const PALETE_POR_METADE_E_LADO = {
-    esquerdo: { primeira: 3, segunda: 1 },
-    direito:  { primeira: 4, segunda: 2 },
-  };
+  // Cada berço da bateria enche 2 painéis — um do lado ESQUERDO (DB:
+  // estado_esquerda), um do lado DIREITO (DB: estado_direita) — mesmo
+  // "Direito"/"Esquerdo" já usado nos pontinhos de Bateria Atual e
+  // Análise Focada (ver data-lado="direita"/"esquerda", ba-dot-topo/
+  // ba-dot-base, bateria-atual.js). A capacidade (nº de berços
+  // configurado, nunca bercos_reais — ver capacidadeOperacaoAtual) é
+  // dividida em duas metades; qual metade + qual lado determina o
+  // palete de destino. CONFIGURÁVEL desde Configurações → Bateria e
+  // Montagem → "Definir Paletes" (ver public/js/paletes-config.js,
+  // LW.PALETES_CONFIG, data.js) — mapeamento DIRETO (config.direito* →
+  // aqui `direito`, config.esquerdo* → aqui `esquerdo`), sem nenhuma
+  // inversão escondida: a prévia visual da própria tela de configuração
+  // mostra exatamente pra qual palete cada lado vai, então qualquer
+  // ajuste necessário é feito ali mesmo, visualmente, pelo Administrador
+  // — não decidido "no escuro" aqui no código.
+  function _paletePorMetadeELado() {
+    const cfg = LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT;
+    return {
+      esquerdo: { primeira: cfg.esquerdoPrimeira, segunda: cfg.esquerdoSegunda },
+      direito:  { primeira: cfg.direitoPrimeira,  segunda: cfg.direitoSegunda },
+    };
+  }
 
   // Berço + lado -> { pallet, posicao } (posição É o número mostrado
   // dentro daquele palete, sempre 1..metade).
@@ -1845,7 +2204,7 @@
     if (!capacidade || capacidade <= 0) return null;
     const metade = Math.ceil(capacidade / 2);
     const primeiraMetade = bercoNum <= metade;
-    const pallet = PALETE_POR_METADE_E_LADO[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
+    const pallet = _paletePorMetadeELado()[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
     if (!pallet) return null;
     const posicao = primeiraMetade ? bercoNum : bercoNum - metade;
     return { pallet, posicao };
@@ -1930,11 +2289,15 @@
   // em vez de um índice solto 1..N sem relação com o berço físico.
   // Paletes extras (5+, ver adicionarPalletExtra) não têm berço de
   // origem definido — devolve null, a chamada volta a numerar 1..N.
+  // Generalizado pra qualquer permutação configurada em "Definir
+  // Paletes" (ver _paletePorMetadeELado, acima) — não assume mais que
+  // paletes 3/4 são sempre a 1ª metade.
   function _bercoDoSlot(pallet, posicao, capacidade) {
     if (!capacidade || capacidade <= 0) return null;
     const metade = Math.ceil(capacidade / 2);
-    if (pallet === 3 || pallet === 4) return posicao;       // 1ª metade — numeração direta
-    if (pallet === 1 || pallet === 2) return metade + posicao; // 2ª metade
+    const mapa = _paletePorMetadeELado();
+    if (pallet === mapa.esquerdo.primeira || pallet === mapa.direito.primeira) return posicao;         // 1ª metade — numeração direta
+    if (pallet === mapa.esquerdo.segunda  || pallet === mapa.direito.segunda)  return metade + posicao; // 2ª metade
     return null;
   }
 
@@ -1943,14 +2306,17 @@
   // capacidade da operação já é conhecida (ver capacidadeOperacaoAtual);
   // fica em branco (mesmo texto de sempre, sem subtítulo) enquanto não
   // for, pra não mostrar uma faixa errada antes da operação carregar.
+  // Generalizado pra qualquer permutação configurada em "Definir
+  // Paletes" (ver _paletePorMetadeELado, acima).
   function _atualizarSubtitulosPallets() {
     const cap = capacidadeOperacaoAtual;
     const metade = cap ? Math.ceil(cap / 2) : null;
+    const mapa = _paletePorMetadeELado();
     const faixas = cap ? {
-      3: `Berços 1–${metade} · Esq.`,
-      4: `Berços 1–${metade} · Dir.`,
-      1: `Berços ${metade + 1}–${cap} · Esq.`,
-      2: `Berços ${metade + 1}–${cap} · Dir.`,
+      [mapa.esquerdo.primeira]: `Berços 1–${metade} · Esq.`,
+      [mapa.direito.primeira]:  `Berços 1–${metade} · Dir.`,
+      [mapa.esquerdo.segunda]:  `Berços ${metade + 1}–${cap} · Esq.`,
+      [mapa.direito.segunda]:   `Berços ${metade + 1}–${cap} · Dir.`,
     } : { 1: '', 2: '', 3: '', 4: '' };
     Object.entries(faixas).forEach(([n, texto]) => {
       const el = document.getElementById('sq-pallet-sub-' + n);
@@ -2418,6 +2784,31 @@
     renderDrafts();
   }
 
+  // Tipo(s) de montagem de CADA palete, pro registro salvo (coluna
+  // Pallet 1..4 na tela "Registros" — ver renderHistory, mais abaixo).
+  // Antes usava só palletTypes[idx] (preset uniforme do dropdown
+  // principal) — ficava vazio (mostrando só um traço "—") sempre que o
+  // modo "Personalizada" era usado, MESMO quando as placas tinham um
+  // tipo de verdade (ver conversa que motivou isso). Agora calcula a
+  // partir do `tipoEsperado` de CADA painel (já presente em
+  // evalObj.paineis, ver registerEvaluation) — funciona pra qualquer
+  // tipo cadastrado (não só os 4 antes hardcoded no modal Personalizada,
+  // ver _renderBotoesTipoModal) e, se o mesmo palete tiver placas de
+  // tipos DIFERENTES, junta todos com "/" (ex: "3T/5T") em vez de
+  // mostrar só um ou nenhum.
+  function _montagemDoRegistro(paineis) {
+    const montagem = {};
+    for (let n = 1; n <= 4; n++) {
+      const tipos = [];
+      paineis.filter(p => p.pallet === n).forEach(p => {
+        const t = (p.tipoEsperado || '').toString().toUpperCase();
+        if (t && !tipos.includes(t)) tipos.push(t);
+      });
+      montagem[`pallet${n}`] = tipos.join('/');
+    }
+    return montagem;
+  }
+
   /* ── Registrar avaliação definitiva (ou salvar correção) ── */
   function registerEvaluation() {
     if (viewMode) return;
@@ -2460,7 +2851,13 @@
         id: evId, schemaVersion: 2,
         batteryId: document.getElementById('sq-batteryId').value,
         linkedOperacaoId: editando ? _editandoLinkedOperacaoId : (linkedOperacaoId || null),
-        montagem: { pallet1: palletTypes[0], pallet2: palletTypes[1], pallet3: palletTypes[2], pallet4: palletTypes[3] },
+        // Preenchido logo abaixo, depois de montar evalObj.paineis — ver
+        // _montagemDoRegistro (calcula a partir do tipo de CADA placa,
+        // não de um valor fixo por pallet, ver conversa que motivou:
+        // "Registros" só mostrava um traço "—" pra qualquer tipo além de
+        // 2P/SP, porque usava só palletTypes[idx], que fica vazio no
+        // modo Personalizada mesmo quando as placas TÊM um tipo).
+        montagem: null,
         turno:    document.getElementById('sq-turno').value,
         tempInput: parseFloat(document.getElementById('sq-temp').value) || 0,
         dtMontagem:    toISO(document.getElementById('sq-dtMontagem').value),
@@ -2481,6 +2878,15 @@
         dimensaoOperacao: dimensaoOperacaoAtual || null,
         capacidadeOperacao: capacidadeOperacaoAtual || null,
         observations: document.getElementById('sq-obs').value,
+        // Autoria automática — quem está logado agora (ver
+        // LW.nomeDeQuemEstaLogado(), data.js), preenchida só ao
+        // REGISTRAR uma avaliação nova; numa correção, preserva o
+        // avaliador original (_editandoAvaliadorNome, carregado junto
+        // com o resto da avaliação em edição — ver
+        // _carregarAvaliacaoNoFormulario) em vez de trocar pra quem só
+        // corrigiu um detalhe depois (mesmo raciocínio de Paradas,
+        // paradas.js).
+        avaliadorNome: editando ? (_editandoAvaliadorNome || null) : LW.nomeDeQuemEstaLogado(),
         ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
       // Painéis embutidos na própria avaliação — 1 linha no banco pra
@@ -2497,11 +2903,8 @@
         const info  = getClassifiedInfo(marks);
         return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null };
       });
+      evalObj.montagem = _montagemDoRegistro(evalObj.paineis);
 
-      // Numa correção, a bateria já saiu da fila há muito tempo (foi por
-      // isso que virou avaliação) — não faz sentido tentar marcar a
-      // operação como avaliada de novo.
-      const opIdParaMarcar = editando ? null : linkedOperacaoId;
       const btnRegistrar = document.getElementById('sq-btn-register');
       if (btnRegistrar) btnRegistrar.disabled = true;
 
@@ -2527,18 +2930,17 @@
           showAlert('Concluído', editando ? 'Correção salva com sucesso!' : 'Avaliação registrada com sucesso!');
           navigateTo(destino);
           carregarAvaliacoesQualidade();
-
-          if (opIdParaMarcar) {
-            fetch('/marcar-operacao-avaliada', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: opIdParaMarcar }),
-            })
-              .then(() => carregarFilaNaoAvaliadas()) // sai da fila -> os demais sobem de posição
-              .catch(err => console.error('Não consegui marcar a operação como avaliada:', err));
-          } else {
-            carregarFilaNaoAvaliadas(); // avulsa: não muda a fila, mas mantém em dia mesmo assim
-          }
+          // A operação vinculada (se houver) já foi marcada como avaliada
+          // e removida da fila pelo PRÓPRIO /registrar-avaliacao-qualidade,
+          // na mesma requisição acima (ver lib/rotas/qualidade.js) — não
+          // precisa mais de uma 2ª chamada separada aqui. Antes, essa 2ª
+          // chamada (POST /marcar-operacao-avaliada) podia falhar
+          // silenciosamente (só .catch(console.error), sem avisar
+          // ninguém) e deixar a operação presa na fila pra sempre, mesmo
+          // com a avaliação já registrada com sucesso — bug real
+          // encontrado e corrigido. Só recarrega a fila aqui, pra
+          // refletir a mudança que o servidor já fez.
+          carregarFilaNaoAvaliadas();
         })
         .catch(err => {
           console.error('Falha ao registrar avaliação de qualidade:', err);
@@ -2683,6 +3085,7 @@
         _editandoAvaliacaoId      = item.id;
         _editandoRegistradoEm     = item.registeredAt || null;
         _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
+        _editandoAvaliadorNome    = item.avaliadorNome || null;
         setEditable(true);
         // Mesma trava do lançamento novo: os dados vieram da operação
         // real na hora do registro original, corrigir aqui não deveria
@@ -2699,6 +3102,14 @@
   function exitViewMode()  { viewMode = false; setEditable(true); }
 
   function setEditable(editable) {
+    // Perfis sem a área 'qualidade' de edição (ver lib/perfis.js — hoje,
+    // Operador de Injetora e Manutenção) nunca ficam editáveis aqui, nem
+    // que algum fluxo interno peça setEditable(true): o Setor de
+    // Qualidade fica só como visualização pra eles. O servidor valida de
+    // novo em POST /registrar-avaliacao-qualidade e
+    // /marcar-operacao-avaliada, isso aqui é só a parte visual.
+    const permiteEdicao = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('qualidade') : true;
+    if (!permiteEdicao) editable = false;
     document.getElementById('sq-view-overlay').style.display = editable ? 'none' : 'block';
     document.querySelectorAll('.sq-hide-view').forEach(el => el.classList.toggle('is-view', !editable));
     document.querySelectorAll('.sq-show-view').forEach(el => el.classList.toggle('is-view', !editable));
@@ -2783,7 +3194,7 @@
         return `<span class="sq-mini-mark sq-mini-mark-x" title="Painel não preenchido">×</span>`;
       const w = m.shape==='dash' ? '12px' : '6px', h = m.shape==='dash' ? '2px' : '6px';
       const r = m.shape==='circle' ? '50%' : '2px';
-      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja' };
+      const varMap = { verde:'--sq-cor-verde', vermelho:'--sq-cor-vermelho', azul:'--sq-cor-azul', amarelo:'--sq-cor-amarelo', laranja:'--sq-cor-laranja', cinza:'--sq-cor-identificacao-auto' };
       return `<span class="sq-mini-mark" style="background:var(${varMap[m.color]||'--sq-cor-verde'});width:${w};height:${h};border-radius:${r};margin:0 1px;display:inline-block;"></span>`;
     }).join('');
   }
@@ -2815,7 +3226,12 @@
     const n = getSlabCount(item.batteryId);
     const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
     let html = '<div class="sq-mini-stacks">';
-    for (let p = 1; p <= 4; p++) {
+    // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
+    // na 2ª (layout 2x2, mesma ordem da grade principal — ver
+    // .sq-pallet-col[data-pallet-id] em setor-qualidade.css). Só a ORDEM
+    // DE EXIBIÇÃO muda; os dados de cada pallet continuam vindo do mesmo
+    // número de sempre.
+    [2, 1, 3, 4].forEach(p => {
       html += `<div class="sq-mini-pallet"><div class="sq-mini-pallet-header">P${p}</div>`;
       for (let i = 1; i <= n; i++) {
         const panel = panels.find(pa => pa.pallet===p && pa.posicao===i);
@@ -2842,10 +3258,20 @@
         // simples de sempre.
         const berco = _bercoDoSlot(p, i, item.capacidadeOperacao);
         const rotulo = berco ? ('B' + berco) : i;
-        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${rotulo}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</div>`;
+        // Motivo + tipo agrupados num wrapper só (.sq-mini-slab-canto-info,
+        // mesma ideia da grade principal — ver .sq-slab-canto-info,
+        // renderStacks) — sem isso, o motivo entrava como mais um item
+        // solto no flex do mini-slab e ENCOLHIA o espaço reservado pra
+        // .sq-mini-slab-marks (flex:1), fazendo as marcas ficarem
+        // desalinhadas entre placas com e sem código de motivo. Com o
+        // wrapper, a largura do canto direito muda, mas .sq-mini-slab-marks
+        // continua centralizada no espaço restante do mesmo jeito nas duas
+        // situações (marcas viram o único item central, sempre).
+        const cantoInfo = `<span class="sq-mini-slab-canto-info">${motivoHtml}${tipo?`<span class="sq-mini-slab-type ${cm[tipo]||''}">${tipo}</span>`:''}</span>`;
+        html += `<div class="sq-mini-slab"><span class="sq-mini-slab-number">${rotulo}</span><div class="sq-mini-slab-marks">${getMirrorMark(panel)}</div>${cantoInfo}</div>`;
       }
       html += '</div>';
-    }
+    });
     html += '</div>';
     container.innerHTML = html;
   }
@@ -3761,6 +4187,7 @@
     _editandoAvaliacaoId = null;
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
+    _editandoAvaliadorNome = null;
     _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';
@@ -3945,6 +4372,22 @@
   }
 
   /* ── Modal genérico (usa o modal do Lightwall se disponível) */
+  // Toast leve — avisos rápidos e não-bloqueantes (diferente de
+  // showAlert, que é um modal e exige clicar OK). Usado por
+  // engatilhamentos frequentes/esperados que não merecem interromper o
+  // fluxo (ver toggleMark/toggleMarkErase: limite de marcas por placa,
+  // nada pra apagar). Mesmo padrão de toast(), manutencao.js — arquivo
+  // diferente, IIFE separada, sem colisão de nome.
+  function toast(msg, tipo = 'success') {
+    const container = document.getElementById('sq-toastContainer');
+    if (!container) return; // container não existe (ex: tela ainda não montada) — silenciosamente ignora, não é crítico
+    const t = document.createElement('div');
+    t.className = `sq-toast ${tipo === 'error' ? 'error' : ''}`;
+    t.innerHTML = `<span>${tipo === 'error' ? '<i class="fas fa-exclamation-circle"></i>' : '<i class="fas fa-check-circle"></i>'}</span><span>${_escaparHtml(msg)}</span>`;
+    container.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
   function showAlert(title, msg) {
     if (typeof LW !== 'undefined' && LW.mostrarAlerta) { LW.mostrarAlerta(msg, { titulo: title }); return; }
     _modal(title, msg, 'alert');
@@ -3990,12 +4433,10 @@
     exportDashboardPDF,
     exportDashboardHTML,
     selectColor, selectShape,
-    selectAllPallet, applyColorToPallet,
-    toggleDropdown,
+    toggleIndicadorAtivo,
+    selectAllPallet, clearPallet,
     toggleCollapsible,
     togglePopover,
-    abrirDefinirCombinacao,
-    salvarCombinacaoTipo,
     undoLastAction, clearAllMarks,
     formatTemperature, calculateCureTime, autoSetThickness,
     editField,
@@ -4004,10 +4445,13 @@
     changeMountType,
     openPalletModal, closePalletModal, setModalTipo,
     clearModalPlates, confirmPalletModal,
+    calcularMontagemDoRegistro: _montagemDoRegistro,
+    getExpectedType,
     init() {
       _carregarOpcoesMontagem();
       carregarAvaliacoesQualidade();
       _renderReferenciaMotivos();
+      _aplicarOrdemPaletes();
       startNew();
     },
   };

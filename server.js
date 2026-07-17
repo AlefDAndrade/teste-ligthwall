@@ -1,7 +1,6 @@
 const http      = require('http');
 const fs        = require('fs');
 const path      = require('path');
-const vm        = require('vm');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
 
@@ -33,14 +32,14 @@ const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "ban
 // mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
 const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
 const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
-// Cadastro de Identidade Leve de Operador (ver "Identidade Leve de
-// Operador", db.js) — mesmo motivo de SECURITY_PATH viver fora de
-// public/: contém pinHash por operador, e um arquivo dentro de public/db/
-// seria servido cru pela rota estática genérica pra qualquer um que
-// soubesse a URL (foi exatamente o problema histórico de security.json —
-// ver README, "Limitações conhecidas"). GET /operadores (abaixo) nunca
-// devolve pinHash, só {id, nome}.
-const OPERADORES_PATH = path.join(PRIVATE_DIR, 'operadores.json');
+// Cadastro de usuários com login+senha+perfil (ver lib/rotas/usuarios.js,
+// lib/perfis.js) — mesmo motivo de segurança: contém senhaHash por
+// usuário, e um arquivo dentro de public/db/ seria servido cru pela rota
+// estática genérica pra qualquer um que soubesse a URL (foi exatamente o
+// problema histórico de security.json — ver README, "Limitações
+// conhecidas"). GET /usuarios (lib/rotas/usuarios.js) nunca devolve
+// senhaHash, só {id, nomeUsuario, perfil}.
+const USUARIOS_PATH = path.join(PRIVATE_DIR, 'usuarios.json');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
 // Migração automática, só na 1ª vez que sobe depois desta mudança: se o
@@ -66,42 +65,201 @@ const auth = require('./lib/auth.js')(SECURITY_PATH);
 // antes desta mudança: GET /db/security.json e POST /salvar-security.
 const sessao = require('./lib/sessao.js')();
 
+// Sessão de USUÁRIO CADASTRADO (Operador/Analista/Qualidade/Manutenção/
+// Administrativo — ver lib/perfis.js) — diferente de `sessao` acima, que é
+// só pro Administrador Master (senha única mestra). Ver lib/sessao-usuario.js.
+const sessaoUsuario = require('./lib/sessao-usuario.js')();
+
+// Mapa central de permissões por perfil (o que cada um vê e o que pode
+// EDITAR) — ver lib/perfis.js. Usado tanto por GET /perfis (front monta o
+// menu e esconde controles de edição) quanto por validações no servidor
+// (rotas de escrita de cada domínio).
+const perfis = require('./lib/perfis.js');
+
+// Catálogo de itens permissionáveis (páginas, dashboards, sub-itens,
+// "Outros", abas de Configurações — ver lib/itens-permissao.js) e o
+// módulo que guarda os perfis CRIADOS pelo Administrador em Configurações
+// → Usuários → "+ Criar novo tipo de perfil" (ver
+// lib/perfis-customizados.js) — somam-se aos 6 perfis fixos acima, nunca
+// os substituem.
+const itensPermissao = require('./lib/itens-permissao.js');
+const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, PRIVATE_DIR, perfis, itensPermissao });
+
+// ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
+// Todas as páginas são abertas pra VISUALIZAÇÃO; o que cada perfil pode
+// EDITAR/registrar é validado aqui, rota a rota, por área ('injetora',
+// 'paradas', 'qualidade', 'manutencao', 'manutencao-chamado'). Funções
+// declaradas (não const) de propósito: são referenciadas no wiring das
+// factories logo abaixo, antes do ponto do arquivo onde estariam se fossem
+// const (hoisting).
+
+// A sessão do Administrador Master (lib/sessao.js) edita qualquer área;
+// pros usuários cadastrados, decide o perfil — primeiro os 6 fixos (ver
+// perfis.podeEditar), e se não for nenhum deles, tenta um perfil
+// CUSTOMIZADO (ver perfisCustomizados.podeEditar, que faz a ponte entre o
+// nível granular "Acesso Total" escolhido no catálogo e esta mesma área).
+function podeEditarArea(req, area) {
+  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  if (perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)) return perfis.podeEditar(dados.perfil, area);
+  const customizado = perfisCustomizados.obter(dados.perfil);
+  return !!customizado && perfisCustomizados.podeEditar(customizado, area);
+}
+
+function negarEdicao(res, oQue) {
+  res.writeHead(403, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    ok: false,
+    erro: `Seu perfil só pode VISUALIZAR ${oQue} — sem permissão pra registrar, editar ou excluir. Se precisar dessa permissão, fale com um Administrador (ou confira se sua sessão não expirou, fazendo login de novo).`,
+  }));
+}
+
+// Poderes totais de administração: a sessão mestra de sempre (lib/sessao.js)
+// OU um usuário cadastrado com perfil Administrativo ("Administrador" na
+// tela — igual ao master por definição, ver lib/perfis.js). As rotas que
+// antes exigiam só a sessão mestra (backup, SQL, importação, gerenciar
+// usuários, salvar config, resetar operação) agora aceitam as duas — por
+// isso recebem `sessaoOuAdmin` (abaixo) no lugar de `sessao`.
+function temPoderesDeAdmin(req) {
+  if (sessao.requestTemSessaoValida(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  return !!dados && dados.perfil === 'Administrativo';
+}
+
+// Mesmo contrato de lib/sessao.js (só o método que essas rotas usam) —
+// permite passar isto no lugar de `sessao` sem mudar nada dentro delas.
+const sessaoOuAdmin = { requestTemSessaoValida: temPoderesDeAdmin };
+
+// Confere se quem está fazendo a requisição pode excluir ESTE chamado
+// corretivo específico — pedido do usuário: só o Administrador (master
+// OU perfil Administrativo) OU quem abriu o chamado pode excluí-lo,
+// mesmo que o perfil dele tenha edição total de Manutenção (ver
+// podeEditarArea, acima — aquela checagem é só "pode editar a ÁREA",
+// não "pode excluir ESTE registro específico"; as duas rodam juntas na
+// rota de exclusão, ver lib/rotas/manutencao.js). "Quem abriu" é
+// comparado pelo NOME (campo "observador", texto livre desde sempre —
+// não tem outro jeito de saber quem abriu, já que não existia essa
+// trava antes) contra o nome de cadastro da sessão atual
+// (sessaoUsuario.dadosDaSessao) — comparação sem diferenciar
+// maiúsc./minúsc. nem espaços nas pontas, porque "observador" sempre
+// foi digitado à mão, sujeito a variações de digitação.
+function podeExcluirChamado(req, chamado) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados || !dados.nomeUsuario) return false;
+  return (chamado.observador || '').trim().toLowerCase() === dados.nomeUsuario.trim().toLowerCase();
+}
+
+// ── Novo fluxo de aceite de chamado / pedido de peça (ver conversa que
+// motivou isso) ────────────────────────────────────────────────────────
+// Nome de quem está fazendo a requisição, pra gravar como autoria do
+// aceite (aceito_por / pedido_peca_aceito_por, ver db.js) — 'ADM' pro
+// Administrador Master, mesmo valor fixo usado em
+// LW.nomeDeQuemEstaLogado() (data.js) no front.
+function nomeDeQuemAceita(req) {
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (dados && dados.nomeUsuario) return dados.nomeUsuario;
+  if (sessao.requestTemSessaoValida(req)) return 'ADM';
+  return null;
+}
+
+// Nome pra registrar quem VISUALIZOU um chamado (ver
+// marcarVisualizadoManutencaoCorretiva, db.js — vira um ponto na
+// trajetória visual) — igual a nomeDeQuemAceita(), acima, EXCETO que
+// quando quem visualizou tem poderes de Admin (master OU perfil
+// Administrativo), grava só "Administrador" genérico em vez do nome de
+// cadastro — pedido do usuário: não expor QUAL administrador
+// especificamente visualizou, só que foi um admin.
+function nomeParaVisualizacao(req) {
+  if (temPoderesDeAdmin(req)) return 'Administrador';
+  return nomeDeQuemAceita(req);
+}
+
+// Confere se quem está fazendo a requisição pode editar a ABERTURA/
+// DETALHES de UM chamado já existente (Seções 1 e 2 do formulário) —
+// pedido do usuário: só quem abriu (mesma comparação por nome de
+// podeExcluirChamado, acima) OU Administrador (master/Administrativo)
+// OU Supervisão OU Encarregado. Diferente de podeEditarArea('manutencao'),
+// que é só "o perfil tem a área liberada" — isso aqui é "pode editar
+// ESTE registro específico", igual ao raciocínio de podeExcluirChamado.
+function podeEditarAberturaChamado(req, chamado) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  if (dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado') return true;
+  if (!dados.nomeUsuario) return false;
+  return (chamado.observador || '').trim().toLowerCase() === dados.nomeUsuario.trim().toLowerCase();
+}
+
+// Confere se quem está fazendo a requisição pode ACEITAR um chamado
+// (libera a Seção 3 — Execução) — qualquer um dos 4: Manutenção,
+// Administrador, Supervisão ou Encarregado (pedido do usuário: basta 1
+// aceitar). Some ao aceite, não à edição da abertura — por isso é uma
+// checagem separada de podeEditarAberturaChamado, acima (perfil
+// Manutenção NÃO edita abertura/detalhes, mas PODE aceitar o chamado).
+function podeAceitarChamado(req) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  return dados.perfil === 'Manutencao' || dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
+}
+
+// Confere se quem está fazendo a requisição pode ACEITAR um PEDIDO DE
+// PEÇA (libera a Seção 4 — Acompanhamento da Supervisão) — só Supervisão,
+// Encarregado ou Administrador (pedido do usuário: "vai ser mandado para
+// os perfis de supervisor encarregado e adm"); perfil Manutenção NÃO
+// pode aceitar pedido de peça, só abrir o pedido (marcar "Aguardando
+// peças? = Sim" na Execução).
+function podeAceitarPedidoPeca(req) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  return dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
+}
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
 // devolve true se já respondeu. Chamadas em sequência dentro do
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
-const rotasOperadores = require('./lib/rotas/operadores.js')({ fs, path, PRIVATE_DIR, auth, sessao });
-const rotasParadas = require('./lib/rotas/paradas.js')({ db });
-const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas });
-const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
+const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados });
+const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ fs, path, PRIVATE_DIR, sessao: sessaoOuAdmin, perfisCustomizados, itensPermissao });
+const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
+const rotasManutencao = require('./lib/rotas/manutencao.js')({
+  db, podeEditarArea, negarEdicao, podeExcluirChamado,
+  podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca, nomeDeQuemAceita,
+  nomeParaVisualizacao,
+});
+const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
+const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
-const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste });
-const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, dispositivoAutorizado, negarDispositivoNaoAutorizado });
+const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste, podeEditarArea, negarEdicao });
+const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
-  sessao, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
-  lerBercosAndamento, salvarBercosAndamentoNoDisco, dispositivoAutorizado, negarDispositivoNaoAutorizado,
+  sessao: sessaoOuAdmin, lerOperacaoAndamento, salvarOperacaoAndamentoNoDisco, broadcastOperacaoAndamento,
+  lerBercosAndamento, salvarBercosAndamentoNoDisco, podeControlarOperacao, negarControleDeOperacao,
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
-const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao, numOuNulo });
+const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao: sessaoOuAdmin, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
-const rotasEdicao = require('./lib/rotas/edicao.js')({ db, sessao, numOuNulo });
+const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
 const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
   db, fs, path, dirParaModoTeste,
-  dispositivoAutorizado, negarDispositivoNaoAutorizado,
+  podeControlarOperacao, negarControleDeOperacao,
   lerBercosAndamento, salvarBercosAndamentoNoDisco,
   adicionarNaFilaNaoAvaliadas, broadcastOperacaoFinalizada,
 });
 const rotasBackup = require('./lib/rotas/backup.js')({
-  db, fs, path, JSZip, vm,
-  ROOT_DIR, DB_DIR, SECURITY_PATH, OPERADORES_PATH,
-  auth, sessao,
+  db, fs, path, JSZip,
+  ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH,
+  auth, sessao: sessaoOuAdmin,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasOperadores, rotasParadas, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -393,41 +551,54 @@ function salvarBercosAndamentoNoDisco(mapa) {
 const DIR_LOGS = path.join(ROOT_DIR, 'logs');
 const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 
-// ─── DISPOSITIVOS AUTORIZADOS A CONTROLAR A OPERAÇÃO ───────────────────────
-// Lista opcional em config.json (dispositivosAutorizados: [{ deviceId, nome,
-// autorizadoEm }]), editável em Configurações → Autorizados. Regra: lista
-// VAZIA = sem restrição (qualquer computador pode iniciar/encerrar/registrar
-// — comportamento padrão, igual a antes desta funcionalidade existir).
-// Lista com pelo menos 1 item = só os deviceIds dela podem controlar; os
-// demais continuam podendo ACOMPANHAR ao vivo (WebSocket), só não interagir.
-function lerConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
-  } catch (_) {
-    return {};
-  }
+// ─── QUEM PODE CONTROLAR A OPERAÇÃO (iniciar/encerrar/registrar) ──────────
+// Substituiu o antigo sistema de "dispositivo autorizado" (lista de
+// deviceIds em config.json, editável em Configurações → Autorizados) —
+// ver conversa que motivou a mudança: a trava agora é por PESSOA
+// (sessão de usuário logado — ver lib/sessao-usuario.js), não por
+// computador. "Administrador" (senha mestra) e "Administrativo" sempre
+// podem, irrestrito; os demais perfis só se o usuário específico tiver
+// sido marcado com podeIniciarOperacao:true no cadastro (Configurações →
+// Usuários — ver lib/rotas/usuarios.js, lib/perfis.js).
+//
+// Diferente da versão antiga (função pura, só um deviceId), esta lê o
+// `req` inteiro pra extrair o cookie de sessão — ver
+// sessaoUsuario.dadosDaSessao(req).
+function podeControlarOperacao(req) {
+  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master: irrestrito
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false; // sem sessão de usuário válida, sem acesso
+  if (perfis.ehPerfilDeAdmin(dados.perfil)) return true; // Administrativo = igual ao master
+  // Pros demais perfis, duas condições juntas: o perfil precisa ter a área
+  // 'injetora' de edição (Operador de Injetora, Encarregado, Supervisão,
+  // ou um perfil CUSTOMIZADO com o item "Registrar Operação" marcado
+  // "Acesso Total" — ver lib/perfis.js / lib/perfis-customizados.js) E o
+  // usuário específico precisa ter sido marcado com o checkbox "pode
+  // iniciar/encerrar operações" no cadastro.
+  const temAreaInjetora = perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)
+    ? perfis.podeEditar(dados.perfil, 'injetora')
+    : (() => {
+        const customizado = perfisCustomizados.obter(dados.perfil);
+        return !!customizado && perfisCustomizados.podeEditar(customizado, 'injetora');
+      })();
+  return temAreaInjetora && !!dados.podeIniciarOperacao;
 }
 
-function dispositivoAutorizado(deviceId) {
-  const cfg = lerConfig();
-  const lista = Array.isArray(cfg.dispositivosAutorizados) ? cfg.dispositivosAutorizados : [];
-  if (!lista.length) return true; // sem restrição configurada ainda
-  return lista.some(d => d && d.deviceId === deviceId);
-}
-
-function negarDispositivoNaoAutorizado(res) {
+function negarControleDeOperacao(res) {
   res.writeHead(403, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     ok: false,
-    erro: 'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+    erro: 'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
   }));
 }
 
 const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
-  // ?deviceId=... — usado pra checar autorização de dispositivo em rotas
-  // que controlam a operação em andamento, ver dispositivoAutorizado();
+  // ?deviceId=... — usado só pra identificar o "dono" da operação em
+  // andamento, ver donoDeviceId em lib/rotas/operacao-andamento.js; a
+  // AUTORIZAÇÃO pra controlar operações agora é por sessão de usuário
+  // logado, ver podeControlarOperacao(), acima;
   // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
   // ver dirParaModoTeste(), mais abaixo).
   const [urlPath, queryString] = req.url.split('?');
@@ -506,14 +677,35 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ server, path: '/ws/operacao-andamento' });
 const clientesOperacaoAndamento = new Set();
 
+// Número de revisão da operação em andamento — só em memória (reseta com
+// o servidor, junto de clientesOperacaoAndamento; não precisa sobreviver
+// a um restart, já que todo cliente reconecta e recebe um snapshot novo
+// de qualquer forma). Incrementado a cada broadcastOperacaoAndamento(),
+// nunca decrementado — é o jeito do CLIENTE (ver _aplicarEstadoExterno,
+// operacao.js) saber "essa atualização que chegou é mais nova que a que
+// eu já tenho, ou é uma atualização atrasada/velha que devo ignorar".
+//
+// Motivação (ver conversa que motivou): antes, qualquer atualização
+// recebida por WebSocket SUBSTITUÍA o estado local inteiro, sem checar
+// se era mais recente — duas ABAS (não só dois computadores; abas do
+// MESMO navegador compartilham deviceId via localStorage, então o
+// mecanismo de "dono" já existente, baseado em deviceId, não protege
+// contra isso) editando a mesma operação podiam se sobrescrever uma à
+// outra silenciosamente, apagando dados recém-preenchidos sem aviso
+// nenhum — um traço "cheio" podia voltar a aparecer como pendente do
+// nada, se uma aba mais atrasada mandasse a própria versão por cima.
+let _revisaoOperacaoAndamento = 0;
+
 wss.on('connection', (ws) => {
   clientesOperacaoAndamento.add(ws);
 
   // Ao conectar, manda na hora o snapshot atual — é assim que a tela
   // carrega já mostrando uma operação que outra pessoa tenha deixado
-  // rodando (ou null, se não houver nenhuma).
+  // rodando (ou null, se não houver nenhuma). Inclui a revisão ATUAL
+  // (não 0) — pra esta aba já nascer sabendo a partir de qual ponto
+  // futuras atualizações contam como "mais novas".
   try {
-    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento() }));
+    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento(), revisao: _revisaoOperacaoAndamento }));
   } catch (_) { /* conexão pode ter caído nesse exato instante — ignora */ }
 
   ws.on('close', () => clientesOperacaoAndamento.delete(ws));
@@ -529,8 +721,16 @@ function _enviarWsParaTodos(msg) {
   }
 }
 
+// Devolve o novo número de revisão pra quem chamou (ver POST
+// /salvar-operacao-andamento, lib/rotas/operacao-andamento.js) poder
+// incluir na RESPOSTA HTTP também — o próprio autor da mudança nunca vê
+// o eco do seu WebSocket (filtrado por origemClientId, ver data.js),
+// então é só pela resposta HTTP que ele fica sabendo sua própria
+// revisão mais recente.
 function broadcastOperacaoAndamento(dados, origemClientId) {
-  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId });
+  _revisaoOperacaoAndamento++;
+  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId, revisao: _revisaoOperacaoAndamento });
+  return _revisaoOperacaoAndamento;
 }
 
 // Avisa todo mundo "ligado" no sistema (exceto quem registrou — esse já

@@ -284,9 +284,11 @@
     dotEl.setAttribute('data-tooltip', _tituloDot(novoEstado, lado));
 
     try {
-      // A rota agora exige dispositivo autorizado + ser o dono da
-      // operação (ver server.js) — precisa mandar o deviceId, que antes
-      // não era necessário aqui (era uma marcação livre, sem trava).
+      // A rota exige sessão de usuário logado com permissão de controlar
+      // operações + ser o dono da operação (ver podeControlarOperacao(),
+      // server.js) — deviceId continua sendo mandado só pra identificar o
+      // "dono" da operação em andamento (ver donoDeviceId,
+      // lib/rotas/operacao-andamento.js), não é mais usado pra autorização.
       const res = await fetch('/marcar-berco-andamento?deviceId=' + encodeURIComponent(LW.getDeviceId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

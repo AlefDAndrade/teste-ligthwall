@@ -8,58 +8,63 @@
             Controle de produção industrial</p>
         </div>
         <div class="menu-grid">
-          <div class="menu-card" data-hide-analista onclick="showPage('operacao')">
+          <div class="menu-card" data-hide-analista data-page="operacao" onclick="showPage('operacao')">
             <div class="menu-card-icon">⏱</div>
             <div class="menu-card-title">Registrar Operação</div>
             <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e
               controle de tempo.</div>
           </div>
-          <div class="menu-card" onclick="showPage('turnos')">
+          <div class="menu-card" data-page="turnos" onclick="showPage('turnos')">
             <div class="menu-card-icon">🏭</div>
             <div class="menu-card-title">Desempenho Turnos</div>
             <div class="menu-card-desc">Comparativo de produtividade, atrasos e eficiência operacional por turno de
               trabalho.</div>
           </div>
-          <div class="menu-card" onclick="showPage('registro')">
+          <div class="menu-card" data-page="registro" onclick="showPage('registro')">
             <div class="menu-card-icon">📋</div>
             <div class="menu-card-title">Operação</div>
             <div class="menu-card-desc">Histórico completo de todas as injeções registradas, com filtros, exportação em
               CSV e acesso à Análise Operacional.</div>
           </div>
-          <div class="menu-card" onclick="showPage('relatorio')">
+          <div class="menu-card" data-page="relatorio" onclick="showPage('relatorio')">
             <div class="menu-card-icon">🧾</div>
             <div class="menu-card-title">Traços</div>
             <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações —
               com acesso à Qualidade dos Traços.</div>
           </div>
-          <div class="menu-card" onclick="showPage('relatorio-bercos')">
+          <div class="menu-card" data-page="relatorio-bercos" onclick="showPage('relatorio-bercos')">
             <div class="menu-card-icon">📑</div>
             <div class="menu-card-title">Berços</div>
             <div class="menu-card-desc">Resultado visual (Okay/Vazou) de cada berço por bateria registrada — com acesso
               à Análise de Berços.</div>
           </div>
-          <div class="menu-card" onclick="showPage('oee')">
+          <div class="menu-card" data-page="oee" onclick="showPage('oee')">
             <div class="menu-card-icon">🎯</div>
             <div class="menu-card-title">OEE</div>
             <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
             </div>
           </div>
-          <div class="menu-card" onclick="showPage('metas')">
+          <div class="menu-card" data-page="metas" onclick="showPage('metas')">
             <div class="menu-card-icon">🏁</div>
             <div class="menu-card-title">Metas</div>
             <div class="menu-card-desc">Progresso do mês contra as metas de traços, m² e OEE definidas pelo Administrador.</div>
           </div>
-          <div class="menu-card" onclick="showPage('paradas')">
+          <div class="menu-card" data-page="paradas" onclick="showPage('paradas')">
             <div class="menu-card-icon">🛑</div>
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
-          <div class="menu-card" onclick="showPage('setor-qualidade')">
+          <div class="menu-card" data-page="setor-qualidade" onclick="showPage('setor-qualidade')">
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
             <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
           </div>
-          <div class="menu-card" onclick="window.open('tv.html', '_blank')">
+          <div class="menu-card" data-page="manutencao" onclick="showPage('manutencao')">
+            <div class="menu-card-icon">🔧</div>
+            <div class="menu-card-title">Manutenção</div>
+            <div class="menu-card-desc">Chamados corretivos, manutenção programada, compra de peças e almoxarifado — com visão executiva de custos e MTTR.</div>
+          </div>
+          <div class="menu-card" data-page="tv" onclick="window.open('tv.html', '_blank')">
             <div class="menu-card-icon">📺</div>
             <div class="menu-card-title">Modo TV</div>
             <div class="menu-card-desc">Painel para telão da fábrica: operação ao vivo, traços do dia, OEE e últimas paradas — atualiza sozinho, sem precisar de login.</div>
@@ -73,7 +78,8 @@
           <div class="menu-card" data-admin-only onclick="abrirBackupHub()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup e Restauração</div>
-            <div class="menu-card-desc">Fazer ou restaurar um backup — só dos dados, ou do programa inteiro.</div>
+            <div class="menu-card-desc">Fazer ou restaurar um backup — só dados de produção, ou dados + configurações
+              e usuários.</div>
           </div>
         </div>
       </div>

@@ -9,24 +9,33 @@
 /* Variáveis específicas desta tela — nomes distintos dos do
    Lightwall para não colidir, mesmo agora rodando no mesmo documento */
 :root {
-  --sq-orange:      #f5821f;
-  --sq-yellow:      #f1c40f;
-  --sq-purple:      #8b5cf6;
-  --sq-cor-verde:   var(--green);
-  --sq-cor-vermelho:var(--red);
-  --sq-cor-azul:    var(--blue);
+  --sq-orange: #f5821f;
+  --sq-yellow: #f1c40f;
+  --sq-purple: #8b5cf6;
+  --sq-cor-verde: var(--green);
+  --sq-cor-vermelho: var(--red);
+  --sq-cor-azul: var(--blue);
   --sq-cor-amarelo: #f1c40f;
   --sq-cor-laranja: #f5821f;
   /* Cor FIXA (não configurável, nunca escolhida na paleta) do marcador
      "X" — Painel não preenchido. Sempre a mesma, ao contrário das outras
      5 cores de marcação (verde/vermelho/azul/amarelo/laranja, que o
      usuário escolhe na paleta). */
-  --sq-cor-cinza:   red;
+  --sq-cor-cinza: red;
+  /* Cor NEUTRA (cinza de verdade, apesar do nome de --sq-cor-cinza acima
+     já estar "ocupado" com vermelho por razão histórica — ver comentário
+     dele) usada só nas marcas de IDENTIFICAÇÃO AUTOMÁTICA (tipos de forma
+     simples, sem corModificadora — ver COR_IDENTIFICACAO_AUTO,
+     _marcasDeIdentificacao, setor-qualidade.js). Precisa ser visualmente
+     BEM diferente de verde/azul/vermelho (as cores de status) — senão a
+     marca automática (que ainda não é uma validação de ninguém) pareceria
+     uma aprovação de verdade antes mesmo do operador agir. */
+  --sq-cor-identificacao-auto: #8a94a6;
   /* Antes eram cores fixas (#23354a/#2a4054) — só faziam sentido no tema
      escuro padrão. bg-3/border-2 já existem no sistema principal (ver
      css/styles.css) e mudam com o tema selecionado, então a "placa" some
      e reaparece do jeito certo em Claro/Lightwall também. */
-  --sq-placa-bg:    var(--bg-3);
+  --sq-placa-bg: var(--bg-3);
   --sq-placa-borda: var(--border-2);
   /* Cores de tipo de montagem — usadas em 3 lugares (mini-slab, slab,
      modal); centralizadas aqui pra não repetir o mesmo hex 3x. */
@@ -34,15 +43,19 @@
   --sq-tipo-p2-text: #42a5f5;
   --sq-tipo-t3-text: #ab47bc;
   --sq-tipo-t1-text: #ffa726;
-  --sq-tipo-sp:     #2e7d32;
-  --sq-tipo-2p:     #0d47a1;
-  --sq-tipo-3t:     #4a148c;
-  --sq-tipo-1t:     #e65100;
-  --sq-shadow:      var(--shadow);
+  --sq-tipo-sp: #2e7d32;
+  --sq-tipo-2p: #0d47a1;
+  --sq-tipo-3t: #4a148c;
+  --sq-tipo-1t: #e65100;
+  --sq-shadow: var(--shadow);
 }
 
 /* Reset mínimo — o Lightwall já faz o global */
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 /* Antes era "body { ... }" — fazia sentido quando esta tela era um
    documento HTML à parte (iframe, setor-qualidade-app.html). Agora que
@@ -80,9 +93,16 @@
   gap: 8px;
   margin-bottom: 18px;
 }
-.sq-collapsible-row.sq-hide-view { display: flex; } /* .sq-hide-view por padrão é inline-flex — aqui precisa ser coluna */
 
-.sq-collapsible { position: relative; }
+.sq-collapsible-row.sq-hide-view {
+  display: flex;
+}
+
+/* .sq-hide-view por padrão é inline-flex — aqui precisa ser coluna */
+
+.sq-collapsible {
+  position: relative;
+}
 
 .sq-collapsible-btn {
   display: flex;
@@ -103,8 +123,15 @@
   box-shadow: var(--sq-shadow);
   transition: background .15s ease, border-color .15s ease;
 }
-.sq-collapsible-btn:hover { background: var(--bg-2); border-color: var(--accent); }
-.sq-collapsible.open .sq-collapsible-btn { border-color: var(--accent); }
+
+.sq-collapsible-btn:hover {
+  background: var(--bg-2);
+  border-color: var(--accent);
+}
+
+.sq-collapsible.open .sq-collapsible-btn {
+  border-color: var(--accent);
+}
 
 .sq-collapsible-badge {
   background: var(--bg-3);
@@ -116,6 +143,7 @@
   min-width: 20px;
   text-align: center;
 }
+
 /* Contagem > 0 — aplicada via JS (renderDrafts/carregarFilaNaoAvaliadas,
    ver setor-qualidade.js), pra chamar atenção quando há algo pra ver. */
 .sq-collapsible-badge.sq-badge-ativo {
@@ -129,7 +157,10 @@
   color: var(--text-3);
   transition: transform .15s ease;
 }
-.sq-collapsible.open .sq-collapsible-chevron { transform: rotate(180deg); }
+
+.sq-collapsible.open .sq-collapsible-chevron {
+  transform: rotate(180deg);
+}
 
 .sq-collapsible-panel {
   display: none;
@@ -142,13 +173,19 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 14px 18px;
-  box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
   max-height: 360px;
   overflow-y: auto;
 }
-.sq-collapsible.open .sq-collapsible-panel { display: block; }
 
-.sq-fila-pendentes-vazio { font-size: .78rem; color: var(--text-3); }
+.sq-collapsible.open .sq-collapsible-panel {
+  display: block;
+}
+
+.sq-fila-pendentes-vazio {
+  font-size: .78rem;
+  color: var(--text-3);
+}
 
 /* 4ª posição em diante — só aparece se a fila tiver mais de 3 baterias
    pendentes; sem cartão próprio, só um <select> + "Iniciar" mesmo. */
@@ -158,7 +195,10 @@
   align-items: center;
   margin-bottom: 10px;
 }
-.sq-fila-outras select { flex: 1; }
+
+.sq-fila-outras select {
+  flex: 1;
+}
 
 /* 3ª e 2ª posições — lado a lado, compactas, ACIMA da 1ª (ver
    .sq-fila-item-principal, abaixo). */
@@ -168,7 +208,10 @@
   align-items: stretch;
   gap: 8px;
 }
-.sq-fila-secundarias .sq-fila-item { flex: 1 1 160px; }
+
+.sq-fila-secundarias .sq-fila-item {
+  flex: 1 1 160px;
+}
 
 /* Cada bateria pendente é um <button> — clicar em qualquer parte do item
    já inicia a avaliação (ver iniciarAvaliacaoDaFila, setor-qualidade.js);
@@ -192,10 +235,28 @@
   padding: 4px 10px 4px 8px;
   transition: border-color .15s ease, background .15s ease;
 }
-.sq-fila-item:hover { border-color: var(--accent); background: var(--bg-3, var(--bg-2)); }
-.sq-fila-item-info { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
-.sq-fila-item-info strong { color: var(--text); font-size: .8rem; }
-.sq-fila-item-info span { color: var(--text-3); font-size: .68rem; }
+
+.sq-fila-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-3, var(--bg-2));
+}
+
+.sq-fila-item-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.sq-fila-item-info strong {
+  color: var(--text);
+  font-size: .8rem;
+}
+
+.sq-fila-item-info span {
+  color: var(--text-3);
+  font-size: .68rem;
+}
 
 /* Botão "X" de excluir — em cada elemento da fila (cartão compacto,
    cartão principal e select da 4ª posição em diante, ver
@@ -220,17 +281,24 @@
   font-size: .7rem;
   transition: color .15s ease, background .15s ease, border-color .15s ease;
 }
+
 .sq-fila-item-excluir:hover {
   color: #fff;
   background: var(--red, #ef4444);
   border-color: var(--red, #ef4444);
 }
+
 /* No cartão principal, o ícone de "play" já tem margin-left:auto (ver
    regra mais abaixo) — o "X" só precisa de um respiro à esquerda dele. */
-.sq-fila-item-principal .sq-fila-item-excluir { margin-left: 8px; }
+.sq-fila-item-principal .sq-fila-item-excluir {
+  margin-left: 8px;
+}
+
 /* Dentro de .sq-fila-outras (select + Iniciar + X), sem auto-margin —
    ele já vem depois dos outros dois na ordem natural do flex. */
-.sq-fila-outras .sq-fila-item-excluir { margin-left: 0; }
+.sq-fila-outras .sq-fila-item-excluir {
+  margin-left: 0;
+}
 
 /* Item vinculado à avaliação em edição AGORA (ver linkedOperacaoId,
    setor-qualidade.js) — destaque verde bem visível, pra identificar de
@@ -241,7 +309,11 @@
   background: rgba(16, 185, 129, .12);
   box-shadow: 0 0 0 1px var(--green);
 }
-.sq-fila-item-ativa .sq-fila-ordinal { color: var(--green); }
+
+.sq-fila-item-ativa .sq-fila-ordinal {
+  color: var(--green);
+}
+
 .sq-fila-item-principal.sq-fila-item-ativa::after {
   content: '✓ Em avaliação';
   font-size: .65rem;
@@ -250,7 +322,10 @@
   margin-left: auto;
   white-space: nowrap;
 }
-.sq-fila-item-ativa.sq-fila-item-principal i.fa-play { display: none; }
+
+.sq-fila-item-ativa.sq-fila-item-principal i.fa-play {
+  display: none;
+}
 
 /* 1ª posição — a próxima a ser avaliada — ocupa a linha inteira sozinha,
    ABAIXO da 3ª/2ª (ver .sq-fila-secundarias, acima), com mais destaque e
@@ -262,9 +337,19 @@
   border-color: var(--accent);
   gap: 12px;
 }
-.sq-fila-item-principal .sq-fila-item-info strong { font-size: .92rem; }
-.sq-fila-item-principal .sq-fila-item-info span { font-size: .74rem; }
-.sq-fila-item-principal i.fa-play { color: var(--accent); margin-left: auto; }
+
+.sq-fila-item-principal .sq-fila-item-info strong {
+  font-size: .92rem;
+}
+
+.sq-fila-item-principal .sq-fila-item-info span {
+  font-size: .74rem;
+}
+
+.sq-fila-item-principal i.fa-play {
+  color: var(--accent);
+  margin-left: auto;
+}
 
 /* Número da posição na fila (1ª, 2ª, 3ª...) — vem da ORDEM da lista, não
    é guardado em lugar nenhum: ao recarregar a fila depois de uma
@@ -276,7 +361,10 @@
   min-width: 20px;
   text-align: center;
 }
-.sq-fila-item-principal .sq-fila-ordinal { font-size: .95rem; }
+
+.sq-fila-item-principal .sq-fila-ordinal {
+  font-size: .95rem;
+}
 
 /* ── Topbar ───────────────────────────────────────────────── */
 .sq-topbar {
@@ -313,7 +401,10 @@
 }
 
 /* ── Navegação interna ────────────────────────────────────── */
-.sq-nav { display: flex; gap: 12px; }
+.sq-nav {
+  display: flex;
+  gap: 12px;
+}
 
 .sq-nav-btn {
   background: transparent;
@@ -327,13 +418,37 @@
   transition: color .15s, border-color .15s;
   font-family: var(--font-body);
 }
-.sq-nav-btn:hover { color: var(--text-2); }
-.sq-nav-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+.sq-nav-btn:hover {
+  color: var(--text-2);
+}
+
+.sq-nav-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--blue);
+}
 
 /* ── Seções (pages internas) ──────────────────────────────── */
-.sq-section { display: none; animation: sq-fadeIn .25s ease; }
-.sq-section.active { display: block; }
-@keyframes sq-fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.sq-section {
+  display: none;
+  animation: sq-fadeIn .25s ease;
+}
+
+.sq-section.active {
+  display: block;
+}
+
+@keyframes sq-fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* ── Cards de rascunho (lista EM ANDAMENTO) ───────────────── */
 .sq-list-card {
@@ -348,10 +463,27 @@
   flex-wrap: wrap;
   gap: 10px;
 }
-.sq-list-card-info { display: flex; flex-direction: column; gap: 3px; }
-.sq-list-card-info .sq-id { font-weight: 700; font-size: .9rem; }
-.sq-list-card-info .sq-meta { font-size: .75rem; color: var(--text-3); }
-.sq-list-card-actions { display: flex; gap: 8px; }
+
+.sq-list-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sq-list-card-info .sq-id {
+  font-weight: 700;
+  font-size: .9rem;
+}
+
+.sq-list-card-info .sq-meta {
+  font-size: .75rem;
+  color: var(--text-3);
+}
+
+.sq-list-card-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* ── Estado vazio ─────────────────────────────────────────── */
 .sq-empty {
@@ -359,7 +491,13 @@
   padding: 48px 24px;
   color: var(--text-3);
 }
-.sq-empty i { font-size: 2.2rem; margin-bottom: 12px; display: block; opacity: .5; }
+
+.sq-empty i {
+  font-size: 2.2rem;
+  margin-bottom: 12px;
+  display: block;
+  opacity: .5;
+}
 
 /* ── Filtros do Dashboard ─────────────────────────────────── */
 .sq-filters {
@@ -388,9 +526,11 @@
   gap: 12px;
   margin-bottom: 20px;
 }
+
 #sq-dashboard .kpi-card {
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
+
 #sq-dashboard .kpi-card:hover {
   transform: translateY(-3px);
   border-color: var(--blue);
@@ -414,19 +554,39 @@
   gap: 20px;
   margin-bottom: 20px;
 }
+
 /* Reutiliza .card do Lightwall para as caixas */
 .sq-chart-box {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: 16px; box-shadow: var(--sq-shadow);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--sq-shadow);
   transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
 }
+
 .sq-chart-box:hover {
   transform: translateY(-3px);
   border-color: var(--blue);
   box-shadow: 0 8px 24px rgba(59, 130, 246, .15);
 }
-.sq-chart-box h4 { color: var(--text-2); font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.sq-chart-box svg { max-height: 300px; max-width: 100%; display: block; margin: 0 auto; }
+
+.sq-chart-box h4 {
+  color: var(--text-2);
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.sq-chart-box svg {
+  max-height: 300px;
+  max-width: 100%;
+  display: block;
+  margin: 0 auto;
+}
 
 /* ── Resumo executivo ─────────────────────────────────────── */
 .sq-summary-box {
@@ -438,6 +598,7 @@
   box-shadow: var(--sq-shadow);
   transition: box-shadow .2s ease, border-color .2s ease;
 }
+
 /* Sem o "translateY" aqui de propósito — é uma caixa larga de texto
    corrido (não um "card" que se clica/navega), então só realça a borda
    e a sombra; levantar ela junto com o texto ficaria estranho. */
@@ -445,8 +606,22 @@
   border-color: var(--blue);
   box-shadow: 0 8px 24px rgba(59, 130, 246, .12);
 }
-.sq-summary-box h4 { color: var(--text-2); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.sq-summary-box p { font-size: .88rem; color: var(--text-2); line-height: 1.6; }
+
+.sq-summary-box h4 {
+  color: var(--text-2);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.sq-summary-box p {
+  font-size: .88rem;
+  color: var(--text-2);
+  line-height: 1.6;
+}
 
 /* ── Espelho Visual ───────────────────────────────────────── */
 .sq-mirror-wrapper {
@@ -457,15 +632,45 @@
   margin-bottom: 20px;
   box-shadow: var(--sq-shadow);
 }
+
 .sq-mirror-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 10px; flex-wrap: wrap; gap: 10px;
-  border-bottom: 1px solid var(--border); padding-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
 }
-.sq-mirror-title { font-weight: 700; font-size: .88rem; display: flex; align-items: center; gap: 6px; color: var(--text); }
-.sq-mirror-info { display: flex; gap: 16px; font-size: .82rem; color: var(--text-2); flex-wrap: wrap; }
-.sq-mirror-info strong { color: var(--text); }
-.sq-mirror-nav { display: flex; gap: 8px; align-items: center; }
+
+.sq-mirror-title {
+  font-weight: 700;
+  font-size: .88rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.sq-mirror-info {
+  display: flex;
+  gap: 16px;
+  font-size: .82rem;
+  color: var(--text-2);
+  flex-wrap: wrap;
+}
+
+.sq-mirror-info strong {
+  color: var(--text);
+}
+
+.sq-mirror-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .sq-mirror-nav button {
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -476,40 +681,162 @@
   transition: background .15s;
   font-size: .8rem;
 }
-.sq-mirror-nav button:hover:not(:disabled) { background: var(--blue); border-color: var(--blue); }
-.sq-mirror-nav button:disabled { opacity: .35; cursor: not-allowed; }
 
-.sq-mini-stacks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.sq-mini-pallet { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
-.sq-mini-pallet-header { font-size: .68rem; font-weight: 700; color: var(--text-3); text-align: center; margin-bottom: 5px; border-bottom: 1px solid var(--border); padding-bottom: 3px; text-transform: uppercase; }
-.sq-mini-slab { height: 24px; background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda); border-radius: 3px; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
-.sq-mini-slab-number { font-size: .58rem; font-weight: 700; color: var(--text-3); font-family: var(--font-mono); }
-.sq-mini-slab-marks { display: flex; align-items: center; justify-content: center; gap: 2px; flex: 1; }
-.sq-mini-slab-type { font-size: .58rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
-.sq-mini-slab-type.sp { color: var(--sq-tipo-sp-text); }
-.sq-mini-slab-type.p2 { color: var(--sq-tipo-p2-text); }
-.sq-mini-slab-type.t3 { color: var(--sq-tipo-t3-text); }
-.sq-mini-slab-type.t1 { color: var(--sq-tipo-t1-text); }
+.sq-mirror-nav button:hover:not(:disabled) {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.sq-mirror-nav button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.sq-mini-stacks {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 0 10%;
+}
+
+.sq-mini-pallet {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 6%;
+}
+
+.sq-mini-pallet-header {
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text-3);
+  text-align: center;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.sq-mini-slab {
+  position: relative;
+  height: 24px;
+  background: var(--sq-placa-bg);
+  border: 1px solid var(--sq-placa-borda);
+  border-radius: 3px;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+/* Número do berço — canto esquerdo, `absolute` (removido do fluxo) por
+   um motivo específico: se ficasse no fluxo normal do flex (como era
+   antes), ele concorreria por espaço com .sq-mini-slab-marks (flex:1),
+   e a largura VARIÁVEL de .sq-mini-slab-canto-info (motivo+tipo, abaixo)
+   faria .sq-mini-slab-marks encolher/crescer conforme a placa tem ou não
+   código de motivo — as marcas ficavam visualmente desalinhadas entre
+   placas vizinhas só por causa disso. Com número E canto-info fora do
+   fluxo (absolute), .sq-mini-slab-marks vira o ÚNICO item de verdade no
+   flex do slab — sempre ocupa/centraliza no mesmo espaço, com ou sem
+   motivo, mesmo alinhamento pedido pelo usuário (igual à Avaliação). */
+.sq-mini-slab-number {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: .58rem;
+  font-weight: 700;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
+.sq-mini-slab-marks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.sq-mini-slab-type {
+  font-size: .58rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+
+.sq-mini-slab-type.sp {
+  color: var(--sq-tipo-sp-text);
+}
+
+.sq-mini-slab-type.p2 {
+  color: var(--sq-tipo-p2-text);
+}
+
+.sq-mini-slab-type.t3 {
+  color: var(--sq-tipo-t3-text);
+}
+
+.sq-mini-slab-type.t1 {
+  color: var(--sq-tipo-t1-text);
+}
+
 /* Código do motivo (ex: "BC") no Espelho Visual — só leitura aqui (sem
    clique — o espelho é a visão consolidada, editar motivo é lá no
-   formulário, ver editarAvaliacaoDoEspelho). */
+   formulário, ver editarAvaliacaoDoEspelho). Ao lado do tipo (nunca
+   sobreposto), dentro do wrapper .sq-mini-slab-canto-info abaixo. */
 .sq-mini-slab-motivo {
-  font-size: .55rem; font-weight: 700; font-family: var(--font-mono);
-  color: #fff; background: var(--sq-cor-vermelho);
-  border-radius: 3px; padding: 1px 4px; line-height: 1.4;
+  font-size: .55rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--sq-cor-vermelho);
+  background: var(--sq-cor-amarelo);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
 }
-.sq-mini-mark { display: inline-block; }
+
+/* 2ª linha (ver _linhaDoPainel/renderMirror) — mesma cor usada no badge
+   equivalente da grade principal, ver .sq-slab-motivo-2linha,
+   setor-qualidade.css. */
+.sq-mini-slab-motivo.sq-mini-slab-motivo-2linha {
+  color: #fff;
+  background: var(--sq-cor-azul);
+}
+
+/* Wrapper que agrupa motivo + tipo, canto direito — `absolute` pelo
+   mesmo motivo de .sq-mini-slab-number, acima (ver comentário lá): tira
+   os dois do fluxo do flex pra largura variável do motivo nunca afetar
+   a centralização de .sq-mini-slab-marks. Motivo antes do tipo (mesma
+   ordem de sempre), lado a lado via `gap`, nunca um sobre o outro. */
+.sq-mini-slab-canto-info {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sq-mini-mark {
+  display: inline-block;
+}
+
 /* "Sem marcação" (a imensa maioria das placas) — círculo VAZADO (sem
    preenchimento), pra nunca ser confundido com uma marca real (círculo
    ou traço real são sempre preenchidos/sólidos — ver getMirrorMark,
    setor-qualidade.js). Antes era uma barrinha sólida do mesmo tamanho
    do traço de SP, o que fazia parecer marcação onde não havia nenhuma. */
 .sq-mini-mark-vazia {
-  width: 9px; height: 9px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid var(--sq-placa-borda);
 }
+
 /* "Não avaliado no sistema" (ver SQ.excluirDaFila) — nunca passou pelo
    Setor de Qualidade de verdade; precisa ser óbvio que é OUTRA coisa,
    não "sem marcação" nem uma marca real. */
@@ -519,6 +846,7 @@
   font-weight: 700;
   color: var(--text-3);
 }
+
 /* "Painel não preenchido" (marca X feita pelo avaliador — ver
    COR_NAO_PREENCHIDO em setor-qualidade.js). De propósito, um badge
    preenchido (fundo cinza + × branco), não texto solto como
@@ -526,9 +854,12 @@
    (aqui é uma marcação real; lá é a bateria inteira nunca avaliada) e
    não podem ficar visualmente iguais no Espelho. */
 .sq-mini-mark-x {
-  width: 9px; height: 9px;
+  width: 9px;
+  height: 9px;
   border-radius: 1px;
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--sq-cor-cinza);
   color: #fff;
   font-size: .58rem;
@@ -537,12 +868,22 @@
 }
 
 .sq-mirror-legend {
-  display: flex; justify-content: center; gap: 16px;
-  font-size: .72rem; color: var(--text-2);
-  margin-top: 10px; border-top: 1px solid var(--border);
-  padding-top: 10px; flex-wrap: wrap;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: .72rem;
+  color: var(--text-2);
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  flex-wrap: wrap;
 }
-.sq-mirror-legend .sq-legend-item { display: flex; align-items: center; gap: 5px; }
+
+.sq-mirror-legend .sq-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 
 /* ── Header do formulário ─────────────────────────────────── */
 .sq-header-grid {
@@ -559,8 +900,11 @@
 
 /* ── Ferramentas (cor / forma / ações) ────────────────────── */
 .sq-tools {
-  display: flex; align-items: center; flex-wrap: wrap;
-  gap: 8px; padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -577,24 +921,55 @@
      aparece sozinho. */
   counter-reset: sq-color-num sq-shape-num;
 }
-.sq-tools-label { font-size: .67rem; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: .06em; }
+
+.sq-tools-label {
+  font-size: .67rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
 
 .sq-btn-color {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform .15s;
-  position: relative; /* âncora do badge de nº do atalho, ::after abaixo */
+  position: relative;
+  /* âncora do badge de nº do atalho, ::after abaixo */
   counter-increment: sq-color-num;
 }
-.sq-btn-color:hover { transform: scale(1.12); }
-.sq-btn-color.active { border-color: var(--text); box-shadow: 0 0 0 2px rgba(255,255,255,.2); }
-.sq-btn-color.verde   { background: var(--sq-cor-verde); }
-.sq-btn-color.vermelho { background: var(--sq-cor-vermelho); }
-.sq-btn-color.azul    { background: var(--sq-cor-azul); }
-.sq-btn-color.amarelo { background: var(--sq-cor-amarelo); }
-.sq-btn-color.laranja { background: var(--sq-cor-laranja); }
+
+.sq-btn-color:hover {
+  transform: scale(1.12);
+}
+
+.sq-btn-color.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .2);
+}
+
+.sq-btn-color.verde {
+  background: var(--sq-cor-verde);
+}
+
+.sq-btn-color.vermelho {
+  background: var(--sq-cor-vermelho);
+}
+
+.sq-btn-color.azul {
+  background: var(--sq-cor-azul);
+}
+
+.sq-btn-color.amarelo {
+  background: var(--sq-cor-amarelo);
+}
+
+.sq-btn-color.laranja {
+  background: var(--sq-cor-laranja);
+}
 
 .sq-btn-shape {
   padding: 4px 6px;
@@ -603,29 +978,89 @@
   cursor: pointer;
   background: var(--bg-3);
   transition: background .15s, transform .15s;
-  display: flex; align-items: center; justify-content: center;
-  position: relative; /* âncora do badge de nº do atalho, ::after abaixo */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  /* âncora do badge de nº do atalho, ::after abaixo */
   counter-increment: sq-shape-num;
 }
-.sq-btn-shape:hover { background: var(--border); }
-.sq-btn-shape.active { border-color: var(--text); background: var(--border); }
-.sq-shape-circle { width: 13px; height: 13px; border-radius: 50%; background: var(--text); }
-.sq-shape-dash   { width: 17px; height: 3px; border-radius: 2px; background: var(--text); }
+
+.sq-btn-shape:hover {
+  background: var(--border);
+}
+
+.sq-btn-shape.active {
+  border-color: var(--text);
+  background: var(--border);
+}
+
+.sq-shape-circle {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.sq-shape-dash {
+  width: 17px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text);
+}
+
 /* Ícone do botão de forma "X" — Painel não preenchido. Caractere, não
    bloco preenchido (diferente de circle/dash), porque não há "cor
    selecionada" pra representar aqui: é sempre neutro, veja
    .sq-btn-color-disabled logo abaixo. */
 .sq-shape-x {
-  width: 13px; height: 13px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 1.6rem; line-height: 1;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.6rem;
+  line-height: 1;
   color: var(--sq-cor-cinza);
+}
+
+/* Botão "I" — Indicador de qualidade (toggleIndicadorAtivo, ver
+   setor-qualidade.js). Fica FORA do grupo .sq-btn-shape de propósito
+   (não conta pro contador de atalhos Ctrl+nº nem ganha o badge numerado
+   — não é uma forma, é um interruptor: decide o PAPEL da próxima marca,
+   não o desenho dela). Estado ativo = accent, igual ao mesmo botão "i"
+   já usado em Configurações → Paletes → "Combinações de Avaliação". */
+.sq-btn-indicador {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: .8rem;
+  border: 2px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text);
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.sq-btn-indicador:hover {
+  border-color: var(--text-3);
+}
+
+.sq-btn-indicador.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }
 
 /* Paleta de cor desabilitada enquanto a forma "X" está selecionada — X
    nunca usa a cor escolhida (é sempre --sq-cor-cinza, ver
    COR_NAO_PREENCHIDO em setor-qualidade.js). */
-.sq-btn-color-disabled { opacity: .3; pointer-events: none; }
+.sq-btn-color-disabled {
+  opacity: .3;
+  pointer-events: none;
+}
 
 /* Badge com o número do atalho de teclado — canto inferior direito de
    cada botão. Cor sozinha = número (tecla "1", "2"...); forma usa o
@@ -634,8 +1069,11 @@
 .sq-btn-color::after {
   content: counter(sq-color-num);
   position: absolute;
-  bottom: -4px; right: -4px;
-  min-width: 13px; height: 13px; padding: 0 2px;
+  bottom: -4px;
+  right: -4px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
   border-radius: 50%;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -647,11 +1085,15 @@
   font-family: var(--font-mono);
   pointer-events: none;
 }
+
 .sq-btn-shape::after {
   content: '^' counter(sq-shape-num);
   position: absolute;
-  bottom: -4px; right: -4px;
-  min-width: 16px; height: 13px; padding: 0 2px;
+  bottom: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 13px;
+  padding: 0 2px;
   border-radius: 7px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -664,22 +1106,68 @@
   pointer-events: none;
 }
 
-.sq-tools-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+.sq-tools-sep {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
 /* Legenda curta dos atalhos — mesmo estilo discreto de .sq-tools-label. */
-.sq-tools-hint { font-size: .64rem; color: var(--text-3); font-style: italic; }
+.sq-tools-hint {
+  font-size: .64rem;
+  color: var(--text-3);
+  font-style: italic;
+}
 
 /* ── Stacks / Pallets ─────────────────────────────────────── */
 /* flex-wrap (não mais grid de 4 colunas fixas) — pallets extras (ver
    SQ.adicionarPalletExtra) quebram linha naturalmente em vez de
-   espremer os 4 originais. */
+   espremer os 4 originais. Largura de ~50% cada faz 2 caberem por linha
+   (layout 2x2 pedido pelo usuário) — a ORDEM visual (que pallet aparece
+   em qual posição) é controlada por `order` (ver .sq-pallet-col-* logo
+   abaixo), nunca pela ordem no HTML/DOM — os ids (stack1/stack2/...) e
+   tudo que depende deles (_stackIds, mapeamento de berço→palete)
+   continuam exatamente como sempre. */
 .sq-stacks {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
   margin-bottom: 16px;
+  padding: 0 10%;
 }
-.sq-pallet-col { display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 140px; }
+
+.sq-pallet-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 1 calc(50% - 3px);
+  min-width: 140px;
+  padding: 0 3%;
+}
+
+/* Ordem visual padrão pedida: Palete 2 e Palete 1 na primeira linha,
+   Palete 3 e Palete 4 na segunda — mesmo que a ordem no HTML continue
+   1,2,3,4 (ver comentário acima). Pallets extras (criados em runtime,
+   ver _criarColunaPallet) recebem order mais alto inline, pra sempre
+   aparecerem DEPOIS destes 4. */
+.sq-pallet-col[data-pallet-id="stack1"] {
+  order: 2;
+}
+
+.sq-pallet-col[data-pallet-id="stack2"] {
+  order: 1;
+}
+
+.sq-pallet-col[data-pallet-id="stack3"] {
+  order: 3;
+}
+
+.sq-pallet-col[data-pallet-id="stack4"] {
+  order: 4;
+}
+
 /* Botão discreto de "novo pallet" — ao lado do último, mesma altura
    aproximada da grade de placas (margin-top alinha com o topo dela, não
    com o cabeçalho colorido do pallet). */
@@ -687,30 +1175,48 @@
   flex: 0 0 auto;
   align-self: center;
   margin-top: 22px;
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 1px dashed var(--border-2);
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: .68rem;
   transition: border-color .15s, color .15s, background .15s;
 }
-.sq-pallet-add:hover { border-color: var(--blue); color: var(--blue); background: rgba(59,130,246,.08); }
+
+.sq-pallet-add:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: rgba(59, 130, 246, .08);
+}
+
 .sq-pallet-header {
   position: relative;
-  display: flex; justify-content: center; align-items: center;
-  flex-wrap: wrap; gap: 4px; width: 100%; margin-bottom: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 4px;
 }
+
 .sq-pallet-label {
-  font-weight: 700; color: var(--text-2); font-size: .67rem;
+  font-weight: 700;
+  color: var(--text-2);
+  font-size: .67rem;
   text-transform: uppercase;
   background: var(--bg-3);
   padding: 2px 10px;
   border-radius: 12px;
   border: 1px solid var(--border);
 }
+
 /* Faixa de berços de cada palete-base (ex: "Berços 1–10 · Esq.") — ver
    _atualizarSubtitulosPallets, setor-qualidade.js. flex-basis:100% joga
    pra uma linha própria, abaixo do rótulo (o header já é flex-wrap). */
@@ -720,7 +1226,12 @@
   font-size: .62rem;
   color: var(--text-3);
 }
-.sq-pallet-actions { display: flex; align-items: center; gap: 3px; }
+
+.sq-pallet-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
 
 .sq-btn-select-all {
   background: rgba(59, 130, 246, .12);
@@ -733,78 +1244,94 @@
   font-weight: 700;
   transition: background .15s;
 }
-.sq-btn-select-all:hover { background: var(--blue); color: #fff; }
 
-.sq-btn-dropdown {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: .65rem;
-  display: flex; align-items: center; justify-content: center;
-  transition: border-color .15s;
+.sq-btn-select-all:hover {
+  background: var(--blue);
+  color: #fff;
 }
-.sq-btn-dropdown:hover { border-color: var(--blue); color: var(--text); }
 
 .sq-btn-remove-pallet {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-2);
-  width: 22px; height: 22px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   cursor: pointer;
   font-size: .6rem;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: border-color .15s, color .15s, background .15s;
 }
-.sq-btn-remove-pallet:hover { border-color: var(--sq-cor-vermelho); color: var(--sq-cor-vermelho); background: rgba(239,68,68,.08); }
 
-.sq-color-dropdown {
-  position: absolute; top: 110%; right: 0; z-index: 999;
-  background: var(--bg-card);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-lg);
-  padding: 8px;
-  display: none;
-  box-shadow: var(--sq-shadow);
-  flex-wrap: wrap; gap: 4px; justify-content: center;
-  min-width: 104px;
+.sq-btn-remove-pallet:hover {
+  border-color: var(--sq-cor-vermelho);
+  color: var(--sq-cor-vermelho);
+  background: rgba(239, 68, 68, .08);
 }
-.sq-color-dropdown.open { display: flex; }
-.sq-dropdown-color {
-  width: 22px; height: 22px;
+
+/* "🧹 Limpar" por pallet — substituiu o dropdown de cores (🎨), que era
+   redundante com "⚡ Todas" + a paleta principal (ver clearPallet,
+   setor-qualidade.js). Mesmo tamanho/formato de .sq-btn-remove-pallet,
+   cor de destaque igual ao botão "Limpar" geral (btn-danger). */
+.sq-btn-clear-pallet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2px solid transparent;
   cursor: pointer;
-  transition: transform .15s;
+  font-size: .6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .15s, color .15s, background .15s;
 }
-.sq-dropdown-color:hover { transform: scale(1.2); border-color: var(--text); }
-.sq-dropdown-color.verde   { background: var(--sq-cor-verde); }
-.sq-dropdown-color.vermelho { background: var(--sq-cor-vermelho); }
-.sq-dropdown-color.azul    { background: var(--sq-cor-azul); }
-.sq-dropdown-color.amarelo { background: var(--sq-cor-amarelo); }
-.sq-dropdown-color.laranja { background: var(--sq-cor-laranja); }
+
+.sq-btn-clear-pallet:hover {
+  border-color: var(--sq-cor-vermelho);
+  color: var(--sq-cor-vermelho);
+  background: rgba(239, 68, 68, .08);
+}
 
 /* Placa individual */
-.sq-slab-stack { display: flex; flex-direction: column; gap: 2px; width: 100%; margin-bottom: 8px; }
-/* Placa + badge de motivo lado a lado (ver renderStacks, setor-qualidade.js). */
-.sq-slab-linha { display: flex; align-items: center; gap: 4px; }
-.sq-slab-linha .sq-slab { flex: 1; min-width: 0; }
+.sq-slab-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
 .sq-slab {
   position: relative;
-  width: 100%; height: 30px;
+  width: 100%;
+  height: 30px;
   background: var(--sq-placa-bg);
   border: 1px solid var(--sq-placa-borda);
   border-radius: var(--radius);
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: border-color .1s;
 }
-.sq-slab:hover { border-color: var(--blue); }
-.sq-slab[draggable="true"] { cursor: grab; }
-.sq-slab.sq-slab-dragging { opacity: .35; cursor: grabbing; }
+
+.sq-slab:hover {
+  border-color: var(--blue);
+}
+
+.sq-slab[draggable="true"] {
+  cursor: grab;
+}
+
+.sq-slab.sq-slab-dragging {
+  opacity: .35;
+  cursor: grabbing;
+}
+
 /* Pallet recebendo o arraste (ver _ativarDropZone, setor-qualidade.js) */
 .sq-slab-stack-dragover {
   outline: 2px dashed var(--blue);
@@ -812,6 +1339,7 @@
   border-radius: var(--radius);
   background: rgba(59, 130, 246, .06);
 }
+
 /* Placa específica recebendo o arraste (ver _ativarDropZonePlaca) —
    destaque mais forte que o da coluna inteira, já que aqui é uma troca
    de posição precisa (placa por placa), não só "em algum lugar deste
@@ -821,6 +1349,7 @@
   outline-offset: 1px;
   background: rgba(59, 130, 246, .18) !important;
 }
+
 /* Pallet extra vazio (recém-criado, ainda sem nenhuma placa arrastada) —
    mensagem discreta no lugar da grade, some assim que a 1ª placa chega. */
 .sq-slab-stack-extra:empty::after {
@@ -834,181 +1363,502 @@
   border-radius: var(--radius);
   padding: 10px 4px;
 }
+
 .sq-slab-number {
-  position: absolute; top: 2px; left: 4px;
-  font-size: .5rem; font-weight: 700; color: var(--text-3);
-  user-select: none; pointer-events: none; font-family: var(--font-mono);
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: .5rem;
+  font-weight: 700;
+  color: var(--text-3);
+  user-select: none;
+  pointer-events: none;
+  font-family: var(--font-mono);
 }
+
 .sq-slab-type {
-  position: absolute; bottom: 2px; right: 4px;
-  font-size: .57rem; font-weight: 700; color: var(--text-3);
-  font-family: var(--font-mono); pointer-events: none;
+  font-size: .57rem;
+  font-weight: 700;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  pointer-events: none;
 }
-.sq-slab-type.sp { color: var(--sq-tipo-sp-text); }
-.sq-slab-type.p2 { color: var(--sq-tipo-p2-text); }
-.sq-slab-type.t3 { color: var(--sq-tipo-t3-text); }
-.sq-slab-type.t1 { color: var(--sq-tipo-t1-text); }
+
+.sq-slab-type.sp {
+  color: var(--sq-tipo-sp-text);
+}
+
+.sq-slab-type.p2 {
+  color: var(--sq-tipo-p2-text);
+}
+
+.sq-slab-type.t3 {
+  color: var(--sq-tipo-t3-text);
+}
+
+.sq-slab-type.t1 {
+  color: var(--sq-tipo-t1-text);
+}
+
 .sq-slab-marks {
-  display: flex; justify-content: center; align-items: center;
-  gap: 2px; flex-wrap: wrap; pointer-events: none; max-width: 88%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  flex: 1;
+  pointer-events: none;
+  max-width: 88%;
 }
-.sq-mark-circle { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
-.sq-mark-dash   { width: 12px; height: 3px; border-radius: 2px; }
+
+.sq-mark-circle {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .2);
+}
+
+.sq-mark-dash {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+
 /* Marca "X" — Painel não preenchido. Quadrada (não círculo/traço) e
    sempre na cor fixa --sq-cor-cinza, nunca lida de m.color (ver
    renderMarks, setor-qualidade.js) — só pra ficar visualmente óbvio,
    de longe, que é uma categoria à parte das marcas normais. */
 .sq-mark-x {
-  width: 9px; height: 9px;
-  display: inline-flex; align-items: center; justify-content: center;
-  color: red; font-size: 1.56rem; font-weight: 800; line-height: 1;
+  width: 9px;
+  height: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: red;
+  font-size: 1.56rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
-/* Badge do código de motivo (ex: "BC") — ao LADO da placa (ver
-   .sq-slab-linha, acima), não sobreposto em cima dela — mesma ideia
-   visual do Espelho Visual (ver .sq-mini-slab-motivo). Pill com fundo
-   sólido (diferente de -number/-type, que são só texto solto) porque
-   também é CLICÁVEL (reabre o seletor — ver _abrirSeletorMotivo,
-   setor-qualidade.js) — precisa parecer um botão pequeno, não só uma
-   legenda. "?" (sq-slab-motivo-pendente) usa a cor de alerta — placa com
-   defeito marcado mas sem motivo escolhido ainda, fica visualmente
-   diferente do código já preenchido, pra chamar atenção sem travar nada. */
+/* Badge do código de motivo (ex: "BC") — AO LADO da identificação de
+   tipo (ver .sq-slab-canto-info, abaixo — o wrapper que os agrupa, não
+   este elemento, é quem fica no canto), mesma ideia visual do Espelho
+   Visual (ver .sq-mini-slab-motivo). Pill com fundo sólido (diferente
+   de -number/-type, que são só texto solto) porque também é CLICÁVEL
+   (reabre o seletor — ver _abrirSeletorMotivo, setor-qualidade.js) —
+   precisa parecer um botão pequeno, não só uma legenda. "?"
+   (sq-slab-motivo-pendente) usa a cor de alerta — placa com defeito
+   marcado mas sem motivo escolhido ainda, fica visualmente diferente do
+   código já preenchido, pra chamar atenção sem travar nada. */
 .sq-slab-motivo {
-  flex: 0 0 auto;
-  display: none; align-items: center; justify-content: center;
-  min-width: 17px; height: 17px; padding: 0 4px;
-  font-size: .52rem; font-weight: 700; font-family: var(--font-mono);
-  color: #fff; background: var(--sq-cor-vermelho);
-  border-radius: 3px; cursor: pointer; line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 14px;
+  padding: 0 3px;
+  font-size: .48rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--sq-cor-vermelho);
+  background: var(--sq-cor-amarelo);
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1;
 }
-.sq-slab-motivo.sq-slab-motivo-pendente { background: var(--accent); }
-.sq-slab-motivo:hover { filter: brightness(1.15); }
+
+/* Wrapper que agrupa motivo + tipo DENTRO do desenho da placa, canto
+   inferior direito — os dois lado a lado (motivo primeiro, tipo depois,
+   mesma ordem do Espelho Visual), nunca um sobreposto no outro: o
+   motivo (quando aparece) EMPURRA o tipo pra esquerda via `gap`, em vez
+   de cobrir por cima dele (era isso que acontecia antes, quando cada um
+   tinha posição `absolute` própria e podiam coincidir no mesmo canto). */
+.sq-slab-canto-info {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 1;
+}
+
+/* 2ª linha (marca azul, aprovada mesmo exigindo motivo — ver
+   _corExigeMotivo/_renderBadgeMotivo) — cor PRÓPRIA, diferente do
+   amarelo/vermelho de reprovado: letra branca, fundo azul (mesmo azul
+   usado no resto do módulo pra "2ª linha", ver --sq-cor-azul). Vem
+   DEPOIS de .sq-slab-motivo (mesma especificidade — 1 classe cada —
+   então a ordem no arquivo decide; precisa vir depois pra sobrescrever
+   color/background do bloco base). */
+.sq-slab-motivo.sq-slab-motivo-2linha {
+  color: #fff;
+  background: var(--sq-cor-azul);
+}
+
+.sq-slab-motivo.sq-slab-motivo-pendente {
+  background: var(--accent);
+}
+
+.sq-slab-motivo:hover {
+  filter: brightness(1.15);
+}
 
 .sq-slab.invalid {
   border: 2px solid var(--red) !important;
-  box-shadow: inset 0 0 0 1px var(--red), 0 0 6px rgba(239,68,68,.3);
+  box-shadow: inset 0 0 0 1px var(--red), 0 0 6px rgba(239, 68, 68, .3);
   background: rgba(239, 68, 68, .08) !important;
 }
-.sq-slab.invalid .sq-slab-type { color: var(--red); }
+
+.sq-slab.invalid .sq-slab-type {
+  color: var(--red);
+}
 
 /* ── Legenda ──────────────────────────────────────────────── */
 .sq-legend {
-  display: flex; justify-content: center; gap: 16px;
-  font-size: .75rem; color: var(--text-2); flex-wrap: wrap;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: .75rem;
+  color: var(--text-2);
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
-.sq-legend-item { display: flex; align-items: center; gap: 5px; }
+
+.sq-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 
 /* ── Seção de medição ─────────────────────────────────────── */
-.sq-medicao-title-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
-.sq-medicao-title {
-  font-size: .78rem; font-weight: 700; color: var(--text); text-transform: uppercase;
-  letter-spacing: .1em; background: var(--bg-3);
-  padding: 4px 20px; border-radius: 16px; border: 1px solid var(--border);
+.sq-medicao-title-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
 }
 
-.sq-pallet-info-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.sq-info-col { flex: 1 1 0; min-width: 140px; }
-.sq-info-col { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.sq-medicao-title {
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  background: var(--bg-3);
+  padding: 4px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.sq-pallet-info-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.sq-info-col {
+  flex: 1 1 0;
+  min-width: 140px;
+}
+
+.sq-info-col {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
 .sq-info-col-header {
-  background: var(--bg-3); color: var(--text-2);
-  padding: 4px 8px; font-weight: 700; font-size: .63rem;
-  text-align: center; text-transform: uppercase;
-  border-bottom: 1px solid var(--border); letter-spacing: .06em;
+  background: var(--bg-3);
+  color: var(--text-2);
+  padding: 4px 8px;
+  font-weight: 700;
+  font-size: .63rem;
+  text-align: center;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: .06em;
 }
+
 .sq-info-row {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 4px;
-  align-items: center; padding: 4px 8px;
-  border-bottom: 1px solid var(--border); font-size: .72rem;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: .72rem;
 }
-.sq-info-row:last-child { border-bottom: none; }
-.sq-info-row:nth-child(even) { background: var(--bg-2); }
-.sq-info-key { color: var(--text-3); }
-.sq-info-val { font-weight: 600; color: var(--text); text-align: right; min-width: 22px; }
-.sq-info-edit { cursor: pointer; color: var(--text-3); font-size: .7rem; transition: color .15s; }
-.sq-info-edit:hover { color: var(--blue); }
-.sq-info-edit-locked { cursor: not-allowed; opacity: .35; pointer-events: none; }
-.sq-info-edit-locked:hover { color: var(--text-3); }
+
+.sq-info-row:last-child {
+  border-bottom: none;
+}
+
+.sq-info-row:nth-child(even) {
+  background: var(--bg-2);
+}
+
+.sq-info-key {
+  color: var(--text-3);
+}
+
+.sq-info-val {
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  min-width: 22px;
+}
+
+.sq-info-edit {
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: .7rem;
+  transition: color .15s;
+}
+
+.sq-info-edit:hover {
+  color: var(--blue);
+}
+
+.sq-info-edit-locked {
+  cursor: not-allowed;
+  opacity: .35;
+  pointer-events: none;
+}
+
+.sq-info-edit-locked:hover {
+  color: var(--text-3);
+}
 
 /* ── Observações ──────────────────────────────────────────── */
 .sq-obs-area {
-  margin-top: 12px; padding: 16px 18px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: var(--sq-shadow);
+  margin-top: 12px;
+  padding: 16px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--sq-shadow);
 }
+
 .sq-obs-label {
-  font-size: .67rem; font-weight: 700; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; display: block;
+  font-size: .67rem;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 8px;
+  display: block;
 }
 
 /* ── Modal personalizado de pallet ───────────────────────── */
 .sq-modal-pallet-overlay {
-  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(0,0,0,.85); backdrop-filter: blur(4px);
-  z-index: 99999; display: none; justify-content: center; align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, .85);
+  backdrop-filter: blur(4px);
+  z-index: 99999;
+  display: none;
+  justify-content: center;
+  align-items: center;
 }
-.sq-modal-pallet-overlay.open { display: flex; }
+
+.sq-modal-pallet-overlay.open {
+  display: flex;
+}
+
 .sq-modal-pallet-box {
   background: var(--bg-card);
   border: 1px solid var(--border-2);
   border-radius: var(--radius-lg);
-  padding: 24px; max-width: 800px; width: 90%;
-  box-shadow: 0 20px 60px rgba(0,0,0,.8);
-  display: flex; flex-direction: column; gap: 16px;
+  padding: 24px;
+  max-width: 800px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .8);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   animation: sq-fadeIn .2s ease;
-  max-height: 90vh; overflow-y: auto;
+  max-height: 90vh;
+  overflow-y: auto;
 }
-.sq-modal-pallet-header { text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
-.sq-modal-pallet-header h2 { font-family: var(--font-display); font-size: 1.1rem; letter-spacing: .05em; text-transform: uppercase; }
-.sq-modal-pallet-header p { font-size: .78rem; color: var(--text-3); margin-top: 4px; }
-.sq-modal-tipo-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+
+.sq-modal-pallet-header {
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.sq-modal-pallet-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.sq-modal-pallet-header p {
+  font-size: .78rem;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.sq-modal-tipo-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .sq-btn-tipo {
   padding: 4px 12px;
   border-radius: var(--radius);
   border: 1px solid transparent;
-  font-size: .75rem; font-weight: 700;
-  cursor: pointer; font-family: var(--font-mono); color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  color: #fff;
   transition: transform .15s;
 }
-.sq-btn-tipo:hover { transform: scale(1.05); }
-.sq-btn-tipo.sp { background: var(--sq-tipo-sp); }
-.sq-btn-tipo.p2 { background: var(--sq-tipo-2p); }
-.sq-btn-tipo.t3 { background: var(--sq-tipo-3t); }
-.sq-btn-tipo.t1 { background: var(--sq-tipo-1t); }
-.sq-btn-tipo.active { border-color: var(--text); box-shadow: 0 0 6px rgba(255,255,255,.25); }
 
-.sq-modal-slabs-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 8px 0; }
-.sq-modal-pallet-col { display: flex; flex-direction: column; gap: 2px; }
+.sq-btn-tipo:hover {
+  transform: scale(1.05);
+}
+
+.sq-btn-tipo.sp {
+  background: var(--sq-tipo-sp);
+}
+
+.sq-btn-tipo.p2 {
+  background: var(--sq-tipo-2p);
+}
+
+.sq-btn-tipo.t3 {
+  background: var(--sq-tipo-3t);
+}
+
+.sq-btn-tipo.t1 {
+  background: var(--sq-tipo-1t);
+}
+
+.sq-btn-tipo.active {
+  border-color: var(--text);
+  box-shadow: 0 0 6px rgba(255, 255, 255, .25);
+}
+
+.sq-modal-slabs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.sq-modal-pallet-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .sq-modal-pallet-col .sq-modal-col-label {
-  font-size: .6rem; text-transform: uppercase; font-weight: 700;
-  color: var(--text-3); text-align: center; margin-bottom: 4px;
+  font-size: .6rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-3);
+  text-align: center;
+  margin-bottom: 4px;
 }
+
 .sq-modal-slab {
-  width: 100%; height: 24px;
-  background: var(--sq-placa-bg); border: 1px solid var(--sq-placa-borda);
-  border-radius: 3px; cursor: pointer;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 4px; transition: border-color .1s;
+  width: 100%;
+  height: 24px;
+  background: var(--sq-placa-bg);
+  border: 1px solid var(--sq-placa-borda);
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  transition: border-color .1s;
 }
-.sq-modal-slab:hover { border-color: var(--blue); }
-.sq-modal-slab .sq-m-num { font-size: .5rem; color: var(--text-3); font-family: var(--font-mono); }
-.sq-modal-slab .sq-m-tp { font-size: .5rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-3); }
-.sq-modal-slab .sq-m-tp.sp { color: var(--sq-tipo-sp-text); }
-.sq-modal-slab .sq-m-tp.p2 { color: var(--sq-tipo-p2-text); }
-.sq-modal-slab .sq-m-tp.t3 { color: var(--sq-tipo-t3-text); }
-.sq-modal-slab .sq-m-tp.t1 { color: var(--sq-tipo-t1-text); }
-.sq-modal-slab.sel { border-color: var(--text); box-shadow: 0 0 6px rgba(255,255,255,.2); }
-.sq-modal-pallet-footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+.sq-modal-slab:hover {
+  border-color: var(--blue);
+}
+
+.sq-modal-slab .sq-m-num {
+  font-size: .5rem;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
+.sq-modal-slab .sq-m-tp {
+  font-size: .5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+
+.sq-modal-slab .sq-m-tp.sp {
+  color: var(--sq-tipo-sp-text);
+}
+
+.sq-modal-slab .sq-m-tp.p2 {
+  color: var(--sq-tipo-p2-text);
+}
+
+.sq-modal-slab .sq-m-tp.t3 {
+  color: var(--sq-tipo-t3-text);
+}
+
+.sq-modal-slab .sq-m-tp.t1 {
+  color: var(--sq-tipo-t1-text);
+}
+
+.sq-modal-slab.sel {
+  border-color: var(--text);
+  box-shadow: 0 0 6px rgba(255, 255, 255, .2);
+}
+
+.sq-modal-pallet-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
 
 /* ── View overlay ─────────────────────────────────────────── */
 .sq-view-overlay {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  z-index: 9999; background: transparent; pointer-events: auto; cursor: default;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  background: transparent;
+  pointer-events: auto;
+  cursor: default;
 }
-.sq-hide-view { display: inline-flex; }
-.sq-hide-view.is-view { display: none !important; }
-.sq-show-view { display: none; }
-.sq-show-view.is-view { display: inline-flex !important; }
+
+.sq-hide-view {
+  display: inline-flex;
+}
+
+.sq-hide-view.is-view {
+  display: none !important;
+}
+
+.sq-show-view {
+  display: none;
+}
+
+.sq-show-view.is-view {
+  display: inline-flex !important;
+}
+
 /* .sq-collapsible-row.sq-hide-view (definida lá em cima, junto do resto
    dos colapsáveis) usa o mesmo mecanismo de esconder em modo só-leitura
    (ver setEditable, setor-qualidade.js) — só precisa do próprio "flex"
@@ -1040,11 +1890,13 @@
    "presos" ali, bloqueando qualquer interação com o resto da tela até a
    pessoa escolher um motivo no popover por cima. */
 .sq-motivo-modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.55);
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .55);
   z-index: 999;
   animation: fadeInDown .15s ease;
 }
+
 .sq-motivo-popover {
   position: fixed;
   z-index: 1000;
@@ -1054,45 +1906,144 @@
   padding: 12px;
   width: 300px;
   max-width: calc(100vw - 16px);
-  box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
   animation: fadeInDown .15s ease;
 }
+
 .sq-motivo-popover-titulo {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: .78rem; font-weight: 700; color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--text);
   margin-bottom: 4px;
 }
+
 .sq-motivo-popover-obrigatorio {
-  font-size: .66rem; color: var(--text-3); font-style: italic;
+  font-size: .66rem;
+  color: var(--text-3);
+  font-style: italic;
   margin-bottom: 10px;
 }
+
 .sq-motivo-popover-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
 }
+
 .sq-motivo-popover-item {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  background: var(--bg-2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 5px 7px; cursor: pointer;
-  text-align: left; transition: border-color .1s, background .1s;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .1s, background .1s;
 }
-.sq-motivo-popover-item:hover { border-color: var(--accent); background: var(--bg-3); }
-.sq-motivo-popover-item strong { font-size: .74rem; color: var(--accent); font-family: var(--font-mono); }
-.sq-motivo-popover-item span { font-size: .64rem; color: var(--text-2); line-height: 1.25; }
+
+.sq-motivo-popover-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-3);
+}
+
+.sq-motivo-popover-item strong {
+  font-size: .74rem;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.sq-motivo-popover-item span {
+  font-size: .64rem;
+  color: var(--text-2);
+  line-height: 1.25;
+}
 
 /* ── Responsivo ───────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .sq-container { padding: 14px 18px; }
+  .sq-container {
+    padding: 14px 18px;
+  }
+
   /* Base já é 2 colunas — abaixo de 1024px cada gráfico ficaria
      estreito de novo (mesmo problema que motivou reduzir de 4 pra 2,
      ver .sq-charts-grid acima), então cai direto pra 1 coluna larga. */
-  .sq-charts-grid { grid-template-columns: 1fr; }
+  .sq-charts-grid {
+    grid-template-columns: 1fr;
+  }
 }
+
 @media (max-width: 700px) {
-  .sq-container { padding: 8px 10px; }
-  .sq-kpi-grid { grid-template-columns: 1fr 1fr; }
-  .sq-topbar, .sq-nav { flex-wrap: wrap; justify-content: center; }
-  .sq-modal-slabs-grid { grid-template-columns: repeat(2, 1fr); }
+  .sq-container {
+    padding: 8px 10px;
+  }
+
+  .sq-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sq-topbar,
+  .sq-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .sq-modal-slabs-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   /* Tela estreita: 2 pallets por linha (min-width alto força o wrap),
      em vez de 4+ colunas espremidas. */
-  .sq-pallet-col, .sq-info-col { min-width: calc(50% - 6px); }
+  .sq-pallet-col,
+  .sq-info-col {
+    min-width: calc(50% - 6px);
+  }
+}
+
+/* Toast leve (ver toast(), setor-qualidade.js) — mesmo padrão visual de
+   .man-toast-container/.man-toast (manutencao.css), escopado só pra esta
+   página. */
+.sq-toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sq-toast {
+  background: var(--bg-card);
+  border-left: 6px solid var(--green);
+  padding: 14px 22px;
+  border-radius: 8px;
+  box-shadow: var(--sq-shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  animation: sqToastIn .3s ease;
+  font-size: .85rem;
+}
+
+.sq-toast.error {
+  border-left-color: var(--sq-cor-vermelho);
+}
+
+@keyframes sqToastIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }

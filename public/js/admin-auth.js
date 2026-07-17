@@ -147,10 +147,14 @@ const AdminAuth = (() => {
 
   // ─── Remove autenticação (logout) ──────────────────────────────────────────
   function logout() {
-    // Best-effort: avisa o servidor pra destruir a sessão (ver lib/sessao.js
-    // e server.js) — não espera a resposta, pra não atrasar o logout se a
-    // rede estiver lenta/fora; mesmo sem isso, a sessão expira sozinha.
+    // Best-effort: avisa o servidor pra destruir as duas sessões possíveis
+    // (Admin Master — lib/sessao.js — e usuário cadastrado — ver
+    // lib/sessao-usuario.js; nem sempre as duas existem ao mesmo tempo,
+    // mas não faz mal tentar destruir ambas) — não espera a resposta, pra
+    // não atrasar o logout se a rede estiver lenta/fora; mesmo sem isso,
+    // as sessões expiram sozinhas.
     fetch('/logout-admin', { method: 'POST' }).catch(() => {});
+    fetch('/logout-usuario', { method: 'POST' }).catch(() => {});
     localStorage.removeItem(LS_KEY);
     sessionStorage.clear();
     window.location.href = 'login.html';

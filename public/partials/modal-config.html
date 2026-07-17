@@ -22,15 +22,18 @@
           <button type="button" id="cfg-nav-dados" onclick="cfgMostrarSecao('dados')"
             style="text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600">
             🔧 Baterias e Montagem</button>
+          <button type="button" id="cfg-nav-paletes" onclick="cfgMostrarSecao('paletes')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🎨 Paletes</button>
           <button type="button" id="cfg-nav-atalhos" onclick="cfgMostrarSecao('atalhos')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             ⌨️ Atalhos de Teclado</button>
+          <button type="button" id="cfg-nav-usuarios" onclick="cfgMostrarSecao('usuarios')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔑 Usuários</button>
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔒 Autorizados</button>
-          <button type="button" id="cfg-nav-operadores" onclick="cfgMostrarSecao('operadores')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            👤 Operadores</button>
+            🟢 Operação em Andamento</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -180,6 +183,144 @@
           </div>
           <!-- ========== /SEÇÃO: Baterias e Tipos de Montagem ========== -->
 
+          <!-- ========== SEÇÃO: Paletes ========== -->
+          <div id="cfg-secao-paletes" style="display:none">
+
+            <!-- ---- Definir Paletes ---- -->
+            <!-- Direcionamento de painéis por palete (ver public/js/paletes-config.js,
+                 LW.PALETES_CONFIG em data.js, _paletePorMetadeELado em
+                 setor-qualidade.js). 4 selects, um por quadrante (metade da
+                 bateria × lado do berço) — cada um escolhe qual dos 4
+                 paletes-base recebe aquele quadrante. A prévia abaixo mostra o
+                 resultado ao vivo, pras dimensões de bateria já cadastradas
+                 (18/20/22 berços — ver LW.DIMENSAO_OPTS), antes de salvar de
+                 verdade. -->
+            <div style="margin-bottom:28px">
+              <div class="card-title">Definir Paletes</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Cada berço enche 2 painéis — um do lado <strong>Direito</strong>, um do lado <strong>Esquerdo</strong>.
+                Escolha, pra cada metade da bateria e cada lado, qual dos 4 paletes recebe esses painéis.
+                A prévia abaixo mostra o resultado antes de salvar.
+              </p>
+              <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">1ª metade · Lado Direito</label>
+                    <select class="form-input" id="pc-select-direitoPrimeira" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">2ª metade · Lado Direito</label>
+                    <select class="form-input" id="pc-select-direitoSegunda" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">1ª metade · Lado Esquerdo</label>
+                    <select class="form-input" id="pc-select-esquerdoPrimeira" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">2ª metade · Lado Esquerdo</label>
+                    <select class="form-input" id="pc-select-esquerdoSegunda" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                </div>
+                <div id="pc-erro" style="display:none;color:var(--red);font-size:.82rem;margin-top:12px"></div>
+              </div>
+
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+                Prévia — berços visuais</div>
+              <div id="pc-abas-dimensao" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
+              <div id="pc-preview" style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto"></div>
+            </div>
+            <!-- ---- /Definir Paletes ---- -->
+
+            <hr class="divider">
+
+            <!-- ---- Ordem dos Paletes ---- -->
+            <!-- Posição VISUAL de cada palete na tela do Setor de Qualidade
+                 (ver public/js/paletes-ordem.js, LW.PALETES_ORDEM em
+                 data.js). Segurar "PALETE N" e arrastar pra cima de outro
+                 troca a posição dos dois aqui no rascunho — só vira valor de
+                 verdade ao clicar "✓ Salvar Configurações", igual ao resto
+                 desta aba. Layout 2x2, mesma disposição da tela real. -->
+            <div style="margin-bottom:28px">
+              <div class="card-title">Ordem dos Paletes</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Escolha em qual posição cada palete aparece na tela do Setor de Qualidade. Segure o rótulo
+                de um palete e arraste sobre outro pra trocar os dois de lugar. A posição salva aqui é a
+                que aparece na avaliação.
+              </p>
+              <div id="po-grid"
+                style="display:flex;flex-wrap:wrap;gap:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              </div>
+            </div>
+            <!-- ---- /Ordem dos Paletes ---- -->
+
+            <hr class="divider">
+
+            <!-- ---- Combinações de Avaliação ---- -->
+            <!-- Pra cada tipo de montagem SIMPLES (não híbrida — ver
+                 public/js/paletes-combinacoes.js): lista de tipos "sem
+                 combinação" (chips clicáveis) → clicar abre um painel
+                 único de marcação visual (cor + forma, igual ao gesto de
+                 avaliação de verdade) + um botão "i" pra marcar qual
+                 marca é o indicador de qualidade (a que recebe a cor
+                 real — verde/vermelho/azul — na avaliação de verdade;
+                 aqui aparece sempre cinza, é só configuração) → ao
+                 salvar, sai da lista "sem combinação" e entra em
+                 "Combinações definidas", com um botão de editar do lado.
+                 Edita direto em _cfgDados.montagens (mesmo rascunho de
+                 "Baterias e Tipos de Montagem") — só vira valor de
+                 verdade ao clicar "✓ Salvar Configurações", igual ao
+                 resto desta aba. -->
+            <div style="margin-bottom:8px">
+              <div class="card-title">Combinações de Avaliação</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Pra cada tipo de montagem simples, monte a combinação de marcação usada na avaliação da
+                Qualidade e marque qual delas é o <strong>indicador de qualidade</strong> (botão "i") — a
+                marca que recebe a cor real (verde/vermelho/azul) conforme o painel é aprovado, reprovado
+                ou vira 2ª linha. As demais marcas viram identidade fixa, preenchida sozinha. Um tipo de
+                montagem novo aparece na lista "Sem combinação" automaticamente.
+              </p>
+
+              <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Sem combinação</div>
+              <div id="pca-sem-combinacao" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
+
+              <div id="pca-editor" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+                  <strong id="pca-editor-titulo" style="font-family:var(--font-display);font-size:.95rem"></strong>
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="pcaFecharEditor()">✕ Cancelar</button>
+                </div>
+                <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">
+                  <div>
+                    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Cor</div>
+                    <div id="pca-editor-cores" style="display:flex;gap:6px"></div>
+                  </div>
+                  <div>
+                    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Forma / marcar indicador</div>
+                    <div id="pca-editor-formas" style="display:flex;gap:6px;align-items:center"></div>
+                  </div>
+                </div>
+                <div id="pca-painel" onclick="pcaCliqueNoPainel()" style="cursor:pointer;min-height:52px;display:flex;align-items:center;gap:2px;padding:10px 14px;background:var(--bg-3);border:1px dashed var(--border);border-radius:8px;margin-bottom:10px"></div>
+                <p id="pca-editor-dica" style="font-size:.76rem;color:var(--text-3);margin-bottom:14px"></p>
+                <div style="display:flex;gap:10px;justify-content:flex-end">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="pcaLimparPainel()">Limpar</button>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="pcaSalvarCombinacao()">Salvar Combinação</button>
+                </div>
+              </div>
+
+              <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Combinações definidas</div>
+              <div id="pca-definidas-lista"></div>
+            </div>
+            <!-- ---- /Combinações de Avaliação ---- -->
+
+            <hr class="divider">
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+              <button class="btn btn-ghost" onclick="fecharConfigComConfirmacao()">Cancelar</button>
+              <button class="btn btn-primary" onclick="cfgSalvar()">✓ Salvar Configurações</button>
+            </div>
+
+          </div>
+          <!-- ========== /SEÇÃO: Paletes ========== -->
+
           <!-- ========== SEÇÃO: Atalhos de Teclado ========== -->
           <div id="cfg-secao-atalhos" style="display:none">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">
@@ -189,7 +330,7 @@
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px">
               Escolha a combinação mais confortável pra você em cada atalho. Clique em "Alterar" e pressione a nova
               combinação — precisa ter ao menos uma tecla modificadora (Ctrl, Alt ou Shift), exceto teclas F1–F12.
-              Fica salvo só neste navegador.
+              <span id="cfg-atalhos-onde-salva">Fica salvo só neste navegador.</span>
             </p>
 
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px">
@@ -210,76 +351,104 @@
           </div>
           <!-- ========== /SEÇÃO: Atalhos de Teclado ========== -->
 
-          <!-- ========== SEÇÃO: Dispositivos Autorizados ========== -->
-          <div id="cfg-secao-autorizados" style="display:none">
-            <div class="card-title">Dispositivos Autorizados</div>
+          <!-- ========== SEÇÃO: Usuários ========== -->
+          <!-- Cadastro de usuário+senha com PERFIL — login de verdade
+               (ver login.html, POST /login-usuario) — o perfil escolhido
+               aqui decide exatamente o que a pessoa pode acessar (ver
+               lib/perfis.js). Só o Administrador Master (senha mestra)
+               vê esta aba — nenhum perfil cadastrado, nem Administrativo,
+               tem permissão de gerenciar outros usuários. -->
+          <div id="cfg-secao-usuarios" style="display:none">
+            <div class="card-title">🔑 Usuários</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Controla quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong>.
-              Enquanto a lista estiver <strong>vazia</strong>, qualquer computador pode controlar (comportamento
-              atual). Ao autorizar pelo menos um dispositivo aqui, só os da lista podem controlar — os demais
-              continuam podendo acompanhar a operação ao vivo, só não interagir.
+              Cada usuário entra com <strong>usuário e senha próprios</strong>, e o <strong>perfil</strong>
+              escolhido aqui decide o que essa pessoa pode acessar — ela não escolhe isso na hora do login,
+              já entra direto com as permissões definidas neste cadastro.
+            </p>
+
+            <!-- ========== Tipos de Perfil (fixos + customizados) ========== -->
+            <!-- Além dos 6 perfis fixos do sistema, o Administrador pode
+                 CRIAR novos tipos de perfil com um mapa de permissões
+                 próprio, item por item (ver modal-criar-perfil.html,
+                 lib/perfis-customizados.js). Esta lista mostra só os
+                 perfis CUSTOMIZADOS já criados — os 6 fixos não aparecem
+                 aqui (não são editáveis/excluíveis, sempre existem). -->
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">
+                  Tipos de Perfil Customizados</div>
+                <button class="btn btn-outline-accent btn-sm" onclick="abrirCriarPerfil()">+ Criar novo tipo de perfil</button>
+              </div>
+              <div id="cfg-perfis-customizados-lista" style="display:flex;flex-direction:column;gap:8px">
+                <span style="color:var(--text-3);font-size:.82rem">Nenhum perfil customizado criado ainda.</span>
+              </div>
+            </div>
+            <!-- ========== /Tipos de Perfil ========== -->
+
+            <div id="cfg-usuarios-status" style="margin-bottom:18px"></div>
+
+            <div id="cfg-usuarios-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Adicionar Usuário</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+                  <label class="form-label">Usuário</label>
+                  <input class="form-input" id="cfg-usuario-nome" placeholder="Ex: joao.silva">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+                  <label class="form-label">Senha</label>
+                  <input class="form-input" id="cfg-usuario-senha" type="password" placeholder="Mínimo 4 caracteres">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
+                  <label class="form-label">Perfil</label>
+                  <!-- Opções preenchidas dinamicamente por
+                       _cfgPopularSelectPerfil() (app-core.js), a partir de
+                       GET /perfis (rotulosPorPerfil + perfisCadastraveis)
+                       — inclui os 6 fixos E qualquer perfil customizado já
+                       criado, sem precisar hardcodar <option> nenhuma aqui. -->
+                  <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()">
+                  </select>
+                </div>
+              </div>
+              <!-- Só aparece pra perfis que de fato têm a página "Registrar
+                   Operação" liberada (ver cfgAtualizarCampoPodeIniciarOperacao,
+                   app-core.js) — pros outros, a marcação não significaria
+                   nada, então nem mostra o campo. -->
+              <div id="cfg-usuario-pode-iniciar-wrap" style="margin-top:14px;display:none">
+                <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text-2);cursor:pointer">
+                  <input type="checkbox" id="cfg-usuario-pode-iniciar">
+                  Pode iniciar/encerrar operações em Registrar Operação
+                </label>
+              </div>
+              <div style="margin-top:14px">
+                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarUsuario()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Usuários ========== -->
+
+          <!-- ========== SEÇÃO: Operação em Andamento ========== -->
+          <!-- Antes era "Dispositivos Autorizados" (lista de deviceId que
+               podiam controlar operações) — removido (ver conversa que
+               motivou a mudança): quem pode controlar agora é decidido
+               pela sessão de usuário logado (podeIniciarOperacao no
+               cadastro, ver aba Usuários / lib/perfis.js), não mais por
+               computador. O que sobra útil aqui é só visualizar/cancelar
+               a operação em andamento agora, se houver uma. -->
+          <div id="cfg-secao-autorizados" style="display:none">
+            <div class="card-title">Operação em Andamento</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong> é definido
+              por pessoa (aba <strong>Usuários</strong> — permissão "Pode iniciar/encerrar operações"), não mais
+              por computador. Aqui dá pra ver se há uma operação em andamento agora e cancelá-la, se precisar.
             </p>
 
             <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
-
-            <div id="cfg-autorizados-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-            </div>
-
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Autorizar Novo Dispositivo</div>
-              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
-                  <label class="form-label">Nome (opcional)</label>
-                  <input class="form-input" id="cfg-autorizado-nome" placeholder="Ex: Sala de Controle">
-                </div>
-                <div class="form-group" style="margin-bottom:0;flex:2;min-width:240px">
-                  <label class="form-label">Device ID</label>
-                  <input class="form-input" id="cfg-autorizado-deviceid"
-                    style="font-family:var(--font-mono);font-size:.78rem">
-                </div>
-                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarAutorizado()">+ Autorizar</button>
-              </div>
-              <p style="font-size:.74rem;color:var(--text-3);margin-top:10px;margin-bottom:0">
-                💡 Pra autorizar <strong>este</strong> computador, o Device ID dele já vem preenchido acima.
-              </p>
-            </div>
           </div>
-          <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
-
-          <!-- ========== SEÇÃO: Operadores (Identidade Leve) ========== -->
-          <div id="cfg-secao-operadores" style="display:none">
-            <div class="card-title">Operadores</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Cadastro opcional pra saber <strong>quem registrou o quê</strong> (Registrar Operação, Registro de
-              Paradas). Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador — não é
-              login nem trava nada: enquanto ninguém estiver cadastrado aqui, o sistema funciona exatamente como
-              antes, sem perguntar nada a ninguém.
-            </p>
-
-            <div id="cfg-operadores-status" style="margin-bottom:18px"></div>
-
-            <div id="cfg-operadores-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-            </div>
-
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Adicionar Operador</div>
-              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:2;min-width:160px">
-                  <label class="form-label">Nome</label>
-                  <input class="form-input" id="cfg-operador-nome" placeholder="Ex: João Silva">
-                </div>
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
-                  <label class="form-label">PIN (4 a 8 dígitos)</label>
-                  <input class="form-input" id="cfg-operador-pin" type="password" inputmode="numeric" maxlength="8"
-                    style="font-family:var(--font-mono)">
-                </div>
-                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarOperador()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Operadores ========== -->
+          <!-- ========== /SEÇÃO: Operação em Andamento ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">

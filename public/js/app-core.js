@@ -39,11 +39,95 @@
     });
 
     // ---- Navigation ----
-    // Páginas bloqueadas por perfil — Analista não acessa Registrar Operação,
-    // mesmo navegando direto (atalho de teclado, URL, etc.), não só pela UI.
-    const PAGINAS_BLOQUEADAS_POR_PERFIL = {
-      'Analista': ['operacao'],
-    };
+    // Controle de acesso por perfil — ANTES era uma lista fixa de páginas
+    // BLOQUEADAS por perfil (só existia 1 entrada: Analista sem Operação).
+    // Agora que existem 6 perfis (Operador, Analista, Qualidade,
+    // Manutencao, Administrativo, AdminMaster — ver lib/perfis.js,
+    // server.js) com listas de páginas bem diferentes entre si, virou uma
+    // lista de páginas PERMITIDAS, carregada do servidor (GET /perfis) —
+    // não mais hardcoded aqui, pra nunca ficar dessincronizada da mesma
+    // fonte de verdade que o servidor usa pra validar de verdade.
+    //
+    // _paginasPermitidas começa vazio e é preenchido no boot (ver
+    // DOMContentLoaded, mais abaixo) — antes disso, _paginaPermitida()
+    // devolve `true` pra tudo (fail-open só durante o brevíssimo instante
+    // entre o DOM carregar e a resposta de /perfis chegar; qualquer
+    // rota sensível de verdade é validada de novo no servidor mesmo
+    // assim, então não é uma brecha real de segurança, só evita a tela
+    // "piscar" escondendo/mostrando itens de novo depois de carregar).
+    let _paginasPermitidas = null; // null = ainda não carregou; Array = já carregou
+    // Áreas de edição do perfil atual (ver lib/perfis.js) — usado pelo
+    // resto do front (paradas.js, setor-qualidade.js, manutencao.js,
+    // operacao.js) pra desabilitar formulários/botões de registro nas
+    // páginas em que o perfil só visualiza. null = Administrador (master)
+    // ou ainda carregando = tudo liberado; Array = lista real de áreas.
+    let _areasDeEdicao = null;
+
+    // Confere se o perfil atual pode EDITAR a `area` (ver AREAS_DE_EDICAO,
+    // lib/perfis.js: 'injetora', 'paradas', 'qualidade', 'manutencao',
+    // 'manutencao-chamado') — usado só pra ESCONDER/DESABILITAR controles
+    // no front; a validação que importa de verdade é sempre a do servidor
+    // (cada rota de escrita confere de novo, ver podeEditarArea() em
+    // server.js).
+    function _perfilPodeEditar(area) {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return true; // master: irrestrito
+      if (!_areasDeEdicao) return true; // ainda carregando — fail-open temporário, ver _paginaPermitida
+      // Mesma regra de subconjunto do backend (ver podeEditar(),
+      // lib/perfis.js: "'manutencao' completa implica
+      // 'manutencao-chamado'") — sem isso, um perfil com 'manutencao'
+      // completa (Supervisão, Manutenção, e agora também Operador de
+      // Injetora e Encarregado — ver conversa que motivou isso) ficava
+      // com os botões "Novo Chamado"/"Salvar Chamado" ESCONDIDOS,
+      // porque o array bruto de `editar` deles nunca continha a string
+      // 'manutencao-chamado' junto (só 'manutencao'). O backend sempre
+      // aceitava a rota; só o front escondia o botão sem necessidade.
+      if (area === 'manutencao-chamado' && _areasDeEdicao.includes('manutencao')) return true;
+      return _areasDeEdicao.includes(area);
+    }
+
+    // "Administrador" (botão do topo, senha mestra — ver login.html) é
+    // irrestrito por definição, igual sempre foi — nunca passa pela
+    // lista carregada do servidor.
+    function _paginaPermitida(pageId) {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return true;
+      if (pageId === 'menu') return true; // Menu Principal sempre acessível, pra todo mundo — mesma regra de _aplicarVisibilidadeDoMenu, abaixo, e de PAGINAS_DE_TRABALHO (lib/perfis.js). Reforça o que o servidor já garante (ver paginasPermitidas, lib/perfis-customizados.js) — nunca deveria faltar, mas showPage('menu') não pode ficar refém disso.
+      if (!_paginasPermitidas) return true; // ainda carregando — ver comentário acima
+      return _paginasPermitidas.includes(pageId);
+    }
+
+    async function _carregarPermissoesDoServidor() {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') { _paginasPermitidas = null; _areasDeEdicao = null; return; } // irrestrito, nunca precisa da lista
+      try {
+        const res = await fetch('/perfis');
+        const data = await res.json();
+        _paginasPermitidas = (data.ok && data.paginasPorPerfil[role]) || [];
+        _areasDeEdicao = (data.ok && data.areasEdicaoPorPerfil && data.areasEdicaoPorPerfil[role]) || [];
+      } catch (e) {
+        // Sem servidor/rede — mantém null (fail-open temporário, ver
+        // comentário em _paginaPermitida) em vez de travar a pessoa fora
+        // de tudo por causa de uma falha de rede pontual.
+        _paginasPermitidas = null;
+        _areasDeEdicao = null;
+      }
+    }
+
+    // Esconde do menu lateral e do Menu Principal todo [data-page="..."]
+    // que o perfil atual não pode acessar — chamado logo depois de
+    // _carregarPermissoesDoServidor() ter a lista pronta (ver
+    // DOMContentLoaded). Diferente de _paginaPermitida() (trava a
+    // NAVEGAÇÃO em si, em showPage()): isso aqui é só a parte visual,
+    // pra nem oferecer o link de algo que a pessoa não pode abrir.
+    function _aplicarVisibilidadeDoMenu() {
+      if (!_paginasPermitidas) return; // Administrador ou ainda carregando — nada pra esconder
+      document.querySelectorAll('[data-page]').forEach(el => {
+        const pagina = el.getAttribute('data-page');
+        if (pagina === 'menu') return; // Menu Principal sempre visível pra todo mundo
+        el.style.display = _paginasPermitidas.includes(pagina) ? '' : 'none';
+      });
+    }
 
     // Restaura, depois de um F5, a última página que a pessoa estava
     // vendo nesta aba (ver showPage, que grava sessionStorage a cada
@@ -55,8 +139,7 @@
       let pagina = null;
       try { pagina = sessionStorage.getItem('lw_ultima_pagina'); } catch (e) { /* sessionStorage indisponível — sem restauração, sem quebrar o boot */ }
       if (!pagina || pagina === 'menu') return; // já é o padrão (nenhum showPage() extra necessário)
-      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[sessionStorage.getItem('lw_role')] || [];
-      if (bloqueadas.includes(pagina)) return;
+      if (!_paginaPermitida(pagina)) return;
       if (!document.getElementById('page-' + pagina)) return; // versão salva antiga/página que não existe mais
       showPage(pagina);
     }
@@ -85,9 +168,7 @@
     }
 
     function showPage(pageId, navEl) {
-      const role = sessionStorage.getItem('lw_role');
-      const bloqueadas = PAGINAS_BLOQUEADAS_POR_PERFIL[role] || [];
-      if (bloqueadas.includes(pageId)) return;
+      if (!_paginaPermitida(pageId)) return;
 
       // Lembra a página atual pra restaurar depois de um F5 (ver
       // _restaurarUltimaPagina, chamada no boot) — sessionStorage, não
@@ -99,9 +180,10 @@
       // base pra, no futuro, restringir essa tela a um único computador.
       if (pageId === 'operacao') {
         LW.registrarAcesso('/operacao');
-        // A lista de Configurações → Autorizados pode ter mudado desde o
-        // boot da página (ex: admin acabou de autorizar este computador)
-        // — reaplica a trava na hora de abrir a aba, sem precisar de F5.
+        // A permissão de controlar operações (Configurações → Usuários)
+        // pode ter mudado desde o boot da página (ex: admin acabou de
+        // habilitar isso no cadastro) — reaplica a trava na hora de abrir
+        // a aba, sem precisar de F5.
         if (typeof LWOp !== 'undefined' && LWOp.atualizarTravaAutorizacao) LWOp.atualizarTravaAutorizacao();
       }
 
@@ -204,6 +286,13 @@
       if (pageId === 'setor-qualidade' && !window._sqInit) {
         window._sqInit = true;
         SQ.init();
+      }
+
+      // Manutenção — mesmo padrão de guarda "só uma vez, na 1ª vez que
+      // abre" do Setor de Qualidade, acima (ver comentário lá).
+      if (pageId === 'manutencao' && !window._manInit) {
+        window._manInit = true;
+        MAN.init();
       }
 
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
@@ -396,6 +485,18 @@
 
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
+      // Re-renderiza Configurações → Atalhos se a resposta de
+      // GET /meus-atalhos (assíncrona, ver keyboard-shortcuts.js,
+      // _carregarOverrides) chegar DEPOIS que a pessoa já abriu essa aba
+      // — caso raro (a resposta costuma ser rápida), mas sem isso a tela
+      // ficaria mostrando os combos de FÁBRICA por engano até a pessoa
+      // trocar de aba e voltar. Não faz nada se a aba de Atalhos não
+      // estiver aberta nesse momento (cfgRenderAtalhos já lida com isso).
+      window.addEventListener('lwkeyboard:overrides-carregados', () => {
+        const secaoAtalhos = document.getElementById('cfg-secao-atalhos');
+        if (secaoAtalhos && secaoAtalhos.style.display !== 'none') cfgRenderAtalhos();
+      });
+
       // Set date in topbar and op form
       const now = nowBrasilia();
       document.getElementById('topbar-date').textContent = now.toLocaleDateString('pt-BR', {
@@ -431,31 +532,27 @@
       // ---- Controle de acesso por perfil ----
       const role = sessionStorage.getItem('lw_role');
 
-      // Perfil ausente ou inválido (ex: sessionStorage adulterada) — volta
-      // pro login em vez de deixar a tela sem nenhuma restrição aplicada.
-      const PERFIS_VALIDOS = ['Operador', 'Analista', 'Administrador'];
-      if (!PERFIS_VALIDOS.includes(role)) {
+      // Sem role nenhum (sessionStorage vazia/adulterada) — volta pro
+      // login antes de tentar mais nada. NÃO existe mais uma lista fixa
+      // de "perfis válidos" aqui — perfis CUSTOMIZADOS (Configurações →
+      // Usuários → "+ Criar novo tipo de perfil", ver
+      // lib/perfis-customizados.js) têm ids GERADOS
+      // (ex: custom_lider-de-turno_1720000000000), então qualquer lista
+      // hardcoded aqui ficaria desatualizada assim que um perfil novo
+      // fosse criado — foi exatamente isso que aconteceu (perfil
+      // customizado sendo rejeitado no boot e mandado de volta pro
+      // login, mesmo com uma sessão real e válida no servidor). A
+      // validação de verdade pra qualquer perfil que não seja a senha
+      // mestra é a chamada a GET /minha-sessao logo abaixo — confirma
+      // que existe uma sessão de usuário REAL pra esse role específico,
+      // o que já rejeita um valor inventado/adulterado do mesmo jeito.
+      if (!role) {
         sessionStorage.clear();
         window.location.href = 'login.html';
         return;
       }
 
-      if (role === 'Operador') {
-        // Esconde itens exclusivos do administrador (config, backup, import)
-        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
-
-        // Bloqueia acesso direto via showPage para páginas admin
-        // Vai direto para a tela de operação
-        showPage('operacao');
-
-      } else if (role === 'Analista') {
-        // Mesmas restrições do Operador (sem config/backup/import), e
-        // também sem acesso à Operação — só dashboards e relatórios.
-        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
-        _restaurarUltimaPagina();
-
-      } else if (role === 'Administrador') {
+      if (role === 'Administrador') {
         // Verifica se a autenticação admin foi concluída corretamente
         if (!AdminAuth.isAutenticado()) {
           // Acesso indevido sem autenticação — retorna ao login
@@ -463,16 +560,90 @@
           window.location.href = 'login.html';
           return;
         }
-        // Administrador: acesso total
+        // Administrador Master: acesso total, irrestrito — nunca passa
+        // pela lista de páginas do servidor (ver _paginaPermitida).
         document.getElementById('btn-config').style.display = 'inline-flex';
-        // Garante que itens admin e de operação estejam visíveis
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
         _restaurarUltimaPagina();
+
+      } else {
+        // Todo o resto (Operador, Analista, Qualidade, Manutencao,
+        // Administrativo) — vem de login usuário+senha (ver login.html,
+        // POST /login-usuario), diferente de Administrador (senha mestra
+        // única, sem cadastro). sessionStorage.lw_role sozinho é só um
+        // valor no navegador (editável por quem souber abrir o DevTools)
+        // — antes de confiar nele pra esconder/mostrar qualquer coisa,
+        // confirma que existe uma sessão de usuário REAL e válida no
+        // servidor (ver GET /minha-sessao, lib/sessao-usuario.js). Toda
+        // rota sensível já revalida por conta própria de qualquer forma
+        // (ver lib/perfis.js, paginaPermitida) — isso aqui fecha o boot
+        // sem UI enganosa, não é a única linha de defesa.
+        let sessaoReal = null;
+        try {
+          const resSessao = await fetch('/minha-sessao');
+          const dataSessao = await resSessao.json();
+          if (dataSessao.ok) sessaoReal = dataSessao;
+        } catch (e) { /* sem rede — trata como sessão inválida, abaixo */ }
+
+        if (!sessaoReal || sessaoReal.perfil !== role) {
+          sessionStorage.clear();
+          window.location.href = 'login.html';
+          return;
+        }
+
+        // Mesmo tratamento genérico pros 5 perfis: busca a lista de
+        // páginas permitidas do servidor (fonte única de verdade — ver
+        // lib/perfis.js) e esconde do menu tudo que não está nela.
+        // "data-admin-only" continua exclusivo do Administrador Master de
+        // verdade (ações sensíveis dentro de uma página, ex: editar um
+        // registro — ver comentário em nav-sidebar.html/page-menu.html),
+        // mesmo perfis com bastante acesso como Administrativo não
+        // ganham esses botões.
+        document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
+
+        await _carregarPermissoesDoServidor();
+        _aplicarVisibilidadeDoMenu();
+
+        // "⚙ Configurações" no topbar não tem mais data-admin-only (ver
+        // nav-topbar.html) — agora é revelado pra qualquer perfil que
+        // tenha PELO MENOS UMA aba liberada lá dentro (mesmo raciocínio
+        // de abrirConfig(), app-core.js — hoje sempre verdade, já que
+        // "config-atalhos" está em todos os perfis cadastráveis).
+        const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
+        document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
+
+        if (role === 'OperadorInjetora') {
+          // Operador de Injetora sempre entra direto na tela de trabalho
+          // (Registrar Operação), mesmo comportamento de sempre — os
+          // outros perfis restauram a última página vista, ou caem no
+          // Menu Principal na 1ª vez.
+          showPage('operacao');
+        } else {
+          _restaurarUltimaPagina();
+        }
       }
 
       const roleEl = document.getElementById('topbar-role');
-      if (roleEl) roleEl.textContent = role || '';
+      if (roleEl) roleEl.textContent = role === 'Administrador' ? 'Administrador' : (role ? _rotuloPerfil(role) : '');
+
+      // Badge de nome no topbar — substituiu a Identidade Leve de
+      // Operador (perguntava "quem está operando" via PIN — ver
+      // conversa que motivou a remoção): agora o nome já vem do login
+      // (sessionStorage.lw_nome_usuario), sem opção de "trocar" (só
+      // trocaria fazendo logout e logando com outro usuário). "ADM" pro
+      // Administrador Master (senha mestra, sem nome de cadastro).
+      const nomeEl = document.getElementById('topbar-nome-usuario');
+      if (nomeEl) {
+        const nome = LW.nomeDeQuemEstaLogado();
+        if (nome) {
+          nomeEl.textContent = '👤 ' + nome;
+          nomeEl.style.display = 'flex';
+        } else {
+          nomeEl.style.display = 'none';
+        }
+      }
 
       // Lógica do botão Sidebar
       const sidebar = document.querySelector('.sidebar');
@@ -609,36 +780,64 @@
     }
 
     // ---- Backup de Dados (admin) ----
-    // A lógica de buscar os arquivos de public/db/ e montar o .zip vive em
-    // LW.gerarBackupDados() (data.js) — aqui só cuidamos do feedback na tela.
-    // O painel fica aberto durante a geração (pra mostrar o status) e só se
-    // fecha depois que o download foi disparado com sucesso.
-    async function fazerBackupDados() {
+    // Gerado no SERVIDOR (rota GET /backup-dados — ver
+    // gerarZipDadosServidor, lib/rotas/backup.js), diferente de antes
+    // (montado no navegador via fetch de cada GET /db/*.json — ver
+    // conversa que motivou a reformulação de Backup de Dados vs Backup
+    // Geral). Só dados de produção — sem config.json/security.json/
+    // usuarios.json (exclusivos do Backup Geral, abaixo).
+    // Exige sessão de Administrador (ver lib/sessao.js) — pede a senha
+    // antes de gerar/baixar o zip.
+    function fazerBackupDados() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (typeof AdminAuth === 'undefined') {
+        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
+        return;
+      }
 
       const card = document.getElementById('backup-hub-card-dados');
 
-      try {
-        if (card) card.style.pointerEvents = 'none';
-        _statusBackupHub('Gerando backup de dados...');
+      AdminAuth.abrirModal(async function onSuccess() {
+        try {
+          if (card) card.style.pointerEvents = 'none';
+          _statusBackupHub('Gerando backup de dados...');
 
-        await LW.gerarBackupDados();
-        fecharBackupHub();
-      } catch (e) {
-        LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
-      } finally {
-        if (card) card.style.pointerEvents = '';
-        _statusBackupHub(null);
-      }
+          const res = await fetch('/backup-dados');
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+
+          const cd = res.headers.get('Content-Disposition') || '';
+          const match = cd.match(/filename="(.+?)"/);
+          const nomeArquivo = match ? match[1] : `lightwall_backup_dados_${todayBrasilia()}.zip`;
+
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = nomeArquivo;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          fecharBackupHub();
+        } catch (e) {
+          LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
+        } finally {
+          if (card) card.style.pointerEvents = '';
+          _statusBackupHub(null);
+        }
+      });
     }
 
     // ---- Backup Geral (admin) ----
-    // Diferente do Backup de Dados, este .zip é montado no PRÓPRIO SERVIDOR
-    // (rota GET /backup-geral) — ele varre o projeto inteiro (código + dados),
-    // então não precisa que o front-end conheça cada arquivo de antemão.
-    // GET /backup-geral agora exige sessão de Administrador (ver
-    // lib/sessao.js) — pede a senha aqui, antes de gerar/baixar o zip do
-    // projeto inteiro (que inclui security.json).
+    // Dados de produção + config.json (baterias, tipos de montagem,
+    // automação) + identidade/acesso (security.json, usuarios.json) —
+    // ver gerarZipBackupGeral, lib/rotas/backup.js.
+    // Reformulado (ver conversa que motivou a mudança): ANTES incluía o
+    // PROJETO INTEIRO (código-fonte) — isso saiu, já que código-fonte
+    // tem controle de versão próprio (Git). GET /backup-geral exige
+    // sessão de Administrador (ver lib/sessao.js) — pede a senha aqui,
+    // antes de gerar/baixar o zip (que inclui security.json/usuarios.json).
     function fazerBackupGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       if (typeof AdminAuth === 'undefined') {
@@ -683,19 +882,22 @@
     }
 
     // ---- Restaurar Backup de Dados (admin) ----
-    // Mesma lista de arquivos do "Backup de Dados", com uma checagem mínima
-    // de formato pra recusar arquivo errado/corrompido antes de mandar pro
-    // servidor (que faz a MESMA validação de novo — nunca confiamos só no
-    // que foi checado aqui no navegador).
+    // Mesma lista de arquivos do "Backup de Dados" — só dados de
+    // produção (ver VALIDADORES_DADOS_PRODUCAO, lib/rotas/backup.js), com
+    // uma checagem mínima de formato pra recusar arquivo errado/
+    // corrompido antes de mandar pro servidor (que faz a MESMA validação
+    // de novo — nunca confiamos só no que foi checado aqui no navegador).
+    // Sem config.json/security.json/usuarios.json — exclusivos do
+    // "Backup Geral" (que não faz essa validação de formato completa no
+    // navegador, só confere a presença de config.json — ver
+    // ESSENCIAIS_BACKUP_GERAL, mais abaixo — e deixa o servidor validar o
+    // resto de verdade).
     const RESTAURAR_VALIDACOES = {
-      'config.json':            v => v && typeof v === 'object' && !Array.isArray(v),
       'contador_tracos.json':   v => v && typeof v === 'object' && !Array.isArray(v),
       'historico.json':          v => Array.isArray(v),
       'historico_edicoes.json': v => Array.isArray(v),
       'relatorio_injecao.json': v => Array.isArray(v),
       'relatorio_edicoes.json': v => Array.isArray(v),
-      'security.json':           v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
-      'operadores.json':         v => Array.isArray(v),
       'sobra.json':              v => v && typeof v === 'object',
       'paradas.json':            v => Array.isArray(v),
       'ajustes_tracos.json':    v => Array.isArray(v),
@@ -703,17 +905,29 @@
       'metas.json':              v => v && typeof v === 'object' && !Array.isArray(v),
       // Adicionados junto com Berços Visuais e Avaliações do Setor de
       // Qualidade no Backup de Dados — mesma lista do servidor
-      // (VALIDADORES_BACKUP_DADOS, em server.js).
+      // (VALIDADORES_DADOS_PRODUCAO, lib/rotas/backup.js).
       'bercos_visuais.json':       v => Array.isArray(v),
       'avaliacoes_qualidade.json': v => Array.isArray(v),
       // Adicionado: sem isso, esta cópia (client-side) ficava desatualizada
-      // em relação a VALIDADORES_BACKUP_DADOS (server.js) — o navegador
-      // nunca lia "operacoes_avaliadas.json" de dentro do .zip nem mandava
-      // no payload pro servidor, que então recusava a restauração INTEIRA
-      // com "Backup incompleto — faltam: operacoes_avaliadas.json" (o
-      // servidor sempre exige todos os arquivos que ele mesmo valida,
-      // ver esperados/faltando em /restaurar-backup-dados).
+      // em relação a VALIDADORES_DADOS_PRODUCAO (lib/rotas/backup.js) — o
+      // navegador nunca lia "operacoes_avaliadas.json" de dentro do .zip
+      // nem mandava no payload pro servidor, que então recusava a
+      // restauração INTEIRA com "Backup incompleto —
+      // faltam: operacoes_avaliadas.json" (o servidor sempre exige todos
+      // os arquivos que ele mesmo valida, ver esperados/faltando em
+      // /restaurar-backup-dados).
       'operacoes_avaliadas.json':  v => Array.isArray(v),
+      // Mesmo motivo do comentário acima — faltavam aqui, desatualizados
+      // em relação a VALIDADORES_DADOS_PRODUCAO (lib/rotas/backup.js).
+      // Sem isso, o navegador nunca lia esses 3 arquivos de dentro do
+      // .zip nem mandava no payload, então o servidor restaurava tudo
+      // MENOS eles — silenciosamente, sem avisar (ver conversa que
+      // motivou essa correção: "ainda fica falando que falta Metas.json
+      // na hora de restaurar", mesmo depois do servidor já ter deixado
+      // de exigir).
+      'operacoes_nao_avaliadas.json': v => Array.isArray(v),
+      'manutencao_corretiva.json':    v => Array.isArray(v),
+      'manutencao_programada.json':   v => Array.isArray(v),
     };
 
     // Alguns desses arquivos legitimamente ficam vazios (0 bytes) até o app
@@ -731,6 +945,9 @@
       'bercos_visuais.json': [],
       'avaliacoes_qualidade.json': [],
       'operacoes_avaliadas.json': [],
+      'operacoes_nao_avaliadas.json': [],
+      'manutencao_corretiva.json': [],
+      'manutencao_programada.json': [],
     };
 
     function parseArquivoRestaurar(nome, texto) {
@@ -740,7 +957,51 @@
       return JSON.parse(texto);
     }
 
-    let _restaurarArquivos = null; // { 'config.json': '<texto original>', ... } já validados
+    let _restaurarArquivos = null; // { 'historico.json': '<texto original>', ... } já validados
+
+    // Nome legível de cada arquivo de dados — usado só pro checklist
+    // visual mostrado depois de restaurar (ver conversa que motivou:
+    // "quero que apareça uma lista de todos os arquivos de dados, um
+    // visto ao lado das que sofreram [restauração] e um x ao lado das
+    // que não receberam nenhuma mudança"). Cobre tanto Backup de Dados
+    // quanto os 3 extras do Backup Geral (config/identidade) — a lista
+    // que realmente aparece pra cada um vem do servidor
+    // (json.arquivos, ver /restaurar-backup-dados e
+    // /restaurar-backup-geral, lib/rotas/backup.js), então um arquivo
+    // sem label aqui ainda aparece (com o próprio nome do arquivo como
+    // texto), só não fica tão legível.
+    const RESTAURAR_DADOS_LABELS = {
+      'historico.json': 'Operações (Registro de Baterias)',
+      'historico_edicoes.json': 'Histórico de edição de operações',
+      'relatorio_edicoes.json': 'Histórico de edição de traços',
+      'relatorio_injecao.json': 'Traços (Relatório de Injeção)',
+      'contador_tracos.json': 'Contador de Traços do dia',
+      'sobra.json': 'Sobra de Traço',
+      'paradas.json': 'Paradas',
+      'ajustes_tracos.json': 'Ajustes de receita',
+      'metas.json': 'Metas de Produção',
+      'bercos_visuais.json': 'Berços Visuais',
+      'avaliacoes_qualidade.json': 'Avaliações de Qualidade',
+      'operacoes_avaliadas.json': 'Operações Avaliadas (Qualidade)',
+      'operacoes_nao_avaliadas.json': 'Fila de Avaliação (Qualidade)',
+      'manutencao_corretiva.json': 'Chamados de Manutenção Corretiva',
+      'manutencao_programada.json': 'Manutenção Programada',
+      'config.json': 'Configurações (baterias, tipos de montagem, automação)',
+      'security.json': 'Senha de Administrador',
+      'usuarios.json': 'Usuários cadastrados',
+    };
+
+    // Monta o texto do checklist (✅ restaurado / ❌ sem alteração — o
+    // arquivo não veio no backup, provavelmente por ser opcional) a
+    // partir de json.arquivos (ver rotas de restaurar, acima).
+    function _textoChecklistRestauracao(arquivos) {
+      if (!Array.isArray(arquivos) || !arquivos.length) return '';
+      const linhas = arquivos.map(a => {
+        const label = RESTAURAR_DADOS_LABELS[a.nome] || a.nome;
+        return `${a.restaurado ? '✅' : '❌'} ${label}`;
+      });
+      return '\n\nArquivos:\n' + linhas.join('\n');
+    }
 
     function abrirRestaurarBackup() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
@@ -796,7 +1057,11 @@
         // existirem, é válido mesmo sem eles; sem esta lista, o próprio
         // navegador já recusava o arquivo antes de chegar a enviar
         // qualquer coisa pro servidor.
-        const OPCIONAIS = ['bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json'];
+        const OPCIONAIS = [
+          'bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json',
+          'operacoes_nao_avaliadas.json', 'manutencao_corretiva.json', 'manutencao_programada.json',
+          'metas.json',
+        ];
         const obrigatorios = esperados.filter(n => !OPCIONAIS.includes(n));
         const faltando = obrigatorios.filter(nome => !zip.file(nome));
         if (faltando.length) {
@@ -870,7 +1135,10 @@
         const json = await res.json();
         if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar backup.');
 
-        await LW.mostrarAlerta('Backup restaurado com sucesso! A página será recarregada.', { tipo: 'sucesso' });
+        await LW.mostrarAlerta(
+          'Backup restaurado com sucesso! A página será recarregada.' + _textoChecklistRestauracao(json.arquivos),
+          { tipo: 'sucesso' }
+        );
         window.location.reload();
       } catch (e) {
         mostrarErroRestaurar(e.message);
@@ -1056,12 +1324,40 @@
     }
 
     // ---- Restaurar Backup Geral (admin) ----
-    // Mesmas ideias do Restaurar Backup de Dados, com camadas extras dado o
-    // risco maior: frase de confirmação explícita, e o backup pode conter
-    // QUALQUER arquivo do projeto (não uma lista fixa como o de dados).
-    const ESSENCIAIS_BACKUP_GERAL = ['server.js', 'package.json', 'public/index.html'];
+    // Mesmas ideias do Restaurar Backup de Dados — dados de produção +
+    // config.json + usuários/senha de administrador (se presentes). Único
+    // arquivo sempre obrigatório é config.json (sempre existiu, mesmo no
+    // sistema antigo pré-Fase A) — security.json/usuarios.json são
+    // OPCIONAIS (ver conversa que motivou isso: restaurar um backup do
+    // sistema antigo, sem esses 2, não pode apagar os usuários já
+    // cadastrados no sistema atual — o servidor trata isso em
+    // _restaurarArquivosExtraDoGeral, lib/rotas/backup.js).
+    const ESSENCIAIS_BACKUP_GERAL = ['config.json'];
 
-    let _restaurarGeralArquivos = null; // { 'server.js': '<conteúdo>', ... } já lidos do .zip
+    // Mesma ideia de RESTAURAR_VALIDACOES (Backup de Dados, acima), +
+    // config/security/usuarios — pedido do usuário: "podemos fazer igual
+    // em backup de dados, avisar que é um backup de um sistema antigo e
+    // informar quais arquivos estão faltando e deixar a opção da pessoa
+    // de prosseguir". Antes, Backup Geral lia QUALQUER arquivo do .zip
+    // sem checar formato nem avisar nada sobre arquivos antigos faltando
+    // — a pessoa só descobria um problema (se houvesse) na hora de
+    // confirmar, sem contexto nenhum sobre o que faltava ou por quê.
+    const RESTAURAR_GERAL_VALIDACOES = {
+      ...RESTAURAR_VALIDACOES,
+      'config.json':   v => v && typeof v === 'object' && !Array.isArray(v),
+      'security.json': v => v && typeof v === 'object' && typeof v.passwordHash === 'string',
+      'usuarios.json': v => Array.isArray(v),
+    };
+    // Mesma lista de opcionais do Backup de Dados + security/usuarios —
+    // config.json continua o único de verdade obrigatório (ver
+    // ESSENCIAIS_BACKUP_GERAL, acima).
+    const OPCIONAIS_BACKUP_GERAL = [
+      'bercos_visuais.json', 'avaliacoes_qualidade.json', 'operacoes_avaliadas.json',
+      'operacoes_nao_avaliadas.json', 'manutencao_corretiva.json', 'manutencao_programada.json',
+      'metas.json', 'security.json', 'usuarios.json',
+    ];
+
+    let _restaurarGeralArquivos = null; // { 'historico.json': '<conteúdo>', ... } já lidos do .zip
 
     function abrirRestaurarGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
@@ -1122,35 +1418,74 @@
       try {
         const zip = await JSZip.loadAsync(file);
 
-        const faltando = ESSENCIAIS_BACKUP_GERAL.filter(nome => !zip.file(nome));
-        if (faltando.length) {
-          mostrarErroRestaurarGeral('Isso não parece ser um Backup Geral — faltam: ' + faltando.join(', ') +
+        const faltandoEssenciais = ESSENCIAIS_BACKUP_GERAL.filter(nome => !zip.file(nome));
+        if (faltandoEssenciais.length) {
+          mostrarErroRestaurarGeral('Isso não parece ser um Backup Geral — faltam: ' + faltandoEssenciais.join(', ') +
             '. Você selecionou um Backup de Dados por engano?');
           return;
         }
 
+        // Arquivos CONHECIDOS (ver RESTAURAR_GERAL_VALIDACOES, acima) —
+        // lidos e validados um por um, mesmo rigor de Backup de Dados.
+        const conhecidos = Object.keys(RESTAURAR_GERAL_VALIDACOES);
+        const presentes = conhecidos.filter(nome => !!zip.file(nome));
         const conteudos = {};
+        const resumo = [];
         let tamanhoTotal = 0;
-        const caminhos = [];
+
+        for (const nome of presentes) {
+          const texto = await zip.file(nome).async('string');
+          let valor;
+          try {
+            valor = parseArquivoRestaurar(nome, texto);
+          } catch (e) {
+            mostrarErroRestaurarGeral(`"${nome}" não é um JSON válido.`);
+            return;
+          }
+          if (!RESTAURAR_GERAL_VALIDACOES[nome](valor)) {
+            mostrarErroRestaurarGeral(`"${nome}" não tem o formato esperado.`);
+            return;
+          }
+          conteudos[nome] = texto;
+          tamanhoTotal += texto.length;
+          resumo.push(`• ${nome}: ${Array.isArray(valor) ? valor.length + ' registro(s)' : 'ok'}`);
+        }
+
+        // Qualquer OUTRO arquivo do .zip, fora da lista conhecida — não
+        // barra nem valida formato (o servidor decide o que fazer com
+        // eles), só copia o conteúdo pro payload. Mantém compatibilidade
+        // com um backup mais NOVO que este código (arquivo que ainda nem
+        // existia quando esta tela foi escrita).
+        const desconhecidos = [];
         for (const [nome, entry] of Object.entries(zip.files)) {
-          if (entry.dir) continue;
+          if (entry.dir || conhecidos.includes(nome)) continue;
           const texto = await entry.async('string');
           conteudos[nome] = texto;
           tamanhoTotal += texto.length;
-          caminhos.push(nome);
+          desconhecidos.push(nome);
         }
-        caminhos.sort();
 
-        if (caminhos.length > 500) {
+        if (presentes.length + desconhecidos.length > 500) {
           mostrarErroRestaurarGeral('Backup com número de arquivos suspeito (>500) — recusado por segurança.');
           return;
         }
 
+        // Avisa quais opcionais faltaram (backup de um sistema mais
+        // antigo) — NÃO bloqueia, só deixa claro que essas partes não
+        // vão ser tocadas pela restauração, pra pessoa decidir se quer
+        // prosseguir mesmo assim (ver conversa que motivou isso).
+        const opcionaisFaltando = OPCIONAIS_BACKUP_GERAL.filter(n => !presentes.includes(n));
+        if (opcionaisFaltando.length) {
+          resumo.push(`<div style="margin-top:6px;color:var(--text-3)">⚠ Backup de um sistema mais antigo — não tinha ainda: ${opcionaisFaltando.join(', ')} (essas partes não serão alteradas na restauração).</div>`);
+        }
+        if (desconhecidos.length) {
+          resumo.push(`<div style="margin-top:6px;color:var(--text-3)">+ ${desconhecidos.length} outro(s) arquivo(s) do backup: ${desconhecidos.slice(0, 6).join(', ')}${desconhecidos.length > 6 ? '…' : ''}</div>`);
+        }
+
         _restaurarGeralArquivos = conteudos;
         document.getElementById('restaurar-geral-resumo').textContent =
-          `${caminhos.length} arquivo(s) — ${(tamanhoTotal / 1024).toFixed(0)} KB`;
-        document.getElementById('restaurar-geral-preview').innerHTML =
-          caminhos.map(c => `<div>${c}</div>`).join('');
+          `${presentes.length + desconhecidos.length} arquivo(s) — ${(tamanhoTotal / 1024).toFixed(0)} KB`;
+        document.getElementById('restaurar-geral-preview').innerHTML = resumo.map(l => `<div>${l}</div>`).join('');
 
         document.getElementById('restaurar-geral-step-0').style.display = 'none';
         document.getElementById('restaurar-geral-step-1').style.display = 'block';
@@ -1169,8 +1504,9 @@
       if (frase !== 'RESTAURAR TUDO' || !senha) return;
 
       const confirmouGeral = await LW.mostrarConfirmacao(
-        'Isso vai substituir TODO o código e os dados do sistema pelos deste backup, e vai exigir reiniciar o ' +
-        'servidor manualmente depois. Uma cópia de segurança completa do estado atual será salva automaticamente antes.',
+        'Isso vai substituir os dados de produção e configurações atuais pelos deste backup (usuários/senha de ' +
+        'administrador só se o backup os incluir). Uma cópia de segurança do estado atual será salva ' +
+        'automaticamente antes.',
         { titulo: 'ÚLTIMA CONFIRMAÇÃO', textoConfirmar: 'Restaurar Tudo', tipo: 'perigo', icon: '⚠️' }
       );
       if (!confirmouGeral) return;
@@ -1191,9 +1527,8 @@
 
         await LW.mostrarAlerta(
           `Backup geral restaurado com sucesso (${json.arquivosRestaurados} arquivos)!\n\n` +
-          `IMPORTANTE: reinicie o servidor agora manualmente (Ctrl+C e "npm start", ou "pm2 restart") para que ` +
-          `mudanças no código do servidor tenham efeito.\n\n` +
-          `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}`,
+          `Cópia de segurança do estado anterior salva em: ${json.backupSeguranca}` +
+          _textoChecklistRestauracao(json.arquivos),
           { tipo: 'sucesso' }
         );
         window.location.reload();
@@ -1593,15 +1928,18 @@
         cimenticia: (opcao.cimenticia && typeof opcao.cimenticia === 'object')
           ? { leva: !!opcao.cimenticia.leva, quantidade: Number(opcao.cimenticia.quantidade) || 0 }
           : { leva: false, quantidade: 0 },
-        // Combinação de avaliação (Setor de Qualidade → Referência) —
-        // SÓ é lida aqui, nunca editada nesta tela (ver cfgRenderTudo:
-        // mostra um aviso quando vazia, mas não tem campo pra
-        // preencher). Precisa ser copiada pra UI e devolvida intacta em
-        // _montagemDaUIParaConfig (abaixo) — sem isso, abrir e salvar
-        // Configurações (por qualquer motivo, nem precisa mexer em
-        // Montagem) apagava silenciosamente toda combinação já definida.
+        // Combinação de avaliação (marcas[] + indicadorIndex — ver
+        // conversa que motivou o painel visual de "Combinações de
+        // Avaliação", public/js/paletes-combinacoes.js, dentro de
+        // Configurações → Paletes) — editável nesta tela. Só copiada
+        // intacta (formato opaco pra este arquivo — quem entende a
+        // estrutura é setor-qualidade.js/paletes-combinacoes.js) e
+        // devolvida sem alteração em _montagemDaUIParaConfig (abaixo) —
+        // sem isso, abrir e salvar Configurações (por qualquer motivo,
+        // nem precisa mexer em Montagem) apagava silenciosamente toda
+        // combinação já definida.
         combinacaoAvaliacao: (opcao.combinacaoAvaliacao && typeof opcao.combinacaoAvaliacao === 'object')
-          ? { forma: opcao.combinacaoAvaliacao.forma, corModificadora: opcao.combinacaoAvaliacao.corModificadora }
+          ? JSON.parse(JSON.stringify(opcao.combinacaoAvaliacao))
           : null,
       };
     }
@@ -1625,9 +1963,11 @@
           quantidade: m.cimenticia?.leva ? (m.cimenticia.quantidade || 0) : 0,
         },
         // Ver comentário em _montagemDoConfigParaUI, acima — preserva o
-        // que já estava definido (ou null, se ainda não tiver sido).
+        // que já estava definido (ou null, se ainda não tiver sido) e
+        // devolve o que a seção "Combinações de Avaliação"
+        // (paletes-combinacoes.js) tiver alterado em m.combinacaoAvaliacao.
         combinacaoAvaliacao: (m.combinacaoAvaliacao && typeof m.combinacaoAvaliacao === 'object')
-          ? { forma: m.combinacaoAvaliacao.forma, corModificadora: m.combinacaoAvaliacao.corModificadora }
+          ? JSON.parse(JSON.stringify(m.combinacaoAvaliacao))
           : null,
       };
       opcao[`paineis_${m.tipo}_por_berco`] = m.paineisPorBerco;
@@ -1635,7 +1975,16 @@
     }
 
     function abrirConfig() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      const role = sessionStorage.getItem('lw_role');
+      // "Administrador" (senha mestra) sempre pode. Os outros 5 perfis
+      // (ver lib/perfis.js) só se tiverem PELO MENOS UMA aba de
+      // Configurações liberada — hoje isso é sempre verdade, já que
+      // "config-atalhos" está em todos os perfis cadastráveis, mas a
+      // checagem fica explícita mesmo assim, não hardcoded pra um perfil
+      // só, igual sempre foi (evita ficar obsoleta se um perfil novo
+      // aparecer sem nenhuma aba de config no futuro).
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-sql')) return;
+
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
       _cfgDados = {
@@ -1644,10 +1993,49 @@
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
+      // "Definir Paletes" (ver public/js/paletes-config.js) — zera o
+      // rascunho toda vez que Configurações reabre, pra sempre partir do
+      // que está de fato salvo (LW.PALETES_CONFIG), nunca de uma edição
+      // esquecida de uma sessão anterior do modal sem ter salvo.
+      if (typeof _pcRascunho !== 'undefined') _pcRascunho = null;
+      // "Ordem dos Paletes" (ver public/js/paletes-ordem.js) — mesmo
+      // raciocínio de _pcRascunho acima: zera toda vez que Configurações
+      // reabre, pra sempre partir do que está de fato salvo
+      // (LW.PALETES_ORDEM).
+      if (typeof _poRascunho !== 'undefined') _poRascunho = null;
       cfgRenderTudo();
-      cfgMostrarSecao('dados');
+      _cfgAplicarVisibilidadeDeAbas();
+      // Abre na primeira aba que este perfil realmente tem acesso — nem
+      // sempre "dados", que era o padrão fixo de antes (só fazia sentido
+      // quando só o Administrador Master via este modal).
+      const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+      cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
+    }
+
+    // Esconde do menu lateral do modal de Configurações as abas que este
+    // perfil não pode ver — "Administrador" (senha mestra) nunca passa
+    // por aqui (vê tudo, ver abrirConfig acima). Os outros perfis usam a
+    // mesma lista de páginas permitidas do resto do sistema (ver
+    // lib/perfis.js) — "config-dados", "config-atalhos",
+    // "config-automacao", "config-usuarios" e "config-sql" são os IDs de
+    // página usados especificamente pras abas de Configurações (não são
+    // páginas de verdade — não tem showPage nenhum com esses nomes, só
+    // entram no mesmo mapa de permissões por conveniência, ver comentário
+    // em lib/perfis.js).
+    function _cfgAplicarVisibilidadeDeAbas() {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return; // vê tudo, nada pra esconder
+      // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
+      // era escondida de ninguém, pra nenhum perfil (bug separado, pego
+      // na mesma revisão do bug do cssText, acima).
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
+      Object.entries(MAPA).forEach(([secao, navId]) => {
+        const el = document.getElementById(navId);
+        if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
+      });
     }
 
     function fecharConfig() {
@@ -1692,38 +2080,53 @@
     // ---- Menu lateral das Configurações ----
     function cfgMostrarSecao(secao) {
       const elDados = document.getElementById('cfg-secao-dados');
+      const elPaletes = document.getElementById('cfg-secao-paletes');
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
+      const elUsuarios = document.getElementById('cfg-secao-usuarios');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
-      const elOperadores = document.getElementById('cfg-secao-operadores');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
+      if (elPaletes) elPaletes.style.display = secao === 'paletes' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
+      if (elUsuarios) elUsuarios.style.display = secao === 'usuarios' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
-      if (elOperadores) elOperadores.style.display = secao === 'operadores' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
       const navDados = document.getElementById('cfg-nav-dados');
+      const navPaletes = document.getElementById('cfg-nav-paletes');
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
+      const navUsuarios = document.getElementById('cfg-nav-usuarios');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
-      const navOperadores = document.getElementById('cfg-nav-operadores');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navPaletes) navPaletes.style.cssText = secao === 'paletes' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navUsuarios) navUsuarios.style.cssText = secao === 'usuarios' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navOperadores) navOperadores.style.cssText = secao === 'operadores' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
+      if (secao === 'usuarios') cfgRenderUsuarios();
       if (secao === 'autorizados') cfgRenderAutorizados();
-      if (secao === 'operadores') cfgRenderOperadores();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
+
+      // Reaplica por último, de propósito: os `navX.style.cssText = ...`
+      // acima SUBSTITUEM o style inteiro do botão (é assim que o destaque
+      // visual da aba ativa funciona) — isso apaga sem querer o
+      // `display:none` que _cfgAplicarVisibilidadeDeAbas() tinha aplicado,
+      // reexibindo TODAS as abas de Configurações pra qualquer perfil
+      // não-admin (bug real, pego numa conversa: um perfil customizado só
+      // com Atalhos liberado via visto TODAS as outras abas mesmo assim).
+      // Reforçar aqui, toda vez que uma seção é mostrada, corrige na
+      // raiz — não importa quantas vezes cfgMostrarSecao for chamada.
+      _cfgAplicarVisibilidadeDeAbas();
     }
 
     // ---- Automação (Configurações → Automação) ────────────────────────
@@ -2016,6 +2419,17 @@
       const elNav = document.getElementById('cfg-atalhos-navegacao');
       const elAcoes = document.getElementById('cfg-atalhos-acoes');
       const elRef = document.getElementById('cfg-atalhos-referencia');
+      const elOndeSalva = document.getElementById('cfg-atalhos-onde-salva');
+      // Administrador (senha mestra, sem usuário próprio) continua em
+      // localStorage deste navegador; qualquer usuário cadastrado tem os
+      // atalhos seguindo a pessoa entre computadores (ver
+      // keyboard-shortcuts.js, _usaServidorParaAtalhos).
+      if (elOndeSalva) {
+        const role = sessionStorage.getItem('lw_role');
+        elOndeSalva.textContent = role === 'Administrador'
+          ? 'Fica salvo só neste navegador.'
+          : 'Fica salvo na sua conta — segue você em qualquer computador que logar.';
+      }
       if (elNav) elNav.innerHTML = todos.filter(a => a.grupo === 'navegacao').map(_cfgLinhaAtalho).join('');
       if (elAcoes) elAcoes.innerHTML = todos.filter(a => a.grupo === 'acao').map(_cfgLinhaAtalho).join('');
       // Atalhos NÃO-editáveis (ver REFERENCIA_CONFIG, keyboard-shortcuts.js)
@@ -2144,14 +2558,15 @@
         const swatch = (m.modo === 'simples' && typeof m.cor === 'string')
           ? `<span title="Cor deste tipo" style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${m.cor};flex:0 0 auto"></span>`
           : '';
-        // Combinação de avaliação (cor+forma da marcação, Setor de
-        // Qualidade → Referência) nasce vazia (null) num tipo simples
-        // recém-cadastrado (ver cfgAdicionarMontagemSimples) — só quem
-        // define é o Setor de Qualidade, nunca aqui. Sinaliza o estado
-        // "ainda vazio" pra quem cadastra saber que falta esse passo,
-        // sem precisar ir até lá conferir.
+        // Combinação de avaliação (cor+forma+posição da marcação) nasce
+        // vazia (null) num tipo simples recém-cadastrado (ver
+        // cfgAdicionarMontagemSimples) — configurável tanto aqui
+        // (Configurações → Paletes → "Combinações de Avaliação", ver
+        // public/js/paletes-combinacoes.js) quanto no picker rápido do
+        // Setor de Qualidade → 📖 Referência. Sinaliza o estado "ainda
+        // vazio" pra quem cadastra saber que falta esse passo.
         const avisoSemCombinacao = (m.modo === 'simples' && !m.combinacaoAvaliacao)
-          ? `<span style="font-size:.7rem;color:var(--accent)" title="Definida em Setor de Qualidade → 📖 Referência">⚠ sem marcação definida</span>`
+          ? `<span style="font-size:.7rem;color:var(--accent)" title="Configurável em Paletes → Combinações de Avaliação, ou em Setor de Qualidade → 📖 Referência">⚠ sem marcação definida</span>`
           : '';
         return `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
@@ -2167,6 +2582,21 @@
       }).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum tipo cadastrado.</span>';
 
       cfgPopularSelectsHibrida();
+
+      // "Definir Paletes" (ver public/js/paletes-config.js) — função
+      // global definida naquele arquivo, chamável daqui porque scripts
+      // sem módulo compartilham o mesmo escopo global da página (mesmo
+      // padrão de cfgRenderPerfisCustomizados, perfis-customizados.js).
+      if (typeof pcRenderTudo === 'function') pcRenderTudo();
+      // "Ordem dos Paletes" (ver public/js/paletes-ordem.js) — mesmo
+      // padrão de pcRenderTudo logo acima, só que pra aba "Paletes".
+      if (typeof poRenderTudo === 'function') poRenderTudo();
+      // "Combinações de Avaliação" (ver public/js/paletes-combinacoes.js)
+      // — mesmo padrão, mas edita direto em _cfgDados.montagens (mesmo
+      // array que a lista de tipos de montagem logo acima usa), não um
+      // rascunho à parte — por isso é re-renderizada de novo aqui, toda
+      // vez que a lista de montagens muda (tipo novo criado/removido).
+      if (typeof pcaRenderTudo === 'function') pcaRenderTudo();
     }
 
     function cfgAdicionarBateria() {
@@ -2306,11 +2736,11 @@
       _cfgDados.montagens.push({
         label, modo: 'simples', tipo, paineisPorBerco, cor,
         cimenticia: { leva: levaCimenticia, quantidade: levaCimenticia ? qtdCimenticia : 0 },
-        // Combinação cor+forma da Referência de Marcação (Setor de
-        // Qualidade) — nasce vazia de propósito. Só é preenchida de lá
-        // (ver salvarCombinacaoTipo, setor-qualidade.js), nunca aqui no
-        // cadastro: cadastrar o tipo e decidir sua marcação visual são
-        // passos distintos, e nem sempre feitos pela mesma pessoa.
+        // Combinação de avaliação — nasce vazia de propósito. Configurável
+        // logo abaixo, em "Combinações de Avaliação" (mesma tela, ver
+        // paletes-combinacoes.js — cfgRenderTudo(), chamada no fim desta
+        // função, já mostra este tipo lá pronto pra configurar), ou pelo
+        // picker rápido em Setor de Qualidade → 📖 Referência.
         combinacaoAvaliacao: null,
       });
 
@@ -2372,6 +2802,34 @@
       if (!_cfgDados.baterias.length) { LW.mostrarAlerta('Adicione ao menos uma bateria.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.montagens.length) { LW.mostrarAlerta('Adicione ao menos um tipo de montagem.', { tipo: 'aviso' }); return; }
 
+      // "Definir Paletes" (ver public/js/paletes-config.js) — valida
+      // ANTES de tentar salvar (mesmo raciocínio das duas checagens
+      // acima): evita gravar um config.json com 2 quadrantes apontando
+      // pro mesmo palete, ou um palete sem quadrante nenhum.
+      let paletesConfig = null;
+      if (typeof pcColetarValores === 'function') {
+        try {
+          paletesConfig = pcColetarValores();
+        } catch (e) {
+          LW.mostrarAlerta('Definir Paletes: ' + e.message, { tipo: 'aviso' });
+          return;
+        }
+      }
+
+      // "Ordem dos Paletes" (ver public/js/paletes-ordem.js) — mesmo
+      // raciocínio de "Definir Paletes" acima: valida ANTES de tentar
+      // salvar, cancelando o salvamento inteiro se as 4 posições não
+      // formarem uma permutação válida.
+      let paletesOrdem = null;
+      if (typeof poColetarValores === 'function') {
+        try {
+          paletesOrdem = poColetarValores();
+        } catch (e) {
+          LW.mostrarAlerta('Ordem dos Paletes: ' + e.message, { tipo: 'aviso' });
+          return;
+        }
+      }
+
       // Nova estrutura: dimensão e berços ficam dentro de cada bateria
       // Reconstruímos DIMENSAO_OPTS a partir das baterias (para retrocompatibilidade)
       const dimensoesOpcoes = _derivarDimensoesDeBaterias(_cfgDados.baterias);
@@ -2384,7 +2842,7 @@
         // salvar, em vez de reconstruir do zero só com o que esta tela
         // conhece. /salvar-config SUBSTITUI o arquivo inteiro (não faz
         // merge) — então campos que este modal nunca edita (ex:
-        // dispositivosAutorizados; modoAutomatico) eram APAGADOS
+        // modoAutomatico) eram APAGADOS
         // silenciosamente toda vez que alguém salvava Baterias e Tipos de
         // Montagem aqui, mesmo sem mexer neles. Usar `...cfgAtual` como
         // base preserva tudo que já existe; só os campos abaixo são de
@@ -2404,11 +2862,19 @@
           baterias: { ids: _cfgDados.baterias },
           dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
           tipos_montagem: { opcoes: novasOpcoesMontagem },
-          // Preserva volume_por_placa e dispositivosAutorizados — usa o que
-          // acabou de vir do servidor; LW.* só como rede de segurança caso
+          // Preserva volume_por_placa — usa o que acabou de vir do
+          // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.
           volume_por_placa: cfgAtual.volume_por_placa || LW.VOLUME_POR_PLACA,
-          dispositivosAutorizados: cfgAtual.dispositivosAutorizados || LW.DISPOSITIVOS_AUTORIZADOS,
+          // "Definir Paletes" — null (pcColetarValores ausente/tela
+          // ainda não carregada) preserva o que já estava salvo, via
+          // ...cfgAtual acima, em vez de apagar a configuração de
+          // paletes de alguém que só veio mexer em Baterias/Montagem.
+          ...(paletesConfig ? { paletes: paletesConfig } : {}),
+          // "Ordem dos Paletes" — mesmo raciocínio do comentário acima:
+          // null (poColetarValores ausente/tela ainda não carregada)
+          // preserva o que já estava salvo, via ...cfgAtual.
+          ...(paletesOrdem ? { paletesOrdem } : {}),
         };
       } catch (e) {
         LW.mostrarAlerta('Erro ao salvar: ' + e.message, { tipo: 'erro' });
@@ -2456,9 +2922,9 @@
     }
 
     // Deriva dimensoes.opcoes a partir de uma lista de baterias — usado por
-    // cfgSalvar() (com o rascunho em edição) e _configAtualBaseParaSalvar()
-    // (com o que já está carregado), pra manter o campo de compatibilidade
-    // "dimensoes" sempre em sincronia com as baterias, sem duplicar lógica.
+    // cfgSalvar() (com o rascunho em edição), pra manter o campo de
+    // compatibilidade "dimensoes" sempre em sincronia com as baterias, sem
+    // duplicar lógica.
     function _derivarDimensoesDeBaterias(baterias) {
       const uniqueDims = new Map();
       baterias.forEach(b => {
@@ -2467,114 +2933,42 @@
       return Array.from(uniqueDims.entries()).map(([label, bercos]) => ({ label, bercos }));
     }
 
-    // ---- Dispositivos Autorizados (Configurações → Autorizados) ----
-    // Diferente da seção "Baterias e Montagem" (que só salva tudo de uma vez
-    // no botão "✓ Salvar Configurações"), aqui cada autorizar/remover salva
-    // na hora — não tem o que "cancelar" depois de uma ação tão simples.
-    // Por isso monta o config.json inteiro a partir do que já está
-    // carregado em memória (igual cfgSalvar() faz com volume_por_placa),
-    // só trocando a lista de autorizados.
-    function _configAtualBaseParaSalvar() {
-      return {
-        baterias: { ids: LW.BATERIA_IDS },
-        dimensoes: { opcoes: _derivarDimensoesDeBaterias(LW.BATERIA_IDS) },
-        tipos_montagem: { opcoes: LW.MONTAGEM_OPCOES },
-        volume_por_placa: LW.VOLUME_POR_PLACA,
-        dispositivosAutorizados: LW.DISPOSITIVOS_AUTORIZADOS,
-      };
-    }
 
-    // POST /salvar-config agora exige sessão de Administrador (ver
-    // lib/sessao.js) — pede a senha aqui (se ainda não houver sessão
-    // válida) antes de autorizar/remover um dispositivo. Mantém o mesmo
-    // contrato de antes pros dois chamadores (cfgAdicionarAutorizado/
-    // cfgRemoverAutorizado): retorna uma Promise que resolve quando salvo
-    // com sucesso, e rejeita em erro real OU cancelamento — nesse 2º caso
-    // com `.silencioso = true`, pra quem chama saber que não deve mostrar
-    // um alerta de "erro" (o usuário só desistiu, não é uma falha).
-    function _cfgSalvarAutorizados(novaLista) {
-      return new Promise((resolve, reject) => {
-        if (typeof AdminAuth === 'undefined') {
-          reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
-          return;
-        }
-        AdminAuth.abrirModal(async function onSuccess() {
-          try {
-            const cfg = _configAtualBaseParaSalvar();
-            cfg.dispositivosAutorizados = novaLista;
-            const res = await fetch('/salvar-config', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(cfg),
-            });
-            const json = await res.json();
-            if (!json.ok) throw new Error(json.erro || 'Erro ao salvar.');
-            LW.atualizarDispositivosAutorizados(novaLista);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        }, function onCancel() {
-          const err = new Error('Cancelado.');
-          err.silencioso = true;
-          reject(err);
-        });
-      });
-    }
-
+    // "Configurações → Autorizados" antes gerenciava uma LISTA de
+    // dispositivos (deviceId) que podiam controlar operações — removido
+    // (ver conversa que motivou a mudança): agora quem pode controlar é
+    // decidido pela sessão de usuário logado (podeIniciarOperacao no
+    // cadastro, ver Configurações → Usuários / lib/perfis.js), não mais
+    // por computador. O que sobra útil aqui é só visualizar/cancelar a
+    // operação em andamento agora, se houver uma — mesma função de
+    // "🗑️ Limpar Tudo" em Registrar Operação, só que acessível daqui,
+    // sem precisar estar com aquela tela aberta.
     async function cfgRenderAutorizados() {
-      const meuId = LW.getDeviceId();
-      const lista = LW.DISPOSITIVOS_AUTORIZADOS;
-
-      // Dono atual da operação em andamento (se houver uma rodando agora) —
-      // usado só pra marcar, na lista de autorizados, qual deles está com o
-      // controle nesse momento. Falha de rede aqui não deve travar a tela
-      // de Configurações; nesse caso, simplesmente ninguém é marcado.
-      let donoDeviceId = null;
-      try {
-        const operacaoAtual = await LW.getOperacaoAndamento();
-        if (operacaoAtual && operacaoAtual.status && operacaoAtual.status !== 'idle') {
-          donoDeviceId = operacaoAtual.donoDeviceId || null;
-        }
-      } catch (_) {
-        // sem conexão ou erro ao consultar — segue sem indicar dono
-      }
-
-      // Status de "este computador" — feedback imediato de se quem está
-      // olhando essa tela agora consegue (ou não) controlar a operação.
       const elStatus = document.getElementById('cfg-autorizados-status');
-      let statusHtml;
-      if (!lista.length) {
-        statusHtml = `<span class="badge badge-gray">⬤ Sem restrição — qualquer computador pode controlar</span>`;
-      } else if (lista.some(d => d.deviceId === meuId)) {
-        statusHtml = `<span class="badge badge-green">✓ Este computador ESTÁ autorizado</span>`;
-      } else {
-        statusHtml = `<span class="badge badge-red">⚠ Este computador NÃO está autorizado</span>`;
+
+      let operacaoAtual = null;
+      try {
+        const r = await LW.getOperacaoAndamento();
+        if (r && r.status && r.status !== 'idle') operacaoAtual = r;
+      } catch (_) {
+        // sem conexão ou erro ao consultar — trata como "nenhuma operação"
       }
-      elStatus.innerHTML = statusHtml +
-        `<div style="font-size:.74rem;color:var(--text-3);margin-top:8px">Device ID deste computador: <span style="font-family:var(--font-mono)">${meuId}</span></div>`;
 
-      // Lista de autorizados
-      const elLista = document.getElementById('cfg-autorizados-lista');
-      elLista.innerHTML = lista.map(d => `
+      if (!operacaoAtual) {
+        elStatus.innerHTML = `<span class="badge badge-gray">⬤ Nenhuma operação em andamento agora</span>`;
+        return;
+      }
+
+      elStatus.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
-      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${d.nome ? _escaparHtmlLocal(d.nome) : '(sem nome)'}</span>
-      <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-2)">${_escaparHtmlLocal(d.deviceId)}</span>
-      ${d.deviceId === meuId ? '<span style="font-size:.7rem;color:var(--green)">← este computador</span>' : ''}
-      ${d.deviceId === donoDeviceId ? `<span class="badge badge-green" style="font-size:.7rem;cursor:pointer;text-decoration:underline" onclick="cfgCancelarOperacaoDono('${_escaparHtmlLocal(d.deviceId)}')" title="Clique para cancelar a operação em andamento">🟢 Operando agora${d.nome ? '' : ' — ' + _escaparHtmlLocal(d.deviceId)}</span>` : ''}
-      <button onclick="cfgRemoverAutorizado('${_escaparHtmlLocal(d.deviceId)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
-    </div>
-  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum dispositivo autorizado ainda.</span>';
-
-      // Convenience: pré-preenche o campo de Device ID com o deste
-      // computador — é o caso mais comum (autorizar a própria máquina).
-      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
-      if (inputDeviceId && !inputDeviceId.value) inputDeviceId.value = meuId;
+      <span class="badge badge-green">🟢 Operação em andamento agora</span>
+      <button onclick="cfgCancelarOperacaoDono()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Cancelar Operação</button>
+    </div>`;
     }
 
     /**
-     * Clique no badge "🟢 Operando agora" (Configurações → Autorizados):
-     * cancela a operação em andamento — equivalente ao "🗑️ Limpar Tudo" de
+     * Botão "✕ Cancelar Operação" (Configurações → Autorizados): cancela
+     * a operação em andamento — equivalente ao "🗑️ Limpar Tudo" de
      * Registrar Operação, só que disparado daqui, pelo Administrador, sem
      * precisar estar com aquela tela aberta. Nada do que foi preenchido na
      * operação é salvo; ela simplesmente é descartada.
@@ -2585,12 +2979,9 @@
      * usado no login, sempre pede a senha de novo, mesmo já autenticado).
      * Só depois das duas a operação é de fato cancelada.
      */
-    async function cfgCancelarOperacaoDono(deviceId) {
-      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
-      const identificacao = dispositivo?.nome || deviceId;
-
+    async function cfgCancelarOperacaoDono() {
       const confirmou = await LW.mostrarConfirmacao(
-        `A operação em andamento foi iniciada por "${identificacao}". Cancelar agora descarta tudo o que já foi preenchido nela — turno, traços, horários — sem salvar nada. A operação ficará liberada para qualquer dispositivo autorizado iniciar uma nova.`,
+        'Cancelar agora descarta tudo o que já foi preenchido na operação em andamento — turno, traços, horários — sem salvar nada. A operação ficará liberada para ser iniciada de novo.',
         { titulo: 'Cancelar a operação em andamento?', textoConfirmar: 'Cancelar Operação', tipo: 'perigo', icon: '🛑' }
       );
       if (!confirmou) return;
@@ -2614,7 +3005,7 @@
             LW.mostrarAlerta(json?.erro || 'Não foi possível cancelar a operação. Tente novamente.', { tipo: 'erro' });
             return;
           }
-          LW.mostrarAlerta('Operação cancelada. A operação está liberada para ser iniciada por qualquer dispositivo autorizado.', { tipo: 'sucesso' });
+          LW.mostrarAlerta('Operação cancelada. Ela está liberada para ser iniciada de novo.', { tipo: 'sucesso' });
           cfgRenderAutorizados();
         } catch (_) {
           LW.mostrarAlerta('Erro de conexão ao cancelar a operação. Verifique a rede e tente novamente.', { tipo: 'erro' });
@@ -2630,45 +3021,96 @@
       return div.innerHTML;
     }
 
-    // ---- Operadores (Configurações → Operadores — Identidade Leve) ----
-    // Mesmo raciocínio de Autorizados, acima, mas a lista em si NUNCA é
-    // guardada num global tipo LW.DISPOSITIVOS_AUTORIZADOS — vem sempre
-    // fresca de GET /operadores (nunca inclui pinHash, só {id, nome}),
-    // porque só é consultada aqui, dentro de Configurações.
-    let _operadoresCache = [];
+    // ---- Usuários (Configurações → Usuários) ───────────────────────────
+    // Login de verdade (usuário+senha, ver login.html/POST /login-usuario)
+    // — o PERFIL escolhido no cadastro decide o que a pessoa pode acessar
+    // (ver lib/perfis.js, server.js). Lista em cache local (nunca inclui
+    // senhaHash — GET /usuarios só devolve {id, nomeUsuario, perfil}).
+    let _usuariosCache = [];
+    let _perfisInfoCache = null; // { paginasPorPerfil, areasEdicaoPorPerfil, perfisCadastraveis, perfisComControleDeOperacao } — carregado 1x
 
-    async function cfgRenderOperadores() {
-      const elStatus = document.getElementById('cfg-operadores-status');
-      const elLista = document.getElementById('cfg-operadores-lista');
+    // Rótulos vêm do servidor (perfis.ROTULO_POR_PERFIL, lib/perfis.js) —
+    // fallback local só pra não quebrar a badge antes da 1ª resposta de
+    // GET /perfis chegar (ver cfgAtualizarCampoPodeIniciarOperacao).
+    const RÓTULO_PERFIL_FALLBACK = {
+      OperadorInjetora: 'Operador de Injetora',
+      AssistenteQualidade: 'Assistente de Qualidade',
+      Encarregado: 'Encarregado',
+      Manutencao: 'Manutenção',
+      Supervisao: 'Supervisão',
+      Administrativo: 'Administrador',
+    };
+    function _rotuloPerfil(perfil) {
+      return (_perfisInfoCache && _perfisInfoCache.rotulosPorPerfil && _perfisInfoCache.rotulosPorPerfil[perfil])
+        || RÓTULO_PERFIL_FALLBACK[perfil] || perfil;
+    }
+
+    // Mostra/esconde o checkbox "Pode iniciar/encerrar operações" — só
+    // faz sentido pra perfis com controle de operação de verdade (ver
+    // lib/perfis.js, PERFIS_COM_CONTROLE_DE_OPERACAO: quem tem a área
+    // 'injetora' de edição sem já ser administrador irrestrito); pros
+    // outros, a marcação não significaria nada (ou é redundante), então
+    // nem mostra o campo. Chamado ao trocar o <select> de perfil (ver
+    // onchange no HTML, modal-config.html) e também no boot da seção
+    // (cfgRenderUsuarios).
+    async function cfgAtualizarCampoPodeIniciarOperacao() {
+      if (!_perfisInfoCache) {
+        try {
+          const res = await fetch('/perfis');
+          _perfisInfoCache = await res.json();
+        } catch (e) {
+          _perfisInfoCache = { perfisComControleDeOperacao: [] };
+        }
+      }
+      const perfil = document.getElementById('cfg-usuario-perfil').value;
+      const wrap = document.getElementById('cfg-usuario-pode-iniciar-wrap');
+      const podeMostrar = (_perfisInfoCache.perfisComControleDeOperacao || []).includes(perfil);
+      wrap.style.display = podeMostrar ? 'block' : 'none';
+      if (!podeMostrar) document.getElementById('cfg-usuario-pode-iniciar').checked = false;
+    }
+
+    async function cfgRenderUsuarios() {
+      await cfgAtualizarCampoPodeIniciarOperacao(); // garante _perfisInfoCache pronto e o campo certo já visível
+      // Preenche o <select> de perfil (fixos + customizados — ver
+      // lib/perfis-customizados.js) e a lista de perfis customizados já
+      // criados (ver public/js/perfis-customizados.js) — funções globais
+      // definidas naquele arquivo, chamáveis daqui porque todo script sem
+      // módulo compartilha o mesmo escopo global da página.
+      if (typeof _cfgPopularSelectPerfil === 'function') _cfgPopularSelectPerfil();
+      if (typeof cfgRenderPerfisCustomizados === 'function') cfgRenderPerfisCustomizados();
+
+      const elStatus = document.getElementById('cfg-usuarios-status');
+      const elLista = document.getElementById('cfg-usuarios-lista');
       elLista.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
       try {
-        const res = await fetch('/operadores');
+        const res = await fetch('/usuarios');
         const json = await res.json();
-        if (!json.ok) throw new Error(json.erro || 'Erro ao listar operadores.');
-        _operadoresCache = json.operadores;
+        if (!json.ok) throw new Error(json.erro || 'Erro ao listar usuários.');
+        _usuariosCache = json.usuarios;
       } catch (e) {
         elLista.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
         return;
       }
 
-      elStatus.innerHTML = _operadoresCache.length
-        ? `<span class="badge badge-green">✓ ${_operadoresCache.length} operador(es) cadastrado(s)</span>`
-        : `<span class="badge badge-gray">⬤ Nenhum operador cadastrado — recurso desligado (nada muda pra quem registra)</span>`;
+      elStatus.innerHTML = _usuariosCache.length
+        ? `<span class="badge badge-green">✓ ${_usuariosCache.length} usuário(s) cadastrado(s)</span>`
+        : `<span class="badge badge-gray">⬤ Nenhum usuário cadastrado ainda — ninguém consegue logar com usuário+senha (só o botão "Entrar como Administrador" continua funcionando).</span>`;
 
-      elLista.innerHTML = _operadoresCache.map(o => `
+      elLista.innerHTML = _usuariosCache.map(u => `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
-      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(o.nome)}</span>
-      <button onclick="cfgRemoverOperador('${_escaparHtmlLocal(o.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+      <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(u.nomeUsuario)}</span>
+      <span class="badge badge-blue">${_escaparHtmlLocal(_rotuloPerfil(u.perfil))}</span>
+      ${u.podeIniciarOperacao ? '<span class="badge badge-green" title="Pode iniciar/encerrar operações">▶ Inicia Operação</span>' : ''}
+      <button onclick="cfgRemoverUsuario('${_escaparHtmlLocal(u.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
     </div>
-  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum operador cadastrado ainda.</span>';
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum usuário cadastrado ainda.</span>';
     }
 
-    // POST /salvar-operadores exige sessão de Administrador (ver
-    // lib/sessao.js) — mesmo contrato de _cfgSalvarAutorizados (Promise
-    // que resolve/rejeita, rejeição de cancelamento marcada como
-    // `.silencioso`). `listaParaEnviar` já deve vir no formato esperado
-    // pelo servidor ([{id?, nome, pin?}] — ver comentário na rota).
-    function _cfgSalvarOperadores(listaParaEnviar) {
+    // POST /salvar-usuarios exige sessão de Administrador Master (ver
+    // lib/sessao.js — mesma senha mestra de sempre, NÃO a sessão de
+    // usuário comum) — mesmo contrato de _cfgSalvarAutorizados, acima
+    // (Promise que resolve/rejeita, cancelamento marcado como `.silencioso`).
+    function _cfgSalvarUsuarios(listaParaEnviar) {
       return new Promise((resolve, reject) => {
         if (typeof AdminAuth === 'undefined') {
           reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
@@ -2676,7 +3118,7 @@
         }
         AdminAuth.abrirModal(async function onSuccess() {
           try {
-            const res = await fetch('/salvar-operadores', {
+            const res = await fetch('/salvar-usuarios', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(listaParaEnviar),
@@ -2695,106 +3137,67 @@
       });
     }
 
-    async function cfgAdicionarOperador() {
-      const inputNome = document.getElementById('cfg-operador-nome');
-      const inputPin = document.getElementById('cfg-operador-pin');
-      const nome = inputNome.value.trim();
-      const pin = inputPin.value.trim();
+    async function cfgAdicionarUsuario() {
+      const inputNome = document.getElementById('cfg-usuario-nome');
+      const inputSenha = document.getElementById('cfg-usuario-senha');
+      const selectPerfil = document.getElementById('cfg-usuario-perfil');
+      const chkPodeIniciar = document.getElementById('cfg-usuario-pode-iniciar');
 
-      if (!nome) { LW.mostrarAlerta('Digite o nome do operador.', { tipo: 'aviso' }); return; }
-      if (!/^\d{4,8}$/.test(pin)) { LW.mostrarAlerta('O PIN precisa ter de 4 a 8 dígitos numéricos.', { tipo: 'aviso' }); return; }
+      const nomeUsuario = inputNome.value.trim();
+      const senha = inputSenha.value;
+      const perfil = selectPerfil.value;
+      const podeIniciarOperacao = chkPodeIniciar.checked;
 
-      // Reenvia todo mundo que já existia SEM "pin" (preserva o hash de
-      // cada um no servidor — ver comentário em POST /salvar-operadores)
-      // + o novo, com o PIN em texto puro só nesta chamada (o servidor
+      if (!nomeUsuario) { LW.mostrarAlerta('Digite o nome de usuário.', { tipo: 'aviso' }); return; }
+      if (_usuariosCache.some(u => u.nomeUsuario.toLowerCase() === nomeUsuario.toLowerCase())) {
+        LW.mostrarAlerta(`Já existe um usuário chamado "${nomeUsuario}".`, { tipo: 'aviso' });
+        return;
+      }
+      if (senha.length < 4) { LW.mostrarAlerta('A senha precisa ter no mínimo 4 caracteres.', { tipo: 'aviso' }); return; }
+
+      // Reenvia todo mundo que já existia SEM "senha" (preserva o hash de
+      // cada um no servidor — ver comentário em POST /salvar-usuarios) +
+      // o novo, com a senha em texto puro só nesta chamada (o servidor
       // faz o hash antes de gravar; nunca fica em texto puro em disco).
       const listaParaEnviar = [
-        ..._operadoresCache.map(o => ({ id: o.id, nome: o.nome })),
-        { nome, pin },
+        ..._usuariosCache.map(u => ({ id: u.id, nomeUsuario: u.nomeUsuario, perfil: u.perfil, podeIniciarOperacao: u.podeIniciarOperacao })),
+        { nomeUsuario, senha, perfil, podeIniciarOperacao },
       ];
 
       try {
-        await _cfgSalvarOperadores(listaParaEnviar);
+        await _cfgSalvarUsuarios(listaParaEnviar);
       } catch (e) {
         if (!e.silencioso) LW.mostrarAlerta('Erro ao adicionar: ' + e.message, { tipo: 'erro' });
         return;
       }
 
       inputNome.value = '';
-      inputPin.value = '';
-      cfgRenderOperadores();
+      inputSenha.value = '';
+      selectPerfil.value = 'OperadorInjetora';
+      chkPodeIniciar.checked = false;
+      cfgRenderUsuarios();
     }
 
-    async function cfgRemoverOperador(id) {
-      const operador = _operadoresCache.find(o => o.id === id);
+    async function cfgRemoverUsuario(id) {
+      const usuario = _usuariosCache.find(u => u.id === id);
       const confirmou = await LW.mostrarConfirmacao(
-        `Remover "${operador?.nome || id}" do cadastro de operadores? Registros já feitos por essa pessoa continuam com o nome dela — isto só afeta registros novos.`,
-        { titulo: 'Remover operador', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+        `Remover o usuário "${usuario?.nomeUsuario || id}"? Essa pessoa não vai conseguir mais logar — registros já feitos por ela continuam intactos, isto só afeta o acesso dela ao sistema a partir de agora.`,
+        { titulo: 'Remover usuário', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
       );
       if (!confirmou) return;
 
-      const listaParaEnviar = _operadoresCache
-        .filter(o => o.id !== id)
-        .map(o => ({ id: o.id, nome: o.nome }));
+      const listaParaEnviar = _usuariosCache
+        .filter(u => u.id !== id)
+        .map(u => ({ id: u.id, nomeUsuario: u.nomeUsuario, perfil: u.perfil, podeIniciarOperacao: u.podeIniciarOperacao }));
 
       try {
-        await _cfgSalvarOperadores(listaParaEnviar);
+        await _cfgSalvarUsuarios(listaParaEnviar);
       } catch (e) {
         if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
         return;
       }
 
-      cfgRenderOperadores();
-    }
-
-    async function cfgAdicionarAutorizado() {
-      const inputNome = document.getElementById('cfg-autorizado-nome');
-      const inputDeviceId = document.getElementById('cfg-autorizado-deviceid');
-
-      const nome = inputNome.value.trim();
-      const deviceId = inputDeviceId.value.trim();
-
-      if (!deviceId) { LW.mostrarAlerta('Cole o Device ID do computador a autorizar.', { tipo: 'aviso' }); return; }
-      if (LW.DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === deviceId)) {
-        LW.mostrarAlerta('Este Device ID já está autorizado.', { tipo: 'aviso' });
-        return;
-      }
-
-      const novaLista = [
-        ...LW.DISPOSITIVOS_AUTORIZADOS,
-        { deviceId, nome, autorizadoEm: new Date().toISOString() },
-      ];
-
-      try {
-        await _cfgSalvarAutorizados(novaLista);
-      } catch (e) {
-        if (!e.silencioso) LW.mostrarAlerta('Erro ao autorizar: ' + e.message, { tipo: 'erro' });
-        return;
-      }
-
-      inputNome.value = '';
-      inputDeviceId.value = '';
-      cfgRenderAutorizados();
-    }
-
-    async function cfgRemoverAutorizado(deviceId) {
-      const dispositivo = LW.DISPOSITIVOS_AUTORIZADOS.find(d => d.deviceId === deviceId);
-      const confirmou = await LW.mostrarConfirmacao(
-        `Remover a autorização de "${dispositivo?.nome || deviceId}"? Se a lista ficar vazia, qualquer computador volta a poder controlar operações.`,
-        { titulo: 'Remover dispositivo autorizado', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
-      );
-      if (!confirmou) return;
-
-      const novaLista = LW.DISPOSITIVOS_AUTORIZADOS.filter(d => d.deviceId !== deviceId);
-
-      try {
-        await _cfgSalvarAutorizados(novaLista);
-      } catch (e) {
-        if (!e.silencioso) LW.mostrarAlerta('Erro ao remover: ' + e.message, { tipo: 'erro' });
-        return;
-      }
-
-      cfgRenderAutorizados();
+      cfgRenderUsuarios();
     }
 
 

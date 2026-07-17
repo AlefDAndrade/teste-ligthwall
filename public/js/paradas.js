@@ -208,11 +208,13 @@
       return;
     }
 
-    // "Quem está operando?" (ver operador.js) — só perguntado ao CRIAR
-    // uma parada nova; numa edição, omitir o campo faz o servidor
-    // preservar o autor original (ver POST /salvar-parada, server.js) em
-    // vez de trocar pra quem só corrigiu um detalhe depois.
-    const operador = _modoEdicao ? null : await LWOperador.exigir();
+    // Autoria automática — só preenchida ao CRIAR uma parada nova; numa
+    // edição, omitir o campo faz o servidor preservar o autor original
+    // (ver POST /salvar-parada, server.js) em vez de trocar pra quem só
+    // corrigiu um detalhe depois. Antes perguntava "quem está operando"
+    // via PIN (Identidade Leve de Operador, removida — ver conversa que
+    // motivou isso); agora usa quem já está logado (LW.nomeDeQuemEstaLogado()).
+    const nomeAutor = _modoEdicao ? null : LW.nomeDeQuemEstaLogado();
 
     const parada = {
       id:             _modoEdicao || _gerarIdParada(),
@@ -224,7 +226,7 @@
       classificacao,
       obs,
       registrado_em:  new Date().toISOString(),
-      ...(operador ? { operador_nome: operador.nome } : {}),
+      ...(nomeAutor ? { operador_nome: nomeAutor } : {}),
     };
 
     const btn = document.getElementById('btn-salvar-parada');
@@ -311,9 +313,12 @@
       const badge = p.classificacao === 'Planejada'
         ? `<span class="badge badge-blue">Planejada</span>`
         : `<span class="badge badge-red">Não Planejada</span>`;
-      // Registro de Paradas não é uma feature exclusiva de administrador —
-      // qualquer perfil que acesse esta página pode editar/excluir registros.
-      const canEdit = true;
+      // Registro de Paradas é aberto pra visualização a todo perfil, mas
+      // só quem tem a área 'paradas' de edição (ver lib/perfis.js — hoje,
+      // na prática, todo perfil cadastrável) pode editar/excluir — o
+      // servidor valida de novo em POST /salvar-parada e
+      // /excluir-parada, isso aqui é só a parte visual.
+      const canEdit = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('paradas') : true;
       const btns = canEdit
         ? `<button class="btn btn-ghost btn-sm" onclick="LWParadas.editarParada('${p.id}')">✏</button>
            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="LWParadas.confirmarExclusao('${p.id}')">✕</button>`

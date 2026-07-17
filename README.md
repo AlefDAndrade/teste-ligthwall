@@ -90,7 +90,7 @@ package.json
 |---|---|---|
 | 1 | Hash de senha (scrypt + compat. legado) e rate limiting de tentativas | `lib/auth.js` |
 | 2 | Sessão de Administrador | `lib/sessao.js` |
-| 3 | Identidade Leve de Operador (cadastro, verificação de PIN) | `lib/rotas/operadores.js` |
+| 3 | Identidade Leve de Operador (cadastro, verificação de PIN) — *removida depois, ver Autoria automática de registro* | `lib/rotas/operadores.js` (não existe mais) |
 | 4 | Registro de Paradas | `lib/rotas/paradas.js` |
 | 5 | Setor de Qualidade / Avaliações (fila, avaliação, marcação) | `lib/rotas/qualidade.js` |
 | 6 | Dados SQL (Configurações → 🗄️ Dados SQL) | `lib/rotas/sql-admin.js` |
@@ -105,7 +105,6 @@ package.json
 **Ainda por fazer** (por ordem de risco, do menor pro maior):
 - Rotas centrais de operação: `registrar-operacao`, `editar-operacao`, `registrar-relatorio-injecao`, `editar-traco-relatorio`, `registrar-ajuste-traco`, `leitura-automatica` — são as maiores e mais tocadas do sistema, cada uma tem bastante lógica de negócio embutida.
 - Autenticação/config: `verificar-senha`, `verificar-recovery`, `gerar-hash`, `salvar-config`, `config/modo-automatico`, `salvar-security`, `db/security.json`, `logout-admin`.
-- **Backup & Restauração** (`backup-geral`, `backups-automaticos`, `mesclar-backup-dados`, `restaurar-backup-dados`, `restaurar-backup-geral`) — deixado por último de propósito: é o domínio de maior risco do sistema, já que `restaurar-backup-geral` pode sobrescrever o próprio código do servidor. Só deve ser fatiado com o padrão já bem validado nos domínios mais simples primeiro (o que já é o caso).
 
 ## Fatiamento de index.html
 
@@ -139,7 +138,7 @@ Os arquivos JSON de `public/db/` crescem sem limite e são lidos/escritos **por 
 
 - **Migração automática, sem passo manual**: no boot, `db.migrarHistoricoSeNecessario()` confere se a tabela `operacoes` está vazia E `historico.json` ainda existe com esse nome — se sim, importa tudo (numa transação) e **renomeia** o arquivo pra `historico.json.migrado-<timestamp>` (nunca apaga). Isso também acontece com `historico_edicoes.json`. Reinicia o servidor sem ter migrado nada ainda? Roda sozinho, sem precisar lembrar de nenhum comando.
 - **Zero mudança no navegador**: `historico.json` não existe mais como arquivo, mas o servidor intercepta `GET /db/historico.json` (e `historico_edicoes.json`) e devolve o mesmo formato de sempre, reconstruído a partir do SQL — toda tela que já fazia `fetch('db/historico.json')` direto (Registro de Baterias, OEE, Análise Operacional, Debriefing, a tela de Backup de Dados) continua funcionando **sem nenhuma alteração**.
-- **Backup e Restauração também não mudam de comportamento**: "Backup de Dados" e o backup automático diário exportam o conteúdo atual da tabela como JSON (mesmo formato); "Restaurar Backup de Dados" substitui o conteúdo da tabela inteira (dentro de uma transação) em vez de escrever um arquivo. "Backup Geral" inclui `data/lightwall.sqlite` automaticamente (já varre o projeto inteiro) — com um detalhe importante: roda um `PRAGMA wal_checkpoint(TRUNCATE)` antes de zipar, senão escritas recentes podem estar só no arquivo `-wal` e não no `.sqlite` principal.
+- **Backup e Restauração também não mudam de comportamento**: "Backup de Dados" e o backup automático diário exportam o conteúdo atual da tabela como JSON (mesmo formato); "Restaurar Backup de Dados" substitui o conteúdo da tabela inteira (dentro de uma transação) em vez de escrever um arquivo. "Backup Geral" reaproveita a mesma exportação JSON (não inclui `data/lightwall.sqlite` diretamente) — com um detalhe importante: roda um `PRAGMA wal_checkpoint(TRUNCATE)` antes de exportar, senão escritas recentes podem estar só no arquivo `-wal` e não no `.sqlite` principal.
 - **Modo de Teste não foi tocado**: continua escrevendo em `public/db/teste/historico.json`, exatamente como antes — só o caminho **real** (sem `?modoTeste=true`) passa a usar SQL.
 - **Testado**: migração automática (comparando campo a campo com o arquivo original — reconstrução idêntica), `/registrar-operacao`, `/editar-operacao` (inclusive a checagem de campos protegidos), `/importar-historico` com deduplicação, 5 registros concorrentes via `Promise.all` (o problema original que motivou a migração), Modo de Teste continuando isolado, e a restauração completa de um Backup de Dados (com o backup de segurança pré-restauração capturando o estado anterior corretamente).
 - **Achado de implementação**: tanto o `better-sqlite3` quanto o `node:sqlite` recusam um objeto de parâmetros nomeados com chaves que não aparecem na query (`UPDATE ... SET x = @x` não aceita um objeto que também tenha `@y` sem uso) — o `UPDATE` de `/editar-operacao` precisa receber só as colunas que de fato atualiza, não o objeto inteiro do registro.
@@ -185,15 +184,42 @@ As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `opera
 
 ## Perfis de usuário
 
-Escolhidos na tela de login (`login.html`), sem necessidade de cadastro prévio:
+Login em `login.html`: usuário + senha. O **perfil** de cada pessoa é definido no cadastro pelo Administrador (Configurações → Usuários) — quem loga não escolhe o próprio perfil, já entra direto com o que foi configurado.
 
-| Perfil | Acesso |
-|---|---|
-| **Operador** | Registrar Operação + todos os dashboards e relatórios. Sem senha. |
-| **Analista** | Todos os dashboards e relatórios. **Sem** acesso a Registrar Operação. Sem senha. |
-| **Administrador** | Acesso total — inclui Configurações, Backup/Restauração e Importação. **Sempre** pede senha na tela de login, mesmo que já tenha sido usado antes neste navegador. |
+O botão **"Entrar como Administrador"**, no topo da tela de login, continua separado: é a senha única mestra de sempre, sem cadastro, sem usuário — mesmo comportamento de antes.
 
-A sessão (`sessionStorage`) dura enquanto a aba estiver aberta. Um F5 dentro do sistema não exige login de novo; fechar a aba ou voltar à tela de login, sim.
+**Modelo de permissões**: quase todas as ferramentas ficam abertas para **visualização** a qualquer perfil — o que muda por perfil é o poder de **editar/registrar**. Cada perfil só pode editar as áreas listadas abaixo; nas demais, a tela abre normalmente, mas em modo somente-leitura (formulários desabilitados, botões de salvar/excluir escondidos). O servidor valida de novo em cada rota de escrita — nunca confia só no que o navegador esconde.
+
+| Perfil | Pode editar | O resto |
+|---|---|---|
+| **Operador de Injetora** | Ferramentas de registro de operação (Registrar Operação, histórico/traço), Registrar Paradas | Visualização |
+| **Assistente de Qualidade** | Setor de Qualidade, Registrar Paradas | Visualização |
+| **Encarregado** | Injetora + Qualidade + Paradas, e pode **abrir** um chamado de manutenção (não fechar) | Visualização |
+| **Manutenção** | Manutenção completa (chamados, programada, almoxarifado, movimentações), Registrar Paradas | Visualização |
+| **Supervisão** | Injetora + Qualidade + Paradas + Manutenção completa | Visualização |
+| **Administrador** (perfil cadastrado) | Tudo — igual ao Administrador Master, inclusive Configurações completas | — |
+| **Administrador** (senha mestra) | Acesso total, irrestrito | — |
+
+O checkbox **"Pode iniciar/encerrar operações em Registrar Operação"** continua existindo por usuário (Configurações → Usuários) — só aparece pra quem tem a área de edição da Injetora sem já ser administrador (Operador de Injetora, Encarregado, Supervisão): mesmo tendo permissão de editar a ferramenta, ainda precisa dessa marcação específica pra efetivamente controlar uma operação em andamento (ver *Quem pode controlar operações*, abaixo).
+
+**Configurações**: todo perfil vê só a aba **Atalhos de Teclado**. Só o perfil **Administrador** (cadastrado) tem acesso às demais abas (Dados, Usuários, Automação, Dados SQL, Backup/Restauração) — igual ao Administrador Master.
+
+O mapa de permissões (páginas e áreas de edição) é definido num lugar só (`lib/perfis.js`) e validado tanto no front (esconde/desabilita controles de edição) quanto no back (cada rota de escrita confere de novo — nunca confia só no que o navegador mandou).
+
+### Perfis customizados
+
+Além dos 6 perfis fixos acima, o Administrador pode **criar novos tipos de perfil** em Configurações → Usuários → "+ Criar novo tipo de perfil" (ver `lib/itens-permissao.js`, `lib/perfis-customizados.js`, `lib/rotas/perfis-customizados.js`). Cada perfil customizado tem seu próprio mapa, item por item, sobre o catálogo inteiro (páginas, dashboards, sub-itens de Setor de Qualidade e Manutenção — inclusive as 4 seções do formulário de chamado corretivo — e "Outros"), marcando cada um como **Acesso Total**, **Apenas Visualizar** ou **Ocultar**. Item não marcado fica oculto por padrão (perfil novo é restritivo, ao contrário dos 6 fixos, que são "visualização aberta").
+
+- **Enforcement real no servidor**: só as 5 áreas já validadas de verdade (injetora, paradas, qualidade, manutenção, manutenção-chamado) — marcar "Acesso Total" num item ligado a uma dessas áreas (ex: "Registrar Operação" → área injetora) concede a permissão de escrita de verdade, com a mesma validação server-side que os 6 perfis fixos já têm.
+- **Só front-end por enquanto**: os itens de "Outros" (Importar, Exportações, Edição de Dados, Backup/Restauração) e as abas de Configurações (exceto Atalhos) continuam sendo, no backend, exclusivos do Administrador Master e do perfil fixo "Administrador" — marcá-los num perfil customizado ainda não libera acesso de verdade a essas rotas. Por isso ficam travados em "Ocultar" no formulário de criação, com um aviso explicando o motivo — chegam numa próxima etapa.
+- Perfis customizados não podem usar um nome já reservado (os 6 fixos, ou "Administrador"), nem duplicar o nome de outro customizado.
+- Excluir um perfil customizado é bloqueado enquanto algum usuário cadastrado ainda o estiver usando.
+
+A sessão de usuário cadastrado dura 12h (cookie HttpOnly, `lib/sessao-usuario.js`) — cobre um turno inteiro sem precisar logar de novo no meio do expediente. A sessão do Administrador Master dura 30min (`lib/sessao.js`), mais curta de propósito por ser uma ação administrativa pontual, não "ficar logado o dia todo".
+
+**Atalhos de teclado por usuário**: cada usuário cadastrado tem seus próprios atalhos personalizados (Configurações → Atalhos de Teclado), persistidos no servidor associados ao cadastro (`GET`/`POST /meus-atalhos`, `lib/rotas/usuarios.js`) — a personalização segue a pessoa entre computadores, não fica presa a um navegador. O Administrador Master (sem usuário próprio) continua com os atalhos salvos só em `localStorage` deste navegador, como sempre foi.
+
+A lista de atalhos exibida (em Configurações → Atalhos de Teclado e no modal de ajuda, F1) mostra só os atalhos das páginas que o perfil logado realmente acessa — um perfil sem acesso ao Setor de Qualidade, por exemplo, não vê os atalhos de lá (ver `lib/perfis.js` / `lib/perfis-customizados.js`, campo `page` em `NAV_CONFIG`/`ACTION_CONFIG`/`REFERENCIA_CONFIG`, `public/js/keyboard-shortcuts.js`). Atalhos globais (Sair, abrir Configurações, Debriefing do Dia, filtro/atualizar/exportar) continuam aparecendo pra todo mundo, já que vivem na topbar, compartilhada por todas as telas.
 
 ## Páginas
 
@@ -213,9 +239,22 @@ Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
 
 O app também funciona como **PWA** (manifest + service worker, cobrindo só a casca estática — HTML/CSS/JS/ícones, nunca dado de produção): dá pra "Adicionar à tela inicial" num tablet e abrir sem barra de endereço, com alguma tolerância a queda rápida de rede.
 
-## Identidade Leve de Operador
+## Setor de Manutenção
 
-Cadastro opcional (Configurações → Operadores) pra saber **quem registrou o quê** em Registrar Operação e Registro de Paradas — não é login nem controle de acesso, é só um rótulo de auditoria. Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador (guardado em `sessionStorage`, nunca em cookie/sessão do servidor) e anexado ao registro como `operador_nome`. Enquanto ninguém estiver cadastrado, o sistema funciona exatamente como antes, sem perguntar nada a ninguém — é totalmente opt-in.
+Chamados corretivos, manutenção programada (agendamentos), almoxarifado (estoque de peças) e histórico de movimentações — 4 domínios, cada um com backend real em SQLite (`manutencao_corretiva`, `manutencao_programada`, `manutencao_estoque`, `manutencao_movimentacoes`, ver `db.js` e `lib/rotas/manutencao.js`). Antes vivia inteiro em `localStorage` do navegador (protótipo inicial) — sem sincronizar entre computadores, sem entrar em backup; agora sincroniza normalmente e entra tanto no Backup de Dados quanto no Backup Geral.
+
+Pontos específicos desse domínio:
+- **`autor_nome`/`autorNome`** grava automaticamente quem registrou (mesmo mecanismo de *Autoria automática de registro*, acima).
+- **Estoque nunca é ajustado diretamente** — toda mudança de quantidade passa por uma movimentação (Entrada/Saída), numa transação que ajusta o saldo e grava o histórico juntos. Cadastrar uma peça nova com quantidade inicial grava só o registro histórico (sem duplicar o saldo — a quantidade já nasce certa no cadastro).
+- **Excluir uma peça** remove também todo o seu histórico de movimentações (cascata manual, já que `foreign_keys` está ativado no banco).
+- **Upload de foto/PDF** ainda é só visual — os campos existem na tela mas não fazem upload de verdade (limitação conhecida, ver abaixo).
+- Só `GET`/`POST` (nunca `DELETE`/`PUT`) — mesmo padrão do resto do sistema; exclusão/edição usam rotas próprias com o verbo no path (`/manutencao/excluir-corretiva`, `/manutencao/editar-estoque`), pra ficarem cobertas pela mesma proteção de tamanho máximo de corpo que `server.js` só aplica a `POST`.
+
+## Autoria automática de registro
+
+Registrar Operação, Registro de Paradas e Avaliações do Setor de Qualidade gravam automaticamente **quem registrou** (`operador_nome`/`avaliadorNome`) — não é login nem controle de acesso, é só um rótulo de auditoria (`LW.nomeDeQuemEstaLogado()`, `data.js`). O nome vem de quem já está logado no sistema (usuário cadastrado — ver *Perfis de usuário*) ou `"ADM"` para o Administrador Master (senha mestra, sem usuário próprio). Ninguém precisa escolher/confirmar identidade separadamente — substituiu a antiga "Identidade Leve de Operador" (perguntava PIN à parte do login, toda vez que algo era registrado).
+
+Numa correção/edição de um registro já existente (parada, avaliação de qualidade), o autor **original** é preservado — corrigir um detalhe não troca a autoria pra quem só corrigiu.
 
 ## Ajuste de Receita (Registrar Operação)
 
@@ -241,6 +280,18 @@ Cada ajuste salvo também é registrado em `ajustes_tracos.json`, indexado pelo 
 ```
 
 Esse arquivo é só um log de auditoria (qual ajuste veio com qual tempo de batida) — **durante a operação em si**, não substitui nem altera os campos `*_real`/`tempo_batida` de cada traço (em `historico.json`/`relatorio_injecao.json`), que continuam funcionando exatamente como antes. Isso muda ao **editar** um traço já registrado — ver seção dedicada, abaixo.
+
+**Um campo preenchido só via ajuste conta como preenchido.** Bug relatado: Flow/Densidade preenchidos exclusivamente pelo painel de Remedição (sem nunca ter um valor original) apareciam certinho na tela, mas a checagem de pendência só olhava o valor original — o traço ficava marcado como pendente mesmo com o dado visivelmente lá, bloqueando "Registrar". Corrigido: `tracoCompleto()`/`_statusDoTraco()` (`operacao.js`) agora consideram um insumo preenchido se tiver valor original **ou** pelo menos 1 ajuste — mesmo critério que `totalInsumo()` já usava pra decidir o que mostrar na tela.
+
+## Faixa de Berços (Registrar Operação)
+
+Berço Início e Berço Fim de cada traço são validados (`_erroBercos()`, `operacao.js`), com borda vermelha + mensagem inline no campo, em tempo real (a cada tecla, não só no próximo re-render):
+
+- Início e fim precisam ser **maiores que zero** — não aceita 0 nem negativo.
+- Fim não pode ser **menor** que início (pode ser igual — um traço cobrindo 1 berço só).
+- O início de um traço não pode ser **menor** que o fim do traço **anterior** — mas pode ser **igual**, de propósito: um berço pode ter ficado pela metade, dividido entre os dois traços.
+
+Reforçado em 2 lugares: um item dedicado no painel de pendências ("Faixa de berços válida em todos os traços", bloqueia "Registrar") e dentro de `tracoCompleto()` (um traço com berços inválidos nunca conta como completo, mesmo com o resto preenchido).
 
 ## Montagem Personalizada (Registrar Operação)
 
@@ -302,24 +353,51 @@ Cada tipo **simples** novo recebe uma cor gerada automaticamente — algoritmo *
 - Tipos **híbridos** não geram cor própria: aparecem sempre com a tela dividida 50/50 entre a cor de cada um dos 2 tipos simples que os compõem (gradiente CSS no HTML; gradiente real desenhado no `<canvas>`, que não entende a sintaxe `linear-gradient()` do CSS).
 - Aparece em: badge de "Tipo de Montagem" no Registro de Baterias, gráfico "Montagem × Atrasos" da Análise Operacional, e uma bolinha de pré-visualização na própria tela de admin.
 
-### Autorizados
+### Definir Paletes
 
-Em **Menu → Configurações → Autorizados**: controla quais computadores podem iniciar, encerrar e registrar operações em **Registrar Operação** (ver *Operação em Andamento*, abaixo). Cada item é `{ deviceId, nome, autorizadoEm }`, guardado em `config.json` (`dispositivosAutorizados`).
+Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado **Esquerdo** — que vão pra paletes diferentes no Setor de Qualidade (Palete 01–04). Configurações → Bateria e Montagem → "Definir Paletes" deixa o Administrador escolher, com 4 selects, qual palete recebe cada **quadrante** (1ª/2ª metade da bateria × lado Direito/Esquerdo):
 
-- **Lista vazia (padrão)**: sem restrição — qualquer computador pode controlar, igual ao comportamento antes desta funcionalidade existir.
-- **Lista com 1+ item**: só os `deviceId`s dela podem controlar. Os demais continuam podendo **acompanhar a operação ao vivo** (WebSocket), só não conseguem interagir.
-- A própria tela mostra o `deviceId` do computador que está olhando (gerado e persistido em `localStorage`, `lw_device_id` — ver *Log de Acesso*), já pré-preenchido no campo de autorizar — é assim que se autoriza "este computador aqui".
-- Cada autorizar/remover salva na hora (sem precisar do botão "✓ Salvar Configurações", que é só da aba Baterias e Montagem).
-- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao` e `/confirmar-tracos-hoje` recusam (HTTP 403) qualquer `deviceId` fora da lista, quando ela não está vazia.
-- **Na tela** (Registrar Operação): quem não está autorizado vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de autorizar este computador.
-- Atalhos de teclado (Iniciar/Encerrar/Registrar/Resetar) não dependem só do `<fieldset>` — cada uma dessas 4 ações também checa a autorização no próprio código, então um atalho não contorna a trava.
+- Uma **prévia visual** (mesma grade de berços do card "Bateria Atual") mostra o resultado ao vivo, com abas pra cada dimensão de bateria cadastrada (18/20/22 berços etc.) — o rótulo `P{n}` no topo de cada célula é o lado Direito, embaixo é o Esquerdo.
+- Validado como uma **permutação**: os 4 paletes (01–04) precisam ser usados exatamente 1 vez cada — não dá para dois quadrantes apontarem pro mesmo palete, nem deixar um de fora. Um erro inline aparece e bloqueia o salvamento até corrigir.
+- Persistido em `config.json` (chave `paletes`) junto com o resto desta aba, mesmo botão "✓ Salvar Configurações" — sem essa chave (instalação anterior a esta funcionalidade), o sistema usa um valor padrão de fábrica.
+- `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — direcionamento de painéis (`_paleteDoBerco`), rótulo de origem no drag-and-drop (`_bercoDoSlot`) e os subtítulos "Berços X–Y · Esq./Dir." de cada palete se ajustam automaticamente a qualquer configuração escolhida.
 
-**Dono da operação** (quando há 2+ dispositivos autorizados): só estar na lista não basta — o **primeiro** dispositivo autorizado a dar "Iniciar Injeção" numa operação vazia se torna o **dono** dela (`donoDeviceId`, gravado em `operacao_andamento.json`, recalculado sempre no servidor — nunca confia no que o cliente manda). Enquanto a operação estiver rodando:
-- Só o dono pode editar campos, encerrar ou registrar — outro dispositivo autorizado tentando qualquer uma dessas ações recebe HTTP 409 ("já está sendo controlada por outro computador") e vê o banner "👀 Outro computador autorizado está controlando esta operação agora".
-- **Escape hatch**: "🗑️ Limpar Tudo" funciona pra **qualquer** dispositivo autorizado, mesmo sem ser o dono — é assim que se recupera uma operação travada por um computador que ficou offline, travou, ou esqueceu de encerrar. Limpar também libera o "dono" — o próximo a iniciar assume.
+### Layout 2x2 dos pallets e arrastar-pra-trocar (Setor de Qualidade → Avaliação)
+
+Os 4 pallets são exibidos em 2x2 (Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4 na 2ª), em vez de uma linha só — mesma ordem de exibição em Análise Focada e no Espelho Visual (histórico). Implementado via CSS `order` (`.sq-pallet-col[data-pallet-id]`, `setor-qualidade.css`) — o número/id de cada pallet (`stack1`...`stack4`) nunca muda de lugar no DOM, só a posição visual; o mapeamento berço→pallet ("Definir Paletes", Configurações) não é afetado.
+
+**Arrastar-pra-trocar**: só no Setor de Qualidade (tela ativa) — Análise Focada e Espelho são histórico só-leitura, sem onde persistir uma troca de posição. Segurar o rótulo "PALLET N" e soltar em cima de outro pallet troca a posição visual dos dois (nunca as placas/dados — isso já existe à parte, arrastando uma placa individual). Usa um tipo de `dataTransfer` próprio (`application/x-lw-pallet`), nunca `text/plain` (já usado pelo drag de placa individual) — evita qualquer ambiguidade entre os dois gestos.
+
+### Marcação de placas (Setor de Qualidade → Avaliação)
+
+- **Adicionar**: clique normal numa placa sempre adiciona uma marca com a cor+forma selecionada na paleta — inclusive repetida (até **6 marcas por placa**; a 7ª tentativa mostra um aviso e não adiciona).
+- **Apagar**: clique com o botão direito (mouse) ou toque e segure por ~500ms (touch) remove uma ocorrência da cor+forma *atualmente selecionada* — não precisa ser a última marcada, já que marcas idênticas são visualmente indistinguíveis entre si. Toque longo cancela se o dedo mover (evita conflito com scroll) ou soltar antes da hora.
+- **"×" (painel não preenchido)** continua exclusivo: marcá-lo substitui qualquer marca real que já existisse na placa (inclusive a de identificação automática, abaixo), e marcar qualquer marca real remove o "×" que estivesse lá.
+- **"🧹 Limpar" por pallet**: no cabeçalho de cada pallet, ao lado de "⚡ Todas" — apaga só as marcações daquele pallet (com confirmação). Substituiu o dropdown de seleção rápida de cor por pallet (🎨), que era redundante com "⚡ Todas" combinado com a paleta principal.
+- O Desfazer geral (Ctrl+Z / botão "Desfazer") continua cobrindo a última ação em qualquer lugar da tela, sem mudança — o gesto de apagar acima é para remover uma marca específica, não necessariamente a mais recente.
+
+**Identificação automática por tipo de montagem** (em teste): o sistema já sabe o tipo de cada placa (mesma fonte que mostra o texto "SP"/"2P"/etc. no canto dela, `getExpectedType`) — a marca que identifica esse tipo (mesma "combinação" de sempre, `combinacaoAvaliacao`/`COMBINACOES_PADRAO`) nasce sozinha, sem o operador precisar escolher nada, adiantando o trabalho. **A paleta continua completa** (5 cores + 3 formas, exatamente como sempre foi) — o preenchimento automático só poupa cliques no caso comum; o operador pode marcar, corrigir ou apagar qualquer combinação normalmente a qualquer momento, inclusive as marcas automáticas. Regenerada a cada reset da grade (troca de Tipo de Montagem, Espessura, pré-preenchimento — `_marcasDeIdentificacao`/`_preencherMarcasDeIdentificacao`, `setor-qualidade.js`), preservando qualquer validação que o operador já tenha dado.
+
+- **Tipos de forma COMBINADA** (círculo+traço, ex: 3T/1T): só o **traço** (identificação, cor modificadora — amarelo/laranja) nasce automático; o **círculo** é sempre a marca de validação do operador, e entra **na frente** do traço (`unshift`, não `push`).
+- **Tipos de forma ÚNICA** (círculo só = 2P, traço só = SP): **não recebem nada automático** — uma marca só já identifica tipo e status ao mesmo tempo, então não tem o que pré-preencher. O operador marca normalmente, na única forma daquele tipo.
+- Avaliações antigas continuam lidas com a lógica de classificação de sempre, sem migração.
+
+### Quem pode controlar operações
+
+Antes, isso era controlado por uma lista de dispositivos autorizados (`deviceId`) em Configurações → Autorizados. Agora é decidido pela **sessão de usuário logado**: o Administrador Master e o perfil cadastrado "Administrador" sempre podem controlar; os demais perfis com a área de edição da Injetora (Operador de Injetora, Encarregado, Supervisão) só podem se o usuário específico tiver a permissão **"Pode iniciar/encerrar operações"** marcada no cadastro (Configurações → Usuários — só aparece pra perfis que já têm essa área liberada, ver *Perfis de usuário*). Perfis sem a área da Injetora (Assistente de Qualidade, Manutenção) nunca controlam operações, independente da marcação.
+
+- Reforçado no **servidor**, não só escondido na tela: as rotas `/salvar-operacao-andamento`, `/registrar-operacao`, `/registrar-relatorio-injecao`, `/marcar-berco-andamento` e `/confirmar-tracos-hoje` recusam (HTTP 403) quem não tem essa permissão (`podeControlarOperacao()`, `server.js`).
+- **Na tela** (Registrar Operação): quem não tem permissão vê um banner "🔒 Você está só acompanhando" e todos os campos/botões ficam desabilitados (`<fieldset disabled>` envolvendo a tela inteira, inclusive os traços renderizados dinamicamente). Reaplicado sempre que a aba é aberta — não precisa de F5 se o Administrador acabou de habilitar isso no cadastro.
+- Atalhos de teclado (Iniciar/Encerrar/Registrar/Resetar) não dependem só do `<fieldset>` — cada uma dessas 4 ações também checa a permissão no próprio código, então um atalho não contorna a trava.
+
+**Dono da operação** (quando há 2+ pessoas autorizadas a controlar): ter permissão não basta — a **primeira** pessoa autorizada a dar "Iniciar Injeção" numa operação vazia se torna a **dona** dela (`donoDeviceId`, identifica o computador dela; gravado em `operacao_andamento.json`, recalculado sempre no servidor — nunca confia no que o cliente manda). Enquanto a operação estiver rodando:
+- Só a dona pode editar campos, encerrar ou registrar — outra pessoa autorizada tentando qualquer uma dessas ações recebe HTTP 409 ("já está sendo controlada por outra pessoa") e vê o banner "👀 Outra pessoa autorizada está controlando esta operação agora".
+- **Escape hatch**: "🗑️ Limpar Tudo" funciona pra **qualquer** pessoa autorizada, mesmo sem ser a dona — é assim que se recupera uma operação travada por alguém que ficou offline, travou, ou esqueceu de encerrar. Limpar também libera a "dona" — o próximo a iniciar assume. O Administrador Master também pode cancelar de Configurações → Operação em Andamento, sem precisar estar com a tela de Registrar Operação aberta.
 - O dono é zerado junto com a operação (registrar, resetar, ou forçar) — sempre há, no máximo, um dono por vez, nunca persiste entre operações.
 
-**Limitação conhecida**: `deviceId` não é uma credencial de segurança de verdade (ver *Log de Acesso*) — é só uma identidade de conveniência. Quem tiver acesso físico ao computador autorizado controla a operação; isso restringe *qual máquina*, não *quem* a está usando.
+**Revisão anti-atualização-atrasada**: o mecanismo de "dono" acima (baseado em `deviceId`, salvo no `localStorage`) não distingue **abas diferentes do mesmo navegador** — duas abas na mesma operação compartilham o mesmo `deviceId`, então nenhuma das duas é bloqueada pela outra. Pra evitar que uma atualização mais VELHA sobrescreva silenciosamente uma mais nova quando chega fora de ordem (ex: uma aba esquecida aberta mandando sua cópia desatualizada), cada broadcast leva um número de **revisão** atribuído pelo servidor (`_revisaoOperacaoAndamento`, `server.js` — só em memória, sempre crescente, nunca pelo cliente, pra relógios de dispositivos diferentes não brigarem). O cliente só aplica uma atualização recebida por WebSocket se a revisão for maior que a última aplicada (`_abrirWsOperacaoAndamento`, `data.js`) — a resposta HTTP de `POST /salvar-operacao-andamento` também devolve a revisão, já que o autor de uma mudança nunca vê o próprio eco via WebSocket. **Escopo**: isso resolve entrega fora de ordem (mensagem enviada antes chegando depois); não é uma solução completa de concorrência — se uma segunda aba tiver uma cópia desatualizada em memória e fizer uma edição própria baseada nela, o servidor ainda atribui uma revisão nova a essa escrita (aconteceu depois no tempo), mesmo que o conteúdo seja antigo.
+
+**Limitação conhecida**: a sessão de usuário (cookie HttpOnly, 12h) identifica a pessoa, mas quem tiver acesso à sessão ativa dela (ex: navegador destravado) controla em nome dela — mesmo princípio de qualquer sistema de login por sessão.
 
 ## Backup e Restauração (Administrador)
 
@@ -327,13 +405,13 @@ Um único card no menu ("💾 Backup e Restauração") abre um painel com todas 
 
 | Opção | O que faz |
 |---|---|
-| **Backup de Dados** | Baixa um `.zip` com os arquivos de dados de `public/db/` (histórico, traços, paradas, avaliações de qualidade etc. — 13 no total, alguns reconstruídos a partir do SQLite). Gerado no navegador. |
-| **Backup Geral** | Baixa um `.zip` com o projeto inteiro (código + dados, exceto `node_modules`/`.git`). Gerado no servidor. |
-| **Restaurar Dados** | Sobrescreve `public/db/` a partir de um backup de dados. |
-| **Restaurar Geral** | Sobrescreve o projeto inteiro a partir de um backup geral. **Exige reiniciar o servidor manualmente depois**, pra mudanças em `server.js` valerem. |
-| **Backups Automáticos** | Lista os backups diários gerados pelo servidor (ver abaixo), com link de download pra cada um. |
+| **Backup de Dados** | Baixa um `.zip` só com dados de produção (histórico, traços, paradas, avaliações de qualidade, manutenção etc. — 17 arquivos, alguns reconstruídos a partir do SQLite). Gerado no servidor. |
+| **Backup Geral** | Baixa um `.zip` com dados de produção + `config.json` (baterias, tipos de montagem, automação) + `security.json`/`usuarios.json`/`operadores.json` (identidade e acesso — senhas sempre em hash). Gerado no servidor. Sem código-fonte (esse tem controle de versão próprio — ver Git). |
+| **Restaurar Dados** | Sobrescreve os dados de produção a partir de um backup de dados. |
+| **Restaurar Geral** | Sobrescreve dados de produção + config a partir de um backup geral. `security.json`/`usuarios.json`/`operadores.json` são **opcionais** — se o backup não os incluir (ex: veio de uma instalação mais antiga, sem esses arquivos), o cadastro atual de usuários/senha de administrador é **preservado**, não apagado. |
+| **Backups Automáticos** | Lista os backups de dados diários gerados pelo servidor (ver abaixo), com link de download pra cada um. |
 
-Toda restauração: exige a senha do administrador (reverificada no servidor), valida o formato de cada arquivo antes de gravar qualquer coisa, e salva automaticamente uma cópia de segurança do estado atual em `backups-seguranca/` (fora de `public/`, nunca servida pela web) antes de sobrescrever. A restauração geral pede também uma frase de confirmação (`RESTAURAR TUDO`) e bloqueia caminhos suspeitos (`../`, `node_modules/`, `.git/`).
+Toda restauração: exige a senha do administrador (reverificada no servidor), valida o formato de cada arquivo antes de gravar qualquer coisa, e salva automaticamente uma cópia de segurança do estado atual em `backups-seguranca/` (fora de `public/`, nunca servida pela web) antes de sobrescrever. A restauração geral pede também uma frase de confirmação (`RESTAURAR TUDO`).
 
 `backups-seguranca/` cresce a cada restauração feita — não há limpeza automática; remova as mais antigas manualmente quando quiser.
 
@@ -355,7 +433,7 @@ Só existe **uma operação em andamento por vez**, na fábrica inteira. A parti
 - Campos preenchidos **antes** de clicar em "Iniciar Injeção" não são transmitidos (ainda é só um rascunho local) — a transmissão começa no clique de "Iniciar" e termina quando a operação é registrada, resetada (🗑️ Limpar Tudo) ou enfileirada por falta de conexão.
 - Sem necessidade de framework: o servidor (`server.js`) anexa um `WebSocket.Server` (lib `ws`) ao mesmo `http.Server` já existente.
 
-**Limitação conhecida**: a trava de quem pode editar é por **dispositivo** (ver *Configurações → Autorizados*, abaixo), não por sessão — se a lista de autorizados estiver vazia (padrão), continua valendo "última mudança enviada sobrescreve a anterior", sem nenhuma trava.
+**Limitação conhecida**: a trava de quem pode editar é por **permissão de perfil** (ver *Quem pode controlar operações*, abaixo), não por sessão exclusiva de edição — sempre vale "última mudança enviada sobrescreve a anterior" entre quem tem permissão, sem nenhuma trava adicional de concorrência dentro disso.
 
 ## Modo de Teste (Registrar Operação)
 
@@ -364,8 +442,8 @@ Toggle **🧪 Modo de Teste**, no topo da tela (só pode trocar com a operação
 Com o toggle ativo, a operação funciona normalmente (turno, traços, Iniciar/Finalizar/Registrar, ajustes, sobra), mas:
 
 - **Tudo é salvo em `public/db/teste/`** em vez de `public/db/` — `historico.json`, `relatorio_injecao.json`, `contador_tracos.json`, `ajustes_tracos.json` e `sobra.json` têm uma cópia isolada lá, criada na hora que o modo de teste é usado por aquela rota pela primeira vez. **Nunca** escreve nos arquivos reais.
-- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de Autorizados/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
-- **Qualquer computador pode usar**, mesmo um que não esteja autorizado a controlar operações reais — a trava de Autorizados é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
+- **Nunca é transmitida ao vivo** — não passa pelo WebSocket/`operacao_andamento.json` nem pela trava de permissão/dono (ver seções acima): é um sandbox local a este navegador, do início ao fim. Quem mais estiver acompanhando a tela nunca vê uma operação de teste.
+- **Qualquer pessoa pode usar**, mesmo quem não tem permissão pra controlar operações reais — a trava de permissão é especificamente sobre a operação real e compartilhada; o teste é local e não compartilhado, então não tem com o que conflitar.
 - **Nunca cai na fila de sincronização offline** — se a conexão cair no meio de um teste, ele simplesmente não salva (com aviso de erro), em vez de ficar pendente pra "sincronizar de verdade" depois (essa fila é só pra operações reais).
 - **Sempre desliga ao limpar/zerar a tela** — de propósito, pra nunca ficar "esquecido" ligado numa operação real futura. Pra outro teste, é só ativar de novo.
 - Visualmente reforçado em 3 lugares: o toggle fica roxo/aceso, um banner roxo no topo diz "MODO DE TESTE ATIVO", e o badge de status ao lado do cronômetro ganha um selo "🧪 TESTE".
@@ -393,7 +471,7 @@ Diferente do Modo de Teste (que é local a uma operação, num navegador), o Mod
   - Insumo (balança): `{ tipo: 'insumo', campo: 'cimento_real', valor: 512.3, traco: 1 }` — `campo` é um dos 5 insumos reais do traço (`cimento_real`, `agua_real`, `eps_real`, `superplast_real`, `incorporador_real`); `traco` (número, opcional) indica qual traço — se omitido, aplica no traço selecionado no momento em Registrar Operação.
   - Berço (injetora): `{ tipo: 'berco', berco: 'B7' }` — chega e é logada, mas **ainda sem ação definida** do lado da tela (ver item 7 em *Status da integração*, abaixo).
 - `operacao.js` (`_aplicarLeituraAutomatica`) recebe a leitura via WebSocket e, se o Modo Automático estiver ligado, aplica com `LWOp.updateInsumoOriginal` — o **mesmo caminho** que a digitação manual usa, então total calculado, indicador de traço completo/pendente e persistência funcionam automaticamente, sem lógica duplicada.
-- Sem dispositivo autorizado nem sessão de admin nessa rota especificamente (`/leitura-automatica`) — é uma leitura de sensor, não um controle da operação; a proteção por senha é só pra **ligar/desligar** o modo, não pra cada leitura individual.
+- Sem permissão de controlar operação nem sessão de admin nessa rota especificamente (`/leitura-automatica`) — é uma leitura de sensor, não um controle da operação; a proteção por senha é só pra **ligar/desligar** o modo, não pra cada leitura individual.
 
 ### Status da integração (CLP identificado, coleta ainda não conectada)
 
@@ -428,8 +506,8 @@ Toda vez que a tela **Registrar Operação** é acessada (`showPage('operacao', 
 - Fica em `logs/`, **fora** de `public/` — de propósito: arquivos em `public/db/` são servidos como arquivo estático comum (ver "Limitações conhecidas"), e isso exporia o IP de quem acessa pra qualquer um que soubesse a URL. Em `logs/`, não existe rota nenhuma que sirva esse arquivo — só o próprio servidor lê/escreve nele direto no disco.
 - O IP é gravado em texto puro (não é hash nem está criptografado) — a defesa aqui é não expor o arquivo, não ofuscar o conteúdo dele.
 - Cresce sem limite por enquanto (sem rotina de limpeza automática, igual a `backups-seguranca/`) e ainda não tem tela de visualização — é só a infraestrutura de registro.
-- Pensado como base pra restringir o registro de operação a um único computador — já implementado em **Configurações → Autorizados** (ver seção dedicada), usando esse mesmo `deviceId`.
-- Por estar fora de `public/db/`, não faz parte do "Backup de Dados" (que só cobre `public/db/`) — fica incluído automaticamente no "Backup Geral" (que varre o projeto inteiro), do mesmo jeito que `backups-seguranca/` e `backups-automaticos/` já ficam.
+- `deviceId` continua identificando o "dono" da operação em andamento (evita dois computadores autorizados brigando pela mesma operação, ver *Quem pode controlar operações*), mas quem PODE controlar é decidido pela sessão de usuário logado, não mais pelo `deviceId`.
+- Por estar fora de `public/db/`, não faz parte de nenhum dos dois backups (Dados ou Geral — ambos são uma lista fixa de arquivos, ver *Backup e Restauração*) — fica de fora dos dois, precisando ser copiado manualmente se quiser preservar o histórico de acessos.
 
 **Limitação conhecida**: `deviceId` é só o que o próprio navegador reporta — limpar os dados do navegador gera um device novo, e nada impede alguém de mandar um valor falso direto pra rota (não é uma defesa de segurança, só uma identidade de conveniência).
 
@@ -474,18 +552,19 @@ Quando não há traço registrado num turno, a Qualidade (e portanto o OEE) daqu
 | `/importar-relatorio-injecao` | POST | Importação em lote (Excel) de traços |
 | `/importar-historico` | POST | Importação em lote (Excel) de histórico |
 | `/salvar-sobra` | POST | Salva/atualiza `sobra.json` 🧪 |
-| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outro dispositivo autorizado já é o dono — ver *Autorizados*) |
+| `/salvar-operacao-andamento` | POST | Salva `operacao_andamento.json` e propaga a mudança via WebSocket 🔒 (+ HTTP 409 se outra pessoa autorizada já é a dona — ver *Quem pode controlar operações*) |
 | `/ws/operacao-andamento` | WS | Canal em tempo real da operação em andamento (ver seção dedicada acima) |
 | `/registrar-acesso` | POST | Grava uma entrada em `logs/acessos.json` (log de acesso) |
-| `/backup-geral` | GET | Gera e baixa o `.zip` do projeto inteiro |
-| `/backups-automaticos` | GET | Lista os backups diários automáticos disponíveis (até 3) |
+| `/backup-dados` | GET | Gera e baixa o `.zip` só com dados de produção |
+| `/backup-geral` | GET | Gera e baixa o `.zip` com dados de produção + config.json + identidade/acesso |
+| `/backups-automaticos` | GET | Lista os backups de dados diários automáticos disponíveis (até 3) |
 | `/backups-automaticos/<nome>` | GET | Baixa um backup automático específico |
 | `/mesclar-backup-dados` | POST | Mescla traços/operações/paradas de um backup de OUTRA instalação (exige senha de admin, reverificada) |
-| `/restaurar-backup-dados` | POST | Restaura `public/db/` a partir de um backup (exige senha de admin, reverificada) |
-| `/restaurar-backup-geral` | POST | Restaura o projeto inteiro a partir de um backup (exige senha de admin, reverificada) |
+| `/restaurar-backup-dados` | POST | Restaura dados de produção a partir de um backup (exige senha de admin, reverificada) |
+| `/restaurar-backup-geral` | POST | Restaura dados de produção + config + identidade/acesso (esses últimos opcionais e preservados se ausentes) a partir de um backup (exige senha de admin, reverificada) |
 | `/*` (qualquer outro caminho) | GET | Serve arquivos estáticos de `public/` |
 
-- 🔒 = exige `?deviceId=...` autorizado quando a lista em **Configurações → Autorizados** não está vazia (HTTP 403 caso contrário — ver seção dedicada). Ignorado quando `?modoTeste=true`.
+- 🔒 = exige sessão de usuário logado com permissão de controlar operações (HTTP 403 caso contrário — ver *Quem pode controlar operações*). Ignorado quando `?modoTeste=true`.
 - 🧪 = aceita `?modoTeste=true` — desvia a leitura/escrita pra `public/db/teste/` em vez de `public/db/` (ver *Modo de Teste*, acima).
 - 🔐 = exige sessão de Administrador válida (cookie — ver *Autenticação e Sessão*, abaixo). HTTP 403 sem ela.
 - 🚦 = protegido por rate limiting de tentativas (ver *Autenticação e Sessão*, abaixo). HTTP 429 se bloqueado.
@@ -501,12 +580,11 @@ A senha do Administrador é guardada com hash **scrypt** (nativo do Node — sem
 - O arquivo físico não existe mais em `public/db/` (migração automática no boot, se uma instalação antiga ainda tiver o arquivo no lugar velho — renomeia, nunca apaga).
 - `GET /db/security.json` (mesma URL de sempre — o front continua usando ela) e `POST /salvar-security` agora exigem uma **sessão de Administrador** válida: um cookie `HttpOnly`, emitido depois de uma senha ou chave de recuperação confirmada com sucesso, válido por 30 minutos, destruído em `/logout-admin` (chamado automaticamente pelo botão de logout). Em memória, igual ao rate limiting.
 
-Essa sessão **não substitui** a re-verificação de senha das rotas mais destrutivas (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade: mesmo um cookie de sessão vazado/sequestrado de uma aba esquecida aberta não basta pra restaurar dados ou sobrescrever o servidor sozinho). Fora essas 3, a sessão hoje cobre a maior parte das rotas administrativas — `salvar-config`, `salvar-metas`, `config/modo-automatico`, `importar-relatorio-injecao`, `importar-historico`, `backup-geral`, `backups-automaticos` (listagem e download), toda a aba "🗄️ Dados SQL", `admin/resetar-operacao`, e o cadastro de Identidade Leve de Operador (`salvar-operadores`) — além das 2 originais (`db/security.json`, `salvar-security`).
+Essa sessão **não substitui** a re-verificação de senha das rotas mais destrutivas (`/restaurar-backup-dados`, `/restaurar-backup-geral`, `/mesclar-backup-dados`) — elas continuam pedindo a senha de novo a cada chamada, por design (defesa em profundidade: mesmo um cookie de sessão vazado/sequestrado de uma aba esquecida aberta não basta pra restaurar dados ou sobrescrever o servidor sozinho). Fora essas 3, a sessão hoje cobre a maior parte das rotas administrativas — `salvar-config`, `salvar-metas`, `config/modo-automatico`, `importar-relatorio-injecao`, `importar-historico`, `backup-dados`, `backup-geral`, `backups-automaticos` (listagem e download), toda a aba "🗄️ Dados SQL", `admin/resetar-operacao`, e o cadastro de usuários (`salvar-usuarios`) — além das 2 originais (`db/security.json`, `salvar-security`).
 
 ## Limitações conhecidas
 
-- **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever o próprio código do servidor) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.
+- **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever dados de produção, configurações e o cadastro de usuários) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.
 - Backups de segurança (`backups-seguranca/`) não têm rotina de limpeza automática.
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
 - Testes automatizados (`test/`) cobrem autenticação/sessão e Setor de Qualidade — o resto das rotas (registrar operação, traços, backup geral, importação) ainda não tem teste automatizado formal, só validação manual (via chamadas HTTP reais) a cada mudança.
-- Identidade Leve de Operador é só rótulo de auditoria — não é login nem controle de acesso; qualquer PIN correto de qualquer operador cadastrado funciona pra qualquer registro, sem vínculo a permissões específicas.

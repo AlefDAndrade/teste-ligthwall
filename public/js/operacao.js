@@ -438,40 +438,32 @@
 
   /**
    * Usado no topo de ações que controlam a operação (iniciar, encerrar,
-   * registrar, resetar) — mostra um aviso e retorna true se este
-   * dispositivo NÃO está autorizado (Configurações → Autorizados). A
-   * trava de verdade é sempre no servidor; isto aqui só dá feedback
-   * imediato (sem esperar a rede) e cobre atalhos de teclado, que não
-   * passam pelos campos/botões desabilitados na tela.
-   */
-  /**
-   * Usado no topo de ações que controlam a operação (iniciar, encerrar,
    * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
-   * pode agir agora: dispositivo fora da lista de Autorizados, OU a
-   * operação já tem outro dono (outro dispositivo autorizado que a
-   * iniciou — ver "dono da operação" em server.js). A trava de verdade é
-   * sempre no servidor; isto aqui só dá feedback imediato (sem esperar a
-   * rede) e cobre atalhos de teclado, que não passam pelos campos/botões
-   * desabilitados na tela.
+   * pode agir agora: a pessoa logada não tem permissão de controlar
+   * operações (Configurações → Usuários), OU a operação já tem outro
+   * dono (outra pessoa autorizada que a iniciou — ver "dono da operação"
+   * em server.js). A trava de verdade é sempre no servidor; isto aqui só
+   * dá feedback imediato (sem esperar a rede) e cobre atalhos de teclado,
+   * que não passam pelos campos/botões desabilitados na tela.
    * @param {object} opts
    * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
    */
   function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
     // Modo de teste é um sandbox local — nunca toca o servidor (ver
-    // persist()), então a trava de Autorizados/dono não faz sentido aqui:
-    // qualquer computador pode testar, autorizado ou não pra operações reais.
+    // persist()), então a trava de permissão/dono não faz sentido aqui:
+    // qualquer pessoa pode testar, autorizada ou não pra operações reais.
     if (state.modo_teste) return false;
     if (!LW.dispositivoEstaAutorizado()) {
       LW.mostrarAlerta(
-        'Este computador não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Autorizados.',
+        'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
         { tipo: 'erro' }
       );
       return true;
     }
     if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
       LW.mostrarAlerta(
-        'Esta operação já está sendo controlada por outro computador autorizado. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+        'Esta operação já está sendo controlada por outra pessoa. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
         { tipo: 'erro' }
       );
       return true;
@@ -482,11 +474,12 @@
   /**
    * Desabilita todos os campos/botões da tela (via <fieldset disabled> —
    * cobre até os elementos de traço, renderizados dinamicamente) e mostra
-   * o banner correspondente quando este dispositivo não pode controlar a
-   * operação agora — seja por não estar na lista de Autorizados, seja por
-   * outro dispositivo autorizado já ser o dono da operação atual. Chamada
-   * sempre que o estado é re-renderizado (renderAll()) — o "dono" muda
-   * dinamicamente, diferente da lista de Autorizados.
+   * o banner correspondente quando a pessoa logada agora não pode
+   * controlar a operação — seja por não ter a permissão "pode iniciar
+   * operação" no cadastro (Configurações → Usuários), seja por outra
+   * pessoa autorizada já ser a dona da operação atual. Chamada sempre
+   * que o estado é re-renderizado (renderAll()) — o "dono" muda
+   * dinamicamente, diferente da permissão de perfil.
    */
   function _aplicarTravaDeAutorizacao() {
     const fieldset = $('op-fieldset-trava');
@@ -529,10 +522,10 @@
     if (podeControlar) {
       aviso.style.display = 'none';
     } else if (!autorizado) {
-      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Autorizados</strong>.</span>';
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações → Usuários</strong>.</span>';
       aviso.style.display = 'flex';
     } else {
-      aviso.innerHTML = '👀 <span>Outro computador autorizado está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
+      aviso.innerHTML = '👀 <span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';
       aviso.style.display = 'flex';
     }
   }
@@ -671,15 +664,69 @@
   }
 
   /**
+   * Valida a faixa de berços de UM traço (índice `i` dentro de `tracos`):
+   *   - Berço início/fim precisam ser MAIORES QUE ZERO (não aceita 0 nem
+   *     negativo).
+   *   - Berço fim não pode ser MENOR que berço início.
+   *   - O berço início deste traço não pode ser MENOR que o berço fim do
+   *     traço ANTERIOR (`tracos[i-1]`) — pode ser IGUAL, de propósito
+   *     (um berço pode ter ficado pela metade, dividido entre os dois
+   *     traços; só não pode "voltar" pra trás).
+   * Devolve a mensagem de erro (string) ou `null` se estiver tudo certo.
+   * Só valida quando os campos JÁ TÊM algum valor — campo vazio é coberto
+   * pela checagem de "campos obrigatórios" de tracoCompleto, separada
+   * desta (aqui é só sobre a LÓGICA da faixa, não se foi preenchido).
+   */
+  function _erroBercos(tracos, i) {
+    const t = tracos?.[i];
+    if (!t) return null;
+    const paraNumero = (v) => (v === '' || v === null || v === undefined) ? null : Number(v);
+    const ini = paraNumero(t.berco_ini);
+    const fim = paraNumero(t.berco_fim);
+
+    if (ini !== null && (isNaN(ini) || ini <= 0)) return 'Berço início precisa ser maior que zero.';
+    if (fim !== null && (isNaN(fim) || fim <= 0)) return 'Berço fim precisa ser maior que zero.';
+    if (ini !== null && fim !== null && !isNaN(ini) && !isNaN(fim) && fim < ini) {
+      return 'Berço fim não pode ser menor que o berço início.';
+    }
+    if (ini !== null && !isNaN(ini) && i > 0) {
+      const fimAnterior = paraNumero(tracos[i - 1]?.berco_fim);
+      if (fimAnterior !== null && !isNaN(fimAnterior) && ini < fimAnterior) {
+        return `Berço início não pode ser menor que o berço fim do traço anterior (${fimAnterior}).`;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Verifica se um traço tem TODOS os campos obrigatórios preenchidos.
    * Único campo opcional é "Observações" (obs) — não entra nesta checagem.
+   * `i`/`tracos` são opcionais (default: sem checar a faixa de berços
+   * contra o traço anterior) — quando chamada via `state.tracos.every(
+   * tracoCompleto)`, o próprio `.every()` já passa (elemento, índice,
+   * array) automaticamente, então a validação completa acontece sem
+   * precisar mudar esse call site.
    */
-  function tracoCompleto(t) {
+  function tracoCompleto(t, i, tracos) {
     const insumoPreenchido = (key) => {
       const insumo = t[key];
-      return !!(insumo && insumo.original !== '' && insumo.original !== null && insumo.original !== undefined);
+      if (!insumo) return false;
+      // Preenchido se tem valor ORIGINAL ou pelo menos 1 AJUSTE — bug
+      // relatado numa conversa: Flow/Densidade preenchidos só através do
+      // "Ajustar Receita" (Remedição), sem nunca ter um valor original,
+      // apareciam certinho na tela (totalInsumo já soma/pega o último
+      // ajuste pra exibição), mas essa checagem só olhava .original,
+      // ignorando os ajustes por completo — o traço ficava marcado como
+      // pendente mesmo com o dado visivelmente preenchido. Mesmo
+      // raciocínio vale pra qualquer insumo (cimento, água...): também é
+      // possível ajustar um insumo que nunca teve valor original.
+      const temOriginal = insumo.original !== '' && insumo.original !== null && insumo.original !== undefined;
+      const temAjuste = Array.isArray(insumo.ajustes) && insumo.ajustes.length > 0;
+      return temOriginal || temAjuste;
     };
+    const semErroBerco = tracos === undefined || !_erroBercos(tracos, i ?? 0);
     return !!t.berco_ini && !!t.berco_fim && !!t.silo && !!t.expansao && !!t.densidadeEPS
+      && semErroBerco
       && insumoPreenchido('cimento_real')
       && insumoPreenchido('agua_real')
       && insumoPreenchido('eps_real')
@@ -688,6 +735,95 @@
       && insumoPreenchido('tempo_batida')
       && insumoPreenchido('densidade_insumo')
       && insumoPreenchido('flow_insumo');
+  }
+
+  /**
+   * Calcula o ícone/classe de status de UM traço pra aba de navegação —
+   * função ÚNICA usada tanto no render completo da aba (renderTracos)
+   * quanto na atualização leve (_atualizarStatusAbasTracos, abaixo).
+   * Antes essa lógica vivia só dentro de renderTracos, duplicada
+   * implicitamente: como updatePendencias() (chamada a cada campo
+   * preenchido, via persist()) nunca re-executava renderTracos(), a
+   * aba podia ficar mostrando ⚠️ (pendente) mesmo com o traço já 100%
+   * preenchido, até algo maior disparar um render completo (trocar de
+   * aba, adicionar traço...) — bug relatado numa conversa.
+   */
+  function _statusDoTraco(t, i, tracos) {
+    const isComplete = tracoCompleto(t, i, tracos);
+    // Mesmo critério de tracoCompleto/insumoPreenchido: conta valor
+    // ORIGINAL ou pelo menos 1 AJUSTE — sem isso, um traço com
+    // Flow/Densidade preenchidos só via Ajustar Receita (sem original)
+    // ficava mostrando ⚪ (vazio) nesse campo específico, mesmo tendo
+    // dado de verdade.
+    const temAjuste = (campo) => Array.isArray(t[campo]?.ajustes) && t[campo].ajustes.length > 0;
+    const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
+      || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
+      || !!t.superplast_real?.original || !!t.incorporador_real?.original
+      || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original
+      || temAjuste('cimento_real') || temAjuste('agua_real') || temAjuste('eps_real')
+      || temAjuste('superplast_real') || temAjuste('incorporador_real')
+      || temAjuste('tempo_batida') || temAjuste('densidade_insumo') || temAjuste('flow_insumo');
+    return {
+      icon: isComplete ? '✅' : (hasData ? '⚠️' : '⚪'),
+      cls: isComplete ? 'complete' : (hasData ? 'pending' : 'empty'),
+    };
+  }
+
+  // Atualiza SÓ a borda vermelha + mensagem de erro da faixa de berços de
+  // cada traço já existente no DOM, sem re-renderizar o formulário —
+  // mesmo motivo/técnica de _atualizarStatusAbasTracos (acima): sem isso,
+  // digitar um berço inválido só mostrava a borda vermelha/mensagem no
+  // PRÓXIMO re-render completo (trocar de aba, adicionar traço...), não
+  // na hora — mesmo que o painel de pendências (que já é recalculado do
+  // zero a cada persist()) já soubesse que tinha erro.
+  function _atualizarErroBercos() {
+    const linhas = document.querySelectorAll('.traco-row');
+    if (!linhas.length) return;
+    state.tracos.forEach((t, i) => {
+      const linha = linhas[i];
+      if (!linha) return;
+      const erro = _erroBercos(state.tracos, i);
+      const inputIni = linha.querySelector('[data-campo="berco_ini"]');
+      const inputFim = linha.querySelector('[data-campo="berco_fim"]');
+      if (inputIni) inputIni.classList.toggle('campo-invalido', !!erro);
+      if (inputFim) inputFim.classList.toggle('campo-invalido', !!erro);
+      let divErro = linha.querySelector('.traco-erro-bercos');
+      if (erro) {
+        if (!divErro) {
+          divErro = document.createElement('div');
+          divErro.className = 'traco-erro-bercos';
+          // Mesma posição de sempre: logo depois do campo Berço Fim, antes
+          // do Silo (ver renderTracos) — insere depois do .form-group que
+          // contém o input de berço fim.
+          const grupoFim = inputFim?.closest('.form-group');
+          if (grupoFim) grupoFim.after(divErro);
+        }
+        divErro.textContent = '⚠ ' + erro;
+      } else if (divErro) {
+        divErro.remove();
+      }
+    });
+  }
+
+  // Atualiza SÓ o ícone/classe de cada aba já existente no DOM, sem
+  // re-renderizar o formulário do traço em si — chamada a cada
+  // persist() (ver updatePendencias), continuamente, enquanto o
+  // operador digita. Importante ser um update CIRÚRGICO (não um
+  // innerHTML do formulário inteiro): reconstruir o formulário a cada
+  // tecla apagaria o foco/cursor do campo que a pessoa está digitando
+  // agora mesmo.
+  function _atualizarStatusAbasTracos() {
+    const abas = document.querySelectorAll('.traco-tabs-nav .traco-tab');
+    if (!abas.length) return;
+    state.tracos.forEach((t, i) => {
+      const aba = abas[i];
+      if (!aba) return;
+      const { icon, cls } = _statusDoTraco(t, i, state.tracos);
+      aba.classList.remove('complete', 'pending', 'empty');
+      aba.classList.add(cls);
+      const iconEl = aba.querySelector('.status-icon');
+      if (iconEl) iconEl.textContent = icon;
+    });
   }
 
   /**
@@ -1658,7 +1794,8 @@
     const traco = state.tracos[i];
 
     if (traco && traco._reaproveitado) {
-      // Se for um traço reaproveitado, exibe modal de confirmação
+      // Sobra reaproveitada — mantém o aviso específico de sempre (perde o
+      // vínculo com o traço original).
       _mostrarModalConfirmacaoExclusao(i, () => {
         // Callback de confirmação: executa a remoção real e renumera os
         // traços novos restantes (o reaproveitado removido não afeta a
@@ -1668,16 +1805,34 @@
         expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
         renderTracos();
         persist();
+      }, {
+        titulo: 'Este traço é uma sobra reaproveitada.',
+        corpoHtml: `
+          <p>Ao excluir:</p>
+          <ul>
+            <li>o vínculo com o traço original será perdido;</li>
+            <li>esta utilização deixará de ser registrada nesta operação.</li>
+          </ul>
+          <p>Deseja realmente excluir?</p>`,
       });
     } else {
-      // Traço normal: remove e renumera os demais traços novos em sequência
-      // a partir de baseNumTraco — ex: remover o 2º de 3 faz o 3º assumir o
-      // número do 2º, sem buracos.
-      state.tracos.splice(i, 1);
-      _renumerarTracos();
-      expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
-      renderTracos();
-      persist();
+      // Traço normal — pedido do usuário: sem confirmação aqui, um clique
+      // errado no "✕" (ver btn título="Remover traço", renderTracos)
+      // apagava o traço inteiro (insumos, ajustes, resultados já
+      // preenchidos) na hora, sem chance de desfazer.
+      _mostrarModalConfirmacaoExclusao(i, () => {
+        // Remove e renumera os demais traços novos em sequência a partir
+        // de baseNumTraco — ex: remover o 2º de 3 faz o 3º assumir o
+        // número do 2º, sem buracos.
+        state.tracos.splice(i, 1);
+        _renumerarTracos();
+        expandedTracoIndex = Math.min(expandedTracoIndex, state.tracos.length - 1);
+        renderTracos();
+        persist();
+      }, {
+        titulo: 'Remover este traço?',
+        corpoHtml: `<p>Todos os dados já preenchidos pra este traço (insumos, ajustes, resultados) serão perdidos.</p><p>Deseja realmente remover?</p>`,
+      });
     }
   }
 
@@ -1848,14 +2003,7 @@
       html += `<div class="traco-tabs-nav">`;
       state.tracos.forEach((t, i) => {
         const isExpanded = i === expandedTracoIndex;
-        const isComplete = tracoCompleto(t);
-        const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
-          || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
-          || !!t.superplast_real?.original || !!t.incorporador_real?.original
-          || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original;
-
-        const statusIcon = isComplete ? '✅' : (hasData ? '⚠️' : '⚪');
-        const statusClass = isComplete ? 'complete' : (hasData ? 'pending' : 'empty');
+        const { icon: statusIcon, cls: statusClass } = _statusDoTraco(t, i, state.tracos);
 
         html += `
           <div class="traco-tab ${isExpanded ? 'active' : ''} ${statusClass}" 
@@ -1872,6 +2020,7 @@
       // Garante migração de traços antigos
       migrarTraco(t);
       const isExpanded = i === expandedTracoIndex;
+      const erroBerco = _erroBercos(state.tracos, i);
 
       html += `
       <div class="traco-row ${isExpanded ? '' : ' collapsed'}">
@@ -1887,14 +2036,15 @@
           <div class="traco-header-fields" onclick="if(${isExpanded}) event.stopPropagation()">
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Início <span class="required">*</span></label>
-                <input class="form-input" type="number" min="1" max="22" value="${t.berco_ini}"
+                <input class="form-input ${erroBerco ? 'campo-invalido' : ''}" data-campo="berco_ini" type="number" min="1" max="22" value="${t.berco_ini}"
                 oninput="LWOp.updateTraco(${i},\'berco_ini\',this.value)" placeholder="—">
             </div>
             <div class="form-group traco-header-field">
               <label class="form-label">Berço Fim <span class="required">*</span></label>
-                <input class="form-input" type="number" min="1" max="22" value="${t.berco_fim}"
-                oninput="LWOp.updateTraco(${i},\'berco_fim\',this.value)" placeholder="—"}>
+                <input class="form-input ${erroBerco ? 'campo-invalido' : ''}" data-campo="berco_fim" type="number" min="1" max="22" value="${t.berco_fim}"
+                oninput="LWOp.updateTraco(${i},\'berco_fim\',this.value)" placeholder="—">
             </div>
+            ${erroBerco ? `<div class="traco-erro-bercos">⚠ ${LW.escaparHtml(erroBerco)}</div>` : ''}
             <div class="form-group traco-header-field">
               <label class="form-label">Silo do EPS <span class="required">*</span></label>
                 <select class="form-select ${t._reaproveitado ? 'readonly-reaproveitado' : ''}" 
@@ -1933,8 +2083,8 @@
             ${renderCampoInsumo(t, i, 'cimento_real', 'Cimento (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'eps_real', 'EPS (kg)', '0.01', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'agua_real', 'Água (kg)', '0.01', 2, 'kg', t._reaproveitado)}
-            ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 3, 'kg', t._reaproveitado)}
-            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 3, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 2, 'kg', t._reaproveitado)}
+            ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 2, 'kg', t._reaproveitado)}
             ${renderCampoTempoBatida(t, i, t._reaproveitado)}
           </div>
 
@@ -1965,6 +2115,20 @@
   function updatePendencias() {
     const tracosCompletos = state.tracos.length > 0 && state.tracos.every(tracoCompleto);
     const tracosComAjusteSemTempo = state.tracos.filter(tracoTemAjusteSemTempoBatida);
+    // Item dedicado pra faixa de berços — mais específico que "todos os
+    // campos obrigatórios" (que também cobre isso, via tracoCompleto):
+    // sem esse item à parte, um berço fora da faixa (0/negativo, fim <
+    // início, ou sobrepondo o traço anterior pra trás) ficaria só
+    // genericamente marcado como "campo obrigatório faltando", mesmo
+    // com os campos preenchidos — confuso pra quem for corrigir.
+    const tracosComErroBerco = state.tracos.filter((t, i) => !!_erroBercos(state.tracos, i));
+    // Mantém os ícones das abas de traço em dia com a checagem acima —
+    // sem isso, a aba podia continuar mostrando ⚠️ (pendente) mesmo
+    // depois do último campo do traço ser preenchido, já que
+    // renderTracos() (que antes era o único lugar calculando esse
+    // ícone) só roda em eventos maiores, não a cada tecla digitada.
+    _atualizarStatusAbasTracos();
+    _atualizarErroBercos();
     const checks = [
       { label: 'Turno definido', ok: !!state.turno },
       { label: 'Dimensão da bateria', ok: !!state.dimensao },
@@ -1975,6 +2139,7 @@
       { label: 'Motivo do atraso', ok: state.houve_atraso === 'NÃO' || !!state.motivo_atraso },
       { label: 'Ao menos 1 traço', ok: state.tracos.length > 0 },
       { label: 'Informações do traço (todos os campos obrigatórios)', ok: tracosCompletos },
+      { label: 'Faixa de berços válida em todos os traços', ok: tracosComErroBerco.length === 0 },
       { label: 'Tempo de batida para todos os ajustes de insumo', ok: tracosComAjusteSemTempo.length === 0 }
     ];
 
@@ -2000,24 +2165,22 @@
 
   function registrarOperacao() {
     if (_bloqueadoPorAutorizacao()) return;
-    // "Quem está operando?" (ver operador.js) — pergunta leve, opcional,
-    // ANTES de seguir com o registro de verdade; exigir() nunca trava o
-    // fluxo (resolve com null se pulado ou se ninguém estiver cadastrado
-    // ainda). O nome (não o PIN) fica em state.operador_nome só até este
-    // registro ser montado, logo abaixo.
-    LWOperador.exigir().then(operador => {
-      state.operador_nome = operador?.nome || null;
-      // Montagem Personalizada precisa que "berços reais" bata com a
-      // quantidade de berços com tipo definido na grade — confere (e resolve
-      // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
-      if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
-        _reconciliarMontagemPersonalizada().then(podeSeguir => {
-          if (podeSeguir) _registrarOperacaoInterna();
-        });
-        return;
-      }
-      _registrarOperacaoInterna();
-    });
+    // Autoria automática — quem está logado agora (ver
+    // LW.nomeDeQuemEstaLogado(), data.js) já tem nome próprio (login com
+    // usuário+senha), não precisa perguntar "quem está operando" de novo
+    // (antiga Identidade Leve de Operador, removida — ver conversa que
+    // motivou isso).
+    state.operador_nome = LW.nomeDeQuemEstaLogado();
+    // Montagem Personalizada precisa que "berços reais" bata com a
+    // quantidade de berços com tipo definido na grade — confere (e resolve
+    // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
+    if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+      _reconciliarMontagemPersonalizada().then(podeSeguir => {
+        if (podeSeguir) _registrarOperacaoInterna();
+      });
+      return;
+    }
+    _registrarOperacaoInterna();
   }
 
   function _registrarOperacaoInterna() {
@@ -2577,9 +2740,22 @@
  * @param {number} i - Índice do traço a ser excluído.
  * @param {function} onConfirm - Callback a ser executado se o usuário confirmar a exclusão.
  */
-function _mostrarModalConfirmacaoExclusao(i, onConfirm) {
+function _mostrarModalConfirmacaoExclusao(i, onConfirm, opcoes = {}) {
   const existente = document.getElementById('modal-confirmacao-exclusao');
   if (existente) existente.remove();
+
+  // Defaults = texto de sempre (sobra reaproveitada) — chamado sem
+  // `opcoes` continua funcionando exatamente como antes. removeTraco()
+  // agora passa título/corpo diferentes pra traço normal (ver conversa
+  // que motivou: confirmação também pra traço normal, não só reaproveitado).
+  const titulo = opcoes.titulo || 'Este traço é uma sobra reaproveitada.';
+  const corpoHtml = opcoes.corpoHtml || `
+        <p>Ao excluir:</p>
+        <ul>
+          <li>o vínculo com o traço original será perdido;</li>
+          <li>esta utilização deixará de ser registrada nesta operação.</li>
+        </ul>
+        <p>Deseja realmente excluir?</p>`;
 
   const modal = document.createElement('div');
   modal.id = 'modal-confirmacao-exclusao';
@@ -2589,16 +2765,9 @@ function _mostrarModalConfirmacaoExclusao(i, onConfirm) {
       <div>
         <div style="text-align:center;margin-bottom:16px">
           <div style="font-size:2.2rem;margin-bottom:8px">⚠️</div>
-          <h2>Este traço é uma sobra reaproveitada.</h2>
+          <h2>${titulo}</h2>
         </div>
-        <p>
-          Ao excluir:
-        </p>
-        <ul>
-          <li>o vínculo com o traço original será perdido;</li>
-          <li>esta utilização deixará de ser registrada nesta operação.</li>
-        </ul>
-        <p>Deseja realmente excluir?</p>
+        ${corpoHtml}
         <div class="modal-btns">
           <button id="btn-cancelar-exclusao" class="btn-cancelar">Cancelar</button>
           <button id="btn-confirmar-exclusao" class="btn-excluir">Excluir</button>

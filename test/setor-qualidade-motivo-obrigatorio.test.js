@@ -111,15 +111,13 @@ test('cancelar (ou deixar em branco) a descrição de "Outros" REABRE o seletor,
   assert.ok(window.document.querySelector('.sq-motivo-popover'), 'o seletor de motivo deveria reabrir depois de cancelar a descrição');
 });
 
-test('o badge de motivo fica AO LADO da placa (irmão), não mais sobreposto dentro dela', async () => {
+test('o badge de motivo fica DENTRO do desenho da placa, ao lado da identificação de tipo (mesma ideia do Espelho Visual)', async () => {
   const { window } = dom;
   await abrirFormulario(window);
 
   const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
-  const badge = slab.parentElement.querySelector('.sq-slab-motivo');
-  assert.ok(badge, 'deveria existir um badge de motivo irmão do slab');
-  assert.equal(slab.querySelector('.sq-slab-motivo'), null, 'o badge não deveria mais estar DENTRO do slab');
-  assert.equal(slab.parentElement.className, 'sq-slab-linha', 'o pai comum deveria ser o wrapper .sq-slab-linha');
+  const badge = slab.querySelector('.sq-slab-motivo');
+  assert.ok(badge, 'deveria existir um badge de motivo dentro do slab (mo.className = "sq-slab-motivo", ver renderStacks)');
 });
 
 test('a visibilidade do badge é explícita (flex/none), não depende de limpar o style inline', async () => {

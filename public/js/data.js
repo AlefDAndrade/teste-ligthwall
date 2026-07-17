@@ -34,11 +34,33 @@ let MONTAGEM_OPCOES = [];
 let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
-// Dispositivos autorizados a controlar a operação em andamento (iniciar,
-// encerrar, registrar) — [{ deviceId, nome, autorizadoEm }]. Lista vazia =
-// sem restrição (qualquer computador pode controlar). Editável em
-// Configurações → Autorizados. Ver dispositivoAutorizado() em server.js.
-let DISPOSITIVOS_AUTORIZADOS = [];
+
+// Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
+// cada QUADRANTE (metade da bateria × lado do berço). Configurável em
+// Configurações → Bateria e Montagem → "Definir Paletes" (ver
+// public/js/paletes-config.js, cfgSalvar em app-core.js — persistido em
+// config.json, chave "paletes"). Default abaixo só entra em ação se
+// config.json ainda não tiver essa chave (instalação existente, antes
+// desta funcionalidade) — depois da 1ª vez que o Administrador salvar em
+// Configurações, o valor real sempre vem do arquivo.
+const PALETES_CONFIG_DEFAULT = { direitoPrimeira: 4, direitoSegunda: 2, esquerdoPrimeira: 3, esquerdoSegunda: 1 };
+let PALETES_CONFIG = { ...PALETES_CONFIG_DEFAULT };
+
+// Ordem VISUAL dos 4 paletes-base na tela do Setor de Qualidade (layout
+// 2x2 — qual posição/quadrante cada palete ocupa: 1=superior-esquerdo,
+// 2=superior-direito, 3=inferior-esquerdo, 4=inferior-direito).
+// Configurável em Configurações → Paletes → "Ordem dos Paletes" (ver
+// public/js/paletes-ordem.js, cfgSalvar em app-core.js — persistido em
+// config.json, chave "paletesOrdem"). NÃO tem relação nenhuma com
+// PALETES_CONFIG acima — aquele decide QUAL palete recebe cada
+// quadrante da BATERIA; este decide só a POSIÇÃO NA TELA de cada
+// palete, puramente visual (mesma separação de responsabilidade que já
+// existia entre _trocarPosicaoVisualPallets e o mapeamento
+// berço→palete, antes desta configuração virar persistente). Default
+// abaixo == o valor que já estava fixo no CSS antes de virar
+// configurável (.sq-pallet-col[data-pallet-id], setor-qualidade.css).
+const PALETES_ORDEM_DEFAULT = { stack1: 2, stack2: 1, stack3: 3, stack4: 4 };
+let PALETES_ORDEM = { ...PALETES_ORDEM_DEFAULT };
 
 let _configReady = false;
 const _configCallbacks = [];
@@ -290,6 +312,33 @@ function _aplicarTiposMontagem(opcoes) {
   CIMENTICIA_POR_TIPO = _montarCimenticiaPorTipo(opcoes);
 }
 
+// Confere se `cfg` é uma permutação válida dos 4 paletes-base sobre os 4
+// quadrantes (direitoPrimeira/direitoSegunda/esquerdoPrimeira/
+// esquerdoSegunda) — cada palete (1-4) usado exatamente 1 vez. Usada por
+// loadConfig() (abaixo) e por cfgSalvarPaletes() (paletes-config.js)
+// antes de persistir, pra nunca deixar 2 quadrantes apontando pro mesmo
+// palete ou um palete de fora sem quadrante nenhum.
+function _paletesConfigValida(cfg) {
+  if (!cfg || typeof cfg !== 'object') return false;
+  const CHAVES = ['direitoPrimeira', 'direitoSegunda', 'esquerdoPrimeira', 'esquerdoSegunda'];
+  const valores = CHAVES.map(k => cfg[k]);
+  if (valores.some(v => !Number.isInteger(v) || v < 1 || v > 4)) return false;
+  return new Set(valores).size === 4; // os 4 valores precisam ser distintos (1,2,3,4 em alguma ordem)
+}
+
+// Confere se `cfg` é uma permutação válida das 4 POSIÇÕES na tela
+// (1-4) sobre os 4 paletes-base (stack1..stack4) — cada posição usada
+// exatamente 1 vez. Mesmo raciocínio de _paletesConfigValida acima, só
+// que pra "Ordem dos Paletes" (ver PALETES_ORDEM, acima, e
+// public/js/paletes-ordem.js) em vez de "Definir Paletes".
+function _paletesOrdemValida(cfg) {
+  if (!cfg || typeof cfg !== 'object') return false;
+  const CHAVES = ['stack1', 'stack2', 'stack3', 'stack4'];
+  const valores = CHAVES.map(k => cfg[k]);
+  if (valores.some(v => !Number.isInteger(v) || v < 1 || v > 4)) return false;
+  return new Set(valores).size === 4;
+}
+
 async function loadConfig() {
   if (_configReady) return;
   try {
@@ -359,13 +408,37 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "volume_por_placa" válido — mantendo lista já carregada.');
     }
 
-    // Lista vazia/ausente é o padrão (sem restrição) — não é um erro nem
-    // precisa de warning, diferente dos outros blocos acima.
-    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
-      ? cfg.dispositivosAutorizados.map(d => ({
-          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
-        }))
-      : [];
+    // "paletes": direcionamento de painéis por quadrante (ver
+    // PALETES_CONFIG, acima) — configurável em Configurações → Bateria e
+    // Montagem → "Definir Paletes". Só aceita se for de fato uma
+    // PERMUTAÇÃO válida dos 4 paletes (cada um usado exatamente 1 vez);
+    // qualquer outra coisa (ausente, chave faltando, valor repetido) cai
+    // no default, pra nunca deixar 2 quadrantes apontando pro mesmo
+    // palete ou um palete sem quadrante nenhum.
+    if (_paletesConfigValida(cfg.paletes)) {
+      PALETES_CONFIG = { ...cfg.paletes };
+    } else if (cfg.paletes !== undefined) {
+      console.warn('[LW] config.json com "paletes" inválido (não é uma permutação de 1-4) — usando default.');
+      PALETES_CONFIG = { ...PALETES_CONFIG_DEFAULT };
+    }
+    // Se cfg.paletes for undefined (instalação antes desta funcionalidade
+    // existir), mantém o default já atribuído na declaração — nem loga
+    // aviso, é o caminho normal esperado.
+
+    // "paletesOrdem": posição visual de cada palete na tela do Setor de
+    // Qualidade (ver PALETES_ORDEM, acima) — Configurações → Paletes →
+    // "Ordem dos Paletes". Mesmo raciocínio de validação/fallback de
+    // "paletes", acima: só aceita permutação válida das 4 posições.
+    if (_paletesOrdemValida(cfg.paletesOrdem)) {
+      PALETES_ORDEM = { ...cfg.paletesOrdem };
+    } else if (cfg.paletesOrdem !== undefined) {
+      console.warn('[LW] config.json com "paletesOrdem" inválido (não é uma permutação de 1-4) — usando default.');
+      PALETES_ORDEM = { ...PALETES_ORDEM_DEFAULT };
+    }
+
+    // (Removido: leitura de "dispositivosAutorizados" — o sistema de
+    // dispositivo autorizado por deviceId foi substituído por permissão
+    // de perfil de usuário, ver dispositivoEstaAutorizado(), abaixo.)
 
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
@@ -388,10 +461,7 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
-    // Falha pra ler config.json não deve travar quem já estava autorizado
-    // (nem ninguém, na falta de configuração) — fica vazio (sem
-    // restrição), nunca bloqueado por padrão.
-    if (!DISPOSITIVOS_AUTORIZADOS.length) DISPOSITIVOS_AUTORIZADOS = [];
+    // (Removido: fallback de DISPOSITIVOS_AUTORIZADOS — não existe mais.)
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -439,6 +509,36 @@ function clearOperacaoAtual() {
 }
 
 // ============================================================
+//  AUTORIA — "quem registrou isto"
+// ============================================================
+// Substitui a antiga "Identidade Leve de Operador" (perguntava PIN toda
+// vez, separado do login — ver conversa que motivou a remoção): agora
+// que o login exige usuário+senha (ver login.html), a pessoa já TEM um
+// nome próprio no momento em que registra qualquer coisa — não precisa
+// perguntar de novo. Usado em Registrar Operação, Paradas, e Avaliações
+// do Setor de Qualidade (ver operacao.js, paradas.js, setor-qualidade.js).
+
+/**
+ * Nome de quem está logado agora, pra gravar como autoria num registro
+ * novo (operação, parada, avaliação de qualidade). "ADM" pro
+ * Administrador Master (senha mestra, sem usuário/nome próprio — ver
+ * conversa que motivou esse valor fixo); o nome de cadastro pra qualquer
+ * usuário logado (Operador/Analista/Qualidade/Manutencao/Administrativo
+ * — ver sessionStorage.lw_nome_usuario, gravado no login).
+ * @returns {string|null} nunca lança erro — null só se sessionStorage
+ *   estiver indisponível (navegador sem storage), caso extremamente raro.
+ */
+function nomeDeQuemEstaLogado() {
+  try {
+    const role = sessionStorage.getItem('lw_role');
+    if (role === 'Administrador') return 'ADM';
+    return sessionStorage.getItem('lw_nome_usuario') || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// ============================================================
 //  LOG DE ACESSO
 //
 //  Registra no servidor cada acesso a rotas "sensíveis" do app — por
@@ -472,9 +572,10 @@ function getDeviceId() {
 /**
  * Anexa "?deviceId=..." (ou "&deviceId=..." se já houver query string) na
  * URL — usado pelas rotas que controlam a operação em andamento (iniciar,
- * encerrar, registrar), pra o servidor checar se este dispositivo está
- * autorizado (ver dispositivoAutorizado() em server.js e a seção
- * "Configurações → Autorizados").
+ * encerrar, registrar), pra o servidor saber qual computador é o "dono"
+ * da operação (ver donoDeviceId em lib/rotas/operacao-andamento.js). A
+ * AUTORIZAÇÃO pra controlar é decidida pela sessão de usuário logado
+ * (ver podeControlarOperacao() em server.js), não mais pelo deviceId.
  */
 function _comDeviceId(url) {
   const sep = url.includes('?') ? '&' : '?';
@@ -495,16 +596,6 @@ function _comModoTeste(url, modoTeste) {
 }
 
 /**
- * Atualiza a cópia em memória de DISPOSITIVOS_AUTORIZADOS depois de salvar
- * com sucesso em config.json (Configurações → Autorizados) — loadConfig()
- * só roda uma vez por página (guarda em _configReady), então isto é o jeito
- * de refletir a mudança sem precisar recarregar a página inteira.
- */
-function atualizarDispositivosAutorizados(lista) {
-  DISPOSITIVOS_AUTORIZADOS = Array.isArray(lista) ? lista : [];
-}
-
-/**
  * Registra um acesso à rota informada — melhor esforço: nunca lança erro
  * pra quem chamou (sem conexão, simplesmente não loga; não é crítico a
  * ponto de travar a navegação por isso).
@@ -521,16 +612,22 @@ async function registrarAcesso(rota) {
 }
 
 /**
- * Indica se ESTE dispositivo pode controlar a operação em andamento — true
- * se a lista de Configurações → Autorizados estiver vazia (sem restrição)
- * ou se o deviceId deste navegador estiver nela. Usado pela tela de
- * Registrar Operação pra desabilitar campos/botões com feedback claro —
- * a trava de verdade é sempre no servidor (ver dispositivoAutorizado() em
- * server.js), isto aqui é só pra UI/UX.
+ * Indica se a pessoa LOGADA AGORA pode controlar a operação em andamento
+ * — substituiu o antigo sistema de "dispositivo autorizado" (deviceId
+ * numa lista em Configurações → Autorizados, removido). Agora é por
+ * PESSOA, não por computador: "Administrador" (senha mestra) e
+ * "Administrativo" sempre podem; os demais perfis só se o usuário
+ * específico tiver sido marcado com "pode iniciar operação" no cadastro
+ * (ver sessionStorage.lw_pode_iniciar_operacao, gravado no login —
+ * login.html/POST /login-usuario). Usado pela tela de Registrar Operação
+ * pra desabilitar campos/botões com feedback claro — a trava de verdade
+ * é sempre no servidor (ver podeControlarOperacao() em server.js), isto
+ * aqui é só pra UI/UX.
  */
 function dispositivoEstaAutorizado() {
-  if (!DISPOSITIVOS_AUTORIZADOS.length) return true;
-  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
+  const role = sessionStorage.getItem('lw_role');
+  if (role === 'Administrador' || role === 'Administrativo') return true;
+  return sessionStorage.getItem('lw_pode_iniciar_operacao') === 'true';
 }
 
 // ============================================================
@@ -557,6 +654,13 @@ let _opAndamentoOnFinalizadaPorOutro = null;
 let _opAndamentoReconectarTimeout = null;
 let _opAndamentoEnviarTimeout = null;
 let _opAndamentoUltimoEnviado; // string JSON do último payload mandado — evita reenviar o mesmo estado
+// Última revisão (número atribuído pelo servidor, ver server.js) aceita
+// desta aba — começa em -1 (nenhuma ainda) pra aceitar a 1ª mensagem que
+// chegar, seja qual for o valor. Ver checagem em _abrirWsOperacaoAndamento
+// (recusa mensagem 'estado' com revisão <= esta) e em _postOperacaoAndamento
+// (atualiza com a revisão da PRÓPRIA mudança, já que o eco via WebSocket
+// dela mesma é filtrado e nunca passaria por ali).
+let _opAndamentoUltimaRevisaoConhecida = -1;
 
 // Callback pra "uma linha foi excluída em Configurações → Dados SQL, em
 // QUALQUER dispositivo" — ver broadcastDadosSqlExcluidos, server.js.
@@ -614,6 +718,21 @@ function _abrirWsOperacaoAndamento() {
       if (!msg || msg.origemClientId === OP_ANDAMENTO_CLIENT_ID) return; // eco da própria aba — ignora, em todos os tipos de mensagem
 
       if (msg.tipo === 'estado') {
+        // Recusa atualização ATRASADA/velha (ver conversa que motivou):
+        // antes, QUALQUER mensagem 'estado' substituía o estado local
+        // inteiro, sem checar se era mais recente — duas ABAS na mesma
+        // operação (o mecanismo de "dono" em server.js usa deviceId, que
+        // é compartilhado entre abas do MESMO navegador via localStorage,
+        // então não protege contra isso) podiam se sobrescrever
+        // silenciosamente, apagando um traço recém-preenchido sem aviso
+        // nenhum. `msg.revisao` é atribuído pelo SERVIDOR (nunca pelo
+        // cliente — evita relógios de dispositivos diferentes brigarem),
+        // sempre crescente — só aceita se for mais nova que a última
+        // aplicada aqui. Mensagem sem `revisao` (não deveria acontecer,
+        // mas por segurança) cai no fail-open: aceita mesmo assim, pra
+        // nunca travar a tela por causa só desta checagem.
+        if (typeof msg.revisao === 'number' && msg.revisao <= _opAndamentoUltimaRevisaoConhecida) return;
+        if (typeof msg.revisao === 'number') _opAndamentoUltimaRevisaoConhecida = msg.revisao;
         if (_opAndamentoOnAtualizacao) _opAndamentoOnAtualizacao(msg.dados);
       } else if (msg.tipo === 'operacao_finalizada') {
         if (_opAndamentoOnFinalizadaPorOutro) _opAndamentoOnFinalizadaPorOutro(msg.resumo);
@@ -639,16 +758,9 @@ function _agendarReconexaoOperacaoAndamento() {
  * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
  * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
  * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
- * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
- */
-/**
- * Manda o estado atual da operação pro servidor — debounced por padrão
- * (espera ~250ms de silêncio antes de mandar, pra digitação rápida virar
- * uma única chamada de rede), exceto com `{ imediato: true }` (usado ao
- * encerrar/zerar a operação, onde não tem o que agrupar com mais nada).
- * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de um
- * dispositivo autorizado limpar uma operação que outro dispositivo
- * autorizado começou (ver dono da operação, em server.js).
+ * `{ forcar: true }` é só pro "🗑️ Limpar Tudo" — único jeito de uma
+ * pessoa autorizada limpar uma operação que outra pessoa autorizada
+ * começou (ver dono da operação, em server.js).
  * @param {object|null} dados - estado atual, ou null (sem operação em andamento)
  */
 function enviarOperacaoAndamento(dados, { imediato = false, forcar = false } = {}) {
@@ -672,13 +784,23 @@ async function _postOperacaoAndamento(dados, forcar = false) {
     });
     if (!res.ok) {
       // Diferente de falha de rede (catch abaixo): o servidor respondeu e
-      // recusou — "dispositivo não autorizado" ou "operação já tem dono"
-      // (ver Configurações → Autorizados). Mostra na hora, senão a pessoa
-      // fica digitando sem nenhum feedback de que nada está sendo
-      // transmitido.
+      // recusou — "sem permissão pra controlar operações" ou "operação já
+      // tem dono" (ver Configurações → Usuários / podeControlarOperacao()
+      // em server.js). Mostra na hora, senão a pessoa fica digitando sem
+      // nenhum feedback de que nada está sendo transmitido.
       _opAndamentoUltimoEnviado = undefined; // não foi aceito — não conta como "já enviado"
       const json = await res.json().catch(() => null);
-      mostrarAlerta(json?.erro || 'Este computador não está autorizado a controlar a operação.', { tipo: 'erro' });
+      mostrarAlerta(json?.erro || 'Você não está autorizado a controlar a operação.', { tipo: 'erro' });
+      return;
+    }
+    // Registra a revisão da PRÓPRIA mudança — o eco desta mesma mudança
+    // via WebSocket é filtrado (origemClientId bate com o desta aba, ver
+    // _abrirWsOperacaoAndamento), então é só por aqui que esta aba fica
+    // sabendo sua revisão mais recente, pra comparar corretamente com a
+    // PRÓXIMA atualização que chegar de outra aba/dispositivo.
+    const json = await res.json().catch(() => null);
+    if (json && typeof json.revisao === 'number' && json.revisao > _opAndamentoUltimaRevisaoConhecida) {
+      _opAndamentoUltimaRevisaoConhecida = json.revisao;
     }
   } catch (_) {
     _opAndamentoUltimoEnviado = undefined;
@@ -1438,116 +1560,7 @@ async function desativarSobra(motivo, modoTeste = false) {
   await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() }, modoTeste);
 }
 
-// ---- Backup de Dados ----
-
-// Todos os arquivos que vivem em public/db/ — se um novo arquivo de dados
-// for adicionado lá no futuro, basta incluir o nome aqui também.
-const ARQUIVOS_BACKUP_DB = [
-  'config.json',
-  'contador_tracos.json',
-  'historico.json',
-  'historico_edicoes.json',
-  'relatorio_edicoes.json',
-  'paradas.json',
-  'ajustes_tracos.json',
-  'relatorio_injecao.json',
-  'security.json',
-  // Identidade Leve de Operador — mesmo motivo de segurança de
-  // security.json (ver caminhoArquivoDb, server.js).
-  'operadores.json',
-  'sobra.json',
-  // Metas de produção (Página de Metas) — arquivo simples, mesmo padrão
-  // de config.json (ver POST /salvar-metas, server.js).
-  'metas.json',
-  // Adicionados: Berços Visuais e Avaliações do Setor de Qualidade — antes
-  // ficavam de fora deste backup (só entravam no "Backup Geral"). Vêm de
-  // tabela SQL — a rota GET /db/<nome> reconstrói o JSON a partir do banco.
-  'bercos_visuais.json',
-  'avaliacoes_qualidade.json',
-  // Adicionado: sem isso, "quem já foi avaliado" (fila do Setor de
-  // Qualidade — ver CREATE TABLE operacoes_avaliadas, db.js) não saía no
-  // Backup de Dados — restaurar um backup fazia toda bateria já avaliada
-  // voltar a aparecer na fila, mesmo já avaliada de verdade antes do backup.
-  'operacoes_avaliadas.json',
-  // Adicionado: agora "não avaliadas" é uma fila DE VERDADE, guardada em
-  // arquivo (não mais calculada na hora — ver OPERACOES_NAO_AVALIADAS_PATH,
-  // server.js) — sem isso, ela ficaria de fora do Backup de Dados (o
-  // servidor recalcula sozinho a partir do SQL se este arquivo faltar
-  // junto de historico.json/operacoes_avaliadas.json na restauração, mas
-  // é melhor levar o estado exato de qualquer jeito).
-  'operacoes_nao_avaliadas.json',
-];
-
-/**
- * Busca todos os arquivos de public/db/ (via fetch, igual ao resto do app) e
- * monta um .zip com eles no próprio navegador (usando JSZip, carregado via
- * CDN no index.html), disparando o download. Não depende de nenhuma rota
- * nova no servidor — pros arquivos que migraram pra SQLite (Fase 5), o
- * servidor tem rotas GET /db/<nome> dedicadas que devolvem o conteúdo
- * sempre fresco a partir do banco (ver server.js); fetch('db/'+nome) aqui
- * cai nelas automaticamente, sem essa função precisar saber a diferença.
- *
- * IMPORTANTE (bug corrigido): antes, se algum arquivo falhasse ao buscar,
- * o erro era só logado no console e o .zip seguia sendo gerado (e baixado)
- * incompleto, sem avisar ninguém — só descobria-se na hora de restaurar
- * ("faltam: <arquivo>"). Isso acontecia sobretudo com "security.json":
- * a rota GET /db/security.json exige sessão de admin válida (cookie de
- * até 30 min, ver lib/sessao.js), mas o menu Admin no navegador fica
- * "logado" por muito mais tempo (sessionStorage 'lw_role', sem expirar
- * sozinho) — dava pra ficar horas na tela de Backup sem perceber que a
- * sessão de servidor já tinha expirado, gerar o backup, e só notar o
- * problema dias depois, ao tentar restaurar. Agora, qualquer falha aborta
- * a geração do zip e avisa exatamente qual(is) arquivo(s) falharam.
- */
-async function gerarBackupDados() {
-  if (typeof JSZip === 'undefined') {
-    throw new Error('Biblioteca JSZip não carregada.');
-  }
-
-  const zip = new JSZip();
-  const falhas = [];
-
-  for (const nome of ARQUIVOS_BACKUP_DB) {
-    try {
-      const res = await fetch('db/' + nome, { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const texto = await res.text();
-      zip.file(nome, texto);
-    } catch (err) {
-      console.error(`[Backup] Falha ao incluir "${nome}" no backup:`, err);
-      falhas.push(nome);
-    }
-  }
-
-  if (falhas.length) {
-    // "security.json" tem uma causa mais provável e mais fácil de
-    // resolver que as demais (sessão de admin expirada) — dá a dica certa
-    // em vez de deixar a pessoa adivinhar.
-    const dicaSecurity = falhas.includes('security.json')
-      ? ' Se foi "security.json", provavelmente sua sessão de administrador expirou — feche e reabra a tela de Backup (confirmando a senha de novo) e tente de novo.'
-      : '';
-    throw new Error(
-      `Backup cancelado — não foi possível incluir: ${falhas.join(', ')}.${dicaSecurity}`
-    );
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' });
-
-  // Nome do arquivo final, ex: lightwall_backup_dados_2026-06-19_14h32.zip
-  const agora = nowBrasilia();
-  const hh = String(agora.getUTCHours()).padStart(2, '0');
-  const mm = String(agora.getUTCMinutes()).padStart(2, '0');
-  const nomeArquivo = `lightwall_backup_dados_${todayBrasilia()}_${hh}h${mm}.zip`;
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nomeArquivo;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+// ---- Export ----
 
 // ---- Alerta customizado (substitui o alert() nativo do navegador) ----
 // Mesmo padrão visual usado nos modais de Sobra de Traço (operacao.js):
@@ -1702,8 +1715,9 @@ function mostrarConfirmacao(mensagem, opcoes = {}) {
 
 /**
  * Baixa uma string como arquivo — mesmo mecanismo (Blob + <a> temporário)
- * já usado por gerarBackupDados(), só que genérico: qualquer tela pode
- * chamar pra baixar texto/HTML/JSON sem duplicar esse boilerplate.
+ * já usado por fazerBackupDados()/fazerBackupGeral() (app-core.js), só
+ * que genérico: qualquer tela pode chamar pra baixar texto/HTML/JSON sem
+ * duplicar esse boilerplate.
  * Usado pelos botões "🌐 Exportar Interativo" dos dashboards (Setor de
  * Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
  * Berços, CEP, Análise Focada) — cada um monta seu próprio HTML
@@ -1900,13 +1914,18 @@ window.LW = {
 
   // Getters dinâmicos — leem do estado após config.json carregar
   get DIMENSAO_OPTS() { return DIMENSAO_OPTS; },
+  get PALETES_CONFIG() { return PALETES_CONFIG; },
+  PALETES_CONFIG_DEFAULT,
+  paletesConfigValida: _paletesConfigValida,
+  get PALETES_ORDEM() { return PALETES_ORDEM; },
+  PALETES_ORDEM_DEFAULT,
+  paletesOrdemValida: _paletesOrdemValida,
   get MONTAGEM_OPTS() { return MONTAGEM_OPTS; },
   get MONTAGEM_MAP() { return MONTAGEM_MAP; },
   get MONTAGEM_OPCOES() { return MONTAGEM_OPCOES; },
   get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
-  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
 
   // Config loader
@@ -1934,7 +1953,7 @@ window.LW = {
 
   // Log de Acesso
   getDeviceId, registrarAcesso,
-  atualizarDispositivosAutorizados,
+  nomeDeQuemEstaLogado,
   dispositivoEstaAutorizado,
 
   // Cálculos
@@ -1973,9 +1992,6 @@ window.LW = {
 
   // Sobra de traço
   getSobra, salvarSobra, desativarSobra,
-
-  // Backup de dados
-  gerarBackupDados,
 
   // Alerta customizado (substitui alert() nativo)
   mostrarAlerta,

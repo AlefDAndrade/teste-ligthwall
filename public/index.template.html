@@ -17,10 +17,21 @@
        próprio (setor-qualidade-app.html); agora que a tela roda como
        mais uma página do app, entra aqui igual a qualquer outra. -->
   <link rel="stylesheet" href="css/setor-qualidade.css">
+  <!-- CSS/fontes da Manutenção — mesmo raciocínio do Setor de Qualidade
+       acima: extraído do protótipo standalone "Etiqueta - Manutenção.html"
+       (rodava sozinho, fora da SPA), agora entra como mais uma página. -->
+  <link rel="stylesheet" href="css/manutencao.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
        resto do app não usa nenhum ícone fas/far); antes só era carregado
        dentro do iframe próprio. -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js — usado só pelo gráfico "Evolução de Chamados" da
+       Manutenção (o resto do app desenha gráficos em SVG puro, ver
+       comentário nos gráficos de setor-qualidade.js — mas o protótipo
+       original da Manutenção já usava Chart.js, mantido aqui igual). -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -44,11 +55,13 @@
 <!-- INCLUDE:page-analise-operacional.html -->
 <!-- INCLUDE:page-paradas.html -->
 <!-- INCLUDE:page-setor-qualidade.html -->
+<!-- INCLUDE:page-manutencao.html -->
 
   </div><!-- .app-shell -->
 
 <!-- INCLUDE:modal-success.html -->
 <!-- INCLUDE:modal-config.html -->
+<!-- INCLUDE:modal-criar-perfil.html -->
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -56,14 +69,23 @@
        Qualidade; antes só carregados dentro do iframe próprio. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Pako — usado só por decompressPDF (js/manutencao.js), pra abrir PDFs
+       antigos que porventura tenham sido salvos comprimidos com GZIP por
+       uma versão anterior do protótipo (novos PDFs não são mais
+       comprimidos, ver compressPDF). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
-  <script src="js/operador.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/setor-qualidade.js"></script>
+  <script src="js/manutencao.js"></script>
   <script src="js/app-core.js"></script>
+  <script src="js/perfis-customizados.js"></script>
+  <script src="js/paletes-config.js"></script>
+  <script src="js/paletes-ordem.js"></script>
+  <script src="js/paletes-combinacoes.js"></script>
 <!-- INCLUDE:modal-editar-operacao.html -->
 <!-- INCLUDE:modal-editar-traco.html -->
 <!-- INCLUDE:modal-export.html -->

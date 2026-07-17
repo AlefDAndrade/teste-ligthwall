@@ -17,10 +17,21 @@
        próprio (setor-qualidade-app.html); agora que a tela roda como
        mais uma página do app, entra aqui igual a qualquer outra. -->
   <link rel="stylesheet" href="css/setor-qualidade.css">
+  <!-- CSS/fontes da Manutenção — mesmo raciocínio do Setor de Qualidade
+       acima: extraído do protótipo standalone "Etiqueta - Manutenção.html"
+       (rodava sozinho, fora da SPA), agora entra como mais uma página. -->
+  <link rel="stylesheet" href="css/manutencao.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
        resto do app não usa nenhum ícone fas/far); antes só era carregado
        dentro do iframe próprio. -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js — usado só pelo gráfico "Evolução de Chamados" da
+       Manutenção (o resto do app desenha gráficos em SVG puro, ver
+       comentário nos gráficos de setor-qualidade.js — mas o protótipo
+       original da Manutenção já usava Chart.js, mantido aqui igual). -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -42,9 +53,8 @@
         📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
       </span>
 
-      <span id="topbar-operador-atual" title="Clique para trocar quem está identificado nesta aba"
-        onclick="LWOperador.trocar()"
-        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap;cursor:pointer">
+      <span id="topbar-nome-usuario"
+        style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap">
       </span>
 
       <div style="position:relative">
@@ -78,7 +88,7 @@
           style="font-size:.7rem;padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer">
           Sair
         </button>
-        <button id="btn-config" data-admin-only onclick="abrirConfig()"
+        <button id="btn-config" onclick="abrirConfig()"
           style="display:none;font-size:.7rem;padding:4px 10px;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer">
           ⚙ Configurações
         </button>
@@ -199,6 +209,13 @@
         </svg>
         <span class="nav-text">Setor de Qualidade</span>
       </button>
+
+      <button class="nav-item" data-page="manutencao" onclick="showPage('manutencao',this)">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <span class="nav-text">Manutenção</span>
+      </button>
     </nav>
 
     <!-- Backdrop para fechar ao clicar fora -->
@@ -213,58 +230,63 @@
             Controle de produção industrial</p>
         </div>
         <div class="menu-grid">
-          <div class="menu-card" data-hide-analista onclick="showPage('operacao')">
+          <div class="menu-card" data-hide-analista data-page="operacao" onclick="showPage('operacao')">
             <div class="menu-card-icon">⏱</div>
             <div class="menu-card-title">Registrar Operação</div>
             <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e
               controle de tempo.</div>
           </div>
-          <div class="menu-card" onclick="showPage('turnos')">
+          <div class="menu-card" data-page="turnos" onclick="showPage('turnos')">
             <div class="menu-card-icon">🏭</div>
             <div class="menu-card-title">Desempenho Turnos</div>
             <div class="menu-card-desc">Comparativo de produtividade, atrasos e eficiência operacional por turno de
               trabalho.</div>
           </div>
-          <div class="menu-card" onclick="showPage('registro')">
+          <div class="menu-card" data-page="registro" onclick="showPage('registro')">
             <div class="menu-card-icon">📋</div>
             <div class="menu-card-title">Operação</div>
             <div class="menu-card-desc">Histórico completo de todas as injeções registradas, com filtros, exportação em
               CSV e acesso à Análise Operacional.</div>
           </div>
-          <div class="menu-card" onclick="showPage('relatorio')">
+          <div class="menu-card" data-page="relatorio" onclick="showPage('relatorio')">
             <div class="menu-card-icon">🧾</div>
             <div class="menu-card-title">Traços</div>
             <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações —
               com acesso à Qualidade dos Traços.</div>
           </div>
-          <div class="menu-card" onclick="showPage('relatorio-bercos')">
+          <div class="menu-card" data-page="relatorio-bercos" onclick="showPage('relatorio-bercos')">
             <div class="menu-card-icon">📑</div>
             <div class="menu-card-title">Berços</div>
             <div class="menu-card-desc">Resultado visual (Okay/Vazou) de cada berço por bateria registrada — com acesso
               à Análise de Berços.</div>
           </div>
-          <div class="menu-card" onclick="showPage('oee')">
+          <div class="menu-card" data-page="oee" onclick="showPage('oee')">
             <div class="menu-card-icon">🎯</div>
             <div class="menu-card-title">OEE</div>
             <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
             </div>
           </div>
-          <div class="menu-card" onclick="showPage('metas')">
+          <div class="menu-card" data-page="metas" onclick="showPage('metas')">
             <div class="menu-card-icon">🏁</div>
             <div class="menu-card-title">Metas</div>
             <div class="menu-card-desc">Progresso do mês contra as metas de traços, m² e OEE definidas pelo Administrador.</div>
           </div>
-          <div class="menu-card" onclick="showPage('paradas')">
+          <div class="menu-card" data-page="paradas" onclick="showPage('paradas')">
             <div class="menu-card-icon">🛑</div>
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
-          <div class="menu-card" onclick="showPage('setor-qualidade')">
+          <div class="menu-card" data-page="setor-qualidade" onclick="showPage('setor-qualidade')">
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
             <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
           </div>
-          <div class="menu-card" onclick="window.open('tv.html', '_blank')">
+          <div class="menu-card" data-page="manutencao" onclick="showPage('manutencao')">
+            <div class="menu-card-icon">🔧</div>
+            <div class="menu-card-title">Manutenção</div>
+            <div class="menu-card-desc">Chamados corretivos, manutenção programada, compra de peças e almoxarifado — com visão executiva de custos e MTTR.</div>
+          </div>
+          <div class="menu-card" data-page="tv" onclick="window.open('tv.html', '_blank')">
             <div class="menu-card-icon">📺</div>
             <div class="menu-card-title">Modo TV</div>
             <div class="menu-card-desc">Painel para telão da fábrica: operação ao vivo, traços do dia, OEE e últimas paradas — atualiza sozinho, sem precisar de login.</div>
@@ -278,7 +300,8 @@
           <div class="menu-card" data-admin-only onclick="abrirBackupHub()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup e Restauração</div>
-            <div class="menu-card-desc">Fazer ou restaurar um backup — só dos dados, ou do programa inteiro.</div>
+            <div class="menu-card-desc">Fazer ou restaurar um backup — só dados de produção, ou dados + configurações
+              e usuários.</div>
           </div>
         </div>
       </div>
@@ -306,13 +329,14 @@
           <div class="menu-card" id="backup-hub-card-dados" onclick="fazerBackupDados()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup de Dados</div>
-            <div class="menu-card-desc">Só os arquivos de dados (histórico, relatório de injeção, configurações etc.).
+            <div class="menu-card-desc">Só dados de produção — operações, traços, paradas, avaliações de qualidade.
             </div>
           </div>
           <div class="menu-card" id="backup-hub-card-geral" onclick="fazerBackupGeral()">
             <div class="menu-card-icon">🗄️</div>
             <div class="menu-card-title">Backup Geral</div>
-            <div class="menu-card-desc">O programa inteiro como está agora (código + dados).</div>
+            <div class="menu-card-desc">Dados de produção + configurações (baterias, tipos de montagem) + usuários
+              cadastrados e senha de administrador (em hash).</div>
           </div>
         </div>
 
@@ -327,7 +351,8 @@
           <div class="menu-card" onclick="fecharBackupHub();abrirRestaurarGeral()">
             <div class="menu-card-icon">⚠️</div>
             <div class="menu-card-title">Restaurar Geral</div>
-            <div class="menu-card-desc">A partir de um "Backup Geral". Exige reiniciar o servidor depois.</div>
+            <div class="menu-card-desc">A partir de um "Backup Geral". Usuários/senha de administrador só são
+              alterados se o backup os incluir — sem eles, o cadastro atual é mantido.</div>
           </div>
         </div>
 
@@ -353,7 +378,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -384,9 +409,9 @@
     </div>
     <div id="op-aviso-nao-autorizado"
       style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--accent);font-size:.85rem;align-items:center;gap:10px">
-      🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este computador não está autorizado a iniciar,
-        encerrar ou registrar. Peça ao Administrador pra autorizá-lo em <strong>Configurações →
-          Autorizados</strong>.</span>
+      🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar,
+        encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações →
+          Usuários</strong>.</span>
     </div>
     <fieldset id="op-fieldset-trava" style="border:none;margin:0;padding:0">
       <div class="op-layout-grid">
@@ -2392,10 +2417,14 @@
               <button class="sq-btn-shape dash"            onclick="SQ.selectShape(this,'dash')"><span class="sq-shape-dash"></span></button>
               <button class="sq-btn-shape x"                onclick="SQ.selectShape(this,'x')" title="Painel não preenchido — sempre sozinha, cor vermelha fixa"><span class="sq-shape-x">×</span></button>
               <div class="sq-tools-sep"></div>
+              <button class="sq-btn-indicador active" onclick="SQ.toggleIndicadorAtivo(this)" title="Indicador de qualidade — ATIVADO (padrão): a próxima marca clicada é a marca de STATUS de verdade (aprovado/2ª linha/reprovado). Desative só pra corrigir/adicionar manualmente uma marca de identidade (tipo de montagem), sem que ela conte como avaliação.">I</button>
+              <div class="sq-tools-sep"></div>
               <button class="btn btn-ghost btn-sm"         onclick="SQ.undoLastAction()"><i class="fas fa-undo-alt"></i> Desfazer</button>
               <button class="btn btn-danger btn-sm"        onclick="SQ.clearAllMarks()"><i class="fas fa-trash-alt"></i> Limpar</button>
               <div class="sq-tools-sep"></div>
               <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
+              <div class="sq-tools-sep"></div>
+              <span class="sq-tools-hint" title="Clique normal sempre adiciona uma marca (até 6 por placa). Pra apagar, segure o toque ou clique com o botão direito — remove uma marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: toque longo / clique direito</span>
               <div class="sq-tools-sep"></div>
 
               <!-- Referência visual dos marcadores — mesmo padrão do botão
@@ -2471,83 +2500,55 @@
             <!-- Pallets -->
             <div class="sq-stacks">
               <!-- Pallet 1 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack1">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 1</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-1"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack1')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack1')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack1">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack1','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack1','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack1','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack1','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack1','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack1')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack1"></div>
               </div>
               <!-- Pallet 2 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack2">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 2</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-2"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack2')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack2')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack2">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack2','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack2','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack2','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack2','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack2','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack2')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack2"></div>
               </div>
               <!-- Pallet 3 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack3">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 3</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-3"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack3')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack3')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack3">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack3','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack3','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack3','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack3','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack3','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack3')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack3"></div>
               </div>
               <!-- Pallet 4 -->
-              <div class="sq-pallet-col">
+              <div class="sq-pallet-col" data-pallet-id="stack4">
                 <div class="sq-pallet-header">
                   <span class="sq-pallet-label">PALLET 4</span>
                   <span class="sq-pallet-sub" id="sq-pallet-sub-4"></span>
                   <div class="sq-pallet-actions">
                     <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('stack4')">⚡ Todas</button>
-                    <button class="sq-btn-dropdown"   onclick="SQ.toggleDropdown(this,'stack4')">🎨</button>
-                    <div class="sq-color-dropdown" id="sq-dd-stack4">
-                      <button class="sq-dropdown-color verde"    onclick="SQ.applyColorToPallet('stack4','verde')"></button>
-                      <button class="sq-dropdown-color vermelho" onclick="SQ.applyColorToPallet('stack4','vermelho')"></button>
-                      <button class="sq-dropdown-color azul"     onclick="SQ.applyColorToPallet('stack4','azul')"></button>
-                      <button class="sq-dropdown-color amarelo"  onclick="SQ.applyColorToPallet('stack4','amarelo')"></button>
-                      <button class="sq-dropdown-color laranja"  onclick="SQ.applyColorToPallet('stack4','laranja')"></button>
-                    </div>
+                    <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('stack4')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
                   </div>
                 </div>
                 <div class="sq-slab-stack" id="stack4"></div>
               </div>
               <!-- Novo Pallet (vazio, só recebe placas arrastadas — ver SQ.adicionarPalletExtra) -->
-              <button type="button" class="sq-pallet-add" id="sq-btn-add-pallet" onclick="SQ.adicionarPalletExtra()" title="Criar um novo pallet vazio — arraste uma placa até ele para movê-la">
+              <button type="button" class="sq-pallet-add" id="sq-btn-add-pallet" style="order:9999" onclick="SQ.adicionarPalletExtra()" title="Criar um novo pallet vazio — arraste uma placa até ele para movê-la">
                 <i class="fas fa-plus"></i>
               </button>
             </div>
@@ -2681,10 +2682,7 @@
               <p>Selecione um tipo e clique nas placas para aplicar individualmente.</p>
             </div>
             <div class="sq-modal-tipo-actions">
-              <button class="sq-btn-tipo sp" onclick="SQ.setModalTipo('SP')">SP</button>
-              <button class="sq-btn-tipo p2" onclick="SQ.setModalTipo('2P')">2P</button>
-              <button class="sq-btn-tipo t3" onclick="SQ.setModalTipo('3T')">3T</button>
-              <button class="sq-btn-tipo t1" onclick="SQ.setModalTipo('1T')">1T</button>
+              <div id="sq-modal-tipos-botoes" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
               <button class="btn btn-danger btn-sm" onclick="SQ.clearModalPlates()"><i class="fas fa-trash-alt"></i> Limpar</button>
             </div>
             <div id="sq-modal-slabs-grid" class="sq-modal-slabs-grid"></div>
@@ -2696,8 +2694,473 @@
         </div>
 
       </div><!-- .sq-container -->
+
+      <!-- Toast leve (avisos rápidos, não-bloqueantes) — ver toast(),
+           setor-qualidade.js. Mesmo padrão de .man-toast-container
+           (page-manutencao.html/manutencao.css), só que escopado pra esta
+           página: usado por engatilhamentos frequentes/esperados (ex:
+           limite de marcas por placa atingido, nada pra apagar) que não
+           merecem um modal bloqueante (showAlert). -->
+      <div class="sq-toast-container" id="sq-toastContainer"></div>
       </div>
     </main>
+<!-- ============ PAGE: MANUTENÇÃO ============ -->
+    <main class="main" id="page-manutencao">
+      <div class="page-header">
+        <h1 class="page-title">Manuten<span>ção</span></h1>
+        <p class="page-desc">Chamados Corretivos · Manutenção Programada</p>
+      </div>
+      <div class="page-body" style="padding:0;">
+<div class="man-container">
+  <!-- Barra de ações da página — a marca "LIGHTWALL" do protótipo
+       original foi removida daqui: já aparece no topbar global da SPA
+       (nav-topbar.html), ficaria duplicada. Mantido só como barra de
+       ações + abas internas, mesmo padrão do Setor de Qualidade
+       (ver .sq-topbar/.sq-nav, page-setor-qualidade.html). -->
+  <div class="man-topbar man-no-print">
+    <div class="man-brand">
+      <div style="width:4px; height:24px; background:var(--man-orange); border-radius:2px;"></div>
+      Gestão de Manutenção
+    </div>
+    <div class="man-actions">
+      <button class="man-btn man-btn-primary" data-manut-area="manutencao-chamado" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
+      <button class="man-btn man-btn-outline" onclick="exportarCSV()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
+    </div>
+  </div>
+
+  <!-- NAVEGAÇÃO -->
+  <div class="man-nav-tabs man-no-print">
+    <button class="man-btn active" onclick="navegar('manutencao')"><i class="fas fa-wrench"></i> Corretiva</button>
+    <button class="man-btn" onclick="navegar('programada')"><i class="fas fa-calendar-alt"></i> Programada</button>
+    <button class="man-btn" onclick="navegar('dashboard')"><i class="fas fa-chart-pie"></i> Visão Executiva</button>
+  </div>
+
+  <!-- PÁGINA: MANUTENÇÃO CORRETIVA -->
+  <div id="man-manutencao" class="man-page active">
+    
+    <!-- FILTROS -->
+    <div class="man-filters man-no-print">
+      <div class="man-filter-group"><label><i class="fas fa-search"></i> ID</label><input type="text" id="man-filtroID" placeholder="Buscar ID..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-industry"></i> Máquina</label><input type="text" id="man-filtroMaquina" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-building"></i> Setor</label><input type="text" id="man-filtroSetor" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-bolt"></i> Tipo</label>
+        <select id="man-filtroTipo" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todos</option>
+          <option value="Elétrica">Elétrica</option>
+          <option value="Mecânica">Mecânica</option>
+        </select>
+      </div>
+      <div class="man-filter-group"><label><i class="fas fa-exclamation-triangle"></i> Prioridade</label>
+        <select id="man-filtroPrioridade" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todas</option>
+          <option value="BAIXA">Baixa</option>
+          <option value="MÉDIA">Média</option>
+          <option value="ALTA">Alta</option>
+        </select>
+      </div>
+      <div class="man-filter-group"><label><i class="fas fa-check-circle"></i> Status</label>
+        <select id="man-filtroStatus" onchange="aplicarFiltrosCorretiva()">
+          <option value="">Todos</option>
+          <option value="Aguardando">Aguardando</option>
+          <option value="Em Manutencao">Em Manutenção</option>
+          <option value="Concluido">Concluído</option>
+        </select>
+      </div>
+      <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
+    </div>
+
+    <!-- FORMULÁRIO -->
+    <div id="man-formCard" class="man-card" style="display: none;">
+      <div class="man-card-title">
+        <span id="man-formTitle"><i class="fas fa-edit"></i> Registro de Solicitação</span>
+        <span id="man-formIdDisplay" style="color:var(--man-text-muted); font-family: 'JetBrains Mono'; font-size:12px;"></span>
+        <span id="man-formAceiteInfo" style="color:var(--man-text-muted); font-size:12px; margin-left:8px;"></span>
+      </div>
+      <form id="man-manForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-manId"><input type="hidden" id="man-manEtiquetaFechada" value="false">
+
+        <!-- SEÇÃO 1: ABERTURA -->
+        <div style="background:rgba(255,92,108,0.05); border-left:4px solid var(--man-red); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-red); font-weight:600;"><i class="fas fa-user"></i> 1. Abertura do Chamado</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-manSetor" placeholder="Ex: Injetora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-manMaquina" placeholder="Ex: M01"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
+            <div class="man-form-field">
+              <select id="man-manTurno">
+                <option value="1º TURNO">1º TURNO</option>
+                <option value="2º TURNO">2º TURNO</option>
+                <option value="3º TURNO">3º TURNO</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data</div><div class="man-form-field"><input type="date" id="man-manData"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Observador</div><div class="man-form-field"><input type="text" id="man-manObservador" placeholder="Nome do operador"></div></div>
+        </div>
+
+        <!-- SEÇÃO 2: DETALHES DO PROBLEMA -->
+        <div style="background:rgba(77,141,255,0.05); border-left:4px solid var(--man-blue); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-blue); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> 2. Detalhes do Problema</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-file-alt"></i> Anomalia</div><div class="man-form-field"><textarea id="man-manAnomalia" placeholder="Descreva o problema..."></textarea></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-map-pin"></i> Local</div><div class="man-form-field"><input type="text" id="man-manLocal" placeholder="Ex: EM FRENTE AO PAINEL"></div></div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-list-ul"></i> Tipos de Anomalia</div>
+            <div class="man-form-field">
+              <div class="man-tipos-anomalia" id="man-tiposContainer">
+                <span class="man-tag-anomalia S" data-type="S" onclick="toggleTipo('S')">S</span>
+                <span class="man-tag-anomalia Q" data-type="Q" onclick="toggleTipo('Q')">Q</span>
+                <span class="man-tag-anomalia CB" data-type="CB" onclick="toggleTipo('CB')">CB</span>
+                <span class="man-tag-anomalia LDA" data-type="LDA" onclick="toggleTipo('LDA')">LDA</span>
+                <span class="man-tag-anomalia FS" data-type="FS" onclick="toggleTipo('FS')">FS</span>
+                <span class="man-tag-anomalia FM" data-type="FM" onclick="toggleTipo('FM')">FM</span>
+                <span class="man-tag-anomalia ID" data-type="ID" onclick="toggleTipo('ID')">ID</span>
+              </div>
+              <input type="hidden" id="man-manTipos" value="[]">
+            </div>
+          </div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-exclamation-circle"></i> Prioridade</div>
+            <div class="man-form-field">
+              <div class="man-prioridade-box">
+                <button type="button" class="man-prioridade-btn" data-value="BAIXA" onclick="setPrioridade('BAIXA')">BAIXA</button>
+                <button type="button" class="man-prioridade-btn" data-value="MÉDIA" onclick="setPrioridade('MÉDIA')">MÉDIA</button>
+                <button type="button" class="man-prioridade-btn" data-value="ALTA" onclick="setPrioridade('ALTA')">ALTA</button>
+              </div>
+              <input type="hidden" id="man-manPrioridade">
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-manTipoManutencao"><option value="">Selecione...</option><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
+          <div class="man-form-row">
+            <div class="man-form-label"><i class="fas fa-tag"></i> Tipo de Etiqueta</div>
+            <div class="man-form-field">
+              <select id="man-manTipoEtiqueta">
+                <option value="Azul"><i class="fas fa-circle" style="color:var(--man-blue);"></i> Azul (Autônoma)</option>
+                <option value="Vermelho"><i class="fas fa-circle" style="color:var(--man-red);"></i> Vermelho (Técnica)</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera"></i> Foto / Documento</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoOperador" accept="image/*,.pdf" disabled onchange="previewArquivo(this, 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')"><div id="man-fotoOperadorPreview" style="display:none;"></div><button id="man-btnRemoverFotoOp" style="display:none;" onclick="removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')">Remover</button></div><span class="man-upload-hint">Upload ainda não é funcional nesta etapa — só a interface está pronta.</span></div></div></div>
+        </div>
+
+        <!-- SEÇÃO 3: EXECUÇÃO (MANUTENÇÃO) -->
+        <div id="man-techSection">
+          <div style="background:rgba(245,130,31,0.05); border-left:4px solid var(--man-orange); padding:10px 0; margin:0;">
+            <div style="padding:0 16px 8px 16px; color:var(--man-orange); font-weight:600;"><i class="fas fa-hard-hat"></i> 3. Execução (Manutenção)</div>
+            <div id="man-aceitarChamadoBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--man-orange); border-radius:6px; background:rgba(245,130,31,0.08);">
+              <div id="man-aceitarChamadoNormal">
+                <p style="margin:0 0 10px 0; color:var(--man-text-secondary); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarChamadoTexto">Este chamado ainda não foi aceito. Os campos de execução só aparecem depois que alguém aceitar.</span></p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <button type="button" id="man-btnAceitarChamado" class="man-btn man-btn-warning" onclick="aceitarChamado()"><i class="fas fa-hand-paper"></i> Aceitar Chamado</button>
+                  <button type="button" id="man-btnRecusarChamado" class="man-btn man-btn-outline" style="border-color:var(--man-red); color:var(--man-red);" onclick="abrirModalRecusaChamado()"><i class="fas fa-times-circle"></i> Recusar Chamado</button>
+                </div>
+              </div>
+              <div id="man-recusaPendenteBox" style="display:none;">
+                <p style="margin:0 0 10px 0; color:var(--man-text-secondary); font-size:13px;"><i class="fas fa-exclamation-triangle" style="color:var(--man-red);"></i> Recusa solicitada por <strong id="man-recusaInfoSolicitante"></strong>: <em id="man-recusaInfoMotivo"></em></p>
+                <div id="man-recusaBotoesRevisor" style="display:none; gap:10px; flex-wrap:wrap;">
+                  <button type="button" class="man-btn man-btn-danger" onclick="responderRecusaChamado(true)"><i class="fas fa-lock"></i> Aceitar Recusa (encerra o chamado)</button>
+                  <button type="button" class="man-btn man-btn-outline" onclick="responderRecusaChamado(false)"><i class="fas fa-undo-alt"></i> Negar Recusa (volta pra Manutenção)</button>
+                </div>
+              </div>
+            </div>
+            <div id="man-techCampos">
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataInicio" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraInicio" onchange="calcularTempoGasto()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataFim" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraFim" onchange="calcularTempoGasto()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo gasto</div><div class="man-form-field"><input type="text" id="man-manTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600;"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-cog"></i> Responsável pela Execução</div>
+              <div class="man-form-field">
+                <select id="man-manTipoExecucao" onchange="toggleEmpresaExterna()">
+                  <option value="Interno">Interno</option>
+                  <option value="Externo">Empresa Externa</option>
+                </select>
+              </div>
+            </div>
+            <div class="man-form-row" id="man-manEmpresaExternaRow" style="display:none;"><div class="man-form-label"><i class="fas fa-building"></i> Nome da Empresa</div><div class="man-form-field"><input type="text" id="man-manEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-tie"></i> Responsável Técnico</div><div class="man-form-field"><input type="text" id="man-manResponsavel" placeholder="Nome do técnico"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-info-circle"></i> Situação</div><div class="man-form-field"><select id="man-manSituacao" onchange="aoMudarSituacao()"><option value="Aguardando">Aguardando Atendimento</option><option value="Em Manutencao">Em Manutenção</option><option value="Concluido">Concluído</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-pause-circle"></i> Em manutenção?</div><div class="man-form-field"><select id="man-manEmManutencao"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-boxes"></i> Aguardando peças?</div><div class="man-form-field"><select id="man-manAguardandoPecas" onchange="toggleSupervisorSection()"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Peças avariadas</div><div class="man-form-field"><input type="text" id="man-manPecasAvariadas" placeholder="Ex: Válvulas"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shopping-cart"></i> Peças a comprar</div><div class="man-form-field"><input type="text" id="man-manPecasComprar" placeholder="Ex: Conector em L"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clipboard-list"></i> Rotina executada</div><div class="man-form-field"><textarea id="man-manRotina" placeholder="Descreva o procedimento..."></textarea></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera-retro"></i> Foto / Documento do Serviço</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoTecnico" accept="image/*,.pdf" disabled onchange="previewArquivo(this, 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')"><div id="man-fotoTecnicoPreview" style="display:none;"></div><button id="man-btnRemoverFotoTec" style="display:none;" onclick="removerArquivo('man-manFotoTecnico', 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')">Remover</button></div><span class="man-upload-hint">Upload ainda não é funcional nesta etapa — só a interface está pronta.</span></div></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-clock"></i> Custo Mão de Obra (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoMaoObra" step="0.01" placeholder="0,00"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEÇÃO 4: ACOMPANHAMENTO DA SUPERVISÃO -->
+        <div id="man-supervisorSection">
+          <div style="background:rgba(46,211,163,0.05); border-left:4px solid var(--man-green); padding:10px 0; margin:0;">
+            <div style="padding:0 16px 8px 16px; color:var(--man-green); font-weight:600;"><i class="fas fa-user-shield"></i> 4. Acompanhamento (Supervisão)</div>
+            <div id="man-aceitarPedidoPecaBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--man-green); border-radius:6px; background:rgba(46,211,163,0.08);">
+              <p style="margin:0 0 10px 0; color:var(--man-text-secondary); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarPedidoPecaTexto">Há um pedido de peça pendente. Os campos de acompanhamento só aparecem depois que Supervisão, Encarregado ou Administrador aceitarem o pedido.</span></p>
+              <button type="button" id="man-btnAceitarPedidoPeca" class="man-btn man-btn-success" onclick="aceitarPedidoPeca()"><i class="fas fa-hand-paper"></i> Aceitar Pedido de Peça</button>
+            </div>
+            <div id="man-supCampos">
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataInicio" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraInicio" onchange="calcularTempoSupervisao()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataFim" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraFim" onchange="calcularTempoSupervisao()"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo de atuação</div><div class="man-form-field"><input type="text" id="man-supTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-green); font-weight:600;"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shipping-fast"></i> Status da Compra</div><div class="man-form-field"><select id="man-manStatusCompra"><option value="">Selecione...</option><option value="Em Análise">Em Análise</option><option value="Cotação em andamento">Cotação em andamento</option><option value="Pedido efetuado">Pedido efetuado</option><option value="Peça em transporte">Peça em transporte</option><option value="Peça recebida">Peça recebida</option></select></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-check"></i> Previsão de Chegada</div><div class="man-form-field"><input type="date" id="man-manPrevisaoChegada"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-truck"></i> Nº Pedido / Fornecedor</div><div class="man-form-field"><input type="text" id="man-manFornecedor" placeholder="Pedido #123 - Fornecedor A"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-dollar-sign"></i> Custo Peças (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoPecas" step="0.01" placeholder="0,00"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-check"></i> Responsável pela Análise</div><div class="man-form-field"><input type="text" id="man-manRespSupervisor" placeholder="Nome do supervisor"></div></div>
+            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações da Supervisão</div><div class="man-form-field"><textarea id="man-manObsSupervisor" placeholder="Informações adicionais sobre prazos, negociações ou justificativas..."></textarea></div></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- BOTÕES INFERIORES -->
+        <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
+          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" data-manut-area="manutencao-chamado" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
+          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" data-manut-area="manutencao" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- PAINEL DE CHAMADOS -->
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
+      <div class="man-table-wrap man-table-wrap--linha-unica">
+        <table>
+          <thead><tr>
+            <th style="width: 9%;">Nº</th>
+            <th style="width: 12%;">Máquina</th>
+            <th style="width: 9%;">Setor</th>
+            <th style="width: 9%;">Turno</th>
+            <th style="width: 11%;">Observador</th>
+            <th style="width: 9%;">Tipo</th>
+            <th style="width: 8%;">Prioridade</th>
+            <th style="width: 8%;">Etiqueta</th>
+            <th style="width: 12%;">Status</th>
+            <th style="width: 12%;">Supervisão</th>
+            <th style="width: 10%;">Ações</th>
+          </tr></thead>
+          <tbody id="man-corretivaTableBody"></tbody>
+        </table>
+      </div>
+      <div id="man-pagCorretiva" class="man-pagination man-no-print"></div>
+    </div>
+  </div>
+
+  <!-- PÁGINA: MANUTENÇÃO PROGRAMADA -->
+  <div id="man-programada" class="man-page">
+    <div class="man-dashboard-kpis man-no-print">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progTotal">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Total</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progPendentes" style="color:var(--man-yellow);">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Pendentes</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progAprovados" style="color:var(--man-green);">0</div><div class="man-kpi-label"><i class="fas fa-check-circle"></i> Aprovados</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progReprovados" style="color:var(--man-red);">0</div><div class="man-kpi-label"><i class="fas fa-times-circle"></i> Reprovados</div></div>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-pen-square"></i> Solicitar Manutenção Programada</div>
+      <form class="man-form-paper" onsubmit="return false;">
+        <!-- SEÇÃO 1: DADOS DA SOLICITAÇÃO -->
+        <div style="background:rgba(77,141,255,0.05); border-left:4px solid var(--man-blue); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-blue); font-weight:600;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-progSetor" placeholder="Ex: Injetora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-progMaquina" placeholder="Ex: M01"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-progTipo"><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Solicitante</div><div class="man-form-field"><input type="text" id="man-progSolicitante" placeholder="Seu nome"></div></div>
+        </div>
+        <!-- SEÇÃO 2: PLANEJAMENTO -->
+        <div style="background:rgba(245,130,31,0.05); border-left:4px solid var(--man-orange); padding:10px 0; margin:0;">
+          <div style="padding:0 16px 8px 16px; color:var(--man-orange); font-weight:600;"><i class="fas fa-calendar-check"></i> 2. Planejamento</div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data Programada</div><div class="man-form-field"><input type="date" id="man-progData"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
+            <div class="man-form-field">
+              <select id="man-progTurno">
+                <option value="1º TURNO">1º TURNO</option>
+                <option value="2º TURNO">2º TURNO</option>
+                <option value="3º TURNO">3º TURNO</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Sugestão de Horário</div><div class="man-form-field"><input type="time" id="man-progHora"></div></div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sync-alt"></i> Recorrência</div>
+            <div class="man-form-field">
+              <select id="man-progRecorrencia">
+                <option value="Nenhuma">Nenhuma</option>
+                <option value="Diário">Diário</option>
+                <option value="Semanal">Semanal</option>
+                <option value="Mensal">Mensal</option>
+              </select>
+            </div>
+          </div>
+          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações</div><div class="man-form-field"><textarea id="man-progObs" placeholder="Descreva o motivo ou necessidade..."></textarea></div></div>
+          <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
+            <button type="button" class="man-btn man-btn-primary" data-manut-area="manutencao" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
+            <div id="man-progMensagem" style="font-size:13px; display:flex; align-items:center; color:var(--man-text-secondary);"></div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</div>
+      <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
+      <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+    </div>
+  </div>
+
+  <!-- PÁGINA: VISÃO EXECUTIVA -->
+  <div id="man-dashboard" class="man-page">
+    <div class="man-dashboard-kpis">
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalAbertos">0</div><div class="man-kpi-label"><i class="fas fa-folder-open"></i> Chamados Abertos</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalFechados" style="color:var(--man-green);">0</div><div class="man-kpi-label"><i class="fas fa-check-double"></i> Chamados Fechados</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgMes">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Programadas no Mês</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgHoje">0</div><div class="man-kpi-label"><i class="fas fa-calendar-day"></i> Manut. Hoje</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgPend">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Agend. Pendentes</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoPecas" style="color:var(--man-yellow);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-cogs"></i> Custo Peças</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoMaoObra" style="color:var(--man-blue);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-user-clock"></i> Mão de Obra</div></div>
+      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoTotal" style="color:var(--man-orange);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-coins"></i> Custo Total</div></div>
+    </div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-chart-bar"></i> Evolução de Chamados (últimos 6 meses)</div><canvas id="man-chartManutencao" height="150"></canvas></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-clock"></i> MTTR (Tempo Médio de Reparo) por Máquina</div><div id="man-mttrContainer"></div></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-folder-open"></i> Últimos Chamados Abertos</div><div id="man-dashboardAbertos" style="font-size:13px; color:var(--man-text-secondary);">Nenhum chamado aberto recente.</div></div>
+    <div class="man-card"><div class="man-card-title"><i class="fas fa-check-double"></i> Últimos Chamados Fechados</div><div id="man-dashboardFechados" style="font-size:13px; color:var(--man-text-secondary);">Nenhum chamado fechado recente.</div></div>
+  </div>
+
+  <!-- MODAIS EXISTENTES -->
+  <div id="man-modalRecusaChamado" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-times-circle"></i> Recusar Chamado</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Explique por que este chamado deveria ser recusado. Isso vira uma solicitação pra Supervisão, Encarregado ou Administrador revisarem.</p>
+      <form class="man-form-paper" onsubmit="return false;">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-comment-alt"></i> Motivo</div><div class="man-form-field"><textarea id="man-recusaMotivoInput" placeholder="Ex: Chamado duplicado, fora do escopo da Manutenção, etc."></textarea></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-danger" onclick="confirmarRecusaChamado()"><i class="fas fa-times-circle"></i> Confirmar Recusa</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalRecusaChamado()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalFechamento" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-lock"></i> Confirmar Fechamento do Chamado</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Revise o resumo antes de finalizar:</p>
+      <div id="man-modalResumoBody"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
+        <button class="man-btn man-btn-outline" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="man-modalHistorico" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-eye"></i> Trajetória do Chamado</h2>
+      <div class="man-trajetoria-painel">
+        <div class="man-trajetoria-titulo"><i class="fas fa-route"></i> Progresso do Chamado</div>
+        <div id="man-progressoChamado" class="man-trajetoria-wrap"></div>
+      </div>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Linha do tempo visual do chamado:</p>
+      <div id="man-historicoBody" style="font-size: 14px; line-height: 1.6; max-height: 400px; overflow-y: auto;"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-outline" onclick="fecharModalHistorico()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="man-modalInicioProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-play"></i> Iniciar Execução da Tarefa</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Registre o horário de início da execução.</p>
+      <form id="man-inicioForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-inicioId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-inicioData" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-inicioHora" onchange="calcularTempoEstimado()"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalInicio()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalFinalizarProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-stopwatch"></i> Finalizar Execução da Tarefa</h2>
+      <div id="man-execucaoAvisoAtraso" style="display:none; padding:10px; margin-bottom:12px; border:1px solid var(--man-red); background:rgba(255,92,108,0.1); border-radius:6px; color:var(--man-red); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> Esta tarefa está ATRASADA! Por favor, informe o motivo do atraso ou da não execução no campo abaixo.</div>
+      <form id="man-execForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-execId">
+        <div class="man-form-row" style="background:var(--man-bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Período de Execução</div></div>
+        <div class="man-form-row"><div class="man-form-label">Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataInicio" readonly style="opacity:0.7; cursor:not-allowed;"><label>Hora</label><input type="time" id="man-execHoraInicio" readonly style="opacity:0.7; cursor:not-allowed;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Fim (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataFim" onchange="calcularTempoExecucao()"><label>Hora</label><input type="time" id="man-execHoraFim" onchange="calcularTempoExecucao()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Tempo gasto:</div><div class="man-form-field"><input type="text" id="man-execTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Responsável pela Execução:</div>
+          <div class="man-form-field">
+            <select id="man-execTipoExecucao" onchange="toggleExecEmpresaExterna()">
+              <option value="Interno">Interno</option>
+              <option value="Externo">Empresa Externa</option>
+            </select>
+          </div>
+        </div>
+        <div class="man-form-row" id="man-execEmpresaExternaRow" style="display:none;"><div class="man-form-label">Nome da Empresa:</div><div class="man-form-field"><input type="text" id="man-execEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
+        <div class="man-form-row"><div class="man-form-label">Tarefa executada?</div><div class="man-form-field"><select id="man-execExecutado" onchange="toggleExecucaoCampos()"><option value="Sim">Sim</option><option value="Nao">Não</option></select></div></div>
+        <div class="man-form-row" id="man-execMotivoGroup" style="display:none;"><div class="man-form-label">Motivo da não execução:</div><div class="man-form-field"><textarea id="man-execMotivo" placeholder="Descreva o motivo pelo qual a tarefa não foi executada..." style="width:100%;"></textarea></div></div>
+        <div class="man-form-row"><div class="man-form-label">Técnico Responsável:</div><div class="man-form-field"><input type="text" id="man-execTecnico" placeholder="Nome do técnico que executou" style="width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Observações:</div><div class="man-form-field"><textarea id="man-execObs" placeholder="Informações adicionais sobre a execução..." style="width:100%;"></textarea></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalFinalizar()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalAprovacaoProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-check-circle"></i> Aprovar Tarefa e Definir Horário</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Defina o horário de início e fim estimados para a execução da tarefa.</p>
+      <form id="man-aprForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-aprId">
+        <div class="man-form-row" style="background:var(--man-bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Sugestão do Operador: <span id="man-aprSugestaoDisplay" style="color:var(--man-text-primary); font-weight:600;">--:--</span></div></div>
+        <div class="man-form-row"><div class="man-form-label">Início Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataInicio" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraInicio" onchange="calcularTempoEstimado()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Fim Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataFim" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraFim" onchange="calcularTempoEstimado()"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Duração Estimada:</div><div class="man-form-field"><input type="text" id="man-aprTempoEstimado" readonly placeholder="Calculado automaticamente" style="color:var(--man-orange); font-weight:600; width:100%;"></div></div>
+        <div class="man-form-row"><div class="man-form-label">Responsável pela Aprovação:</div><div class="man-form-field"><input type="text" id="man-aprResponsavel" placeholder="Nome do técnico/supervisor que aprova" style="width:100%;"></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalAprovacao()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="man-modalDetalhesProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-file-alt"></i> Detalhes da Solicitação</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Visualização completa dos dados:</p>
+      <div id="man-detalhesProgramadaBody"></div>
+      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
+        <button class="man-btn man-btn-outline" onclick="fecharModalDetalhesProgramada()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOVO MODAL: REPROVAÇÃO DE AGENDAMENTO -->
+  <div id="man-modalReprovacaoProgramada" class="man-modal-overlay" style="display: none;">
+    <div class="man-modal-content">
+      <h2><i class="fas fa-times-circle" style="color:var(--man-red);"></i> Reprovar Agendamento</h2>
+      <p style="color: var(--man-text-secondary); margin-bottom: 16px; font-size: 14px;">Por favor, informe o motivo da reprovação do agendamento para registro no histórico.</p>
+      <form id="man-reprovacaoForm" class="man-form-paper" onsubmit="return false;">
+        <input type="hidden" id="man-reprovacaoId">
+        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Justificativa</div><div class="man-form-field"><textarea id="man-reprovacaoJustificativa" placeholder="Ex: Não será possível realizar nesta data devido a falta de peças..."></textarea></div></div>
+        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
+          <button type="button" class="man-btn man-btn-danger" data-manut-area="manutencao" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
+          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalReprovacao()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="man-toast-container man-no-print" id="man-toastContainer"></div>
+</div>
+
+      </div>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -2780,15 +3243,18 @@
           <button type="button" id="cfg-nav-dados" onclick="cfgMostrarSecao('dados')"
             style="text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600">
             🔧 Baterias e Montagem</button>
+          <button type="button" id="cfg-nav-paletes" onclick="cfgMostrarSecao('paletes')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🎨 Paletes</button>
           <button type="button" id="cfg-nav-atalhos" onclick="cfgMostrarSecao('atalhos')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             ⌨️ Atalhos de Teclado</button>
+          <button type="button" id="cfg-nav-usuarios" onclick="cfgMostrarSecao('usuarios')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔑 Usuários</button>
           <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔒 Autorizados</button>
-          <button type="button" id="cfg-nav-operadores" onclick="cfgMostrarSecao('operadores')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            👤 Operadores</button>
+            🟢 Operação em Andamento</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -2938,6 +3404,144 @@
           </div>
           <!-- ========== /SEÇÃO: Baterias e Tipos de Montagem ========== -->
 
+          <!-- ========== SEÇÃO: Paletes ========== -->
+          <div id="cfg-secao-paletes" style="display:none">
+
+            <!-- ---- Definir Paletes ---- -->
+            <!-- Direcionamento de painéis por palete (ver public/js/paletes-config.js,
+                 LW.PALETES_CONFIG em data.js, _paletePorMetadeELado em
+                 setor-qualidade.js). 4 selects, um por quadrante (metade da
+                 bateria × lado do berço) — cada um escolhe qual dos 4
+                 paletes-base recebe aquele quadrante. A prévia abaixo mostra o
+                 resultado ao vivo, pras dimensões de bateria já cadastradas
+                 (18/20/22 berços — ver LW.DIMENSAO_OPTS), antes de salvar de
+                 verdade. -->
+            <div style="margin-bottom:28px">
+              <div class="card-title">Definir Paletes</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Cada berço enche 2 painéis — um do lado <strong>Direito</strong>, um do lado <strong>Esquerdo</strong>.
+                Escolha, pra cada metade da bateria e cada lado, qual dos 4 paletes recebe esses painéis.
+                A prévia abaixo mostra o resultado antes de salvar.
+              </p>
+              <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">1ª metade · Lado Direito</label>
+                    <select class="form-input" id="pc-select-direitoPrimeira" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">2ª metade · Lado Direito</label>
+                    <select class="form-input" id="pc-select-direitoSegunda" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">1ª metade · Lado Esquerdo</label>
+                    <select class="form-input" id="pc-select-esquerdoPrimeira" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">2ª metade · Lado Esquerdo</label>
+                    <select class="form-input" id="pc-select-esquerdoSegunda" onchange="pcAoMudarSelect()"></select>
+                  </div>
+                </div>
+                <div id="pc-erro" style="display:none;color:var(--red);font-size:.82rem;margin-top:12px"></div>
+              </div>
+
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+                Prévia — berços visuais</div>
+              <div id="pc-abas-dimensao" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
+              <div id="pc-preview" style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;overflow-x:auto"></div>
+            </div>
+            <!-- ---- /Definir Paletes ---- -->
+
+            <hr class="divider">
+
+            <!-- ---- Ordem dos Paletes ---- -->
+            <!-- Posição VISUAL de cada palete na tela do Setor de Qualidade
+                 (ver public/js/paletes-ordem.js, LW.PALETES_ORDEM em
+                 data.js). Segurar "PALETE N" e arrastar pra cima de outro
+                 troca a posição dos dois aqui no rascunho — só vira valor de
+                 verdade ao clicar "✓ Salvar Configurações", igual ao resto
+                 desta aba. Layout 2x2, mesma disposição da tela real. -->
+            <div style="margin-bottom:28px">
+              <div class="card-title">Ordem dos Paletes</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Escolha em qual posição cada palete aparece na tela do Setor de Qualidade. Segure o rótulo
+                de um palete e arraste sobre outro pra trocar os dois de lugar. A posição salva aqui é a
+                que aparece na avaliação.
+              </p>
+              <div id="po-grid"
+                style="display:flex;flex-wrap:wrap;gap:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              </div>
+            </div>
+            <!-- ---- /Ordem dos Paletes ---- -->
+
+            <hr class="divider">
+
+            <!-- ---- Combinações de Avaliação ---- -->
+            <!-- Pra cada tipo de montagem SIMPLES (não híbrida — ver
+                 public/js/paletes-combinacoes.js): lista de tipos "sem
+                 combinação" (chips clicáveis) → clicar abre um painel
+                 único de marcação visual (cor + forma, igual ao gesto de
+                 avaliação de verdade) + um botão "i" pra marcar qual
+                 marca é o indicador de qualidade (a que recebe a cor
+                 real — verde/vermelho/azul — na avaliação de verdade;
+                 aqui aparece sempre cinza, é só configuração) → ao
+                 salvar, sai da lista "sem combinação" e entra em
+                 "Combinações definidas", com um botão de editar do lado.
+                 Edita direto em _cfgDados.montagens (mesmo rascunho de
+                 "Baterias e Tipos de Montagem") — só vira valor de
+                 verdade ao clicar "✓ Salvar Configurações", igual ao
+                 resto desta aba. -->
+            <div style="margin-bottom:8px">
+              <div class="card-title">Combinações de Avaliação</div>
+              <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+                Pra cada tipo de montagem simples, monte a combinação de marcação usada na avaliação da
+                Qualidade e marque qual delas é o <strong>indicador de qualidade</strong> (botão "i") — a
+                marca que recebe a cor real (verde/vermelho/azul) conforme o painel é aprovado, reprovado
+                ou vira 2ª linha. As demais marcas viram identidade fixa, preenchida sozinha. Um tipo de
+                montagem novo aparece na lista "Sem combinação" automaticamente.
+              </p>
+
+              <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Sem combinação</div>
+              <div id="pca-sem-combinacao" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
+
+              <div id="pca-editor" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+                  <strong id="pca-editor-titulo" style="font-family:var(--font-display);font-size:.95rem"></strong>
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="pcaFecharEditor()">✕ Cancelar</button>
+                </div>
+                <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">
+                  <div>
+                    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Cor</div>
+                    <div id="pca-editor-cores" style="display:flex;gap:6px"></div>
+                  </div>
+                  <div>
+                    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:6px">Forma / marcar indicador</div>
+                    <div id="pca-editor-formas" style="display:flex;gap:6px;align-items:center"></div>
+                  </div>
+                </div>
+                <div id="pca-painel" onclick="pcaCliqueNoPainel()" style="cursor:pointer;min-height:52px;display:flex;align-items:center;gap:2px;padding:10px 14px;background:var(--bg-3);border:1px dashed var(--border);border-radius:8px;margin-bottom:10px"></div>
+                <p id="pca-editor-dica" style="font-size:.76rem;color:var(--text-3);margin-bottom:14px"></p>
+                <div style="display:flex;gap:10px;justify-content:flex-end">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="pcaLimparPainel()">Limpar</button>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="pcaSalvarCombinacao()">Salvar Combinação</button>
+                </div>
+              </div>
+
+              <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700;margin-bottom:8px">Combinações definidas</div>
+              <div id="pca-definidas-lista"></div>
+            </div>
+            <!-- ---- /Combinações de Avaliação ---- -->
+
+            <hr class="divider">
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+              <button class="btn btn-ghost" onclick="fecharConfigComConfirmacao()">Cancelar</button>
+              <button class="btn btn-primary" onclick="cfgSalvar()">✓ Salvar Configurações</button>
+            </div>
+
+          </div>
+          <!-- ========== /SEÇÃO: Paletes ========== -->
+
           <!-- ========== SEÇÃO: Atalhos de Teclado ========== -->
           <div id="cfg-secao-atalhos" style="display:none">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">
@@ -2947,7 +3551,7 @@
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px">
               Escolha a combinação mais confortável pra você em cada atalho. Clique em "Alterar" e pressione a nova
               combinação — precisa ter ao menos uma tecla modificadora (Ctrl, Alt ou Shift), exceto teclas F1–F12.
-              Fica salvo só neste navegador.
+              <span id="cfg-atalhos-onde-salva">Fica salvo só neste navegador.</span>
             </p>
 
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px">
@@ -2968,76 +3572,104 @@
           </div>
           <!-- ========== /SEÇÃO: Atalhos de Teclado ========== -->
 
-          <!-- ========== SEÇÃO: Dispositivos Autorizados ========== -->
-          <div id="cfg-secao-autorizados" style="display:none">
-            <div class="card-title">Dispositivos Autorizados</div>
+          <!-- ========== SEÇÃO: Usuários ========== -->
+          <!-- Cadastro de usuário+senha com PERFIL — login de verdade
+               (ver login.html, POST /login-usuario) — o perfil escolhido
+               aqui decide exatamente o que a pessoa pode acessar (ver
+               lib/perfis.js). Só o Administrador Master (senha mestra)
+               vê esta aba — nenhum perfil cadastrado, nem Administrativo,
+               tem permissão de gerenciar outros usuários. -->
+          <div id="cfg-secao-usuarios" style="display:none">
+            <div class="card-title">🔑 Usuários</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Controla quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong>.
-              Enquanto a lista estiver <strong>vazia</strong>, qualquer computador pode controlar (comportamento
-              atual). Ao autorizar pelo menos um dispositivo aqui, só os da lista podem controlar — os demais
-              continuam podendo acompanhar a operação ao vivo, só não interagir.
+              Cada usuário entra com <strong>usuário e senha próprios</strong>, e o <strong>perfil</strong>
+              escolhido aqui decide o que essa pessoa pode acessar — ela não escolhe isso na hora do login,
+              já entra direto com as permissões definidas neste cadastro.
+            </p>
+
+            <!-- ========== Tipos de Perfil (fixos + customizados) ========== -->
+            <!-- Além dos 6 perfis fixos do sistema, o Administrador pode
+                 CRIAR novos tipos de perfil com um mapa de permissões
+                 próprio, item por item (ver modal-criar-perfil.html,
+                 lib/perfis-customizados.js). Esta lista mostra só os
+                 perfis CUSTOMIZADOS já criados — os 6 fixos não aparecem
+                 aqui (não são editáveis/excluíveis, sempre existem). -->
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">
+                  Tipos de Perfil Customizados</div>
+                <button class="btn btn-outline-accent btn-sm" onclick="abrirCriarPerfil()">+ Criar novo tipo de perfil</button>
+              </div>
+              <div id="cfg-perfis-customizados-lista" style="display:flex;flex-direction:column;gap:8px">
+                <span style="color:var(--text-3);font-size:.82rem">Nenhum perfil customizado criado ainda.</span>
+              </div>
+            </div>
+            <!-- ========== /Tipos de Perfil ========== -->
+
+            <div id="cfg-usuarios-status" style="margin-bottom:18px"></div>
+
+            <div id="cfg-usuarios-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+            </div>
+
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Adicionar Usuário</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+                  <label class="form-label">Usuário</label>
+                  <input class="form-input" id="cfg-usuario-nome" placeholder="Ex: joao.silva">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+                  <label class="form-label">Senha</label>
+                  <input class="form-input" id="cfg-usuario-senha" type="password" placeholder="Mínimo 4 caracteres">
+                </div>
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
+                  <label class="form-label">Perfil</label>
+                  <!-- Opções preenchidas dinamicamente por
+                       _cfgPopularSelectPerfil() (app-core.js), a partir de
+                       GET /perfis (rotulosPorPerfil + perfisCadastraveis)
+                       — inclui os 6 fixos E qualquer perfil customizado já
+                       criado, sem precisar hardcodar <option> nenhuma aqui. -->
+                  <select class="form-input" id="cfg-usuario-perfil" onchange="cfgAtualizarCampoPodeIniciarOperacao()">
+                  </select>
+                </div>
+              </div>
+              <!-- Só aparece pra perfis que de fato têm a página "Registrar
+                   Operação" liberada (ver cfgAtualizarCampoPodeIniciarOperacao,
+                   app-core.js) — pros outros, a marcação não significaria
+                   nada, então nem mostra o campo. -->
+              <div id="cfg-usuario-pode-iniciar-wrap" style="margin-top:14px;display:none">
+                <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text-2);cursor:pointer">
+                  <input type="checkbox" id="cfg-usuario-pode-iniciar">
+                  Pode iniciar/encerrar operações em Registrar Operação
+                </label>
+              </div>
+              <div style="margin-top:14px">
+                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarUsuario()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Usuários ========== -->
+
+          <!-- ========== SEÇÃO: Operação em Andamento ========== -->
+          <!-- Antes era "Dispositivos Autorizados" (lista de deviceId que
+               podiam controlar operações) — removido (ver conversa que
+               motivou a mudança): quem pode controlar agora é decidido
+               pela sessão de usuário logado (podeIniciarOperacao no
+               cadastro, ver aba Usuários / lib/perfis.js), não mais por
+               computador. O que sobra útil aqui é só visualizar/cancelar
+               a operação em andamento agora, se houver uma. -->
+          <div id="cfg-secao-autorizados" style="display:none">
+            <div class="card-title">Operação em Andamento</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong> é definido
+              por pessoa (aba <strong>Usuários</strong> — permissão "Pode iniciar/encerrar operações"), não mais
+              por computador. Aqui dá pra ver se há uma operação em andamento agora e cancelá-la, se precisar.
             </p>
 
             <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
-
-            <div id="cfg-autorizados-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-            </div>
-
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Autorizar Novo Dispositivo</div>
-              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
-                  <label class="form-label">Nome (opcional)</label>
-                  <input class="form-input" id="cfg-autorizado-nome" placeholder="Ex: Sala de Controle">
-                </div>
-                <div class="form-group" style="margin-bottom:0;flex:2;min-width:240px">
-                  <label class="form-label">Device ID</label>
-                  <input class="form-input" id="cfg-autorizado-deviceid"
-                    style="font-family:var(--font-mono);font-size:.78rem">
-                </div>
-                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarAutorizado()">+ Autorizar</button>
-              </div>
-              <p style="font-size:.74rem;color:var(--text-3);margin-top:10px;margin-bottom:0">
-                💡 Pra autorizar <strong>este</strong> computador, o Device ID dele já vem preenchido acima.
-              </p>
-            </div>
           </div>
-          <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
-
-          <!-- ========== SEÇÃO: Operadores (Identidade Leve) ========== -->
-          <div id="cfg-secao-operadores" style="display:none">
-            <div class="card-title">Operadores</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Cadastro opcional pra saber <strong>quem registrou o quê</strong> (Registrar Operação, Registro de
-              Paradas). Cada operador tem um PIN de 4 a 8 dígitos, pedido uma vez por aba do navegador — não é
-              login nem trava nada: enquanto ninguém estiver cadastrado aqui, o sistema funciona exatamente como
-              antes, sem perguntar nada a ninguém.
-            </p>
-
-            <div id="cfg-operadores-status" style="margin-bottom:18px"></div>
-
-            <div id="cfg-operadores-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-            </div>
-
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Adicionar Operador</div>
-              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:2;min-width:160px">
-                  <label class="form-label">Nome</label>
-                  <input class="form-input" id="cfg-operador-nome" placeholder="Ex: João Silva">
-                </div>
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
-                  <label class="form-label">PIN (4 a 8 dígitos)</label>
-                  <input class="form-input" id="cfg-operador-pin" type="password" inputmode="numeric" maxlength="8"
-                    style="font-family:var(--font-mono)">
-                </div>
-                <button class="btn btn-outline-accent btn-sm" onclick="cfgAdicionarOperador()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Operadores ========== -->
+          <!-- ========== /SEÇÃO: Operação em Andamento ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
@@ -3108,6 +3740,51 @@
 
     </div>
   </div>
+<!-- ============ MODAL: Criar / Editar Tipo de Perfil ============ -->
+<!-- Aberto por abrirCriarPerfil()/abrirEditarPerfil(id) (ver
+     public/js/perfis-customizados.js), de dentro de Configurações →
+     Usuários. O catálogo de itens (páginas, dashboards, sub-itens,
+     "Outros", Configurações) vem de GET /catalogo-permissoes — nada aqui
+     é hardcoded em HTML, pra nunca ficar dessincronizado da fonte única de
+     verdade (lib/itens-permissao.js). z-index maior que o de
+     Configurações (999) porque abre POR CIMA dele, sem fechá-lo. -->
+<div id="criar-perfil-modal"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1050;align-items:center;justify-content:center">
+  <div
+    style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:760px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-shrink:0">
+      <h2 id="cp-titulo" style="font-family:var(--font-display);font-size:1.3rem;color:var(--accent);letter-spacing:.08em">
+        ➕ CRIAR NOVO TIPO DE PERFIL</h2>
+      <button onclick="fecharCriarPerfil()"
+        style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+
+    <div style="overflow-y:auto;flex:1;padding-right:4px">
+      <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+        Marque, item por item, o que este perfil pode fazer: <strong>Acesso Total</strong> (vê e edita/registra),
+        <strong>Apenas Visualizar</strong> (vê a tela, sem poder editar/registrar) ou <strong>Ocultar</strong>
+        (nem aparece pra esse perfil). Item não marcado fica <strong>Oculto</strong> por padrão.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Nome do Perfil</label>
+        <input class="form-input" id="cp-nome" placeholder="Ex: Líder de Turno">
+      </div>
+      <div id="cp-erro" style="display:none;color:var(--red);font-size:.82rem;margin:10px 0"></div>
+
+      <div id="cp-catalogo" style="margin-top:12px;display:flex;flex-direction:column;gap:20px">
+        <span style="color:var(--text-3);font-size:.82rem">Carregando catálogo de permissões...</span>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-shrink:0">
+      <button class="btn btn-ghost" onclick="fecharCriarPerfil()">Cancelar</button>
+      <button class="btn btn-primary" id="cp-btn-salvar" onclick="salvarPerfilCustomizado()">Salvar Perfil</button>
+    </div>
+  </div>
+</div>
+<!-- ============ /MODAL: Criar / Editar Tipo de Perfil ============ -->
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -3115,14 +3792,23 @@
        Qualidade; antes só carregados dentro do iframe próprio. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Pako — usado só por decompressPDF (js/manutencao.js), pra abrir PDFs
+       antigos que porventura tenham sido salvos comprimidos com GZIP por
+       uma versão anterior do protótipo (novos PDFs não são mais
+       comprimidos, ver compressPDF). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
-  <script src="js/operador.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/setor-qualidade.js"></script>
+  <script src="js/manutencao.js"></script>
   <script src="js/app-core.js"></script>
+  <script src="js/perfis-customizados.js"></script>
+  <script src="js/paletes-config.js"></script>
+  <script src="js/paletes-ordem.js"></script>
+  <script src="js/paletes-combinacoes.js"></script>
 <!-- ============ MODAL: EDITAR OPERAÇÃO ============ -->
   <div id="editar-operacao-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -3547,9 +4233,10 @@
       <!-- Passo 0: escolher o arquivo -->
       <div id="restaurar-step-0">
         <p style="color:var(--text-2);font-size:.9rem;margin-bottom:20px">
-          Restaura <strong>config, histórico, relatório de injeção, segurança, sobra e contador de traços</strong> a
-          partir de um arquivo gerado pelo botão "Backup de Dados" (.zip). Uma cópia de segurança do estado atual é
-          salva automaticamente no servidor antes de qualquer substituição.
+          Restaura <strong>dados de produção</strong> — histórico de operações, relatório de injeção, paradas, sobra,
+          contador de traços, avaliações de qualidade — a partir de um arquivo gerado pelo botão "Backup de Dados"
+          (.zip). Uma cópia de segurança do estado atual é salva automaticamente no servidor antes de qualquer
+          substituição.
         </p>
 
         <div style="
@@ -3704,14 +4391,12 @@
       <!-- Passo 0: escolher o arquivo -->
       <div id="restaurar-geral-step-0">
         <p style="color:var(--text-2);font-size:.9rem;margin-bottom:12px">
-          Restaura <strong>o programa inteiro</strong> (servidor, páginas, código e dados) a partir de um arquivo
+          Restaura <strong>dados de produção + configurações + usuários cadastrados</strong> a partir de um arquivo
           gerado pelo botão "Backup Geral" (.zip).
         </p>
-        <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:20px">
-          ⚠ Depois de restaurar, é preciso <u>reiniciar o servidor manualmente</u> (ex: Ctrl+C e "npm start", ou
-          "pm2 restart") para que mudanças no código do servidor tenham efeito. As páginas (HTML/CSS/JS) já aparecem
-          atualizadas no próximo carregamento, mas o processo do servidor continua rodando o código antigo até
-          reiniciar.
+        <p style="color:var(--text-3);font-size:.85rem;margin-bottom:20px">
+          Usuários e senha de administrador só são alterados se o backup incluir esses arquivos — um backup mais
+          antigo, sem eles, restaura normalmente e mantém o cadastro atual intacto.
         </p>
 
         <div style="
@@ -3743,8 +4428,9 @@
         </div>
 
         <p style="color:var(--red);font-size:.85rem;font-weight:600;margin-bottom:16px">
-          ⚠ Isso vai substituir TODO o código e os dados atuais pelos deste backup. Uma cópia de segurança completa
-          do estado atual será salva automaticamente no servidor antes da substituição.
+          ⚠ Isso vai substituir os dados de produção e configurações atuais pelos deste backup (usuários/senha de
+          administrador só se o backup os incluir). Uma cópia de segurança do estado atual será salva
+          automaticamente no servidor antes da substituição.
         </p>
 
         <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">

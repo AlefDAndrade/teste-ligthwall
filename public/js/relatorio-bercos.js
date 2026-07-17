@@ -1,8 +1,9 @@
 // ─── relatorio-bercos.js — Página "Relatório de Berços" ────────────────────
 // Mostra, 1 linha por bateria já registrada, o resultado visual de cada
-// lado de cada berço daquela bateria: 'okay' ou 'baixou' (exibido como
-// "Vazou") — dados vêm de bercos_visuais, via db.relatorioBercos() (ver
-// GET /db/relatorio_bercos.json, server.js).
+// lado de cada berço daquela bateria: 'okay', 'baixou' (exibido como
+// "Vazou") ou 'nao_enchido' (exibido como "Não enchido") — dados vêm de
+// bercos_visuais, via db.relatorioBercos() (ver GET /db/relatorio_bercos.json,
+// server.js).
 //
 // Colunas fixas B1..B22 (MAX_BERCOS): nem toda bateria usa as 22 posições
 // — os berços que aquela bateria específica não teve ficam em branco ("—"),
@@ -13,15 +14,21 @@
   const MAX_BERCOS = 22;
 
   // Valores reais gravados no banco -> rótulo exibido (ver db.js,
-  // CREATE TABLE bercos_visuais: "estado_esquerda"/"estado_direita" só
-  // assumem 'okay'/'baixou' por enquanto).
-  const ESTADO_LABEL = { okay: 'Okay', baixou: 'Vazou' };
-  const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)' };
+  // CREATE TABLE bercos_visuais: "estado_esquerda"/"estado_direita"
+  // assumem 'okay' | 'baixou' | 'nao_enchido'). "Não enchido" tem cor
+  // PRÓPRIA (azul, mesma usada pra 2ª linha no Setor de Qualidade e pro
+  // "✕" em bateria-atual.js) — de propósito diferente do vermelho de
+  // "baixou": são conceitos diferentes (vazamento observado vs painel
+  // que nunca existiu pra avaliar).
+  const ESTADO_LABEL = { okay: 'Okay', baixou: 'Vazou', nao_enchido: 'Não enchido' };
+  const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)', nao_enchido: 'var(--sq-cor-azul, var(--blue))' };
 
-  // Total de vazamentos de UMA bateria/linha — soma os 2 lados (esquerdo +
-  // direito) de todo berço marcado como 'baixou'. Usada tanto na coluna
-  // nova da tabela quanto no resumo do Modo Visual e do popover — 1 lugar
-  // só pra não recontar diferente em cada visualização.
+  // Total de VAZAMENTOS de UMA bateria/linha — soma os 2 lados (esquerdo +
+  // direito) de todo berço marcado como 'baixou'. De propósito, NÃO conta
+  // 'nao_enchido' aqui — são conceitos diferentes (o painel nem existiu
+  // pra vazar) e essa contagem é especificamente de vazamentos, usada
+  // tanto na coluna da tabela quanto no resumo do Modo Visual e do
+  // popover — 1 lugar só pra não recontar diferente em cada visualização.
   function _contarVazamentos(linha) {
     return (linha.bercos || []).reduce((soma, b) => {
       if (b.estado_esquerda === 'baixou') soma++;
@@ -216,15 +223,20 @@
   function _montarGradeBercos(linha) {
     const bercosOrdenados = (linha.bercos || []).slice().sort((a, b) => a.ordem - b.ordem);
     return `<div class="ba-grid">${bercosOrdenados.map(b => {
-      const dirMarcado = b.estado_direita === 'baixou';
-      const esqMarcado = b.estado_esquerda === 'baixou';
+      // "✕" (não enchido) é um estado À PARTE de "baixou" (vazamento) —
+      // mesma distinção de bateria-atual.js/ESTADO_LABEL acima: o painel
+      // nunca existiu pra avaliar, diferente de um vazamento observado.
+      const dirNaoEnchido = b.estado_direita === 'nao_enchido';
+      const esqNaoEnchido = b.estado_esquerda === 'nao_enchido';
+      const dirMarcado = b.estado_direita === 'baixou' || dirNaoEnchido;
+      const esqMarcado = b.estado_esquerda === 'baixou' || esqNaoEnchido;
       const numero = String(b.ordem).padStart(2, '0');
       const cor = _corDoBerco(linha, b.ordem);
       return `
         <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${dirNaoEnchido ? 'Direito — Não enchido' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
         </div>`;
     }).join('')}</div>`;
   }

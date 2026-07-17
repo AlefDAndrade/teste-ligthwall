@@ -163,7 +163,18 @@
     if (!iso) return '—';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '—';
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    // timeZone:'UTC' de propósito — op.inicio/op.fim (de uma Operação, ver
+    // Registrar Operação) são gravados via nowBrasilia().toISOString()
+    // (data.js), que guarda o valor UTC do Date já AJUSTADO pra
+    // representar o horário de Brasília (ver comentário de nowBrasilia())
+    // — não é um instante UTC de verdade. Sem timeZone:'UTC' aqui, o
+    // navegador aplicava a conversão de fuso REAL em cima desse valor já
+    // ajustado, deslocando o horário mostrado (bug real relatado pelo
+    // usuário: bateria feita às 14h aparecia como feita às 11h — exatos
+    // os 3h do fuso de Brasília, um deslocamento em dobro). Mesma
+    // correção já aplicada em dashboard.js ("Hora Início"/"Hora Fim") e
+    // em qualquer outro lugar que formate esses mesmos campos.
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   }
   // tempo_batida ORIGINAL do traço é gravado em SEGUNDOS (ver CREATE
   // TABLE tracos, db.js) — os ajustes ("Tempo de Batida Adicionado" em
@@ -237,16 +248,23 @@
     }
 
     el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
-      const dirMarcado = b.estado_direita === 'baixou';
-      const esqMarcado = b.estado_esquerda === 'baixou';
+      // "✕" (não enchido) é um estado À PARTE de "baixou" (vazamento) —
+      // mesma distinção de bateria-atual.js: o painel nunca existiu pra
+      // avaliar, diferente de um vazamento observado. Sem checar os dois
+      // estados, um lado marcado como não enchido aparecia como se
+      // estivesse tudo normal (bug relatado).
+      const dirNaoEnchido = b.estado_direita === 'nao_enchido';
+      const esqNaoEnchido = b.estado_esquerda === 'nao_enchido';
+      const dirMarcado = b.estado_direita === 'baixou' || dirNaoEnchido;
+      const esqMarcado = b.estado_esquerda === 'baixou' || esqNaoEnchido;
       const numero = String(b.ordem).padStart(2, '0');
       const tipoBerco = ehPersonalizada ? (gradePersonalizada[b.ordem - 1] || null) : (op ? op.tipo_montagem : null);
       const cor = _corPorTipoBerco(ehPersonalizada, tipoBerco);
       return `
         <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}" title="Direito">•</span>
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${dirNaoEnchido ? 'Direito — Não enchido' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}" title="Esquerdo">•</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
         </div>`;
     }).join('')}</div>`;
   }
@@ -324,8 +342,8 @@
         ['Cimento', _fmtKg(t.original.cimento), 'kg'],
         ['Água', _fmtKg(t.original.agua), 'kg'],
         ['EPS', _fmtKg(t.original.eps), 'kg'],
-        ['Superplast.', _fmtKg(t.original.superplast, 3), 'kg'],
-        ['Incorp. de Ar', _fmtKg(t.original.incorporador, 3), 'kg'],
+        ['Superplast.', _fmtKg(t.original.superplast), 'kg'],
+        ['Incorp. de Ar', _fmtKg(t.original.incorporador), 'kg'],
         ['Tempo de Batida', _fmtTempoBatidaOriginal(t.original.tempo_batida), ''],
         ['Densidade', t.densidade ?? null, 'kg/m³'],
         ['Flow', t.flow ?? null, ''],
@@ -345,8 +363,8 @@
                  ${a.cimento ? `<span>Cimento +${_fmtKg(a.cimento)}kg</span>` : ''}
                  ${a.agua ? `<span>Água +${_fmtKg(a.agua)}kg</span>` : ''}
                  ${a.eps ? `<span>EPS +${_fmtKg(a.eps)}kg</span>` : ''}
-                 ${a.superplast ? `<span>Superplast. +${_fmtKg(a.superplast, 3)}kg</span>` : ''}
-                 ${a.incorporador ? `<span>Incorp. +${_fmtKg(a.incorporador, 3)}kg</span>` : ''}
+                 ${a.superplast ? `<span>Superplast. +${_fmtKg(a.superplast)}kg</span>` : ''}
+                 ${a.incorporador ? `<span>Incorp. +${_fmtKg(a.incorporador)}kg</span>` : ''}
                </div>`).join('')}
            </div>`;
 
@@ -448,7 +466,11 @@
     const paineis = avaliacao.paineis || [];
 
     let html = '<div class="af-paineis-grid">';
-    for (let p = 1; p <= 4; p++) {
+    // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
+    // na 2ª (layout 2x2) — só a ORDEM DE EXIBIÇÃO muda; os dados de cada
+    // pallet continuam vindo do mesmo número de sempre (avaliacao.paineis,
+    // montagem['palletN']), sem nenhuma outra mudança.
+    [2, 1, 3, 4].forEach(p => {
       // Tipo de montagem daquele pallet — "no cantinho", cabeçalho do
       // próprio card do pallet, não em cada painel individual.
       const tipoMontPallet = montagem['pallet' + p] || '—';
@@ -462,7 +484,7 @@
         </div>`;
       }
       html += '</div></div>';
-    }
+    });
     html += '</div>';
     el.innerHTML = html;
   }
@@ -578,7 +600,7 @@
   .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
   .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
   .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+  .af-paineis-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
   .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
   .af-pallet-tipo { font-size:.66rem; font-weight:600; background:var(--border); color:var(--text-3); padding:2px 8px; border-radius:999px; }
@@ -651,5 +673,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, fmtHora: _fmtHora };
 })();

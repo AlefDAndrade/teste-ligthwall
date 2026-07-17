@@ -33,14 +33,41 @@
     } catch (_) { return '—'; }
   }
 
-  function valorFinal(v) {
+  /**
+   * Extrai o valor "final" de um campo que pode vir como número simples
+   * ou como objeto {original, ajustes: [...]}.
+   *
+   * BUG CORRIGIDO (ver conversa que motivou isso — Traço 9 aparecia com
+   * FLOW 123 e DENSIDADE 1.208, quando o valor real era 40 e 413): esta
+   * função somava original+ajustes pra QUALQUER campo, mas isso só está
+   * certo pra campos de INSUMO (cimento/água/eps/superplast/incorporador
+   * — cada ajuste É material adicionado de fato na batelada, então soma
+   * mesmo). Para campos de RESULTADO/medição (densidade, flow) cada
+   * "ajuste" é uma REMEDIÇÃO — uma leitura nova feita depois, que
+   * substitui a anterior, não se soma a ela (mesma leitura de água não
+   * "aumenta" só porque foi medida de novo). O resto do sistema já trata
+   * isso certo (ver db.js, "Final = última remedição" em rowParaTraco; e
+   * dashboard.js, _valRel/isResultado) — só faltava aqui.
+   * @param {*} v - valor bruto do campo (número ou objeto {original, ajustes})
+   * @param {boolean} ehResultado - true pra densidade/flow (última
+   *   remedição vale); false/omitido pra insumos (soma tudo).
+   */
+  function valorFinal(v, ehResultado) {
     if (v === null || v === undefined || v === '') return null;
     if (typeof v === 'object') {
       if (v.total !== undefined && v.total !== '') return parseFloat(v.total);
       const ajustes = Array.isArray(v.ajustes) ? v.ajustes : [];
       const base = parseFloat(v.original);
-      if (ajustes.length)
+      if (ajustes.length) {
+        if (ehResultado) {
+          // Resultado/medição: a remedição mais recente é o valor de
+          // verdade — nunca soma com o original nem com remedições
+          // anteriores.
+          const ultimo = parseFloat(ajustes[ajustes.length - 1]);
+          return isNaN(ultimo) ? (isNaN(base) ? null : base) : ultimo;
+        }
         return ajustes.reduce((s, a) => s + (parseFloat(a) || 0), isNaN(base) ? 0 : base);
+      }
       return isNaN(base) ? null : base;
     }
     const n = parseFloat(v);
@@ -92,9 +119,9 @@
             const reaproveitado = usoIdx > 0;
             tracos.push({
               num_traco:       traco.num_traco,
-              flow:            valorFinal(traco.flow),
-              densidade:       valorFinal(traco.densidade),
-              densidade_eps:   valorFinal(traco.densidade_eps),
+              flow:            valorFinal(traco.flow, true),
+              densidade:       valorFinal(traco.densidade, true),
+              densidade_eps:   valorFinal(traco.densidade_eps, true),
               berco_inicio:    uso.berco_inicio,
               berco_fim:       uso.berco_finalizacao,
               obs:             (uso.obs !== undefined ? uso.obs : (traco.obs || '')).trim(),
