@@ -20,7 +20,13 @@
 
 let _cpCatalogoCache = null;      // array de itens (GET /catalogo-permissoes), carregado 1x
 let _cpPerfisCustomizadosCache = []; // lista de perfis customizados já criados
-let _cpEditandoId = null;         // null = criando um perfil novo; string = editando esse id
+let _cpEditandoId = null;         // null = criando um perfil novo; string = editando esse id (CUSTOMIZADO)
+// Editando as permissões de um dos 6 perfis FIXOS (voltou — ver conversa
+// que motivou a mudança: engrenagem ⚙️ ao lado do campo "Perfil" em
+// Configurações → Usuários) — null = não é este o modo; string = editando
+// este perfil fixo (id, ex: "OperadorInjetora"). Nunca os dois setados ao
+// mesmo tempo — sempre um dos dois é null.
+let _cpEditandoPerfilFixo = null;
 
 // Rótulos amigáveis pros grupos do catálogo (tipo -> título da seção) —
 // a ORDEM aqui também decide a ordem de exibição no modal.
@@ -109,7 +115,21 @@ async function cfgRenderPerfisCustomizados() {
 // pra não prometer um controle que ainda não existe de verdade.
 function _cpItemAindaExclusivoDoAdmin(item) {
   if (item.tipo === 'acao') return true;
-  if (item.tipo === 'config' && item.id !== 'config-atalhos') return true;
+  if (item.tipo === 'config' && item.id !== 'config-atalhos') {
+    // Editando um dos 6 perfis FIXOS (voltou — ver conversa que motivou a
+    // mudança: engrenagem ao lado do campo "Perfil"), a trava abaixo NÃO
+    // se aplica — perfis fixos JÁ têm as abas de Configurações
+    // mostradas/escondidas de verdade (ABAS_CONFIG_ADMIN/TODOS,
+    // lib/perfis.js), diferente de um perfil CUSTOMIZADO novo (onde a
+    // maioria ainda não tem esse enforcement, ver comentário abaixo) —
+    // destravar aqui só deixa a tela refletir o que já é real, sem
+    // prometer nada novo. Rotas administrativas sensíveis (SQL, backup,
+    // importação) continuam checando a IDENTIDADE do perfil à parte (ver
+    // ehPerfilDeAdmin/temPoderesDeAdmin, server.js), não o catálogo —
+    // então mudar isto aqui não abre brecha de segurança nova nenhuma.
+    if (_cpEditandoPerfilFixo) return false;
+    return true;
+  }
   return false;
 }
 
@@ -192,10 +212,14 @@ function _cpColetarPermissoesDoFormulario() {
 
 async function abrirCriarPerfil() {
   _cpEditandoId = null;
+  _cpEditandoPerfilFixo = null;
   document.getElementById('cp-titulo').textContent = '➕ CRIAR NOVO TIPO DE PERFIL';
+  document.getElementById('cp-nome-grupo').style.display = '';
+  document.getElementById('cp-aviso-fixo').style.display = 'none';
   document.getElementById('cp-nome').value = '';
   document.getElementById('cp-nome').disabled = false;
   document.getElementById('cp-erro').style.display = 'none';
+  document.getElementById('cp-btn-restaurar').style.display = 'none';
   document.getElementById('cp-btn-salvar').textContent = 'Salvar Perfil';
   await _cpRenderCatalogo({}); // tudo começa oculto — admin decide o que liberar
   document.getElementById('criar-perfil-modal').style.display = 'flex';
@@ -207,27 +231,96 @@ async function abrirEditarPerfil(id) {
   if (!perfil) { LW.mostrarAlerta('Perfil customizado não encontrado — a lista pode ter mudado, recarregue.', { tipo: 'erro' }); return; }
 
   _cpEditandoId = id;
+  _cpEditandoPerfilFixo = null;
   document.getElementById('cp-titulo').textContent = '✎ EDITAR TIPO DE PERFIL';
+  document.getElementById('cp-nome-grupo').style.display = '';
+  document.getElementById('cp-aviso-fixo').style.display = 'none';
   document.getElementById('cp-nome').value = perfil.nome;
   document.getElementById('cp-nome').disabled = false;
   document.getElementById('cp-erro').style.display = 'none';
+  document.getElementById('cp-btn-restaurar').style.display = 'none';
   document.getElementById('cp-btn-salvar').textContent = 'Salvar Alterações';
   await _cpRenderCatalogo(perfil.permissoes || {});
   document.getElementById('criar-perfil-modal').style.display = 'flex';
 }
 
+// Abre a engrenagem ⚙️ ao lado do campo "Perfil" em Adicionar Usuário —
+// mesma tela de catálogo (Acesso Total / Apenas Visualizar / Ocultar),
+// agora pra um dos 6 perfis FIXOS do sistema (voltou — ver conversa que
+// motivou a mudança). Sem override salvo ainda, vem pré-marcada com o
+// comportamento hardcoded ATUAL daquele perfil (ver GET
+// /permissoes-perfil-fixo, lib/perfis.js permissoesPadraoDoPerfilFixo) —
+// não começa em branco como um perfil customizado novo.
+async function abrirEditarPermissoesFixo(perfilId) {
+  let data;
+  try {
+    const res = await fetch(`/permissoes-perfil-fixo?perfil=${encodeURIComponent(perfilId)}`);
+    data = await res.json();
+    if (!data.ok) throw new Error(data.erro || 'Não foi possível carregar as permissões deste perfil.');
+  } catch (e) {
+    LW.mostrarAlerta(e.message, { tipo: 'erro' });
+    return;
+  }
+
+  _cpEditandoId = null;
+  _cpEditandoPerfilFixo = perfilId;
+  document.getElementById('cp-titulo').textContent = `⚙️ PERMISSÕES — ${_escaparHtmlLocal(data.rotulo || perfilId)}`;
+  document.getElementById('cp-nome-grupo').style.display = 'none';
+  document.getElementById('cp-aviso-fixo').style.display = 'block';
+  document.getElementById('cp-erro').style.display = 'none';
+  document.getElementById('cp-btn-restaurar').style.display = data.temOverride ? '' : 'none';
+  document.getElementById('cp-btn-salvar').textContent = 'Salvar Alterações';
+  await _cpRenderCatalogo(data.permissoes || {});
+  document.getElementById('criar-perfil-modal').style.display = 'flex';
+}
+
+// Engrenagem ⚙️ ao lado do <select id="cfg-usuario-perfil"> em Adicionar
+// Usuário (voltou — ver conversa que motivou a mudança). Despacha pro
+// modo certo dentro do MESMO modal (modal-criar-perfil.html): um dos 6
+// perfis FIXOS (lib/perfis.js) abre a edição de override
+// (abrirEditarPermissoesFixo), um perfil CUSTOMIZADO abre a edição de
+// sempre (abrirEditarPerfil) — a diferença é transparente pra quem
+// clica, os dois abrem a mesma tela de catálogo. `_cpPerfisCustomizadosCache`
+// pode ainda não ter sido carregada se a aba Usuários acabou de abrir —
+// recarrega antes de decidir, pra não confundir um perfil customizado
+// recém-criado com um fixo.
+async function abrirPermissoesDoPerfilSelecionado() {
+  const select = document.getElementById('cfg-usuario-perfil');
+  const perfilId = select?.value;
+  if (!perfilId) {
+    LW.mostrarAlerta('Escolha um perfil primeiro.', { tipo: 'erro' });
+    return;
+  }
+  await _cpCarregarPerfisCustomizados();
+  const ehCustomizado = _cpPerfisCustomizadosCache.some(p => p.id === perfilId);
+  if (ehCustomizado) {
+    abrirEditarPerfil(perfilId);
+  } else {
+    abrirEditarPermissoesFixo(perfilId);
+  }
+}
+
 function fecharCriarPerfil() {
   document.getElementById('criar-perfil-modal').style.display = 'none';
+  _cpEditandoPerfilFixo = null;
 }
 
 // ── Salvar / excluir (exigem sessão de Administrador — mesmo modal de
 // senha de sempre, AdminAuth.abrirModal, igual a _cfgSalvarUsuarios) ─────
 
 async function salvarPerfilCustomizado() {
-  const nome = document.getElementById('cp-nome').value.trim();
   const erroEl = document.getElementById('cp-erro');
   erroEl.style.display = 'none';
 
+  // Modo "editando permissões de um perfil FIXO" (voltou — ver conversa
+  // que motivou a mudança): sem campo Nome, rota diferente, payload
+  // diferente ({perfil, permissoes} em vez de {id?, nome, permissoes}).
+  if (_cpEditandoPerfilFixo) {
+    await _cpSalvarPermissoesFixo();
+    return;
+  }
+
+  const nome = document.getElementById('cp-nome').value.trim();
   if (!nome) {
     erroEl.textContent = 'Digite um nome pro perfil.';
     erroEl.style.display = 'block';
@@ -289,6 +382,114 @@ async function salvarPerfilCustomizado() {
   } finally {
     btn.disabled = false;
     btn.textContent = textoOriginal;
+  }
+}
+
+// Salva o override de um perfil FIXO — POST /salvar-permissoes-perfil-fixo
+// (ver lib/perfis-fixos-overrides.js). Mesmo fluxo de confirmação de
+// senha de Administrador (AdminAuth.abrirModal) dos perfis customizados —
+// pedido explícito do usuário ("pra salvar isso tem que ser adm e ter
+// senha de adm").
+async function _cpSalvarPermissoesFixo() {
+  const erroEl = document.getElementById('cp-erro');
+  const permissoes = _cpColetarPermissoesDoFormulario();
+  const perfilId = _cpEditandoPerfilFixo;
+
+  const btn = document.getElementById('cp-btn-salvar');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+
+  const executar = () => new Promise((resolve, reject) => {
+    if (typeof AdminAuth === 'undefined') {
+      reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
+      return;
+    }
+    AdminAuth.abrirModal(async function onSuccess() {
+      try {
+        const res = await fetch('/salvar-permissoes-perfil-fixo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ perfil: perfilId, permissoes }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao salvar as permissões deste perfil.');
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }, function onCancel() {
+      const err = new Error('Cancelado.');
+      err.silencioso = true;
+      reject(err);
+    });
+  });
+
+  try {
+    await executar();
+    fecharCriarPerfil();
+    _perfisInfoCache = null;
+    await cfgAtualizarCampoPodeIniciarOperacao();
+    _cfgPopularSelectPerfil();
+    LW.mostrarAlerta('Permissões atualizadas com sucesso!', { tipo: 'sucesso' });
+  } catch (e) {
+    if (e.silencioso) { btn.disabled = false; btn.textContent = textoOriginal; return; }
+    erroEl.textContent = e.message;
+    erroEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
+// Botão "↺ Restaurar Padrão" — só aparece quando o perfil fixo aberto já
+// tem um override salvo (ver abrirEditarPermissoesFixo). Remove o
+// override; o perfil volta ao comportamento hardcoded padrão de
+// lib/perfis.js. Mesma exigência de senha de Administrador.
+async function restaurarPermissoesFixoAtual() {
+  const perfilId = _cpEditandoPerfilFixo;
+  if (!perfilId) return;
+
+  const confirmou = await LW.mostrarConfirmacao(
+    'As permissões deste perfil voltam ao padrão original do sistema, desfazendo qualquer customização feita aqui.',
+    { titulo: 'Restaurar permissões padrão?', textoConfirmar: 'Restaurar', tipo: 'perigo', icon: '↺' }
+  );
+  if (!confirmou) return;
+
+  const executar = () => new Promise((resolve, reject) => {
+    if (typeof AdminAuth === 'undefined') {
+      reject(new Error('Não foi possível confirmar a senha de administrador nesta tela.'));
+      return;
+    }
+    AdminAuth.abrirModal(async function onSuccess() {
+      try {
+        const res = await fetch('/restaurar-permissoes-perfil-fixo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ perfil: perfilId }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao restaurar as permissões deste perfil.');
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }, function onCancel() {
+      const err = new Error('Cancelado.');
+      err.silencioso = true;
+      reject(err);
+    });
+  });
+
+  try {
+    await executar();
+    _perfisInfoCache = null;
+    await cfgAtualizarCampoPodeIniciarOperacao();
+    _cfgPopularSelectPerfil();
+    LW.mostrarAlerta('Permissões restauradas ao padrão.', { tipo: 'sucesso' });
+    await abrirEditarPermissoesFixo(perfilId); // reabre já refletindo o padrão
+  } catch (e) {
+    if (!e.silencioso) LW.mostrarAlerta('Erro ao restaurar: ' + e.message, { tipo: 'erro' });
   }
 }
 

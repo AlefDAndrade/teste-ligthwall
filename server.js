@@ -85,6 +85,14 @@ const perfis = require('./lib/perfis.js');
 const itensPermissao = require('./lib/itens-permissao.js');
 const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, PRIVATE_DIR, perfis, itensPermissao });
 
+// Overrides item-a-item pros 6 perfis FIXOS (voltou — ver conversa que
+// motivou a mudança: engrenagem ⚙️ ao lado do campo "Perfil" em
+// Configurações → Usuários). Sem override pra um perfil = comportamento
+// HARDCODED de lib/perfis.js normalmente; com override, o mapa salvo aqui
+// manda — ver podeEditarArea() e podeControlarOperacao(), abaixo, que
+// consultam isto ANTES de cair no hardcoded.
+const perfisFixosOverrides = require('./lib/perfis-fixos-overrides.js')({ fs, path, PRIVATE_DIR, itensPermissao });
+
 // ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
 // Todas as páginas são abertas pra VISUALIZAÇÃO; o que cada perfil pode
 // EDITAR/registrar é validado aqui, rota a rota, por área ('injetora',
@@ -94,15 +102,23 @@ const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, P
 // const (hoisting).
 
 // A sessão do Administrador Master (lib/sessao.js) edita qualquer área;
-// pros usuários cadastrados, decide o perfil — primeiro os 6 fixos (ver
-// perfis.podeEditar), e se não for nenhum deles, tenta um perfil
-// CUSTOMIZADO (ver perfisCustomizados.podeEditar, que faz a ponte entre o
-// nível granular "Acesso Total" escolhido no catálogo e esta mesma área).
+// pros usuários cadastrados, decide o perfil — primeiro se há um OVERRIDE
+// salvo pra ele (ver lib/perfis-fixos-overrides.js — voltou, ver conversa
+// que motivou a mudança), senão os 6 fixos hardcoded (ver perfis.podeEditar),
+// e se não for nenhum deles, tenta um perfil CUSTOMIZADO (ver
+// perfisCustomizados.podeEditar, que faz a ponte entre o nível granular
+// "Acesso Total" escolhido no catálogo e esta mesma área — a MESMA ponte
+// que os overrides de perfil fixo reaproveitam, só passando o override no
+// lugar de um perfil customizado "de verdade").
 function podeEditarArea(req, area) {
   if (sessao.requestTemSessaoValida(req)) return true; // Admin Master
   const dados = sessaoUsuario.dadosDaSessao(req);
   if (!dados) return false;
-  if (perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)) return perfis.podeEditar(dados.perfil, area);
+  if (perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)) {
+    const override = perfisFixosOverrides.obter(dados.perfil);
+    if (override) return perfisCustomizados.podeEditar({ permissoes: override }, area);
+    return perfis.podeEditar(dados.perfil, area);
+  }
   const customizado = perfisCustomizados.obter(dados.perfil);
   return !!customizado && perfisCustomizados.podeEditar(customizado, area);
 }
@@ -224,7 +240,7 @@ function podeAceitarPedidoPeca(req) {
 // devolve true se já respondeu. Chamadas em sequência dentro do
 // http.createServer, abaixo, antes das rotas que ainda não foram
 // extraídas (ver o loop logo no início do callback).
-const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados });
+const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao });
 const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ fs, path, PRIVATE_DIR, sessao: sessaoOuAdmin, perfisCustomizados, itensPermissao });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
 const rotasManutencao = require('./lib/rotas/manutencao.js')({
@@ -609,17 +625,13 @@ function podeControlarOperacao(req, deviceId) {
   if (perfis.ehPerfilDeAdmin(dados.perfil)) return true; // Administrativo = igual ao master
   // Pros demais perfis, duas condições juntas: o perfil precisa ter a área
   // 'injetora' de edição (Operador de Injetora, Encarregado, Supervisão,
-  // ou um perfil CUSTOMIZADO com o item "Registrar Operação" marcado
-  // "Acesso Total" — ver lib/perfis.js / lib/perfis-customizados.js) E o
-  // usuário específico precisa ter sido marcado com o checkbox "pode
-  // iniciar/encerrar operações" no cadastro.
-  const temAreaInjetora = perfis.PERFIS_CADASTRAVEIS.includes(dados.perfil)
-    ? perfis.podeEditar(dados.perfil, 'injetora')
-    : (() => {
-        const customizado = perfisCustomizados.obter(dados.perfil);
-        return !!customizado && perfisCustomizados.podeEditar(customizado, 'injetora');
-      })();
-  return temAreaInjetora && !!dados.podeIniciarOperacao;
+  // um perfil FIXO com override pra isso — ver lib/perfis-fixos-overrides.js
+  // — ou um perfil CUSTOMIZADO com o item "Registrar Operação" marcado
+  // "Acesso Total") E o usuário específico precisa ter sido marcado com o
+  // checkbox "pode iniciar/encerrar operações" no cadastro. Reaproveita
+  // podeEditarArea() (acima) pra não duplicar a lógica de override/fixo/
+  // customizado aqui de novo.
+  return podeEditarArea(req, 'injetora') && !!dados.podeIniciarOperacao;
 }
 
 // Mensagem diferente conforme a causa — reconfere dispositivoAutorizado()
