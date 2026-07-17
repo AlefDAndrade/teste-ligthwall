@@ -11,7 +11,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
+const { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO } = require('./helpers/servidor-teste.js');
 
 const SENHA_ADMIN = 'senha-admin-autoria-999';
 const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').digest('hex');
@@ -21,6 +21,7 @@ let servidor;
 before(async () => {
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    dispositivosAutorizados: [DEVICE_ID_TESTE_PADRAO],
   });
 });
 
@@ -86,7 +87,7 @@ test('operador_nome enviado no registro de operacao e persistido e devolvido em 
   const cookie = await cadastrarELogar('ana.autoria', 'OperadorInjetora');
   const idOp = 'op-autoria-' + Date.now();
 
-  const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({
@@ -117,7 +118,7 @@ test('avaliadorNome enviado no registro de avaliacao de qualidade e persistido e
   const cookie = await cadastrarELogar('bruno.autoria', 'Administrativo');
   const idOp = 'op-para-avaliar-' + Date.now();
 
-  await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: idOp, data: '2026-07-12', turno: '1° TURNO', dimensao: 9, capacidade: 20, id_bateria: 'B5' }),
@@ -149,7 +150,7 @@ test('avaliacao sem avaliadorNome fica com o campo ausente/null, sem quebrar', a
   const cookie = await cadastrarELogar('carla.autoria', 'Administrativo');
   const idOp = 'op-sem-avaliador-' + Date.now();
 
-  await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: idOp, data: '2026-07-12', turno: '1° TURNO', dimensao: 9, capacidade: 20, id_bateria: 'B5' }),

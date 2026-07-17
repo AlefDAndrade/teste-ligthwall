@@ -35,6 +35,14 @@ let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
 
+// Dispositivos autorizados a controlar operação (voltou — ver conversa que
+// motivou a mudança) — [{ deviceId, nome, autorizadoEm }], espelho em
+// memória do que está em config.json (dispositivosAutorizados), preenchido
+// por loadConfig(). Só pra UI/UX (ver dispositivoEstaAutorizado(), abaixo)
+// — a trava de verdade é sempre no servidor (dispositivoAutorizado(),
+// server.js).
+let DISPOSITIVOS_AUTORIZADOS = [];
+
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
 // Configurações → Bateria e Montagem → "Definir Paletes" (ver
@@ -436,9 +444,17 @@ async function loadConfig() {
       PALETES_ORDEM = { ...PALETES_ORDEM_DEFAULT };
     }
 
-    // (Removido: leitura de "dispositivosAutorizados" — o sistema de
-    // dispositivo autorizado por deviceId foi substituído por permissão
-    // de perfil de usuário, ver dispositivoEstaAutorizado(), abaixo.)
+    // "dispositivosAutorizados": voltou (ver conversa que motivou a
+    // mudança) — lista de dispositivos que podem controlar operação,
+    // além da permissão de perfil de usuário (ver
+    // dispositivoEstaAutorizado(), abaixo). Ausente/inválido = trata como
+    // lista vazia (nenhum dispositivo autorizado ainda), nunca quebra o
+    // carregamento do resto do config.json.
+    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
+      ? cfg.dispositivosAutorizados.map(d => ({
+          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
+        }))
+      : [];
 
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
@@ -461,7 +477,7 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
-    // (Removido: fallback de DISPOSITIVOS_AUTORIZADOS — não existe mais.)
+    DISPOSITIVOS_AUTORIZADOS = []; // config.json indisponível — nenhum dispositivo autorizado conhecido
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -612,22 +628,107 @@ async function registrarAcesso(rota) {
 }
 
 /**
- * Indica se a pessoa LOGADA AGORA pode controlar a operação em andamento
- * — substituiu o antigo sistema de "dispositivo autorizado" (deviceId
- * numa lista em Configurações → Autorizados, removido). Agora é por
- * PESSOA, não por computador: "Administrador" (senha mestra) e
- * "Administrativo" sempre podem; os demais perfis só se o usuário
- * específico tiver sido marcado com "pode iniciar operação" no cadastro
- * (ver sessionStorage.lw_pode_iniciar_operacao, gravado no login —
- * login.html/POST /login-usuario). Usado pela tela de Registrar Operação
- * pra desabilitar campos/botões com feedback claro — a trava de verdade
- * é sempre no servidor (ver podeControlarOperacao() em server.js), isto
- * aqui é só pra UI/UX.
+ * Indica se a PESSOA logada agora tem permissão de PERFIL pra controlar
+ * operação — "Administrador" (senha mestra) e "Administrativo" sempre
+ * podem; os demais perfis só se o usuário específico tiver sido marcado
+ * com "pode iniciar operação" no cadastro (ver
+ * sessionStorage.lw_pode_iniciar_operacao, gravado no login —
+ * login.html/POST /login-usuario). Metade de dispositivoEstaAutorizado()
+ * (abaixo) — sozinha, NÃO é suficiente pra controlar operação, também
+ * precisa do dispositivo estar autorizado.
  */
-function dispositivoEstaAutorizado() {
+function _perfilTemPermissaoDeOperacao() {
   const role = sessionStorage.getItem('lw_role');
   if (role === 'Administrador' || role === 'Administrativo') return true;
   return sessionStorage.getItem('lw_pode_iniciar_operacao') === 'true';
+}
+
+/**
+ * Indica se ESTE dispositivo (navegador/computador) está na lista de
+ * autorizados (voltou — ver conversa que motivou a mudança; ver
+ * DISPOSITIVOS_AUTORIZADOS, preenchida por loadConfig()). Outra metade de
+ * dispositivoEstaAutorizado() — sozinha, também NÃO é suficiente, precisa
+ * também da permissão de perfil.
+ */
+function _esteDispositivoEstaNaLista() {
+  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
+}
+
+/**
+ * Indica se é possível controlar a operação em andamento AGORA — as DUAS
+ * condições juntas, sem exceção pra nenhum perfil (pedido explícito do
+ * usuário): permissão de PERFIL (_perfilTemPermissaoDeOperacao) E
+ * dispositivo autorizado (_esteDispositivoEstaNaLista). Usado pela tela
+ * de Registrar Operação pra desabilitar campos/botões com feedback claro
+ * — a trava de verdade é sempre no servidor (ver podeControlarOperacao()
+ * em server.js), isto aqui é só pra UI/UX.
+ */
+function dispositivoEstaAutorizado() {
+  return _perfilTemPermissaoDeOperacao() && _esteDispositivoEstaNaLista();
+}
+
+/**
+ * Motivo pelo qual dispositivoEstaAutorizado() está false agora — usado
+ * pra mostrar a mensagem certa (ver operacao.js, _aplicarTravaDeAutorizacao):
+ * 'perfil' se a pessoa logada não tem permissão, 'dispositivo' se tem
+ * permissão mas o computador não está autorizado, null se está tudo ok.
+ * Prioriza 'perfil' quando as duas faltam — é a causa mais comum
+ * (dispositivo autorizado tende a ser configuração única por
+ * computador, feita uma vez pelo Administrador).
+ */
+function motivoBloqueioOperacao() {
+  if (!_perfilTemPermissaoDeOperacao()) return 'perfil';
+  if (!_esteDispositivoEstaNaLista()) return 'dispositivo';
+  return null;
+}
+
+/**
+ * Busca a lista completa de dispositivos autorizados no servidor (não a
+ * cópia em memória de DISPOSITIVOS_AUTORIZADOS, que só é preenchida uma
+ * vez por loadConfig()) — usado pela tela de Configurações →
+ * Dispositivos Autorizados, que precisa estar sempre atualizada.
+ * Requer sessão de admin válida (servidor responde 403 sem ela).
+ */
+async function listarDispositivosAutorizados() {
+  const res = await fetch('/dispositivos-autorizados');
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os dispositivos autorizados.');
+  DISPOSITIVOS_AUTORIZADOS = data.lista;
+  return data.lista;
+}
+
+/**
+ * Autoriza um dispositivo (ou atualiza o nome de um já autorizado) —
+ * Configurações → Dispositivos Autorizados. Sem `deviceId` informado,
+ * autoriza ESTE dispositivo (botão "Autorizar este dispositivo").
+ * Requer sessão de admin válida.
+ */
+async function autorizarDispositivo(nome, deviceId) {
+  const res = await fetch('/autorizar-dispositivo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId: deviceId || getDeviceId(), nome: nome || '' }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível autorizar o dispositivo.');
+  DISPOSITIVOS_AUTORIZADOS = data.lista;
+  return data.lista;
+}
+
+/**
+ * Remove um dispositivo da lista de autorizados — Configurações →
+ * Dispositivos Autorizados. Requer sessão de admin válida.
+ */
+async function removerDispositivo(deviceId) {
+  const res = await fetch('/remover-dispositivo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceId }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível remover o dispositivo.');
+  DISPOSITIVOS_AUTORIZADOS = data.lista;
+  return data.lista;
 }
 
 // ============================================================
@@ -1954,7 +2055,11 @@ window.LW = {
   // Log de Acesso
   getDeviceId, registrarAcesso,
   nomeDeQuemEstaLogado,
-  dispositivoEstaAutorizado,
+  dispositivoEstaAutorizado, motivoBloqueioOperacao,
+
+  // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
+  listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
+  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
   // Cálculos
   calcPaineis,

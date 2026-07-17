@@ -1983,7 +1983,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-sql')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -2009,7 +2009,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2031,7 +2031,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2084,6 +2084,7 @@
       const elAtalhos = document.getElementById('cfg-secao-atalhos');
       const elUsuarios = document.getElementById('cfg-secao-usuarios');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
+      const elDispositivos = document.getElementById('cfg-secao-dispositivos');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
@@ -2091,6 +2092,7 @@
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
       if (elUsuarios) elUsuarios.style.display = secao === 'usuarios' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
+      if (elDispositivos) elDispositivos.style.display = secao === 'dispositivos' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
 
@@ -2101,6 +2103,7 @@
       const navAtalhos = document.getElementById('cfg-nav-atalhos');
       const navUsuarios = document.getElementById('cfg-nav-usuarios');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
+      const navDispositivos = document.getElementById('cfg-nav-dispositivos');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
@@ -2108,12 +2111,14 @@
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navUsuarios) navUsuarios.style.cssText = secao === 'usuarios' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navDispositivos) navDispositivos.style.cssText = secao === 'dispositivos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
       if (secao === 'autorizados') cfgRenderAutorizados();
+      if (secao === 'dispositivos') cfgRenderDispositivos();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
 
@@ -3011,6 +3016,101 @@
           LW.mostrarAlerta('Erro de conexão ao cancelar a operação. Verifique a rede e tente novamente.', { tipo: 'erro' });
         }
       });
+    }
+
+    // ---- Dispositivos Autorizados (Configurações → Dispositivos Autorizados) ----
+    // Reintroduzido (ver conversa que motivou a mudança): volta a existir
+    // uma trava por DISPOSITIVO, além da trava por PESSOA (perfil, aba
+    // Usuários) — as duas juntas, sem exceção pra nenhum perfil, ver
+    // dispositivoAutorizado() em server.js. Sempre busca a lista mais
+    // recente do servidor ao abrir a aba (LW.listarDispositivosAutorizados),
+    // nunca confia só na cópia em memória de LW.DISPOSITIVOS_AUTORIZADOS
+    // (que só é preenchida uma vez, no carregamento da página).
+    async function cfgRenderDispositivos() {
+      const meuId = document.getElementById('cfg-dispositivos-meu-id');
+      if (meuId) meuId.textContent = LW.getDeviceId();
+
+      const elLista = document.getElementById('cfg-dispositivos-lista');
+      if (!elLista) return;
+      elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Carregando…</span>';
+
+      let lista = [];
+      try {
+        lista = await LW.listarDispositivosAutorizados();
+      } catch (e) {
+        elLista.innerHTML = `<span style="color:var(--red);font-size:.8rem">${_escaparHtmlLocal(e.message)}</span>`;
+        return;
+      }
+
+      if (!lista.length) {
+        elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Nenhum dispositivo autorizado ainda — ninguém consegue iniciar/encerrar/registrar operações até autorizar pelo menos um.</span>';
+        return;
+      }
+
+      const meuDeviceId = LW.getDeviceId();
+      elLista.innerHTML = lista.map(d => {
+        const nome = d.nome ? _escaparHtmlLocal(d.nome) : '<span style="color:var(--text-3)">(sem nome)</span>';
+        const esteAqui = d.deviceId === meuDeviceId
+          ? '<span class="badge badge-green" style="margin-left:8px">este dispositivo</span>' : '';
+        const dataFmt = d.autorizadoEm ? new Date(d.autorizadoEm).toLocaleString('pt-BR') : '';
+        return `
+          <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div style="font-size:.85rem;color:var(--text-1)">${nome}${esteAqui}</div>
+              <div style="font-size:.7rem;color:var(--text-3);word-break:break-all">${_escaparHtmlLocal(d.deviceId)}${dataFmt ? ' · autorizado em ' + dataFmt : ''}</div>
+            </div>
+            <button type="button" onclick="cfgRemoverDispositivo('${_escaparHtmlLocal(d.deviceId)}')"
+              style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;margin-left:auto">✕ Remover</button>
+          </div>`;
+      }).join('');
+    }
+
+    /** Botão "✅ Autorizar este dispositivo" — atalho pra não precisar copiar/colar o próprio código. */
+    async function cfgAutorizarEsteDispositivo() {
+      const nome = window.prompt('Nome pra identificar este computador (opcional, ex: "PC Injetora 1"):') || '';
+      try {
+        await LW.autorizarDispositivo(nome);
+        LW.mostrarAlerta('Dispositivo autorizado com sucesso.', { tipo: 'sucesso' });
+        cfgRenderDispositivos();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    /** Botão "+ Autorizar" do formulário "pelo código" (autorizar outro computador). */
+    async function cfgAutorizarDispositivoPorId() {
+      const inputId = document.getElementById('cfg-dispositivos-novo-id');
+      const inputNome = document.getElementById('cfg-dispositivos-novo-nome');
+      const deviceId = (inputId?.value || '').trim();
+      if (!deviceId) {
+        LW.mostrarAlerta('Cole o código do dispositivo antes de autorizar.', { tipo: 'erro' });
+        return;
+      }
+      try {
+        await LW.autorizarDispositivo(inputNome?.value || '', deviceId);
+        if (inputId) inputId.value = '';
+        if (inputNome) inputNome.value = '';
+        LW.mostrarAlerta('Dispositivo autorizado com sucesso.', { tipo: 'sucesso' });
+        cfgRenderDispositivos();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    /** Botão "✕ Remover" de cada linha da lista — desautoriza na hora. */
+    async function cfgRemoverDispositivo(deviceId) {
+      const confirmou = await LW.mostrarConfirmacao(
+        'Este computador não vai mais conseguir iniciar, encerrar ou registrar operações até ser autorizado de novo.',
+        { titulo: 'Remover este dispositivo autorizado?', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🛑' }
+      );
+      if (!confirmou) return;
+      try {
+        await LW.removerDispositivo(deviceId);
+        LW.mostrarAlerta('Dispositivo removido.', { tipo: 'sucesso' });
+        cfgRenderDispositivos();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
     }
 
     // existente no escopo global, então replica a mesma lógica usada em

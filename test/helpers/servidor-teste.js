@@ -25,6 +25,17 @@ const ARQUIVOS_NECESSARIOS = ['server.js', 'db.js', 'lib', 'public', 'package.js
  *   objeto em public/db/security.json ANTES de subir o servidor — simula
  *   uma instalação existente (testa a migração automática pra private/) e
  *   dá um hash conhecido pros testes de senha usarem.
+ * @param {string[]} [opcoes.dispositivosAutorizados] - se informado, uma
+ *   lista de deviceIds pra já nascer autorizados em config.json
+ *   (dispositivosAutorizados — ver dispositivoAutorizado(), server.js).
+ *   Sem isto, a lista nasce vazia — NENHUM dispositivo consegue controlar
+ *   operação (mesmo comportamento de uma instalação nova, ver conversa
+ *   que motivou a mudança) até autorizar um explicitamente. Testes que
+ *   batem em rotas de controle de operação (POST /registrar-operacao,
+ *   POST /salvar-operacao-andamento, etc.) e esperam sucesso precisam
+ *   disto — ver DEVICE_ID_TESTE_PADRAO, exportado abaixo, pra usar um
+ *   deviceId consistente entre `dispositivosAutorizados` aqui e a query
+ *   string `?deviceId=...` de cada fetch().
  */
 async function iniciarServidorDeTeste(opcoes = {}) {
   fs.mkdirSync(PASTA_TMP_BASE, { recursive: true });
@@ -40,6 +51,15 @@ async function iniciarServidorDeTeste(opcoes = {}) {
       JSON.stringify(opcoes.seedSecurityJson, null, 2),
       'utf8'
     );
+  }
+
+  if (opcoes.dispositivosAutorizados) {
+    const configPath = path.join(pastaTemp, 'public', 'db', 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    cfg.dispositivosAutorizados = opcoes.dispositivosAutorizados.map(deviceId => ({
+      deviceId, nome: 'Dispositivo de Teste', autorizadoEm: new Date().toISOString(),
+    }));
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
   }
 
   const porta = 4000 + Math.floor(Math.random() * 5000);
@@ -80,4 +100,10 @@ async function esperarServidorSubir(baseUrl, processo, obterErro, tentativas = 1
   throw new Error('Servidor de teste não respondeu a tempo.');
 }
 
-module.exports = { iniciarServidorDeTeste };
+// deviceId padrão pra testes que precisam de UM dispositivo autorizado
+// consistente — usar como opcoes.dispositivosAutorizados: [DEVICE_ID_TESTE_PADRAO]
+// no before() e '?deviceId=' + DEVICE_ID_TESTE_PADRAO em cada fetch() que
+// controla operação.
+const DEVICE_ID_TESTE_PADRAO = 'dev_teste_padrao';
+
+module.exports = { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO };

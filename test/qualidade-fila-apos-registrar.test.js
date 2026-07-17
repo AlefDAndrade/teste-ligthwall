@@ -16,7 +16,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
+const { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO } = require('./helpers/servidor-teste.js');
 
 const SENHA_ADMIN = 'senha-admin-fila-avaliacao-741';
 const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').digest('hex');
@@ -26,6 +26,7 @@ let servidor;
 before(async () => {
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    dispositivosAutorizados: [DEVICE_ID_TESTE_PADRAO],
   });
 });
 
@@ -58,7 +59,7 @@ test('registrar uma avaliação vinculada a uma operação da fila REMOVE essa o
   const cookie = await logarComoAdminMaster();
   const idOp = 'op-fila-' + Date.now();
 
-  await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: idOp, data: '2026-07-16', turno: '1° TURNO', dimensao: 9, capacidade: 20, id_bateria: 'B5' }),
@@ -93,7 +94,7 @@ test('a mesma correção também marca "avaliada" numa CORREÇÃO (id já existe
   const cookie = await logarComoAdminMaster();
   const idOp = 'op-fila-correcao-' + Date.now();
 
-  await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: idOp, data: '2026-07-16', turno: '1° TURNO', dimensao: 9, capacidade: 20, id_bateria: 'B6' }),

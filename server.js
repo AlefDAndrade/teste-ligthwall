@@ -243,6 +243,7 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
   lerBercosAndamento, salvarBercosAndamentoNoDisco, podeControlarOperacao, negarControleDeOperacao,
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
+const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao: sessaoOuAdmin, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
@@ -259,7 +260,7 @@ const rotasBackup = require('./lib/rotas/backup.js')({
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -551,21 +552,58 @@ function salvarBercosAndamentoNoDisco(mapa) {
 const DIR_LOGS = path.join(ROOT_DIR, 'logs');
 const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 
-// ─── QUEM PODE CONTROLAR A OPERAÇÃO (iniciar/encerrar/registrar) ──────────
-// Substituiu o antigo sistema de "dispositivo autorizado" (lista de
-// deviceIds em config.json, editável em Configurações → Autorizados) —
-// ver conversa que motivou a mudança: a trava agora é por PESSOA
-// (sessão de usuário logado — ver lib/sessao-usuario.js), não por
-// computador. "Administrador" (senha mestra) e "Administrativo" sempre
-// podem, irrestrito; os demais perfis só se o usuário específico tiver
-// sido marcado com podeIniciarOperacao:true no cadastro (Configurações →
-// Usuários — ver lib/rotas/usuarios.js, lib/perfis.js).
+// ─── DISPOSITIVO AUTORIZADO (voltou — ver conversa que motivou a mudança) ──
+// Existiu antes (lista de deviceIds em config.json, editável em
+// Configurações → Autorizados), foi removido quando o sistema de perfis
+// entrou (trava passou a ser só por PESSOA), e agora volta como uma
+// camada ADICIONAL: pra controlar operações, o usuário precisa das duas
+// coisas ao mesmo tempo — permissão de perfil (ver podeControlarOperacao,
+// abaixo) E o navegador/computador estar na lista de autorizados. Sem
+// exceção: nem o Administrador Master, nem o perfil Administrativo
+// escapam desta checagem (pedido explícito do usuário) — só uma sessão de
+// admin válida permite GERENCIAR a lista (autorizar/remover um
+// dispositivo, ver lib/rotas/dispositivos-autorizados.js), não CONTROLAR
+// operações num dispositivo não autorizado.
 //
-// Diferente da versão antiga (função pura, só um deviceId), esta lê o
-// `req` inteiro pra extrair o cookie de sessão — ver
-// sessaoUsuario.dadosDaSessao(req).
-function podeControlarOperacao(req) {
-  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master: irrestrito
+// Guardada em config.json (dispositivosAutorizados: [{ deviceId, nome,
+// autorizadoEm }]) — mesmo arquivo/formato da versão antiga. Lida do
+// disco a cada checagem (sem cache em memória) de propósito: um
+// dispositivo recém-autorizado/removido em Configurações precisa valer
+// na hora, sem exigir restart do servidor.
+//
+// Diferente da versão antiga: a lista VAZIA agora significa "nenhum
+// dispositivo autorizado ainda" (nega por padrão), não "sem restrição" —
+// é o comportamento mais seguro pra quem está LIGANDO esta funcionalidade
+// de propósito. Assim que o Administrador autorizar o primeiro
+// dispositivo (Configurações → Dispositivos Autorizados), a operação
+// volta a funcionar normalmente nele.
+function lerDispositivosAutorizados() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
+    return Array.isArray(cfg.dispositivosAutorizados) ? cfg.dispositivosAutorizados : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function dispositivoAutorizado(deviceId) {
+  if (!deviceId) return false;
+  return lerDispositivosAutorizados().some(d => d && d.deviceId === deviceId);
+}
+
+// ─── QUEM PODE CONTROLAR A OPERAÇÃO (iniciar/encerrar/registrar) ──────────
+// Duas travas independentes, as DUAS precisam passar:
+//   1) dispositivoAutorizado(deviceId) — este computador está na lista
+//      de autorizados (ver acima). Sem exceção pra nenhum perfil.
+//   2) Permissão de PESSOA (sessão de usuário logado — ver
+//      lib/sessao-usuario.js): "Administrador" (senha mestra) e
+//      "Administrativo" sempre podem; os demais perfis só se o usuário
+//      específico tiver sido marcado com podeIniciarOperacao:true no
+//      cadastro (Configurações → Usuários — ver lib/rotas/usuarios.js,
+//      lib/perfis.js).
+function podeControlarOperacao(req, deviceId) {
+  if (!dispositivoAutorizado(deviceId)) return false;
+  if (sessao.requestTemSessaoValida(req)) return true; // Admin Master: irrestrito (mas ainda precisa do device acima)
   const dados = sessaoUsuario.dadosDaSessao(req);
   if (!dados) return false; // sem sessão de usuário válida, sem acesso
   if (perfis.ehPerfilDeAdmin(dados.perfil)) return true; // Administrativo = igual ao master
@@ -584,10 +622,24 @@ function podeControlarOperacao(req) {
   return temAreaInjetora && !!dados.podeIniciarOperacao;
 }
 
-function negarControleDeOperacao(res) {
+// Mensagem diferente conforme a causa — reconfere dispositivoAutorizado()
+// aqui pra dizer exatamente qual das duas travas barrou (deviceId sempre
+// disponível em quem chama, ver assinatura de podeControlarOperacao acima).
+function negarControleDeOperacao(res, deviceId) {
+  if (!dispositivoAutorizado(deviceId)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: false,
+      motivo: 'dispositivo',
+      deviceId: deviceId || null,
+      erro: 'Este dispositivo não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Dispositivos Autorizados.',
+    }));
+    return;
+  }
   res.writeHead(403, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     ok: false,
+    motivo: 'perfil',
     erro: 'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
   }));
 }
@@ -595,10 +647,11 @@ function negarControleDeOperacao(res) {
 const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
-  // ?deviceId=... — usado só pra identificar o "dono" da operação em
-  // andamento, ver donoDeviceId em lib/rotas/operacao-andamento.js; a
-  // AUTORIZAÇÃO pra controlar operações agora é por sessão de usuário
-  // logado, ver podeControlarOperacao(), acima;
+  // ?deviceId=... — usado tanto pra identificar o "dono" da operação em
+  // andamento (ver donoDeviceId em lib/rotas/operacao-andamento.js) QUANTO
+  // de novo pra AUTORIZAÇÃO de dispositivo (ver dispositivoAutorizado() e
+  // podeControlarOperacao(), acima) — controlar operações agora exige
+  // sessão de usuário válida E dispositivo autorizado, as duas juntas;
   // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
   // ver dirParaModoTeste(), mais abaixo).
   const [urlPath, queryString] = req.url.split('?');

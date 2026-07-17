@@ -439,12 +439,15 @@
   /**
    * Usado no topo de ações que controlam a operação (iniciar, encerrar,
    * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
-   * pode agir agora: a pessoa logada não tem permissão de controlar
-   * operações (Configurações → Usuários), OU a operação já tem outro
-   * dono (outra pessoa autorizada que a iniciou — ver "dono da operação"
-   * em server.js). A trava de verdade é sempre no servidor; isto aqui só
-   * dá feedback imediato (sem esperar a rede) e cobre atalhos de teclado,
-   * que não passam pelos campos/botões desabilitados na tela.
+   * pode agir agora: a pessoa logada não tem permissão de perfil (ver
+   * Configurações → Usuários), OU este dispositivo não está autorizado
+   * (ver Configurações → Dispositivos Autorizados — voltou, ver conversa
+   * que motivou a mudança), OU a operação já tem outro dono (outra
+   * pessoa/dispositivo autorizados que a iniciaram — ver "dono da
+   * operação" em server.js). A trava de verdade é sempre no servidor;
+   * isto aqui só dá feedback imediato (sem esperar a rede) e cobre
+   * atalhos de teclado, que não passam pelos campos/botões desabilitados
+   * na tela.
    * @param {object} opts
    * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
@@ -454,9 +457,17 @@
     // persist()), então a trava de permissão/dono não faz sentido aqui:
     // qualquer pessoa pode testar, autorizada ou não pra operações reais.
     if (state.modo_teste) return false;
-    if (!LW.dispositivoEstaAutorizado()) {
+    const motivo = LW.motivoBloqueioOperacao();
+    if (motivo === 'perfil') {
       LW.mostrarAlerta(
         'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
+        { tipo: 'erro' }
+      );
+      return true;
+    }
+    if (motivo === 'dispositivo') {
+      LW.mostrarAlerta(
+        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo em Configurações → Dispositivos Autorizados — o código deste dispositivo é "${LW.getDeviceId()}".`,
         { tipo: 'erro' }
       );
       return true;
@@ -512,6 +523,7 @@
     if (avisoTeste) avisoTeste.style.display = 'none';
 
     const autorizado = LW.dispositivoEstaAutorizado();
+    const motivo = LW.motivoBloqueioOperacao();
     const dono = state?.donoDeviceId || null;
     const ehODono = !dono || dono === LW.getDeviceId();
     const podeControlar = autorizado && ehODono;
@@ -521,8 +533,11 @@
     if (!aviso) return;
     if (podeControlar) {
       aviso.style.display = 'none';
-    } else if (!autorizado) {
+    } else if (motivo === 'perfil') {
       aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações → Usuários</strong>.</span>';
+      aviso.style.display = 'flex';
+    } else if (motivo === 'dispositivo') {
+      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador pra autorizá-lo em <strong>Configurações → Dispositivos Autorizados</strong>, informando o código <code>${LW.getDeviceId()}</code>.</span>`;
       aviso.style.display = 'flex';
     } else {
       aviso.innerHTML = '👀 <span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar (ou alguém usar "🗑️ Limpar Tudo").</span>';

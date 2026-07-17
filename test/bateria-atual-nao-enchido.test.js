@@ -19,16 +19,18 @@
 //
 // As rotas de controle de operação (salvar-operacao-andamento,
 // marcar-berco-andamento, registrar-operacao) exigem uma sessão de
-// USUÁRIO logado com permissão de controlar operações (ver
-// podeControlarOperacao(), server.js — substituiu o antigo sistema de
-// "dispositivo autorizado" por deviceId). Este teste cadastra um usuário
+// USUÁRIO logado com permissão de controlar operações E um dispositivo
+// autorizado (voltou — ver conversa que motivou a mudança — ver
+// podeControlarOperacao(), server.js). Este teste cadastra um usuário
 // Administrativo (sempre pode controlar, ver lib/perfis.js) e usa o
-// cookie de sessão emitido no login em todas as chamadas.
+// cookie de sessão emitido no login em todas as chamadas, além de um
+// deviceId pré-autorizado (DEVICE_ID_TESTE_PADRAO, ver
+// dispositivosAutorizados no before()).
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
+const { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO } = require('./helpers/servidor-teste.js');
 
 let servidor;
 let cookieUsuario;
@@ -44,6 +46,7 @@ function extrairCookie(resposta) {
 before(async () => {
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    dispositivosAutorizados: [DEVICE_ID_TESTE_PADRAO],
   });
 
   const respAdmin = await fetch(`${servidor.baseUrl}/verificar-senha`, {
@@ -83,7 +86,7 @@ const OPERACAO_ANDAMENTO = {
 };
 
 async function iniciarOperacaoEmAndamento() {
-  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
+  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ dados: OPERACAO_ANDAMENTO, clientId: 'teste' }),
@@ -94,7 +97,7 @@ async function iniciarOperacaoEmAndamento() {
 test('POST /marcar-berco-andamento com estado "nao_enchido" marca o lado, e GET /bercos-andamento reflete', async () => {
   await iniciarOperacaoEmAndamento();
 
-  const respMarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
+  const respMarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ berco: 'B3', lado: 'esquerda', estado: 'nao_enchido' }),
@@ -112,7 +115,7 @@ test('POST /marcar-berco-andamento com estado "nao_enchido" marca o lado, e GET 
 test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um "estado" diferente no 2º clique', async () => {
   await iniciarOperacaoEmAndamento();
 
-  await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
+  await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ berco: 'B9', lado: 'direita', estado: 'nao_enchido' }),
@@ -124,7 +127,7 @@ test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um 
   // tendo sido desligado entre os dois cliques) — mesmo assim, como o lado
   // já estava marcado, deve DESMARCAR, nunca trocar nao_enchido por baixou
   // num clique só (ver comentário em POST /marcar-berco-andamento).
-  const respDesmarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
+  const respDesmarcar = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ berco: 'B9', lado: 'direita', estado: 'baixou' }),
@@ -138,7 +141,7 @@ test('clicar de novo no mesmo lado desmarca (volta a "okay"), mesmo mandando um 
 
 test('POST /marcar-berco-andamento rejeita um "estado" desconhecido', async () => {
   await iniciarOperacaoEmAndamento();
-  const resp = await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
+  const resp = await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ berco: 'B1', lado: 'esquerda', estado: 'xyz' }),
@@ -151,14 +154,14 @@ test('POST /marcar-berco-andamento rejeita um "estado" desconhecido', async () =
 test('registrar a operação persiste "nao_enchido" em bercos_visuais, e GET /operacoes-nao-avaliadas devolve isso pro Setor de Qualidade', async () => {
   await iniciarOperacaoEmAndamento();
 
-  await fetch(`${servidor.baseUrl}/marcar-berco-andamento`, {
+  await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ berco: 'B4', lado: 'esquerda', estado: 'nao_enchido' }),
   });
 
   const idOperacao = 'op-teste-nao-enchido-' + Date.now();
-  const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao`, {
+  const respRegistrar = await fetch(`${servidor.baseUrl}/registrar-operacao?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({

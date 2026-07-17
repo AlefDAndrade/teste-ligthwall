@@ -47,6 +47,12 @@ let window;
 before(async () => {
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    // 'dev-teste-revisao' é o deviceId hardcoded usado no fetch de
+    // /salvar-operacao-andamento, abaixo — precisa estar autorizado (ver
+    // conversa que motivou a volta do dispositivo autorizado,
+    // dispositivoAutorizado() em server.js), senão a checagem de
+    // dispositivo bloqueia antes mesmo do teste de revisão rodar.
+    dispositivosAutorizados: ['dev-teste-revisao'],
   });
   dom = await JSDOM.fromURL(`${servidor.baseUrl}/index.html`, {
     runScripts: 'dangerously',

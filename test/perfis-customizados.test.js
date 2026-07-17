@@ -13,7 +13,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
+const { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO } = require('./helpers/servidor-teste.js');
 
 const SENHA_ADMIN = 'senha-admin-perfis-customizados-159';
 const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').digest('hex');
@@ -23,6 +23,7 @@ let servidor;
 before(async () => {
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    dispositivosAutorizados: [DEVICE_ID_TESTE_PADRAO],
   });
 });
 
@@ -341,7 +342,7 @@ test('perfil customizado com "operacao" total + podeIniciarOperacao consegue con
   assert.equal(dataLogin.podeIniciarOperacao, true, 'perfil customizado com área injetora deveria poder marcar podeIniciarOperacao');
   const cookieUsuario = extrairCookie(respLogin);
 
-  const respControle = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento`, {
+  const respControle = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
     body: JSON.stringify({ dados: { id_bateria: 'B1', tipo_montagem: 'SP', status: 'ativa' }, clientId: 'x' }),
