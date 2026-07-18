@@ -818,6 +818,8 @@
               <option value="todos" selected>Todos</option>
             </select>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+              <input class="form-input" type="text" id="reg-busca-id" placeholder="🔍 Buscar por ID da Operação"
+                title="Filtra a tabela pelo ID da operação (aceita busca parcial)" style="width:220px">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
                 onclick="limparTodosFiltros('filtros-registro')">✕ Limpar Todos</button>
@@ -869,6 +871,8 @@
                 <th data-col="dimensao">Dimensão</th>
                 <th data-col="capacidade">Cap. Berços</th> <!-- Nova -->
                 <th data-col="id_bateria">ID Bateria</th>
+                <th data-col="id_operacao">ID Operação</th> <!-- Nova -->
+
                 <th data-col="inicio">Início</th>
                 <th data-col="fim">Fim</th>
                 <th data-col="desemplaque">Previsão Desemplaque</th>
@@ -890,7 +894,7 @@
             </thead>
             <tbody id="registro-tbody">
               <tr>
-                <td colspan="21" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+                <td colspan="22" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
               </tr>
             </tbody>
           </table>
@@ -1505,6 +1509,37 @@
           </div>
         </div>
 
+        <!-- ── INDICADORES DE PROCESSO: Densidade · Flow · Berços por Traço ── -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+          <div class="card" id="qt-card-media-densidade" style="padding:16px;cursor:help">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Densidade Média</div>
+            <div id="qt-media-densidade"
+              style="font-size:2.2rem;font-weight:800;color:var(--accent);font-family:var(--font-mono);line-height:1.1">
+              —</div>
+            <div id="qt-media-densidade-sub" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+          <div class="card" id="qt-card-media-flow" style="padding:16px;cursor:help">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Flow Médio</div>
+            <div id="qt-media-flow"
+              style="font-size:2.2rem;font-weight:800;color:var(--accent);font-family:var(--font-mono);line-height:1.1">
+              —</div>
+            <div id="qt-media-flow-sub" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+          <div class="card" id="qt-card-media-bercos-traco" style="padding:16px;cursor:help">
+            <div
+              style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:6px">
+              Berços Enchidos / Traço</div>
+            <div id="qt-media-bercos-traco"
+              style="font-size:2.2rem;font-weight:800;color:var(--accent);font-family:var(--font-mono);line-height:1.1">
+              —</div>
+            <div id="qt-media-bercos-traco-sub" style="font-size:.72rem;color:var(--text-3);margin-top:4px">—</div>
+          </div>
+        </div>
+
         <!-- ── INSIGHTS AUTOMÁTICOS ── -->
         <div class="card" style="padding:18px 20px;margin-bottom:16px;border-left:3px solid var(--accent)">
           <div
@@ -1539,7 +1574,7 @@
         <div class="card" style="padding:20px;margin-bottom:16px">
           <div
             style="font-size:.65rem;text-transform:uppercase;letter-spacing:.09em;color:var(--text-3);margin-bottom:14px">
-            📐 Controle Estatístico por Insumo — Média · Mediana · Desvio Padrão · CV</div>
+            📐 Controle Estatístico por Insumo e Parâmetro de Processo (Densidade/Flow) — Média · Mediana · Desvio Padrão · CV</div>
           <div id="qt-cep-tabela" style="overflow-x:auto">
             <div style="color:var(--text-3);font-size:.84rem">Calculando estatísticas...</div>
           </div>

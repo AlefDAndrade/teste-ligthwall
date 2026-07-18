@@ -128,6 +128,29 @@
     return 'Desconhecido';
   }
 
+  // ── BERÇOS ENCHIDOS POR TRAÇO ─────────────────────────────
+  // Soma os berços de TODOS os usos do traço (t.ultilizado.operacao[]) —
+  // cada uso tem berco_inicio/berco_finalizacao (faixa inclusiva: B1-B10
+  // conta 10 berços). Um traço REAPROVEITADO (ex: encheu B1-B7 numa
+  // operação e depois mais B1-B7 — mesmo id_traco, novo uso) já aparece
+  // como UMA ÚNICA entrada em `tracos` (1 por id_traco — ver
+  // getTracosComFiltros/todosOsTracos, db.js), com os 2 usos dentro de
+  // `ultilizado.operacao[]`; somando por AQUI (dentro do mesmo traço) em
+  // vez de contar "1 traço por uso", o reaproveitamento nunca é tratado
+  // como um traço novo — exatamente a regra pedida: T01 encheu 10 berços,
+  // T02 encheu 7 + foi reaproveitado e encheu mais 7 → T02 = 1 traço, 14
+  // berços (não 2 traços de 7).
+  function _bercosDoTraco(t) {
+    const usos = t.ultilizado?.operacao || [];
+    let total = 0;
+    usos.forEach(u => {
+      const ini = parseFloat(u.berco_inicio);
+      const fim = parseFloat(u.berco_finalizacao);
+      if (!isNaN(ini) && !isNaN(fim) && fim >= ini) total += (fim - ini + 1);
+    });
+    return total;
+  }
+
   // ── BUSCA TRAÇOS COM FILTROS ─────────────────────────────
   // Usa relatorio_injecao.json como fonte primária de dados de traços
   async function getTracosComFiltros(filtros) {
@@ -175,6 +198,15 @@
     const porTipo = {};   // tipo → { total, ajustados, porMes: { YYYY-MM: { total, ajustados } } }
     const evolucao = {};  // YYYY-MM → { total, ajustados }
 
+    // Densidade / Flow (parâmetros de PROCESSO, não "insumo" de receita —
+    // por isso ficam fora de valoresReaisPorInsumo/ajustesPorInsumo: não
+    // devem contar pra Taxa de Acerto nem pro ranking de insumos mais
+    // ajustados, que são só sobre os 5 campos de INSUMOS_LABELS) e Berços
+    // Enchidos por Traço — coletados no mesmo loop abaixo, 1 valor por
+    // traço (não por uso — ver _bercosDoTraco).
+    const valoresProcessoPorCampo = { densidade: [], flow: [] };
+    const valoresBercosPorTraco = [];
+
     for (const t of tracos) {
       let tracoTemAjuste = false;
 
@@ -207,6 +239,23 @@
       }
 
       if (tracoTemAjuste) tracosComAjuste++;
+
+      // Densidade / Flow — mesmo formato de normalização dos insumos
+      // (número simples ou {original, ajustes[], total}), só que não
+      // participam da lógica de "ajuste de receita" acima (ver comentário
+      // na declaração de valoresProcessoPorCampo).
+      ['densidade', 'flow'].forEach(campo => {
+        const raw = t[campo];
+        if (raw === undefined) return;
+        const val = normalizarInsumo(raw);
+        if (!isNaN(val.total)) valoresProcessoPorCampo[campo].push(val.total);
+      });
+
+      // Berços enchidos por este traço (soma de todos os usos — ver
+      // _bercosDoTraco). Só entra na média se o traço tiver pelo menos 1
+      // berço válido registrado, mesmo critério de estatisticas()/N.
+      const bercosTraco = _bercosDoTraco(t);
+      if (bercosTraco > 0) valoresBercosPorTraco.push(bercosTraco);
 
       // Agrega por tipo de montagem — resolvido em getTracosComFiltros()
       // via _resolverTipoMontagem (ver comentário lá: tipo_montagem não é
@@ -278,6 +327,16 @@
       const reais = valoresReaisPorInsumo[label] || [];
       cepPorInsumo[label] = estatisticas(reais);
     }
+    // Densidade / Flow entram na MESMA tabela CEP (mesmo cálculo
+    // estatístico de Média/Mediana/Desvio Padrão/CV que os insumos) —
+    // são parâmetro de processo, não de receita, mas ainda assim é
+    // controle estatístico relevante. Ver renderCEP.
+    cepPorInsumo['Densidade'] = estatisticas(valoresProcessoPorCampo.densidade);
+    cepPorInsumo['Flow']      = estatisticas(valoresProcessoPorCampo.flow);
+
+    // Média (e demais estatísticas) de Berços Enchidos por Traço —
+    // reaproveitamentos já colapsados num único traço (ver _bercosDoTraco).
+    const statsBercosPorTraco = estatisticas(valoresBercosPorTraco);
 
     // Tendência da taxa de acerto (evolução mensal)
     const mesesOrdenados = Object.keys(evolucao).sort();
@@ -310,6 +369,7 @@
       receitaMaisEstavel, receitaMaisInstavel,
       maiorDesvioLabel, maiorDesvioPct,
       consumoPorInsumo, cepPorInsumo,
+      statsBercosPorTraco,
       evolucao, mesesOrdenados, taxasMensais, slopeTaxa,
       ajustesPorInsumoMes,
       porTipo,
@@ -382,6 +442,9 @@
     <div class="kpi-card" id="qt-card-receita-instavel" style="border-left:3px solid var(--red)"><div class="kpi-label">Receita Mais Instável</div><div id="qt-receita-instavel" style="font-size:1.15rem;font-weight:700">—</div><div id="qt-receita-instavel-pct" style="font-size:.72rem;margin-top:4px">—</div></div>
     <div class="kpi-card" id="qt-card-insumo-mais-ajustado" style="border-left:3px solid var(--red)"><div class="kpi-label">Insumo Mais Ajustado</div><div id="qt-insumo-mais-ajustado" style="font-size:1.15rem;font-weight:700;color:var(--red)">—</div><div id="qt-insumo-mais-ajustado-cnt" style="font-size:.72rem;margin-top:4px">—</div></div>
     <div class="kpi-card" id="qt-card-insumo-maior-desvio" style="border-left:3px solid var(--accent)"><div class="kpi-label">Maior Desvio Planejado×Real</div><div id="qt-insumo-maior-desvio" style="font-size:1.15rem;font-weight:700;color:var(--accent)">—</div><div id="qt-insumo-maior-desvio-val" style="font-size:.72rem;margin-top:4px">—</div></div>
+    <div class="kpi-card" id="qt-card-media-densidade"><div class="kpi-label">Densidade Média</div><div class="kpi-value" id="qt-media-densidade">—</div><div style="font-size:.72rem;margin-top:4px" id="qt-media-densidade-sub">—</div></div>
+    <div class="kpi-card" id="qt-card-media-flow"><div class="kpi-label">Flow Médio</div><div class="kpi-value" id="qt-media-flow">—</div><div style="font-size:.72rem;margin-top:4px" id="qt-media-flow-sub">—</div></div>
+    <div class="kpi-card" id="qt-card-media-bercos-traco"><div class="kpi-label">Berços Enchidos / Traço</div><div class="kpi-value" id="qt-media-bercos-traco">—</div><div style="font-size:.72rem;margin-top:4px" id="qt-media-bercos-traco-sub">—</div></div>
   </div>
 
   <div class="grid2" style="margin-bottom:14px">
@@ -401,7 +464,7 @@
     <div class="chart-box"><h4>Estabilidade por Tipo de Montagem</h4><div id="qt-ranking-receitas"></div></div>
   </div>
 
-  <div class="chart-box" style="margin-bottom:14px"><h4>Tabela CEP por Insumo</h4><div id="qt-cep-tabela" style="overflow-x:auto"></div></div>
+  <div class="chart-box" style="margin-bottom:14px"><h4>Tabela CEP por Insumo e Parâmetro de Processo</h4><div id="qt-cep-tabela" style="overflow-x:auto"></div></div>
   <div class="chart-box" style="margin-bottom:14px"><h4>Consumo Planejado × Real</h4><div id="qt-consumo-grid"></div></div>
 
   <div class="grid2" style="margin-bottom:14px">
@@ -430,6 +493,7 @@
   ${normalizarInsumo}
   ${estatisticas}
   ${tendencia}
+  ${_bercosDoTraco}
   ${calcularIndicadores}
   ${setText}
   ${fmtN}
@@ -601,6 +665,44 @@
         card.setAttribute('data-tooltip', (v ? `Planejado: ${fmtN(v.planejado)} · Real: ${fmtN(v.real)}\n\n` : '')
           + `Ajustes por mês — ${ind.maiorDesvioLabel}:\n` + _tooltipEvolucaoMensalInsumo(ind.maiorDesvioLabel, ind));
       }
+    }
+
+    // Densidade média / Flow médio — mesmas estatísticas da tabela CEP
+    // (ind.cepPorInsumo.Densidade/.Flow), só exibidas em destaque aqui.
+    const sDensidade = ind.cepPorInsumo?.Densidade;
+    setText('qt-media-densidade', sDensidade && sDensidade.n > 0 ? fmtN(sDensidade.media) : '—');
+    setText('qt-media-densidade-sub', sDensidade && sDensidade.n > 0
+      ? `${sDensidade.n} traço${sDensidade.n !== 1 ? 's' : ''} com leitura no período`
+      : 'Sem leituras de densidade no período');
+    const cardDensidade = document.getElementById('qt-card-media-densidade');
+    if (cardDensidade && sDensidade && sDensidade.n > 0) {
+      cardDensidade.setAttribute('data-tooltip',
+        `Mediana: ${fmtN(sDensidade.mediana)} · Desvio Padrão: ${fmtN(sDensidade.dp)}\nMín: ${fmtN(sDensidade.min)} · Máx: ${fmtN(sDensidade.max)}`);
+    }
+
+    const sFlow = ind.cepPorInsumo?.Flow;
+    setText('qt-media-flow', sFlow && sFlow.n > 0 ? fmtN(sFlow.media) : '—');
+    setText('qt-media-flow-sub', sFlow && sFlow.n > 0
+      ? `${sFlow.n} traço${sFlow.n !== 1 ? 's' : ''} com leitura no período`
+      : 'Sem leituras de flow no período');
+    const cardFlow = document.getElementById('qt-card-media-flow');
+    if (cardFlow && sFlow && sFlow.n > 0) {
+      cardFlow.setAttribute('data-tooltip',
+        `Mediana: ${fmtN(sFlow.mediana)} · Desvio Padrão: ${fmtN(sFlow.dp)}\nMín: ${fmtN(sFlow.min)} · Máx: ${fmtN(sFlow.max)}`);
+    }
+
+    // Berços Enchidos por Traço — traços reaproveitados já contam como 1
+    // único traço (soma de todos os usos) — ver _bercosDoTraco.
+    const sBercos = ind.statsBercosPorTraco;
+    setText('qt-media-bercos-traco', sBercos && sBercos.n > 0 ? fmtN(sBercos.media) : '—');
+    setText('qt-media-bercos-traco-sub', sBercos && sBercos.n > 0
+      ? `${sBercos.n} traço${sBercos.n !== 1 ? 's' : ''} com berços registrados`
+      : 'Sem berços registrados no período');
+    const cardBercos = document.getElementById('qt-card-media-bercos-traco');
+    if (cardBercos && sBercos && sBercos.n > 0) {
+      cardBercos.setAttribute('data-tooltip',
+        `Reaproveitamentos contam como 1 único traço (soma dos berços de todos os usos)\n`
+        + `Mediana: ${fmtN(sBercos.mediana)} · Desvio Padrão: ${fmtN(sBercos.dp)}\nMín: ${fmtN(sBercos.min)} · Máx: ${fmtN(sBercos.max)}`);
     }
   }
 

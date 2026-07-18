@@ -30,6 +30,8 @@
               <option value="todos" selected>Todos</option>
             </select>
             <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+              <input class="form-input" type="text" id="reg-busca-id" placeholder="🔍 Buscar por ID da Operação"
+                title="Filtra a tabela pelo ID da operação (aceita busca parcial)" style="width:220px">
               <span style="font-size:.78rem;color:var(--text-3)" id="reg-count"></span>
               <button class="btn btn-ghost btn-sm" id="btn-limpar-filtros-registro" style="display:none"
                 onclick="limparTodosFiltros('filtros-registro')">✕ Limpar Todos</button>
@@ -81,6 +83,8 @@
                 <th data-col="dimensao">Dimensão</th>
                 <th data-col="capacidade">Cap. Berços</th> <!-- Nova -->
                 <th data-col="id_bateria">ID Bateria</th>
+                <th data-col="id_operacao">ID Operação</th> <!-- Nova -->
+
                 <th data-col="inicio">Início</th>
                 <th data-col="fim">Fim</th>
                 <th data-col="desemplaque">Previsão Desemplaque</th>
@@ -102,7 +106,7 @@
             </thead>
             <tbody id="registro-tbody">
               <tr>
-                <td colspan="21" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
+                <td colspan="22" style="text-align:center;color:var(--text-3);padding:30px">Carregando...</td>
               </tr>
             </tbody>
           </table>
