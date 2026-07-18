@@ -824,6 +824,7 @@
         <td data-col="m2_2psp">${(b.m2_total || 0).toFixed(2)}</td>
         <td data-col="bercos_reais">${b.bercos_reais || '—'}</td>
         <td data-col="placas_cimenticia">${b.placas_cimenticia || 0}</td>
+        <td data-col="operador_nome">${b.operador_nome ? LW.escaparHtml(b.operador_nome) : '—'}</td>
       </tr>`;
     }).join('');
 
@@ -861,6 +862,7 @@
     { key: 'm2_2psp', label: 'm² (Total)' },
     { key: 'bercos_reais', label: 'Berços Reais' },
     { key: 'placas_cimenticia', label: 'Placas Cimenticia' },
+    { key: 'operador_nome', label: 'Registrado por' },
   ];
 
   // Cópia mutável: ganha entradas extras quando tipos de placa novos (3p, 4p, ...)
@@ -893,6 +895,7 @@
       case 'm2_2psp':          return Number(b.m2_total) || 0;
       case 'bercos_reais':     return Number(b.bercos_reais) || 0;
       case 'placas_cimenticia':return Number(b.placas_cimenticia) || 0;
+      case 'operador_nome':    return b.operador_nome || '';
       default:
         if (col.startsWith('paineis_')) return Number((b.paineis_por_tipo || {})[col.replace('paineis_', '')]) || 0;
         if (col.startsWith('m2_'))      return Number((b.m2_por_tipo || {})[col.replace('m2_', '')]) || 0;
