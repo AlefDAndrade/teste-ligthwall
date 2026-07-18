@@ -2022,6 +2022,15 @@
   .sq-info-col {
     min-width: calc(50% - 6px);
   }
+
+  /* Espelho Visual (Dashboard → avaliação em miniatura): 4 mini-paletes
+     em 2x2 ficavam bem espremidos num celular de verdade (cada um já
+     tem padding próprio, ver .sq-mini-pallet) — 1 coluna larga lê
+     melhor, mesmo custando mais rolagem vertical. */
+  .sq-mini-stacks {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
 }
 
 /* Toast leve (ver toast(), setor-qualidade.js) — mesmo padrão visual de
