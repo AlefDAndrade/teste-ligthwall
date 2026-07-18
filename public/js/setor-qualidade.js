@@ -3266,7 +3266,20 @@
   }
 
   /* ── Espelho visual ───────────────────────────────────── */
-  function getSlabCount(bid) { return bid==='B5-7.5'?11:bid==='B6-12'?8:10; }
+  // Quantas placas o PALETE `pallet` teve de verdade nesta avaliação —
+  // olha os painéis salvos de verdade (ver registerEvaluation:
+  // evalObj.paineis tem 1 entrada por posição que existiu no momento do
+  // registro, já refletindo qualquer remoção de painel "não enchido" ou
+  // de lado só parcialmente cheio — ver conversa que motivou isso: "o
+  // espelho e a análise focada não estão refletindo paletes com painéis
+  // a menos"). Antes disso, getSlabCount(bid) era uma função MOCADA —
+  // devolvia um número fixo (11/8/10) direto do ID da bateria, sem olhar
+  // pra avaliação salva nenhuma — todo palete sempre aparecia com a
+  // MESMA contagem, mesmo quando um deles tinha 1 painel a menos.
+  function _totalPorPalletMirror(panels, pallet) {
+    const posicoes = panels.filter(p => p.pallet === pallet).map(p => p.posicao);
+    return posicoes.length ? Math.max(...posicoes) : 0;
+  }
 
   function getMirrorMark(panel) {
     // "Não avaliado no sistema" (ver excluirDaFila) — painel que nunca
@@ -3326,7 +3339,6 @@
     document.getElementById('sq-mirror-next').disabled = index === dashboardEvals.length - 1;
     if (btnEditar) btnEditar.style.display = sessionStorage.getItem('lw_role') === 'Administrador' ? 'inline-flex' : 'none';
 
-    const n = getSlabCount(item.batteryId);
     const cm = { SP:'sp','2P':'p2','3T':'t3','1T':'t1' };
     let html = '<div class="sq-mini-stacks">';
     // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
@@ -3335,6 +3347,7 @@
     // DE EXIBIÇÃO muda; os dados de cada pallet continuam vindo do mesmo
     // número de sempre.
     [2, 1, 3, 4].forEach(p => {
+      const n = _totalPorPalletMirror(panels, p); // cada palete com a contagem DELE, não uma média/fixo compartilhado
       html += `<div class="sq-mini-pallet"><div class="sq-mini-pallet-header">P${p}</div>`;
       for (let i = 1; i <= n; i++) {
         const panel = panels.find(pa => pa.pallet===p && pa.posicao===i);

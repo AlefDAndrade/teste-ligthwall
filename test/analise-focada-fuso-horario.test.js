@@ -56,3 +56,44 @@ test('_fmtHora em outro horário (23:45) também bate certo, sem "virar o dia" p
   const resultado = window.LWFocada.fmtHora('2026-07-16T23:45:00.000Z');
   assert.equal(resultado, '23:45');
 });
+
+// ─── Contagem de painéis por palete (ver conversa: "o espelho e a análise
+// focada não estão refletindo paletes com painéis a menos") ─────────────────
+// Antes, _renderAvaliacao calculava UM totalPorPallet pra todo mundo
+// (avaliacao.totalSlabs / 4) — perdia qualquer palete que tivesse ficado com
+// painel a mais ou a menos que os outros (ex: berço "não enchido" removido
+// da grade, ver setor-qualidade.js). _totalPorPallet agora olha os painéis
+// de CADA palete separadamente.
+
+test('_totalPorPallet reflete um palete com 1 painel A MENOS que os outros (não usa uma média/divisão fixa)', () => {
+  const window = montarJanela();
+  const paineis = [];
+  [1, 2, 3, 4].forEach(pallet => {
+    const total = pallet === 1 ? 9 : 10; // pallet 1 com 1 painel a menos
+    for (let posicao = 1; posicao <= total; posicao++) paineis.push({ pallet, posicao });
+  });
+
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 1), 9, 'pallet 1 deveria ter 9, não 10 (nem a média/divisão do total por 4)');
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 2), 10);
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 3), 10);
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 4), 10);
+});
+
+test('_totalPorPallet reflete um palete com painéis A MAIS que os outros (pallet extra/maior)', () => {
+  const window = montarJanela();
+  const paineis = [];
+  [1, 2, 3, 4].forEach(pallet => {
+    const total = pallet === 3 ? 12 : 10;
+    for (let posicao = 1; posicao <= total; posicao++) paineis.push({ pallet, posicao });
+  });
+
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 3), 12, 'pallet 3 deveria ter 12, refletindo o que a avaliação salvou de verdade');
+  assert.equal(window.LWFocada.totalPorPallet(paineis, 1), 10);
+});
+
+test('_totalPorPallet devolve 0 pra um palete sem nenhum painel salvo (avaliação vazia/legada) em vez de quebrar', () => {
+  const window = montarJanela();
+  assert.equal(window.LWFocada.totalPorPallet([], 1), 0);
+  assert.equal(window.LWFocada.totalPorPallet([{ pallet: 2, posicao: 1 }], 1), 0);
+});
+

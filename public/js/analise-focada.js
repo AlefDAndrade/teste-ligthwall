@@ -454,6 +454,19 @@
     return 'var(--text-3)';
   }
 
+  // Quantas placas o PALETE `pallet` teve de verdade nesta avaliação —
+  // olha os painéis salvos de verdade em vez de dividir o total igual
+  // pra todo mundo (ver conversa que motivou: "o espelho e a análise
+  // focada não estão refletindo paletes com painéis a menos" — antes,
+  // totalPorPallet = totalSlabs/4 assumia os 4 paletes sempre do mesmo
+  // tamanho, mas um berço "não enchido" ou um lado só parcialmente cheio
+  // tira painel de UM palete só, não dos 4 igualmente — ver
+  // _removerPaineisNaoEnchidosDaGrade, setor-qualidade.js).
+  function _totalPorPallet(paineis, pallet) {
+    const posicoes = paineis.filter(p => p.pallet === pallet).map(p => p.posicao);
+    return posicoes.length ? Math.max(...posicoes) : 0;
+  }
+
   function _renderAvaliacao(avaliacao) {
     const el = document.getElementById('af-avaliacao');
     if (!el) return;
@@ -461,7 +474,6 @@
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Bateria sem avaliação.</div>`;
       return;
     }
-    const totalPorPallet = Math.round((avaliacao.totalSlabs || 40) / 4);
     const montagem = avaliacao.montagem || {};
     const paineis = avaliacao.paineis || [];
 
@@ -474,6 +486,7 @@
       // Tipo de montagem daquele pallet — "no cantinho", cabeçalho do
       // próprio card do pallet, não em cada painel individual.
       const tipoMontPallet = montagem['pallet' + p] || '—';
+      const totalPorPallet = _totalPorPallet(paineis, p); // cada palete com a contagem DELE, não uma média/fixo compartilhado
       html += `<div class="af-pallet"><div class="af-pallet-header"><span>Pallet ${p}</span><span class="af-pallet-tipo">${LW.escaparHtml(tipoMontPallet)}</span></div><div class="af-pallet-slabs">`;
       for (let i = 1; i <= totalPorPallet; i++) {
         const painel = paineis.find(pp => pp.pallet === p && pp.posicao === i);
@@ -673,5 +686,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, fmtHora: _fmtHora };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
 })();
