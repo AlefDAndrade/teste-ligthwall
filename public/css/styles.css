@@ -522,12 +522,39 @@ h4 {
   gap: 24px;
 }
 
+/* Página de Paradas — formulário de registro (esquerda) + KPIs/gráfico
+   (direita), lado a lado no desktop. Ver @media abaixo pra empilhar em
+   telas menores (mesmo breakpoint de .op-layout-grid, que tem o mesmo
+   formato "form + painel lateral"). */
+.paradas-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+  align-items: start;
+}
+
+/* Início/Término da parada — 2 campos de data/hora lado a lado dentro
+   do formulário. Só precisa empilhar em telas BEM estreitas (celular),
+   não no tablet — mesmo com .paradas-layout-grid já em 1 coluna lá, o
+   formulário sozinho ainda é largo o bastante pros 2 campos ao mesmo
+   tempo. Ver @media de celular, abaixo. */
+.paradas-form-datas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 @media (max-width: 1200px) {
   .op-layout-grid {
     grid-template-columns: 1fr;
   }
   .op-info-column {
     position: static;
+  }
+  .paradas-layout-grid {
+    grid-template-columns: 1fr;
   }
   /* 4 "colunas" -> 2x2 — cada coluna vira largura igual (a 4ª perde o
      2fr especial, que só fazia sentido ao lado de outras 3 mais
@@ -1951,6 +1978,12 @@ td.mono {
      largo que a tela chegou a ficar. */
   .ao-popover {
     max-width: calc(100vw - 24px);
+  }
+
+  /* Início/Término da parada: 1 campo por linha — só aqui, em tela de
+     celular de verdade (ver .paradas-form-datas, acima). */
+  .paradas-form-datas {
+    grid-template-columns: 1fr;
   }
 
   /* Identificação da Bateria e Controle de Injeção: 1 campo por linha
