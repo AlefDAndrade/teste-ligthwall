@@ -247,7 +247,12 @@ h4 {
 .app-shell {
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: 56px 1fr;
+  /* "auto" em vez de "56px" fixo — em telas estreitas a topbar pode
+     precisar quebrar em 2 linhas (ver @media abaixo); com altura fixa,
+     esse conteúdo extra ficava cortado/sobreposto ao invés de empurrar
+     o resto da página pra baixo. min-height na .topbar (abaixo) garante
+     os mesmos 56px de sempre quando cabe tudo numa linha só. */
+  grid-template-rows: auto 1fr;
   min-height: 100vh;
 }
 
@@ -258,6 +263,7 @@ h4 {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  min-height: 56px;
   padding: 0 24px;
   gap: 16px;
   z-index: 100;
@@ -345,14 +351,15 @@ h4 {
   background: var(--bg-3);
   border: 1px solid var(--border);
   color: var(--text-2);
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .sidebar-label {
@@ -1659,11 +1666,30 @@ td.mono {
 }
 
 /* ---- MENU page ---- */
+.menu-page-wrap {
+  padding: 40px 32px;
+}
+
+.menu-page-header {
+  margin-bottom: 40px;
+}
+
+.menu-page-title {
+  font-size: 2.6rem;
+  margin-bottom: 6px;
+}
+
+.menu-page-subtitle {
+  color: var(--text-3);
+  font-size: .9rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
 .menu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
-  padding: 40px 32px;
   max-width: 1350px;
   margin: 0 auto;
 }
@@ -1731,6 +1757,28 @@ td.mono {
     grid-template-columns: 1fr;
   }
 
+  /* Topbar: logo + assinatura + fila pendente + usuário + Debriefing +
+     data/hora/tema/sair não cabem mais numa linha só a partir daqui —
+     deixa quebrar em 2 linhas (a .topbar já não tem mais altura fixa,
+     ver .app-shell acima, então isso empurra o conteúdo pra baixo em
+     vez de cortar/sobrepor). "Sistema de Injeção V1.0" é só decorativo
+     — primeiro a sumir quando o espaço aperta. */
+  .topbar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    row-gap: 6px;
+  }
+
+  .topbar-sub {
+    display: none;
+  }
+
+  .topbar-right {
+    margin-left: 0;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
   .grid-2,
   .grid-3 {
     grid-template-columns: 1fr;
@@ -1762,6 +1810,72 @@ td.mono {
 
   .page-header {
     padding: 20px 16px 0;
+  }
+
+  .menu-page-wrap {
+    padding: 24px 16px;
+  }
+
+  .menu-page-header {
+    margin-bottom: 24px;
+  }
+
+  .menu-page-title {
+    font-size: 1.9rem;
+  }
+}
+
+/* Celular (mais estreito que o breakpoint de tablet acima) — ajustes
+   finos que só fazem falta quando o espaço aperta de verdade. */
+@media (max-width: 600px) {
+  /* "dd/mm" da data no relógio da topbar é o item menos essencial que
+     sobra depois do .topbar-sub já ter saído (ver breakpoint de 900px,
+     acima) — sai também aqui, mantém só o relógio (mais útil de bater o
+     olho rápido) e o resto (tema/sair/config). */
+  #topbar-date {
+    display: none;
+  }
+
+  /* Botão "📓 Debriefing do Dia" perde o texto, fica só o ícone — meio
+     texto ("Debriefing do Dia") empurrava o resto da topbar pra quebrar
+     em 2-3 linhas sem necessidade; o ícone sozinho já é reconhecível
+     (é o único botão com esse emoji na tela). */
+  .topbar button[onclick*="LWDebriefing.toggle"] {
+    font-size: 0;
+    padding: 6px 8px;
+  }
+  .topbar button[onclick*="LWDebriefing.toggle"]::before {
+    content: '📓';
+    font-size: 1rem;
+  }
+
+  /* O popover de Debriefing normalmente nasce ancorado (position:
+     absolute) embaixo do botão que abriu ele (ver .ao-popover) — como
+     esse botão fica no meio da topbar, o popover (até 560px de largura)
+     saía cortado pela borda da tela num celular. Em vez de ficar preso
+     à posição do botão, vira um painel fixo, centralizado na tela. */
+  .debriefing-popover {
+    position: fixed;
+    left: 50%;
+    top: 90px;
+    transform: translateX(-50%);
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: calc(100vh - 110px);
+  }
+  .debriefing-popover::before {
+    display: none; /* a "setinha" apontando pro botão não faz sentido mais estando centralizado */
+  }
+
+  /* Card do menu principal: em telas bem estreitas, um pouco menos de
+     respiro interno (sem mudar o grid — auto-fit já empilha em 1 coluna
+     sozinho a partir de ~272px, ver .menu-grid). */
+  .menu-page-title {
+    font-size: 1.6rem;
+  }
+
+  .menu-card {
+    padding: 20px;
   }
 }
 
