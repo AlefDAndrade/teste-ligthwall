@@ -1076,8 +1076,15 @@
     const abrir = menu.style.display === 'none';
     if (abrir) {
       const rect = btn.getBoundingClientRect();
+      const LARGURA_MENU = 240; // mesma largura fixa de .col-menu, ver styles.css
+      // Em telas estreitas (celular), o botão "⚙ Colunas" fica perto da
+      // borda direita (empurrado por margin-left:auto no grupo de
+      // botões) — abrir o menu sempre "pra direita" a partir do botão
+      // (comportamento de sempre) cortava ele na borda da tela. Limita
+      // a posição pra caber inteiro, com uma folga de 8px.
+      const maxLeft = window.innerWidth - LARGURA_MENU - 8;
+      menu.style.left = Math.max(8, Math.min(rect.left, maxLeft)) + 'px';
       menu.style.top = (rect.bottom + 8) + 'px';
-      menu.style.left = rect.left + 'px';
     }
     menu.style.display = abrir ? 'block' : 'none';
     btn.setAttribute('aria-expanded', String(abrir));

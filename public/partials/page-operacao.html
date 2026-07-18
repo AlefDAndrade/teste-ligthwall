@@ -36,13 +36,12 @@
       <div class="op-layout-grid">
         <!-- Coluna Esquerda: Informações Operacionais (~60%) -->
         <div class="op-info-column">
-          <div class="card"
-            style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px">
-            <div style="display:flex; align-items:center; gap:16px">
+          <div class="card op-status-card">
+            <div class="op-status-left">
               <div id="status-banner"><span class="badge badge-gray">⬤ Aguardando início</span></div>
 
               <!-- Trigger Buttons for Floating Panels -->
-              <div style="display:flex; gap:8px; border-left:1px solid var(--border); padding-left:16px">
+              <div class="op-status-triggers">
                 <div style="position:relative">
                   <button class="btn btn-ghost btn-sm" onclick="LWOp.togglePopover('popover-pendencias', event)">
                     ⚠️ Pendências <span id="pendencia-badge-count"></span>
@@ -67,7 +66,7 @@
               </div>
             </div>
 
-            <div style="display:flex;align-items:center;gap:24px">
+            <div class="op-status-timers">
               <div>
                 <div
                   style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">
@@ -85,7 +84,7 @@
 
           <div class="card">
             <div class="card-title">Identificação da Bateria</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+            <div class="op-grid-identificacao">
               <div class="form-group">
                 <label class="form-label">Data <span class="required">*</span></label>
                 <input class="form-input auto-filled" id="op-data-val" readonly value="" style="color:var(--accent)">
@@ -143,7 +142,7 @@
 
           <div class="card">
             <div class="card-title">Controle de Injeção</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+            <div class="op-grid-controle">
               <div class="form-group">
                 <label class="form-label">Início da Injeção</label>
                 <div style="display:flex;gap:8px">
@@ -187,8 +186,7 @@
           </div>
 
           <div class="card">
-            <div id="op-cards-paineis"
-              style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;text-align:center">
+            <div id="op-cards-paineis" class="op-grid-paineis">
               <div>
                 <div
                   style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">

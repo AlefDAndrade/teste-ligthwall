@@ -455,6 +455,73 @@ h4 {
   gap: 20px;
 }
 
+/* Identificação da Bateria: Data/Turno/ID/Dimensão/Capacidade/Tipo de
+   Montagem/Berços Injetados — 7 campos, 3 por linha no desktop. Sem
+   breakpoint próprio, isso vira 7 colunas espremidas de ~50px numa tela
+   de celular — ver @media abaixo. */
+.op-grid-identificacao {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+/* Início/Fim da Injeção, Tempo Total, Atraso — 4 campos numa linha só
+   no desktop. Mesmo problema em tela estreita — ver @media abaixo. */
+.op-grid-controle {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 14px;
+  align-items: end;
+}
+
+/* Cards de Total de Painéis/m² por tipo — quantidade de colunas na
+   verdade é DINÂMICA (operacao.js injeta 1 par de cards — painéis + m²
+   — por tipo de painel usado na bateria, dentro de #op-cards-paineis-tipo
+   e #op-cards-m2-tipo, ambos com display:contents pra virarem itens
+   diretos DESTE grid). "repeat(7,1fr)" era só um chute de quantas
+   colunas cabem — com auto-fit, cada coluna tem no mínimo 70px (dá pra
+   ler o número) e quantas couberem na largura disponível ficam numa
+   linha só; o resto quebra pra próxima — funciona igual em qualquer
+   tela e não depende de quantos tipos a bateria tiver. */
+.op-grid-paineis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 8px;
+  text-align: center;
+}
+
+/* Card de status (badge + botões de Pendências/Referências + timer) —
+   antes tudo numa linha só (justify-content:space-between, sem wrap);
+   sem espaço lateral sobrando (ex: celular), timer saía espremido ou
+   cortado. Ver @media abaixo pra quebra em telas estreitas. */
+.op-status-card {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.op-status-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.op-status-triggers {
+  display: flex;
+  gap: 8px;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
+.op-status-timers {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
 @media (max-width: 1200px) {
   .op-layout-grid {
     grid-template-columns: 1fr;
@@ -1784,6 +1851,29 @@ td.mono {
     grid-template-columns: 1fr;
   }
 
+  /* Identificação da Bateria: 3 -> 2 colunas no tablet (7 campos ainda
+     cabem bem em pares) — ver breakpoint de celular, abaixo, pra 1
+     coluna. Controle de Injeção: 4 -> 2 (Início/Fim numa linha, Tempo
+     Total/Atraso na outra). */
+  .op-grid-identificacao {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .op-grid-controle {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Card de status: badge/botões de um lado, timer do outro — em telas
+     menores, quebra em 2 linhas em vez de espremer ou cortar. */
+  .op-status-card {
+    flex-wrap: wrap;
+  }
+
+  .op-status-timers {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .traco-card-header {
     flex-wrap: wrap;
   }
@@ -1828,6 +1918,24 @@ td.mono {
 /* Celular (mais estreito que o breakpoint de tablet acima) — ajustes
    finos que só fazem falta quando o espaço aperta de verdade. */
 @media (max-width: 600px) {
+  /* Popovers no geral (Pendências, Referências, menus de coluna etc.) —
+     nascem ancorados (position:absolute) no botão que os abre; em telas
+     estreitas, se esse botão não estiver perto da borda esquerda, o
+     popover pode ultrapassar a borda direita da tela. Isso não muda
+     ONDE ele nasce (ainda gruda no botão) — só impede que ele seja mais
+     largo que a tela chegou a ficar. */
+  .ao-popover {
+    max-width: calc(100vw - 24px);
+  }
+
+  /* Identificação da Bateria e Controle de Injeção: 1 campo por linha
+     — em telas de celular de verdade, 2 colunas ainda fica apertado
+     pros rótulos mais longos (ex: "ID da Bateria", "Berços Injetados"). */
+  .op-grid-identificacao,
+  .op-grid-controle {
+    grid-template-columns: 1fr;
+  }
+
   /* "dd/mm" da data no relógio da topbar é o item menos essencial que
      sobra depois do .topbar-sub já ter saído (ver breakpoint de 900px,
      acima) — sai também aqui, mantém só o relógio (mais útil de bater o
