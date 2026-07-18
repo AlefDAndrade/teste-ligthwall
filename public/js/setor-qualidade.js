@@ -1255,7 +1255,7 @@
         // — cai de volta pro índice simples de sempre quando não for
         // (avaliação avulsa legada, palete extra, ou rascunho reaberto
         // sem a operação recarregada — ver capacidadeOperacaoAtual).
-        const berco = palleteBase <= 4 ? _bercoDoSlot(palleteBase, i, capacidadeOperacaoAtual) : null;
+        const berco = palleteBase <= 4 ? _bercoDoSlot(palleteBase, i, capacidadeOperacaoAtual, paineisNaoEnchidosAtual) : null;
         num.textContent = berco ? ('B' + berco) : i;
         slab.appendChild(num);
 
@@ -2250,6 +2250,35 @@
     return { pallet, posicao };
   }
 
+  // Dado um dos 4 paletes BASE, devolve de qual LADO ele é (esquerdo ou
+  // direito) — usado por _bercoDoSlot pra saber quais berços "não
+  // enchido" (que são marcados por lado, não pelo palete em si) valem
+  // pra ele.
+  function _ladoDoPallet(pallet) {
+    const mapa = _paletePorMetadeELado();
+    if (pallet === mapa.esquerdo.primeira || pallet === mapa.esquerdo.segunda) return 'esquerdo';
+    if (pallet === mapa.direito.primeira || pallet === mapa.direito.segunda) return 'direito';
+    return null;
+  }
+
+  // Conjunto (Set) dos números de berço marcados como "não enchido" NO
+  // LADO indicado, a partir de uma lista bruta no formato de
+  // paineisNaoEnchidosAtual (ver _definirPaineisNaoEnchidos). Recebe a
+  // lista como parâmetro em vez de ler paineisNaoEnchidosAtual direto —
+  // assim _bercoDoSlot também funciona pro espelho de uma avaliação já
+  // salva (item.capacidadeOperacao), sem misturar com o estado da
+  // avaliação que está sendo editada agora.
+  function _bercosNaoEnchidosPorLado(lado, listaBruta) {
+    const campo = lado === 'esquerdo' ? 'esquerda' : 'direita';
+    const set = new Set();
+    (Array.isArray(listaBruta) ? listaBruta : []).forEach(b => {
+      if (b[`estado_${campo}`] !== 'nao_enchido') return;
+      const bercoNum = parseInt(b.ordem) || parseInt(String(b.berco || '').replace(/^B/i, ''));
+      if (bercoNum) set.add(bercoNum);
+    });
+    return set;
+  }
+
   // "🚫 Marcar Não Enchido" (Bateria Atual, ver bateria-atual.js) — grava
   // o snapshot cru de op.bercos_visuais (ver bercosVisuaisPorOperacoes,
   // db.js, e GET /operacoes-nao-avaliadas) em paineisNaoEnchidosAtual, pra
@@ -2332,13 +2361,37 @@
   // Generalizado pra qualquer permutação configurada em "Definir
   // Paletes" (ver _paletePorMetadeELado, acima) — não assume mais que
   // paletes 3/4 são sempre a 1ª metade.
-  function _bercoDoSlot(pallet, posicao, capacidade) {
+  //
+  // bercosNaoEnchidos (opcional, mesmo formato de paineisNaoEnchidosAtual)
+  // — ver conversa que motivou isso: encher só um lado do berço (ou
+  // marcar "🚫 Não Enchido" em Bateria Atual) tira 1 painel da grade
+  // (ver _removerPaineisNaoEnchidosDaGrade), mas o berço que falta
+  // precisa DESAPARECER da numeração, não só empurrar todo mundo pra
+  // trás uma casa — B6 continua sendo B6 mesmo se B5 não existir aqui,
+  // nunca vira "B5" por engano. Por isso este cálculo agora PULA os
+  // berços não enchidos ao contar posições, em vez de somar direto
+  // (posição + deslocamento fixo).
+  function _bercoDoSlot(pallet, posicao, capacidade, bercosNaoEnchidos) {
     if (!capacidade || capacidade <= 0) return null;
     const metade = Math.ceil(capacidade / 2);
     const mapa = _paletePorMetadeELado();
-    if (pallet === mapa.esquerdo.primeira || pallet === mapa.direito.primeira) return posicao;         // 1ª metade — numeração direta
-    if (pallet === mapa.esquerdo.segunda  || pallet === mapa.direito.segunda)  return metade + posicao; // 2ª metade
-    return null;
+    let inicio, fim;
+    if (pallet === mapa.esquerdo.primeira || pallet === mapa.direito.primeira) { inicio = 1; fim = metade; }
+    else if (pallet === mapa.esquerdo.segunda || pallet === mapa.direito.segunda) { inicio = metade + 1; fim = capacidade; }
+    else return null;
+
+    if (!bercosNaoEnchidos || !bercosNaoEnchidos.length) return inicio + posicao - 1; // atalho de sempre, sem remoções
+
+    const removidos = _bercosNaoEnchidosPorLado(_ladoDoPallet(pallet), bercosNaoEnchidos);
+    if (!removidos.size) return inicio + posicao - 1;
+
+    let contagem = 0;
+    for (let b = inicio; b <= fim; b++) {
+      if (removidos.has(b)) continue;
+      contagem++;
+      if (contagem === posicao) return b;
+    }
+    return null; // não deveria acontecer se posicao <= stackCounts[sid]
   }
 
   // Atualiza o subtítulo de cada palete-base (ex.: "Berços 1–10 · Esq.")

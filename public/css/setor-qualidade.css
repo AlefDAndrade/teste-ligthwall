@@ -1299,7 +1299,14 @@
 /* Placa individual */
 .sq-slab-stack {
   display: flex;
-  flex-direction: column;
+  /* B1 é a base física do palete (primeira placa carregada) — fica embaixo
+     na tela; berços maiores (B2, B3...) vão sendo empilhados por cima,
+     igual a pilha de verdade. Ver conversa que motivou isso: antes B1
+     aparecia no topo e ia numerando pra baixo, o oposto de como o palete
+     é fisicamente montado. A ordem dos elementos no DOM (e portanto de
+     _stackIds()/drag-and-drop, que trabalham por id, não por posição na
+     tela) continua igual — só a ORDEM VISUAL inverte. */
+  flex-direction: column-reverse;
   gap: 2px;
   width: 100%;
   margin-bottom: 8px;

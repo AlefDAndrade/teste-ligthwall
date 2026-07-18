@@ -133,3 +133,32 @@ test('sem berços marcados "não enchido" (bercos_visuais ausente ou vazio), gra
     assert.equal(contarPlacas(sid), 10, `${sid} deveria nascer com todas as placas, sem bercos_visuais`);
   });
 });
+
+test('o berço que falta é PULADO na numeração (não é só um índice deslocado) — quem vinha depois mantém o número verdadeiro', async () => {
+  const { window } = dom;
+  await iniciarAvaliacaoComTipoFixo(window, OPERACAO_COM_NAO_ENCHIDOS.id);
+
+  const rotulo = (sid, posicao) => window.document.querySelector(`[data-id="${sid}-${posicao}"] .sq-slab-number`)?.textContent;
+
+  // stack3 = 1ª metade, esquerdo (berços 1-10) — berço 3 removido (esquerda).
+  // Antes da correção, a posição 3 (que agora guarda os dados do berço 4,
+  // deslocados pra preencher o buraco) ficava rotulada "B3" por engano —
+  // devia mostrar o berço 4 de verdade.
+  assert.equal(rotulo('stack3', 1), 'B1');
+  assert.equal(rotulo('stack3', 2), 'B2');
+  assert.equal(rotulo('stack3', 3), 'B4', 'berço 3 sumiu — a posição 3 agora é o berço 4, não pode continuar rotulada B3');
+  assert.equal(rotulo('stack3', 9), 'B10', 'último painel deveria ser o berço 10 (o maior berço desta metade), não B9');
+
+  // stack1 = 2ª metade, esquerdo (berços 11-20) — berço 15 removido (esquerda e direita).
+  assert.equal(rotulo('stack1', 4), 'B14');
+  assert.equal(rotulo('stack1', 5), 'B16', 'berço 15 sumiu — a posição 5 agora é o berço 16');
+  assert.equal(rotulo('stack1', 9), 'B20', 'último painel deveria ser o berço 20, não B19');
+
+  // stack2 = 2ª metade, direito (berços 11-20) — berço 15 também removido aqui.
+  assert.equal(rotulo('stack2', 5), 'B16', 'mesmo raciocínio do lado direito');
+
+  // stack4 = 1ª metade, direito (berços 1-10) — nada removido deste lado
+  // (berço 3 só foi marcado do lado esquerdo) — numeração direta, sem pulos.
+  for (let i = 1; i <= 10; i++) assert.equal(rotulo('stack4', i), 'B' + i);
+});
+
