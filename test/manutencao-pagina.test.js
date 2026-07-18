@@ -136,9 +136,9 @@ test('criar um chamado corretivo: preencher o formulário e salvar reflete na ta
   await window.salvarManutencao();
   await new Promise(r => setTimeout(r, 300));
 
-  const tbody = window.document.getElementById('man-corretivaTableBody');
-  assert.ok(tbody.innerHTML.includes('Injetora Teste'), 'o chamado deveria aparecer na tabela de Corretiva');
-  assert.ok(tbody.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer na tabela');
+  const board = window.document.getElementById('man-corretivaBoard');
+  assert.ok(board.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer em algum cartão do board');
+  assert.ok(board.querySelector('.man-kanban-card'), 'o chamado deveria aparecer como um cartão no board Kanban');
 
   const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
   const data = await resp.json();

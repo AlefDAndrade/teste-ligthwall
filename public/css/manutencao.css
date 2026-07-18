@@ -131,6 +131,63 @@
 .man-kpi-card .man-kpi-number { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: var(--text); }
 .man-kpi-card .man-kpi-label { font-size: 11px; color: var(--text-3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* ── BOARD KANBAN — Chamados Corretivos ──────────────────────────────────
+   Substitui a antiga tabela única (ver conversa que motivou isso: "não
+   estou satisfeito com o fluxo do chamado" → falta de clareza de quem
+   precisa agir). Cada coluna é uma FASE do chamado (calculada em
+   _corretivaColuna(), manutencao.js — nunca gravada como campo, é sempre
+   derivada do estado atual), cada cartão mostra, se aplicável, "de quem é
+   a vez agora" (ver _acaoPendenteCard()). Rola na horizontal em telas
+   estreitas (mesma ideia de .man-table-wrap pra tabelas largas) — colunas
+   fixas, cartões dentro de cada uma rolam na vertical.  */
+.man-kanban-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.man-kanban-col { flex: 1 1 240px; min-width: 240px; max-width: 300px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; max-height: 70vh; }
+.man-kanban-col-head { padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.man-kanban-col-head .count { margin-left: auto; background: var(--bg-3); color: var(--text-2); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.man-kanban-col-cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+.man-kanban-col-vazio { font-size: 12px; color: var(--text-3); text-align: center; padding: 16px 4px; opacity: .7; }
+
+.man-kanban-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: .15s; }
+.man-kanban-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+.man-kanban-card-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); margin-bottom: 4px; }
+.man-kanban-card-head .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.man-kanban-card-maquina { font-weight: 700; font-size: 13px; color: var(--text); }
+.man-kanban-card-setor { font-size: 11px; color: var(--text-2); }
+.man-kanban-card-anomalia { font-size: 12px; color: var(--text-2); margin: 6px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.man-kanban-card-cta { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; margin-top: 6px; text-align: center; }
+.man-kanban-card-cta.urgente { background: var(--accent-dim); color: var(--accent); }
+.man-kanban-card-cta.aguardando { background: var(--bg-3); color: var(--text-3); font-weight: 500; }
+.man-kanban-card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.man-kanban-card-footer .man-trajetoria-passos { transform: scale(.8); transform-origin: left center; }
+.man-kanban-card-acoes { display: flex; gap: 8px; }
+.man-kanban-card-acoes i { color: var(--text-3); transition: .15s; }
+.man-kanban-card-acoes i:hover { color: var(--accent); transform: scale(1.15); }
+
+/* ── ASSISTENTE POR ETAPAS — formulário do chamado ───────────────────────
+   Antes, as 4 seções (Abertura, Detalhes, Execução, Acompanhamento)
+   ficavam todas na tela ao mesmo tempo, mostrando/escondendo por CSS
+   conforme o estado — mas quando visíveis, ficavam TODAS visíveis juntas,
+   um formulário longo. Agora só a etapa atual (_manStepAtual,
+   manutencao.js) fica visível; as pílulas abaixo navegam entre etapas já
+   disponíveis (uma etapa só fica clicável quando faz sentido — ver
+   _manAtualizarPills()). O mapeamento de conteúdo é o MESMO de sempre:
+   "Abertura" = Seções 1+2 originais; "Execução" = Seção 3 original
+   (que já trazia embutida a caixa de Aceitar/Recusar); "Peça" = Seção 4
+   original; "Fechamento" é NOVA (antes só existia como botão + modal). */
+.man-wizard-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.man-wizard-step { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-3); font-size: 12px; font-weight: 600; cursor: pointer; transition: .15s; }
+.man-wizard-step .num { width: 18px; height: 18px; border-radius: 50%; background: var(--bg-3); color: var(--text-3); font-size: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.man-wizard-step.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.man-wizard-step.active .num { background: var(--accent); color: #fff; }
+.man-wizard-step.feito:not(.active) { color: var(--green); border-color: var(--green); }
+.man-wizard-step.feito:not(.active) .num { background: var(--green); color: #fff; }
+.man-wizard-step:disabled { opacity: .4; cursor: not-allowed; }
+.man-wizard-step:hover:not(:disabled):not(.active) { border-color: var(--text-2); color: var(--text); }
+
+.man-fechamento-resumo { padding: 16px; }
+.man-fechamento-aviso { padding: 16px; color: var(--text-2); font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.man-fechamento-ok { padding: 20px 16px; text-align: center; color: var(--green); font-weight: 600; }
+
 .man-table-wrap { overflow-x: auto; max-height: 600px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); position: relative; }
 .man-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .man-table-wrap th { text-align: left; padding: 14px 12px; color: var(--text-2); border-bottom: 2px solid var(--border); position: sticky; top: 0; background: var(--bg-card); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; z-index: 20; }

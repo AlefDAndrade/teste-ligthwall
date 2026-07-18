@@ -74,9 +74,9 @@ function dispararMouseEvent(el, tipo, opts = {}) {
 }
 
 test('sem Ctrl, passar o mouse na linha NÃO mostra o preview da trajetória', async () => {
-  const tbody = window.document.getElementById('man-corretivaTableBody');
-  const linha = tbody.querySelector('tr');
-  assert.ok(linha, 'deveria ter pelo menos uma linha na tabela');
+  const board = window.document.getElementById('man-corretivaBoard');
+  const linha = board.querySelector('.man-kanban-card');
+  assert.ok(linha, 'deveria ter pelo menos um cartão no board');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: false });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: false });
@@ -86,8 +86,8 @@ test('sem Ctrl, passar o mouse na linha NÃO mostra o preview da trajetória', a
 });
 
 test('segurando Ctrl e passando o mouse na linha, o preview aparece com o stepper', async () => {
-  const tbody = window.document.getElementById('man-corretivaTableBody');
-  const linha = tbody.querySelector('tr');
+  const board = window.document.getElementById('man-corretivaBoard');
+  const linha = board.querySelector('.man-kanban-card');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: true });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: true });
@@ -100,8 +100,8 @@ test('segurando Ctrl e passando o mouse na linha, o preview aparece com o steppe
 });
 
 test('mouseleave esconde o preview', async () => {
-  const tbody = window.document.getElementById('man-corretivaTableBody');
-  const linha = tbody.querySelector('tr');
+  const board = window.document.getElementById('man-corretivaBoard');
+  const linha = board.querySelector('.man-kanban-card');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: true });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: true });

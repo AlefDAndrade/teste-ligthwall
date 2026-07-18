@@ -73,6 +73,20 @@
       <form id="man-manForm" class="man-form-paper" onsubmit="return false;">
         <input type="hidden" id="man-manId"><input type="hidden" id="man-manEtiquetaFechada" value="false">
 
+        <!-- NAVEGAÇÃO DO ASSISTENTE — troca de qual das 4 zonas abaixo
+             fica visível (ver _manIrParaStep()/_manAplicarStepAtual(),
+             manutencao.js). Pílulas desabilitadas = etapa ainda não faz
+             sentido agora (ex: chamado novo, ainda não salvo; ou "Peça",
+             quando ninguém marcou "Aguardando peças? = Sim"). -->
+        <div class="man-wizard-nav man-no-print" id="man-wizardNav">
+          <button type="button" class="man-wizard-step" data-step="abertura" onclick="_manIrParaStep('abertura')"><span class="num">1</span> Abertura</button>
+          <button type="button" class="man-wizard-step" data-step="execucao" onclick="_manIrParaStep('execucao')"><span class="num">2</span> Execução</button>
+          <button type="button" class="man-wizard-step" data-step="peca" id="man-wizardStepPeca" onclick="_manIrParaStep('peca')" style="display:none;"><span class="num">3</span> Peça</button>
+          <button type="button" class="man-wizard-step" data-step="fechamento" onclick="_manIrParaStep('fechamento')"><span class="num">4</span> Fechamento</button>
+        </div>
+
+        <div id="man-zonaAbertura">
+
         <!-- SEÇÃO 1: ABERTURA -->
         <div style="background:var(--red-dim); border-left:4px solid var(--red); padding:10px 0; margin:0;">
           <div style="padding:0 16px 8px 16px; color:var(--red); font-weight:600;"><i class="fas fa-user"></i> 1. Abertura do Chamado</div>
@@ -134,6 +148,7 @@
           </div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera"></i> Foto / Documento</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoOperador" accept="image/*,.pdf" disabled onchange="previewArquivo(this, 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')"><div id="man-fotoOperadorPreview" style="display:none;"></div><button id="man-btnRemoverFotoOp" style="display:none;" onclick="removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')">Remover</button></div><span class="man-upload-hint">Upload ainda não é funcional nesta etapa — só a interface está pronta.</span></div></div></div>
         </div>
+        </div> <!-- /man-zonaAbertura -->
 
         <!-- SEÇÃO 3: EXECUÇÃO (MANUTENÇÃO) -->
         <div id="man-techSection">
@@ -181,10 +196,10 @@
           </div>
         </div>
 
-        <!-- SEÇÃO 4: ACOMPANHAMENTO DA SUPERVISÃO -->
+        <!-- SEÇÃO 4: ACOMPANHAMENTO DA SUPERVISÃO ("Peça" no assistente) -->
         <div id="man-supervisorSection">
           <div style="background:var(--green-dim); border-left:4px solid var(--green); padding:10px 0; margin:0;">
-            <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-user-shield"></i> 4. Acompanhamento (Supervisão)</div>
+            <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-user-shield"></i> Acompanhamento (Supervisão)</div>
             <div id="man-aceitarPedidoPecaBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--green); border-radius:6px; background:var(--green-dim);">
               <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarPedidoPecaTexto">Há um pedido de peça pendente. Os campos de acompanhamento só aparecem depois que Supervisão, Encarregado ou Administrador aceitarem o pedido.</span></p>
               <button type="button" id="man-btnAceitarPedidoPeca" class="man-btn man-btn-success" onclick="aceitarPedidoPeca()"><i class="fas fa-hand-paper"></i> Aceitar Pedido de Peça</button>
@@ -202,38 +217,40 @@
             </div>
           </div>
         </div>
-        
-        <!-- BOTÕES INFERIORES -->
+
+        <!-- 4ª ETAPA DO ASSISTENTE: FECHAMENTO — nova (antes só existia
+             como botão solto + modal). _manRenderizarFechamento()
+             (manutencao.js) decide o conteúdo: aviso (situação ainda não
+             é "Concluído"), resumo + botão (pronto pra fechar), ou
+             confirmação (já fechado). O botão continua abrindo o MESMO
+             modal de sempre (abrirModalFechamento/confirmarFechamento) —
+             só mudou ONDE o botão mora. -->
+        <div id="man-zonaFechamento" style="display:none;">
+          <div style="background:var(--green-dim); border-left:4px solid var(--green); padding:10px 0; margin:0;">
+            <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-lock"></i> Fechamento</div>
+            <div id="man-fechamentoConteudo"></div>
+          </div>
+        </div>
+
+        <!-- BOTÕES INFERIORES — sempre visíveis, independente da etapa
+             atual do assistente (salva o que estiver preenchido, onde
+             quer que a pessoa esteja navegando). -->
         <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
           <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" data-manut-area="manutencao-chamado" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
-          <button type="button" class="man-btn man-btn-warning" id="man-btnFecharEtiqueta" style="display:none;" data-manut-area="manutencao" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>
           <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
         </div>
       </form>
     </div>
 
-    <!-- PAINEL DE CHAMADOS -->
+    <!-- PAINEL DE CHAMADOS — board Kanban (ver conversa que motivou a troca
+         do modelo antigo de tabela única: falta de clareza de quem
+         precisa agir agora). Colunas fixas (Aguardando Aceite → Em
+         Execução → Aguardando Peça → Aguardando Fechamento → Concluído),
+         montadas 100% em JS (renderCorretiva(), manutencao.js) — cada
+         cartão já mostra "de quem é a vez" quando aplicável. -->
     <div class="man-card">
       <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
-      <div class="man-table-wrap man-table-wrap--linha-unica">
-        <table>
-          <thead><tr>
-            <th style="width: 9%;">Nº</th>
-            <th style="width: 12%;">Máquina</th>
-            <th style="width: 9%;">Setor</th>
-            <th style="width: 9%;">Turno</th>
-            <th style="width: 11%;">Observador</th>
-            <th style="width: 9%;">Tipo</th>
-            <th style="width: 8%;">Prioridade</th>
-            <th style="width: 8%;">Etiqueta</th>
-            <th style="width: 12%;">Status</th>
-            <th style="width: 12%;">Supervisão</th>
-            <th style="width: 10%;">Ações</th>
-          </tr></thead>
-          <tbody id="man-corretivaTableBody"></tbody>
-        </table>
-      </div>
-      <div id="man-pagCorretiva" class="man-pagination man-no-print"></div>
+      <div class="man-kanban-board" id="man-corretivaBoard"></div>
     </div>
   </div>
 

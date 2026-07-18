@@ -506,13 +506,16 @@
     document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.toggle('active', tiposSelecionados.includes(el.dataset.type)));
   }
 
+  // Só reflete a mudança do dropdown "Aguardando peças?" na pílula "Peça"
+  // do assistente (mostra/esconde/habilita) — não força navegação pra lá;
+  // quem decide qual etapa fica visível agora é sempre
+  // _manAplicarStepAtual() (chamado por dentro daqui).
   function toggleSupervisorSection() {
     const el = document.getElementById('man-manAguardandoPecas');
-    const section = document.getElementById('man-supervisorSection');
-    if (!el || !section) return;
+    if (!el) return;
     const aguardando = el.value === 'Sim';
-    section.style.display = aguardando ? 'block' : 'none';
     if (aguardando) _atualizarGateAcompanhamento();
+    _manAplicarStepAtual();
   }
 
   function novoChamado() {
@@ -527,10 +530,6 @@
     if (aceiteInfo) aceiteInfo.textContent = '';
     document.getElementById('man-manId').value = '';
     document.getElementById('man-manEtiquetaFechada').value = 'false';
-    const tech = document.getElementById('man-techSection');
-    if (tech) { tech.classList.remove('open'); tech.style.display = 'none'; }
-    const sup = document.getElementById('man-supervisorSection');
-    if (sup) sup.style.display = 'none';
     _setSecaoAberturaDetalhesEditavel(true);
     document.getElementById('man-manForm').reset();
     const data = document.getElementById('man-manData');
@@ -539,7 +538,6 @@
     document.getElementById('man-manTipos').value = '[]';
     document.getElementById('man-manTempoGasto').value = '';
     document.getElementById('man-supTempoGasto').value = '';
-    document.getElementById('man-btnFecharEtiqueta').style.display = 'none';
     const btnSalvarNovo = document.getElementById('man-btnSalvarManutencao');
     if (btnSalvarNovo) btnSalvarNovo.style.display = 'inline-block';
     document.getElementById('man-manEmpresaExternaRow').style.display = 'none';
@@ -555,6 +553,13 @@
         else if (hora >= 14 && hora < 22) turnoSelect.value = '2º TURNO';
         else turnoSelect.value = '3º TURNO';
     }
+
+    // Chamado novo (ainda sem ID salvo) — só a etapa "Abertura" faz
+    // sentido; as outras (Execução/Peça/Fechamento) ficam desabilitadas
+    // no assistente até o chamado existir de verdade (ver
+    // _manAplicarStepAtual).
+    _manStepAtual = 'abertura';
+    _manAplicarStepAtual();
 
     if (card) card.scrollIntoView({ behavior: 'smooth' });
   }
@@ -605,20 +610,13 @@
     } else if (display) display.value = '';
   }
 
+  // Situação virou "Concluído"? Pré-preenche Fim (Data/Hora) se ainda
+  // estiver vazio, igual sempre fez — só que agora, em vez de mostrar um
+  // botão fixo, atualiza o conteúdo da etapa "Fechamento" do assistente
+  // (ver _manRenderizarFechamento) pra refletir que já dá pra fechar.
   function aoMudarSituacao() {
     const situacao = document.getElementById('man-manSituacao')?.value;
-    const etiquetaFechada = document.getElementById('man-manEtiquetaFechada')?.value === 'true';
-    const btnFechar = document.getElementById('man-btnFecharEtiqueta');
-    // Mesma checagem de permissão de editarManutencao() (linha ~882) e do
-    // reset do formulário (linha ~298) — sem isso, mudar a Situação pra
-    // "Concluído" reexibia o botão pra QUALQUER perfil, mesmo um
-    // Encarregado (só tem 'manutencao-chamado', não 'manutencao'
-    // completa) — o clique acabava dando erro do servidor (que já
-    // bloqueia certinho), mas a experiência ficava confusa: botão
-    // aparecendo pra quem nunca poderia usá-lo de verdade.
-    const podeFechar = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
-    if (situacao === 'Concluido' && !etiquetaFechada && podeFechar && btnFechar) {
-      btnFechar.style.display = 'inline-block';
+    if (situacao === 'Concluido') {
       const dataFim = document.getElementById('man-manDataFim');
       const horaFim = document.getElementById('man-manHoraFim');
       if (dataFim && !dataFim.value) {
@@ -627,7 +625,12 @@
         if (horaFim) horaFim.value = agora.toLocaleTimeString('pt-BR', { hour12: false });
         calcularTempoGasto();
       }
-    } else if (btnFechar) btnFechar.style.display = 'none';
+    }
+    // Reflete a mudança de situação no chamado em memória (usado por
+    // _manRenderizarFechamento pra decidir o que mostrar) mesmo antes de
+    // salvar — só localmente, o servidor só vê isso depois do "Salvar".
+    if (_chamadoEmEdicao) _chamadoEmEdicao.situacao = situacao;
+    _manAplicarStepAtual();
   }
 
   async function salvarManutencao() {
@@ -1139,6 +1142,99 @@
 
   function fecharModalHistorico() { document.getElementById('man-modalHistorico').style.display = 'none'; }
 
+  // ============================================================
+  // BOARD KANBAN — Chamados Corretivos (ver conversa que motivou a troca
+  // do modelo de tabela única: falta de clareza de quem precisa agir).
+  // ============================================================
+
+  // Em qual coluna do board este chamado cai — SEMPRE derivado do estado
+  // atual (nunca um campo salvo à parte), mesma filosofia de
+  // _construirPassosTrajetoria(). Ordem de checagem importa: um chamado
+  // pode "tecnicamente" estar aguardando peça E já concluído ao mesmo
+  // tempo (dados antigos) — fechado/concluído sempre vence.
+  function _corretivaColuna(m) {
+    if (m.recusaResultado === 'Aceita' || m.etiquetaFechada) return 'concluido';
+    if (m.situacao === 'Concluido') return 'fechamento';
+    if ((m.aguardandoPecas || '') === 'Sim' && m.statusCompra !== 'Peça recebida') return 'peca';
+    if (m.aceito === 'Sim') return 'execucao';
+    return 'aceite';
+  }
+
+  const MAN_COLUNAS_CORRETIVA = [
+    { id: 'aceite', titulo: 'Aguardando Aceite', icone: 'fa-hand-paper' },
+    { id: 'execucao', titulo: 'Em Execução', icone: 'fa-hard-hat' },
+    { id: 'peca', titulo: 'Aguardando Peça', icone: 'fa-boxes' },
+    { id: 'fechamento', titulo: 'Aguardando Fechamento', icone: 'fa-lock-open' },
+    { id: 'concluido', titulo: 'Concluído', icone: 'fa-check-circle' },
+  ];
+
+  // "De quem é a vez" neste chamado, pro perfil ATUALMENTE logado — vira
+  // o rótulo de destaque no cartão (Ideia 1 da conversa: fila "sua vez",
+  // encaixada dentro do board em vez de uma aba separada). Retorna null
+  // quando não há nada pendente de decisão (ex: já em execução normal,
+  // sem pedido de peça, sem estar pronto pra fechar ainda).
+  function _acaoPendenteCard(m) {
+    if (m.etiquetaFechada || m.recusaResultado === 'Aceita') return null;
+    if (m.recusaPendente === 'Sim') {
+      return _podeAceitarPedidoPecaAtual()
+        ? { texto: 'Sua vez: revisar recusa', urgente: true }
+        : { texto: 'Aguardando revisão da recusa', urgente: false };
+    }
+    if (m.aceito !== 'Sim') {
+      return _podeAceitarChamadoAtual()
+        ? { texto: 'Sua vez: aceitar chamado', urgente: true }
+        : { texto: 'Aguardando aceite da Manutenção', urgente: false };
+    }
+    if ((m.aguardandoPecas || '') === 'Sim' && m.pedidoPecaAceito !== 'Sim' && m.statusCompra !== 'Peça recebida') {
+      return _podeAceitarPedidoPecaAtual()
+        ? { texto: 'Sua vez: aceitar pedido de peça', urgente: true }
+        : { texto: 'Aguardando aceite da Supervisão', urgente: false };
+    }
+    if (m.situacao === 'Concluido' && !m.etiquetaFechada) {
+      const podeFechar = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+      return podeFechar
+        ? { texto: 'Sua vez: fechar etiqueta', urgente: true }
+        : { texto: 'Aguardando fechamento', urgente: false };
+    }
+    return null;
+  }
+
+  function _corPrioridade(p) {
+    return p === 'ALTA' ? 'var(--red)' : p === 'MÉDIA' ? 'var(--accent)' : 'var(--green)';
+  }
+
+  function _renderizarCartaoCorretiva(m) {
+    const acao = _acaoPendenteCard(m);
+    const anomaliaTexto = esc(m.anomalia || 'Sem descrição.');
+    const podeAberturaRow = _podeEditarAberturaChamadoAtual(m);
+    const iconeAbrir = podeAberturaRow ? 'fa-edit' : 'fa-folder-open';
+    const tituloAbrir = podeAberturaRow ? 'Editar' : 'Abrir chamado';
+    const _podeEditarManut = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+    const deleteIcon = (!m.etiquetaFechada && _podeEditarManut)
+      ? `<i class="fas fa-trash-alt" title="Excluir" onclick="event.stopPropagation(); excluirManutencao('${m.id}')"></i>` : '';
+    const miniTrajetoria = _renderizarTrajetoria(_construirPassosTrajetoria(m));
+    return `<div class="man-kanban-card" onclick="editarManutencao('${m.id}')"
+        onmouseenter="_mostrarPreviewTrajetoria(event,'${m.id}')" onmousemove="_mostrarPreviewTrajetoria(event,'${m.id}')" onmouseleave="_esconderPreviewTrajetoria()"
+        title="Segure Ctrl + passe o mouse pra pré-visualizar a trajetória">
+      <div class="man-kanban-card-head">
+        <span><i class="fas fa-hashtag"></i> ${esc(m.id)}</span>
+        <span class="dot" style="background:${_corPrioridade(m.prioridade || 'BAIXA')}" title="Prioridade ${esc(m.prioridade || '-')}"></span>
+      </div>
+      <div class="man-kanban-card-maquina">${esc(m.maquina || '-')}</div>
+      <div class="man-kanban-card-setor">${esc(m.setor || '-')} · ${esc(m.turno || '-')}</div>
+      <div class="man-kanban-card-anomalia">${anomaliaTexto}</div>
+      ${acao ? `<div class="man-kanban-card-cta ${acao.urgente ? 'urgente' : 'aguardando'}">${esc(acao.texto)}</div>` : ''}
+      <div class="man-kanban-card-footer">
+        ${miniTrajetoria}
+        <span class="man-kanban-card-acoes" onclick="event.stopPropagation();">
+          <i class="fas fa-eye" title="Ver trajetória completa" onclick="abrirHistorico('${m.id}')"></i>
+          <i class="fas ${iconeAbrir}" title="${tituloAbrir}" onclick="editarManutencao('${m.id}')"></i>
+          ${deleteIcon}
+        </span>
+      </div>
+    </div>`;
+  }
+
   function renderCorretiva() {
     try {
       const filtroID = document.getElementById('man-filtroID')?.value?.toLowerCase()?.trim() || '';
@@ -1158,120 +1254,135 @@
       if (filtroStatus) dados = dados.filter(m => (m.situacao || '') === filtroStatus);
       if (filtroEtiqueta) dados = dados.filter(m => (m.tipoEtiqueta || '') === filtroEtiqueta);
 
-      const total = dados.length;
-      const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
-      if (pageCorretiva >= totalPages) pageCorretiva = totalPages - 1;
-      if (pageCorretiva < 0) pageCorretiva = 0;
+      const board = document.getElementById('man-corretivaBoard');
+      if (!board) return;
 
-      const start = pageCorretiva * ITEMS_PER_PAGE;
-      const pageData = dados.slice(start, start + ITEMS_PER_PAGE);
+      const porColuna = {};
+      MAN_COLUNAS_CORRETIVA.forEach(c => { porColuna[c.id] = []; });
+      dados.forEach(m => { const col = _corretivaColuna(m); (porColuna[col] || porColuna.aceite).push(m); });
 
-      const tbody = document.getElementById('man-corretivaTableBody');
-      if(pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
-      } else {
-        tbody.innerHTML = pageData.map(m => {
-          const situacao = m.situacao || 'Aguardando';
-          const sc = situacao === 'Concluido' ? 'man-badge-green'
-            : situacao === 'Em Manutencao' ? 'man-badge-blue'
-            : situacao === 'Recusado' ? 'man-badge-red'
-            : 'man-badge-gray';
-          const prioridade = m.prioridade || 'BAIXA';
-          const pc = prioridade === 'ALTA' ? 'var(--red)' : prioridade === 'MÉDIA' ? 'var(--accent)' : 'var(--green)';
-          const tipo = m.tipoManutencao || '-';
-          const tpc = tipo === 'Elétrica' ? 'var(--accent)' : 'var(--blue)';
-          const etiqueta = m.tipoEtiqueta || 'Azul';
-          const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
-          const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
-          let supClass = 'man-badge-green'; 
-          let supText = '✅ OK';
-          if ((m.aguardandoPecas || '') === 'Sim') {
-              if (m.pedidoPecaAceito !== 'Sim') {
-                  // Ainda não passou pelo aceite de Supervisão/Encarregado/
-                  // Admin — os campos de Acompanhamento nem aparecem pra
-                  // preencher status_compra ainda (ver conversa que
-                  // motivou o fluxo de aceite).
-                  supText = 'Pedido de peça (aguardando aceite)';
-                  supClass = 'man-badge-yellow';
-              } else if (m.statusCompra) {
-                  supText = m.statusCompra;
-                  if (m.statusCompra === 'Em Análise') supClass = 'man-badge-yellow';
-                  else if (m.statusCompra === 'Cotação em andamento') supClass = 'man-badge-orange';
-                  else if (m.statusCompra === 'Pedido efetuado') supClass = 'man-badge-blue';
-                  else if (m.statusCompra === 'Peça em transporte') supClass = 'man-badge-purple';
-                  else if (m.statusCompra === 'Peça recebida') supClass = 'man-badge-green';
-              } else {
-                  supText = 'Sob Supervisão';
-                  supClass = 'man-badge-orange';
-              }
-          }
-          const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock"></i>' : '';
-          // Ícone que indica "ainda não foi aceito" (ou "tem recusa
-          // pendente de revisão", mais urgente) — visível pra todo mundo,
-          // ao lado do número do chamado (ver conversa que motivou o
-          // fluxo de aceite/recusa: ajuda a bater o olho na lista).
-          const aceiteIcon = m.etiquetaFechada ? ''
-            : m.recusaPendente === 'Sim'
-              ? '<i class="fas fa-exclamation-triangle" title="Recusa pendente de revisão" style="color:var(--red);"></i>'
-              : m.aceito !== 'Sim'
-                ? '<i class="fas fa-hourglass-half" title="Aguardando aceite" style="color:var(--accent);"></i>'
-                : '';
-          const _podeEditarManut = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
-          // Antes só aparecia com situacao === 'Aguardando' — um chamado que
-          // já estava "Em Manutencao" (alguém começou a mexer, mas ainda não
-          // fechou) ficava sem jeito de excluir na tela, mesmo pra quem tem
-          // permissão total de 'manutencao' (ex: Administrador). O backend
-          // (POST /manutencao/excluir-corretiva) nunca teve essa trava por
-          // situação — só verifica a permissão de área — então a regra era
-          // só uma limitação visual, sem motivo de negócio por trás. Agora
-          // qualquer chamado ainda ABERTO (não fechado) pode ser excluído.
-          const deleteIcon = (!m.etiquetaFechada && _podeEditarManut)
-            ? `<span style="cursor:pointer;" onclick="excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>` 
-            : '';
-          // Um único ícone de "abrir" o chamado, pra todo mundo — quem
-          // pode editar Abertura/Detalhes (quem abriu, Admin, Supervisão,
-          // Encarregado) vê um lápis; quem só pode ver o relatório e
-          // aceitar (ex: perfil Manutenção, se não foi quem abriu) vê uma
-          // pasta — mas os dois chamam a MESMA função, que decide o que
-          // fica editável (ver editarManutencao()). Pedido do usuário: sem
-          // botão de "editar" pra quem não tem esse direito.
-          const podeAberturaRow = _podeEditarAberturaChamadoAtual(m);
-          const iconeAbrir = podeAberturaRow ? 'fa-edit' : 'fa-folder-open';
-          const tituloAbrir = podeAberturaRow ? 'Editar' : 'Abrir chamado';
-
-          return `<tr style="cursor:pointer;" onclick="abrirHistorico('${m.id}')" onmouseenter="_mostrarPreviewTrajetoria(event,'${m.id}')" onmousemove="_mostrarPreviewTrajetoria(event,'${m.id}')" onmouseleave="_esconderPreviewTrajetoria()" title="Ver trajetória do chamado (segure Ctrl + passe o mouse pra pré-visualizar aqui mesmo)">
-            <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon} ${aceiteIcon}</td>
-            <td data-label="Máquina">${esc(m.maquina || '-')}</td>
-            <td data-label="Setor">${esc(m.setor || '-')}</td>
-            <td data-label="Turno"><strong>${esc(m.turno || '-')}</strong></td>
-            <td data-label="Observador">${esc(m.observador || '-')}</td>
-            <td data-label="Tipo"><span style="color:${tpc};">${esc(tipo)}</span></td>
-            <td data-label="Prioridade"><span style="color:${pc};">${esc(prioridade)}</span></td>
-            <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
-            <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
-            <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
-            <td data-label="Ações" style="justify-content:flex-end;" onclick="event.stopPropagation();"><div class="man-actions-table"><span style="cursor:pointer;" title="${tituloAbrir}" onclick="editarManutencao('${m.id}')"><i class="fas ${iconeAbrir}"></i></span>${deleteIcon}</div></td>
-          </tr>`;
-        }).join('');
-      }
-
-      const pagDiv = document.getElementById('man-pagCorretiva');
-      pagDiv.innerHTML = `
-        <button onclick="changePageCorretiva(-1)" ${pageCorretiva === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
-        <span>${pageCorretiva + 1} / ${totalPages}</span>
-        <button onclick="changePageCorretiva(1)" ${pageCorretiva === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
-      `;
+      board.innerHTML = MAN_COLUNAS_CORRETIVA.map(col => {
+        const itens = porColuna[col.id] || [];
+        const cartoes = itens.length
+          ? itens.map(_renderizarCartaoCorretiva).join('')
+          : `<div class="man-kanban-col-vazio">Nenhum chamado aqui.</div>`;
+        return `<div class="man-kanban-col" data-col="${col.id}">
+          <div class="man-kanban-col-head"><i class="fas ${col.icone}"></i> ${col.titulo} <span class="count">${itens.length}</span></div>
+          <div class="man-kanban-col-cards">${cartoes}</div>
+        </div>`;
+      }).join('');
     } catch (error) {
-      console.error("Erro ao renderizar a tabela corretiva:", error);
-      const tbody = document.getElementById('man-corretivaTableBody');
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--red);">Erro ao carregar a lista.</td></tr>`;
+      console.error("Erro ao renderizar o board corretivo:", error);
+      const board = document.getElementById('man-corretivaBoard');
+      if (board) board.innerHTML = `<div style="color:var(--red); padding:20px;">Erro ao carregar os chamados.</div>`;
     }
   }
 
-  function changePageCorretiva(delta) {
-    pageCorretiva += delta;
-    renderCorretiva();
+  // ============================================================
+  // ASSISTENTE POR ETAPAS — formulário do chamado (ver conversa que
+  // motivou a troca: formulário único com tudo visível ao mesmo tempo).
+  // Cada etapa reaproveita o MESMO HTML/campos/lógica de sempre — só
+  // muda qual zona fica visível (_manAplicarStepAtual) e a navegação
+  // entre elas (_manIrParaStep). "Aceite" não é uma etapa própria: mora
+  // dentro de "Execução", que já trazia embutida a caixa de Aceitar/
+  // Recusar (ver _atualizarGateExecucao) — dividir isso em mais uma
+  // etapa só adicionaria um clique sem separar responsabilidades de
+  // verdade (quem aceita é o mesmo público que depois executa).
+  // ============================================================
+  let _manStepAtual = 'abertura';
+
+  const MAN_ZONAS_ETAPA = {
+    abertura: 'man-zonaAbertura',
+    execucao: 'man-techSection',
+    peca: 'man-supervisorSection',
+    fechamento: 'man-zonaFechamento',
+  };
+
+  function _manIrParaStep(step) {
+    if (!MAN_ZONAS_ETAPA[step]) return;
+    const pill = document.querySelector(`.man-wizard-step[data-step="${step}"]`);
+    if (pill && pill.disabled) return; // etapa ainda não disponível — ignora clique
+    _manStepAtual = step;
+    _manAplicarStepAtual();
   }
+
+  // Decide em qual etapa o assistente deve ABRIR — sempre a etapa onde a
+  // próxima ação relevante está (mesmo raciocínio de _acaoPendenteCard(),
+  // agora aplicado dentro do próprio formulário). Chamado novo (m null)
+  // sempre abre em "Abertura".
+  function _manDefinirStepInicial(m) {
+    if (!m) { _manStepAtual = 'abertura'; return; }
+    if (m.recusaResultado === 'Aceita') { _manStepAtual = 'execucao'; return; } // mostra o desfecho da recusa
+    if (m.recusaPendente === 'Sim') { _manStepAtual = 'execucao'; return; }
+    if (m.aceito !== 'Sim') { _manStepAtual = 'execucao'; return; }
+    if (m.situacao === 'Concluido' && !m.etiquetaFechada) { _manStepAtual = 'fechamento'; return; }
+    if ((m.aguardandoPecas || '') === 'Sim' && m.pedidoPecaAceito !== 'Sim') { _manStepAtual = 'peca'; return; }
+    _manStepAtual = 'execucao';
+  }
+
+  // Mostra só a zona da etapa atual, esconde as outras; habilita/desabilita
+  // as pílulas de navegação conforme faz sentido pro chamado atual; marca
+  // com check (.feito) as etapas já concluídas, pra dar noção de
+  // progresso sem precisar abrir cada uma. Chamada sempre que o estado
+  // muda (novoChamado, editarManutencao, aceitar/recusar, etc.) — única
+  // fonte de verdade de "o que está visível agora".
+  function _manAplicarStepAtual() {
+    const m = _chamadoEmEdicao;
+    Object.entries(MAN_ZONAS_ETAPA).forEach(([step, elId]) => {
+      const el = document.getElementById(elId);
+      if (el) el.style.display = (step === _manStepAtual) ? 'block' : 'none';
+    });
+    if (_manStepAtual === 'fechamento') _manRenderizarFechamento(m);
+
+    const temAguardandoPecas = document.getElementById('man-manAguardandoPecas')?.value === 'Sim';
+    const pillPeca = document.getElementById('man-wizardStepPeca');
+    if (pillPeca) pillPeca.style.display = (m && temAguardandoPecas) ? '' : 'none';
+
+    document.querySelectorAll('.man-wizard-step').forEach(btn => {
+      const step = btn.dataset.step;
+      const disponivel = !!m || step === 'abertura'; // chamado novo: só "Abertura" navegável
+      btn.disabled = !disponivel || (step === 'peca' && !temAguardandoPecas);
+      btn.classList.toggle('active', step === _manStepAtual);
+      const feito = m && (
+        (step === 'abertura') ||
+        (step === 'execucao' && m.aceito === 'Sim') ||
+        (step === 'peca' && m.pedidoPecaAceito === 'Sim') ||
+        (step === 'fechamento' && !!m.etiquetaFechada)
+      );
+      btn.classList.toggle('feito', !!feito);
+    });
+  }
+
+  // Conteúdo da 4ª etapa (Fechamento) — 3 estados possíveis: ainda não dá
+  // pra fechar (situação diferente de Concluído), pronto pra fechar
+  // (resumo + botão, reaproveita o MESMO modal de confirmação de sempre —
+  // abrirModalFechamento/confirmarFechamento — só mudou de onde o botão é
+  // acionado), ou já fechado (confirmação final, read-only).
+  function _manRenderizarFechamento(m) {
+    const alvo = document.getElementById('man-fechamentoConteudo');
+    if (!alvo) return;
+    if (!m) {
+      alvo.innerHTML = `<div class="man-fechamento-aviso"><i class="fas fa-info-circle"></i> Salve o chamado antes de fechá-lo.</div>`;
+      return;
+    }
+    if (m.etiquetaFechada) {
+      alvo.innerHTML = `<div class="man-fechamento-ok"><i class="fas fa-lock"></i> Etiqueta fechada em ${esc(m.dataFim || '')}. Este chamado não pode mais ser editado.</div>`;
+      return;
+    }
+    if (m.situacao !== 'Concluido') {
+      alvo.innerHTML = `<div class="man-fechamento-aviso"><i class="fas fa-info-circle"></i> Marque a Situação como "Concluído" na etapa <a href="#" onclick="_manIrParaStep('execucao'); return false;" style="color:var(--accent);">Execução</a> antes de poder fechar este chamado.</div>`;
+      return;
+    }
+    const _podeFecharChamado = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+    alvo.innerHTML = `
+      <div class="man-fechamento-resumo">
+        <p style="color:var(--text-2); font-size:13px; margin-bottom:12px;"><i class="fas fa-check-circle" style="color:var(--green);"></i> Situação Concluído — pronto pra fechar a etiqueta. Confira o resumo antes de confirmar.</p>
+        ${_podeFecharChamado
+          ? `<button type="button" class="man-btn man-btn-warning" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>`
+          : `<div class="man-fechamento-aviso"><i class="fas fa-lock"></i> Seu perfil não pode fechar chamados de manutenção.</div>`}
+      </div>`;
+  }
+
 
   function editarManutencao(id) {
     try {
@@ -1341,11 +1452,10 @@
       document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.toggle('active', tiposSelecionados.includes(el.dataset.type)));
       _setSecaoAberturaDetalhesEditavel(podeAbertura);
 
-      // Seção 3 (Execução) — sempre visível a partir daqui (chamado já
-      // existe); _atualizarGateExecucao() decide, com base em m.aceito,
-      // se mostra a caixa "Aceitar Chamado" ou os campos de verdade.
-      const tech = document.getElementById('man-techSection');
-      if (tech) { tech.classList.add('open'); tech.style.display = 'block'; }
+      // Seção 3 (Execução) — _atualizarGateExecucao() decide, com base em
+      // m.aceito, se mostra a caixa "Aceitar Chamado" ou os campos de
+      // verdade; a VISIBILIDADE da seção em si (esta etapa está na tela
+      // agora ou não) é decidida por _manAplicarStepAtual(), mais abaixo.
       document.getElementById('man-manDataInicio').value = m.dataInicio || '';
       document.getElementById('man-manHoraInicio').value = m.horaInicio || '';
       document.getElementById('man-manDataFim').value = m.dataFim || '';
@@ -1360,14 +1470,12 @@
       document.getElementById('man-manCustoMaoObra').value = m.custoMaoObra || '';
       _atualizarGateExecucao();
 
-      // Seção 4 (Acompanhamento) — mesma ideia: mostra a seção se tiver
-      // pedido de peça (ou custo já lançado, pra não esconder dado
-      // histórico), e _atualizarGateAcompanhamento() decide dentro dela
-      // se mostra a caixa "Aceitar Pedido de Peça" ou os campos de
-      // verdade, com base em m.pedidoPecaAceito.
+      // Seção 4 (Acompanhamento/"Peça") — carrega os dados se houver
+      // pedido de peça (ou custo já lançado, pra não perder dado
+      // histórico); a VISIBILIDADE de fato é decidida por
+      // _manAplicarStepAtual(), mais abaixo (a pílula "Peça" só aparece
+      // habilitada quando isso se aplica).
       if (m.aguardandoPecas === 'Sim' || (m.custoPecas && m.custoPecas > 0)) {
-          const sup = document.getElementById('man-supervisorSection');
-          if (sup) sup.style.display = 'block';
           document.getElementById('man-supDataInicio').value = m.supDataInicio || '';
           document.getElementById('man-supHoraInicio').value = m.supHoraInicio || '';
           document.getElementById('man-supDataFim').value = m.supDataFim || '';
@@ -1380,9 +1488,6 @@
           document.getElementById('man-manRespSupervisor').value = m.respSupervisor || '';
           document.getElementById('man-manObsSupervisor').value = m.obsSupervisor || '';
           _atualizarGateAcompanhamento();
-      } else {
-          const sup = document.getElementById('man-supervisorSection');
-          if (sup) sup.style.display = 'none';
       }
 
       // Info de quem/quando aceitou (chamado e, se aplicável, pedido de
@@ -1409,8 +1514,8 @@
       const btnSalvar = document.getElementById('man-btnSalvarManutencao');
       if (btnSalvar) btnSalvar.style.display = (podeAbertura || podeExecucao || podeAcompanhamento) ? 'inline-block' : 'none';
 
-      const _podeFecharChamado = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
-      document.getElementById('man-btnFecharEtiqueta').style.display = (m.situacao === 'Concluido' && !m.etiquetaFechada && _podeFecharChamado) ? 'inline-block' : 'none';
+      _manDefinirStepInicial(m);
+      _manAplicarStepAtual();
       if (card) card.scrollIntoView({ behavior: 'smooth' });
     } catch (error) {
       toast('Erro ao carregar dados.', 'error');
@@ -2145,7 +2250,6 @@
     calcularTempoExecucao,
     calcularTempoGasto,
     calcularTempoSupervisao,
-    changePageCorretiva,
     changePageProgramada,
     confirmarAprovacao,
     confirmarFechamento,
@@ -2187,6 +2291,7 @@
   // mesmo não fazendo parte da API pública em MAN.
   window._mostrarPreviewTrajetoria = _mostrarPreviewTrajetoria;
   window._esconderPreviewTrajetoria = _esconderPreviewTrajetoria;
+  window._manIrParaStep = _manIrParaStep;
   window.abrirModalFechamento = MAN.abrirModalFechamento;
   window.abrirModalFinalizar = MAN.abrirModalFinalizar;
   window.abrirModalInicio = MAN.abrirModalInicio;
@@ -2204,7 +2309,6 @@
   window.calcularTempoExecucao = MAN.calcularTempoExecucao;
   window.calcularTempoGasto = MAN.calcularTempoGasto;
   window.calcularTempoSupervisao = MAN.calcularTempoSupervisao;
-  window.changePageCorretiva = MAN.changePageCorretiva;
   window.changePageProgramada = MAN.changePageProgramada;
   window.confirmarAprovacao = MAN.confirmarAprovacao;
   window.confirmarFechamento = MAN.confirmarFechamento;

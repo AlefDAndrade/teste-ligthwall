@@ -1,17 +1,22 @@
 // ─── test/manutencao-fechar-chamado.test.js ─────────────────────────────────
-// Regressão de um bug real: o botão "Fechar Chamado" (man-btnFecharEtiqueta)
-// já era escondido corretamente pra perfis sem a área 'manutencao' completa
-// (ver data-manut-area="manutencao", lib/perfis.js) em dois pontos — ao
-// carregar um chamado existente (editarManutencao) e ao resetar o
-// formulário — mas a função aoMudarSituacao() (disparada quando o campo
-// "Situação" muda pra "Concluído") REEXIBIA o botão sem checar permissão
-// nenhuma. Resultado: alguém sem a área 'manutencao' completa via o botão
-// reaparecer ao marcar Situação como Concluído, clicava, e só descobria que
-// não tinha permissão depois de tomar um erro do servidor.
+// Regressão de um bug real: o botão de fechar chamado já era escondido
+// corretamente pra perfis sem a área 'manutencao' completa (ver
+// data-manut-area="manutencao", lib/perfis.js) em vários pontos — mas a
+// função aoMudarSituacao() (disparada quando o campo "Situação" muda pra
+// "Concluído") reexibia o botão sem checar permissão nenhuma. Resultado:
+// alguém sem a área 'manutencao' completa via o botão reaparecer ao marcar
+// Situação como Concluído, clicava, e só descobria que não tinha permissão
+// depois de tomar um erro do servidor.
 //
-// Cobre: aoMudarSituacao() não reexibe o botão pra quem não pode fechar
+// Desde a reestruturação em assistente por etapas (ver conversa que
+// motivou a mudança: fluxo pouco claro), o botão de fechar não é mais um
+// elemento fixo — vive dentro da 4ª etapa do assistente ("Fechamento"),
+// montada dinamicamente por _manRenderizarFechamento() (manutencao.js)
+// toda vez que essa etapa fica visível. Este teste cobre a MESMA garantia
+// de permissão, agora nesse novo lugar: aoMudarSituacao() não faz a etapa
+// de Fechamento oferecer o botão pra quem não pode fechar
 // (AssistenteQualidade — hoje o único perfil cadastrável sem NENHUMA área
-// de manutenção, ver PERFIS em lib/perfis.js), mas continua reexibindo
+// de manutenção, ver PERFIS em lib/perfis.js), mas continua oferecendo
 // normalmente pra quem pode (Manutencao) — e a segunda camada de proteção
 // em abrirModalFechamento() bloqueia a abertura do modal mesmo se o botão
 // for acionado de outro jeito.
@@ -84,22 +89,44 @@ async function carregarSpaComo(nomeUsuario, perfil) {
   return dom;
 }
 
-test('AssistenteQualidade (sem nenhuma área de manutenção): botão Fechar Chamado NÃO reaparece ao marcar Situação como Concluído', async () => {
+// Cria um chamado de verdade direto pela rota (como Admin, que sempre
+// pode) — não dá pra criar pela SPA logado como AssistenteQualidade, que
+// nem tem a área 'manutencao-chamado' pra abrir chamado nenhum (é
+// justamente o perfil usado no primeiro teste, abaixo). Any perfil pode
+// LER (rotas GET são livres), então dá pra reabrir esse chamado depois
+// login como qualquer perfil, só pra checar a etapa de Fechamento.
+async function criarChamado(sufixo) {
+  const cookieAdmin = await logarComoAdminMaster();
+  const id = 'MAN-fechar-' + sufixo + '-' + Date.now();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({
+      id, data: '2026-07-18', setor: 'Injetora Teste', maquina: 'M-fechar-' + sufixo, turno: '1º TURNO',
+      observador: 'Teste Automatizado', prioridade: 'ALTA', anomalia: 'Anomalia de teste', tipoManutencao: 'Mecânica',
+    }),
+  });
+  return id;
+}
+
+test('AssistenteQualidade (sem nenhuma área de manutenção): etapa Fechamento NÃO oferece o botão de fechar ao marcar Situação como Concluído', async () => {
+  const id = await criarChamado('q');
   const dom = await carregarSpaComo('qualidade.fechar.teste', 'AssistenteQualidade');
   const { window } = dom;
 
   try {
     window.showPage('manutencao');
     await new Promise(r => setTimeout(r, 200));
-    window.novoChamado();
+    window.editarManutencao(id);
     await new Promise(r => setTimeout(r, 100));
 
     const situacaoSelect = window.document.getElementById('man-manSituacao');
     situacaoSelect.value = 'Concluido';
     window.aoMudarSituacao();
+    window._manIrParaStep('fechamento');
 
-    const btn = window.document.getElementById('man-btnFecharEtiqueta');
-    assert.equal(btn.style.display, 'none', 'botão Fechar Chamado não deveria reaparecer pra quem não tem área manutencao, mesmo com Situação=Concluído');
+    const conteudo = window.document.getElementById('man-fechamentoConteudo');
+    assert.ok(!conteudo.innerHTML.includes('man-btn-warning'), 'a etapa Fechamento não deveria oferecer o botão de fechar pra quem não tem área manutencao');
+    assert.ok(conteudo.innerHTML.toLowerCase().includes('não pode fechar'), 'deveria explicar que o perfil não pode fechar chamados de manutenção');
 
     // Segunda camada: mesmo chamando abrirModalFechamento() diretamente
     // (simula alguém forçando o clique de outro jeito), o modal não abre.
@@ -110,22 +137,24 @@ test('AssistenteQualidade (sem nenhuma área de manutenção): botão Fechar Cha
   }
 });
 
-test('Manutencao (com área manutencao completa): botão Fechar Chamado aparece normalmente ao marcar Situação como Concluído', async () => {
+test('Manutencao (com área manutencao completa): etapa Fechamento oferece o botão normalmente ao marcar Situação como Concluído', async () => {
+  const id = await criarChamado('m');
   const dom = await carregarSpaComo('manutencao.fechar.teste', 'Manutencao');
   const { window } = dom;
 
   try {
     window.showPage('manutencao');
     await new Promise(r => setTimeout(r, 200));
-    window.novoChamado();
+    window.editarManutencao(id);
     await new Promise(r => setTimeout(r, 100));
 
     const situacaoSelect = window.document.getElementById('man-manSituacao');
     situacaoSelect.value = 'Concluido';
     window.aoMudarSituacao();
+    window._manIrParaStep('fechamento');
 
-    const btn = window.document.getElementById('man-btnFecharEtiqueta');
-    assert.equal(btn.style.display, 'inline-block', 'botão Fechar Chamado deveria aparecer normalmente pra quem tem a área manutencao completa');
+    const conteudo = window.document.getElementById('man-fechamentoConteudo');
+    assert.ok(conteudo.innerHTML.includes('man-btn-warning'), 'a etapa Fechamento deveria oferecer o botão de fechar pra quem tem a área manutencao completa');
 
     // A segunda camada de proteção não deveria bloquear quem TEM permissão.
     assert.equal(window.eval("_perfilPodeEditar('manutencao')"), true);
