@@ -169,13 +169,13 @@
         reader.onload = function(e) {
           const base64Data = e.target.result;
           // ALTERAÇÃO: Não comprime mais o PDF com GZIP
-          container.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(file.name)}</span></div>`;
+          container.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(file.name)}</span></div>`;
           container.dataset.filename = file.name;
           container.dataset.base64 = base64Data; // Armazena o dado sem compressão
         };
       } else {
         const compressed = await compressImage(file);
-        container.innerHTML = `<img src="${compressed}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+        container.innerHTML = `<img src="${compressed}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--border); object-fit:cover;">`;
       }
     }
   }
@@ -606,99 +606,99 @@
 
     function exibirImagem(src, titulo) {
       if (!src || src === '' || src === 'null' || src === 'undefined') {
-        return `<div style="margin-top:4px; font-size:12px; color:var(--man-text-secondary); opacity:0.6;">Nenhum anexo.</div>`;
+        return `<div style="margin-top:4px; font-size:12px; color:var(--text-2); opacity:0.6;">Nenhum anexo.</div>`;
       }
       
       // Verifica se é um PDF comprimido (legado) ou normal
       if (src.startsWith('pdfgz:')) {
         const decompressedBase64 = decompressPDF(src);
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);">
-          <i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i>
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
+          <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
           <span>PDF anexado</span>
-          <a href="${decompressedBase64}" target="_blank" style="color:var(--man-blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+          <a href="${decompressedBase64}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
         </div>`;
       }
       // Verifica se é um PDF Base64 padrão
       if (src.startsWith('data:application/pdf;base64,')) {
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);">
-          <i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i>
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
+          <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
           <span>PDF anexado</span>
-          <a href="${src}" target="_blank" style="color:var(--man-blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+          <a href="${src}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
         </div>`;
       }
       if (src.startsWith('PDF:')) {
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--man-text-secondary);"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:20px;"></i> ${esc(src.replace('PDF: ', ''))}</div>`;
+        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);"><i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i> ${esc(src.replace('PDF: ', ''))}</div>`;
       }
       return `
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-          <span style="font-size:12px; color:var(--man-text-secondary);">${titulo}:</span>
-          <img src="${src}" style="max-width:100%; max-height:150px; object-fit:cover; border-radius:6px; border:1px solid var(--man-border-color); cursor:pointer;" onclick="window.open(this.src, '_blank')">
+          <span style="font-size:12px; color:var(--text-2);">${titulo}:</span>
+          <img src="${src}" style="max-width:100%; max-height:150px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="window.open(this.src, '_blank')">
         </div>
       `;
     }
 
     let html = `
       <div style="display:flex; flex-direction:column; gap:16px; padding:8px 0;">
-        <div style="border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
-          <h3 style="color:var(--man-orange); margin-bottom:4px;"><i class="fas fa-clipboard-list"></i> Chamado #${esc(chamado.id)}</h3>
-          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--man-text-secondary);">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:12px;">
+          <h3 style="color:var(--accent); margin-bottom:4px;"><i class="fas fa-clipboard-list"></i> Chamado #${esc(chamado.id)}</h3>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-2);">
             <span><i class="fas fa-industry"></i> ${esc(chamado.maquina)}</span>
             <span><i class="fas fa-building"></i> ${esc(chamado.setor)}</span>
           </div>
         </div>
 
-        <div style="background:rgba(255,92,108,0.08); border-left:4px solid var(--man-red); padding:12px; border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
-            <span><i class="fas fa-user" style="color:var(--man-red);"></i> Abertura (Operador)</span>
+        <div style="background:var(--red-dim); border-left:4px solid var(--red); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--text-2); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-user" style="color:var(--red);"></i> Abertura (Operador)</span>
             <span>${esc(chamado.data)}</span>
           </div>
-          <div style="color:var(--man-text-primary);"><strong>${esc(chamado.observador)}</strong> - ${esc(chamado.anomalia)}</div>
-          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:2px;">Prioridade: <span style="color:${chamado.prioridade === 'ALTA' ? 'var(--man-red)' : chamado.prioridade === 'MÉDIA' ? 'var(--man-yellow)' : 'var(--man-green)'}; font-weight:600;">${esc(chamado.prioridade)}</span> | Etiqueta: ${esc(chamado.tipoEtiqueta)} | Turno: <strong>${esc(chamado.turno)}</strong></div>
+          <div style="color:var(--text);"><strong>${esc(chamado.observador)}</strong> - ${esc(chamado.anomalia)}</div>
+          <div style="font-size:12px; color:var(--text-2); margin-top:2px;">Prioridade: <span style="color:${chamado.prioridade === 'ALTA' ? 'var(--red)' : chamado.prioridade === 'MÉDIA' ? 'var(--accent)' : 'var(--green)'}; font-weight:600;">${esc(chamado.prioridade)}</span> | Etiqueta: ${esc(chamado.tipoEtiqueta)} | Turno: <strong>${esc(chamado.turno)}</strong></div>
           ${exibirImagem(chamado.fotoOperador, 'Anexo do problema')}
         </div>
 
-        <div style="background:rgba(245,130,31,0.08); border-left:4px solid var(--man-orange); padding:12px; border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
-            <span><i class="fas fa-hard-hat" style="color:var(--man-orange);"></i> Execução (Manutenção)</span>
+        <div style="background:var(--accent-dim); border-left:4px solid var(--accent); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--text-2); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-hard-hat" style="color:var(--accent);"></i> Execução (Manutenção)</span>
             <span>${chamado.dataInicio ? esc(chamado.dataInicio) : 'Não iniciado'}</span>
           </div>
-          <div style="color:var(--man-text-primary);"><strong>Responsável:</strong> ${esc(chamado.responsavel || 'Não atribuído')}</div>
-          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:2px;">
+          <div style="color:var(--text);"><strong>Responsável:</strong> ${esc(chamado.responsavel || 'Não atribuído')}</div>
+          <div style="font-size:12px; color:var(--text-2); margin-top:2px;">
             <span><i class="fas fa-hourglass-half"></i> ${formatarTempo(chamado.tempoGasto)}</span>
             <span style="margin-left:12px;">Status: <span class="man-badge ${chamado.situacao === 'Concluido' ? 'man-badge-green' : chamado.situacao === 'Em Manutencao' ? 'man-badge-blue' : 'man-badge-gray'}">${esc(chamado.situacao)}</span></span>
           </div>
-          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+          <div style="font-size:12px; color:var(--text-2); margin-top:4px;">
             <i class="fas fa-tools"></i> ${esc(chamado.rotina || 'Nenhuma rotina registrada')}
           </div>
-          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+          <div style="font-size:12px; color:var(--text-2); margin-top:4px;">
             <strong>Custo Mão de Obra:</strong> R$ ${chamado.custoMaoObra ? chamado.custoMaoObra.toFixed(2) : '0,00'}<br>
-            <strong style="color:var(--man-orange);">Custo Total:</strong> <span style="color:var(--man-orange); font-weight:600;">R$ ${(chamado.custoPecas + chamado.custoMaoObra).toFixed(2)}</span>
+            <strong style="color:var(--accent);">Custo Total:</strong> <span style="color:var(--accent); font-weight:600;">R$ ${(chamado.custoPecas + chamado.custoMaoObra).toFixed(2)}</span>
           </div>
           ${exibirImagem(chamado.fotoTecnico, 'Anexo do serviço')}
         </div>
 
-        <div style="background:rgba(77,141,255,0.08); border-left:4px solid var(--man-blue); padding:12px; border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
-            <span><i class="fas fa-user-shield" style="color:var(--man-blue);"></i> Supervisão</span>
+        <div style="background:var(--blue-dim); border-left:4px solid var(--blue); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--text-2); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-user-shield" style="color:var(--blue);"></i> Supervisão</span>
             <span>${chamado.supDataInicio ? esc(chamado.supDataInicio) : 'Não atuado'}</span>
           </div>
-          <div style="font-size:12px; color:var(--man-text-secondary);">
+          <div style="font-size:12px; color:var(--text-2);">
             <strong>Status da Compra:</strong> <span class="man-badge ${chamado.statusCompra === 'Peça recebida' ? 'man-badge-green' : chamado.statusCompra ? 'man-badge-yellow' : 'man-badge-gray'}">${esc(chamado.statusCompra || 'N/A')}</span>
           </div>
-          <div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;">
+          <div style="font-size:12px; color:var(--text-2); margin-top:4px;">
             <strong>Custo Peças:</strong> R$ ${chamado.custoPecas ? chamado.custoPecas.toFixed(2) : '0,00'}<br>
             <i class="fas fa-truck"></i> ${esc(chamado.fornecedor || 'Sem fornecedor')}
           </div>
-          ${chamado.obsSupervisor ? `<div style="font-size:12px; color:var(--man-text-secondary); margin-top:4px;"><i class="fas fa-sticky-note"></i> ${esc(chamado.obsSupervisor)}</div>` : ''}
+          ${chamado.obsSupervisor ? `<div style="font-size:12px; color:var(--text-2); margin-top:4px;"><i class="fas fa-sticky-note"></i> ${esc(chamado.obsSupervisor)}</div>` : ''}
         </div>
 
-        <div style="background:rgba(46,211,163,0.08); border-left:4px solid var(--man-green); padding:12px; border-radius:6px;">
-          <div style="display:flex; justify-content:space-between; color:var(--man-text-secondary); font-size:12px; margin-bottom:4px;">
-            <span><i class="fas fa-check-circle" style="color:var(--man-green);"></i> Fechamento</span>
+        <div style="background:var(--green-dim); border-left:4px solid var(--green); padding:12px; border-radius:6px;">
+          <div style="display:flex; justify-content:space-between; color:var(--text-2); font-size:12px; margin-bottom:4px;">
+            <span><i class="fas fa-check-circle" style="color:var(--green);"></i> Fechamento</span>
             <span>${chamado.etiquetaFechada ? esc(chamado.dataFim) : 'Em aberto'}</span>
           </div>
-          <div style="color:var(--man-text-primary); font-weight:600;">
-            ${chamado.etiquetaFechada ? '<i class="fas fa-lock" style="color:var(--man-green);"></i> Etiqueta Fechada' : '<i class="fas fa-unlock" style="color:var(--man-red);"></i> Etiqueta Aberta'}
+          <div style="color:var(--text); font-weight:600;">
+            ${chamado.etiquetaFechada ? '<i class="fas fa-lock" style="color:var(--green);"></i> Etiqueta Fechada' : '<i class="fas fa-unlock" style="color:var(--red);"></i> Etiqueta Aberta'}
           </div>
         </div>
       </div>
@@ -739,17 +739,17 @@
 
       const tbody = document.getElementById('man-corretivaTableBody');
       if(pageData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhum chamado encontrado.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
       } else {
         tbody.innerHTML = pageData.map(m => {
           const situacao = m.situacao || 'Aguardando';
           const sc = situacao === 'Concluido' ? 'man-badge-green' : situacao === 'Em Manutencao' ? 'man-badge-blue' : 'man-badge-gray';
           const prioridade = m.prioridade || 'BAIXA';
-          const pc = prioridade === 'ALTA' ? 'var(--man-red)' : prioridade === 'MÉDIA' ? 'var(--man-yellow)' : 'var(--man-green)';
+          const pc = prioridade === 'ALTA' ? 'var(--red)' : prioridade === 'MÉDIA' ? 'var(--accent)' : 'var(--green)';
           const tipo = m.tipoManutencao || '-';
-          const tpc = tipo === 'Elétrica' ? 'var(--man-yellow)' : 'var(--man-blue)';
+          const tpc = tipo === 'Elétrica' ? 'var(--accent)' : 'var(--blue)';
           const etiqueta = m.tipoEtiqueta || 'Azul';
-          const etiquetaCor = etiqueta === 'Azul' ? 'var(--man-blue)' : 'var(--man-red)';
+          const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
           const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
           let supClass = 'man-badge-green'; 
           let supText = '✅ OK';
@@ -809,7 +809,7 @@
     } catch (error) {
       console.error("Erro ao renderizar a tabela corretiva:", error);
       const tbody = document.getElementById('man-corretivaTableBody');
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--man-red);">Erro ao carregar a lista.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--red);">Erro ao carregar a lista.</td></tr>`;
     }
   }
 
@@ -854,13 +854,13 @@
           const preview = document.getElementById('man-fotoOperadorPreview');
           preview.style.display = 'block';
           if (m.fotoOperador.startsWith('pdfgz:') || m.fotoOperador.startsWith('data:application/pdf')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
               preview.dataset.base64 = m.fotoOperador;
           } else if (m.fotoOperador.startsWith('PDF:')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoOperador.replace('PDF: ', ''))}</span></div>`;
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoOperador.replace('PDF: ', ''))}</span></div>`;
               preview.dataset.filename = m.fotoOperador.replace('PDF: ', '');
           } else {
-              preview.innerHTML = `<img src="${m.fotoOperador}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+              preview.innerHTML = `<img src="${m.fotoOperador}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--border); object-fit:cover;">`;
           }
           document.getElementById('man-btnRemoverFotoOp').style.display = 'inline';
       }
@@ -869,13 +869,13 @@
           const preview = document.getElementById('man-fotoTecnicoPreview');
           preview.style.display = 'block';
           if (m.fotoTecnico.startsWith('pdfgz:') || m.fotoTecnico.startsWith('data:application/pdf')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
               preview.dataset.base64 = m.fotoTecnico;
           } else if (m.fotoTecnico.startsWith('PDF:')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--man-orange); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--man-red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoTecnico.replace('PDF: ', ''))}</span></div>`;
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoTecnico.replace('PDF: ', ''))}</span></div>`;
               preview.dataset.filename = m.fotoTecnico.replace('PDF: ', '');
           } else {
-              preview.innerHTML = `<img src="${m.fotoTecnico}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--man-border-color); object-fit:cover;">`;
+              preview.innerHTML = `<img src="${m.fotoTecnico}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--border); object-fit:cover;">`;
           }
           document.getElementById('man-btnRemoverFotoTec').style.display = 'inline';
       }
@@ -1009,10 +1009,10 @@
 
     if(conflito && msg) {
       const horarioSugerido = calcularProximoHorarioDisponivel(data, hora, setor, maquina);
-      msg.innerHTML = `<i class="fas fa-times-circle" style="color:var(--man-red);"></i> <span style="color:var(--man-red);">Sugestão ocupada!</span> Próximo horário disponível: <strong>${data} às ${horarioSugerido}</strong>.`;
+      msg.innerHTML = `<i class="fas fa-times-circle" style="color:var(--red);"></i> <span style="color:var(--red);">Sugestão ocupada!</span> Próximo horário disponível: <strong>${data} às ${horarioSugerido}</strong>.`;
       return false;
     } else if (msg) { 
-      msg.innerHTML = '<i class="fas fa-check-circle" style="color:var(--man-green);"></i> <span style="color:var(--man-green);">Sugestão disponível!</span>'; 
+      msg.innerHTML = '<i class="fas fa-check-circle" style="color:var(--green);"></i> <span style="color:var(--green);">Sugestão disponível!</span>'; 
       return true; 
     }
     return true;
@@ -1100,7 +1100,7 @@
     let htmlPlanejamento = '';
     if (a.status === 'Aprovado' && a.dataInicioEstimado) {
         htmlPlanejamento = `
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--text-2); margin-top:4px;">
                 <span><strong>Início Previsto:</strong> ${esc(a.dataInicioEstimado)} ${esc(a.horaInicioEstimado)}</span>
                 <span><strong>Fim Previsto:</strong> ${esc(a.dataFimEstimado)} ${esc(a.horaFimEstimado)}</span>
                 <span><strong>Responsável pela Aprovação:</strong> ${esc(a.justificativa ? a.justificativa.split('Aprovado por ')[1]?.split('.')[0] || 'Não informado' : 'Não informado')}</span>
@@ -1113,21 +1113,21 @@
     if (a.execucao || a.status === 'Em Execucao' || a.status === 'Concluido' || a.status === 'Nao Executado') {
         const exec = a.execucao || {};
         const tempoGasto = exec.tempoGasto ? formatarTempo(exec.tempoGasto) : 'Não registrado';
-        const motivoNao = exec.motivoNaoExecutado ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Motivo da não execução:</strong> ${esc(exec.motivoNaoExecutado)}</div>` : '';
-        const observacoesExec = exec.observacoes ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Observações da execução:</strong> ${esc(exec.observacoes)}</div>` : '';
+        const motivoNao = exec.motivoNaoExecutado ? `<div style="font-size:13px; color:var(--text-2); margin-top:4px;"><strong>Motivo da não execução:</strong> ${esc(exec.motivoNaoExecutado)}</div>` : '';
+        const observacoesExec = exec.observacoes ? `<div style="font-size:13px; color:var(--text-2); margin-top:4px;"><strong>Observações da execução:</strong> ${esc(exec.observacoes)}</div>` : '';
 
         htmlExecucao = `
-            <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+            <div style="font-size:13px; color:var(--text-2); margin-top:4px;">
                 <strong>Status da Execução:</strong> <span class="man-badge ${statusClass}">${esc(a.status)}</span>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--text-2); margin-top:4px;">
                 <span><strong>Início Real:</strong> ${a.execucaoDataInicio ? esc(a.execucaoDataInicio) + ' ' + esc(a.execucaoHoraInicio) : 'Não iniciado'}</span>
                 <span><strong>Fim Real:</strong> ${exec.dataFim ? esc(exec.dataFim) + ' ' + esc(exec.horaFim) : 'Não finalizado'}</span>
                 <span><strong>Tempo Gasto:</strong> ${tempoGasto}</span>
                 <span><strong>Responsável pela Execução:</strong> ${esc(exec.tecnicoResponsavel || 'Não atribuído')}</span>
                 <span><strong>Tipo de Execução:</strong> ${esc(exec.tipoExecucao || 'N/A')}</span>
             </div>
-            ${exec.tipoExecucao === 'Externo' ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Empresa Externa:</strong> ${esc(exec.empresaExterna)}</div>` : ''}
+            ${exec.tipoExecucao === 'Externo' ? `<div style="font-size:13px; color:var(--text-2); margin-top:4px;"><strong>Empresa Externa:</strong> ${esc(exec.empresaExterna)}</div>` : ''}
             ${motivoNao}
             ${observacoesExec}
         `;
@@ -1136,40 +1136,40 @@
     const body = document.getElementById('man-detalhesProgramadaBody');
     if (body) {
         body.innerHTML = `
-            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
-                <h3 style="color:var(--man-orange); margin-bottom:6px;"><i class="fas fa-calendar-alt"></i> Solicitação #${esc(a.id)}</h3>
-                <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--man-text-secondary);">
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+                <h3 style="color:var(--accent); margin-bottom:6px;"><i class="fas fa-calendar-alt"></i> Solicitação #${esc(a.id)}</h3>
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-2);">
                     <span><strong>Solicitante:</strong> ${esc(a.solicitante)}</span>
                     <span><strong>Data Programada:</strong> ${esc(a.data)}</span>
                 </div>
             </div>
 
-            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
-                <h4 style="color:var(--man-red); margin-bottom:4px;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</h4>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--man-text-secondary);">
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+                <h4 style="color:var(--red); margin-bottom:4px;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</h4>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:13px; color:var(--text-2);">
                     <span><strong>Setor:</strong> ${esc(a.setor)}</span>
                     <span><strong>Máquina:</strong> ${esc(a.maquina)}</span>
                     <span><strong>Turno:</strong> <strong>${esc(a.turno)}</strong></span>
                     <span><strong>Tipo:</strong> ${esc(a.tipo)}</span>
                     <span><strong>Sugestão de Horário:</strong> ${esc(a.hora || '-')}</span>
                 </div>
-                <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+                <div style="font-size:13px; color:var(--text-2); margin-top:4px;">
                     <strong>Observações do Solicitante:</strong> ${esc(a.observacoes || '-')}
                 </div>
             </div>
 
-            <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
-                <h4 style="color:var(--man-blue); margin-bottom:4px;"><i class="fas fa-calendar-check"></i> 2. Status e Planejamento</h4>
-                <div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;">
+            <div style="margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+                <h4 style="color:var(--blue); margin-bottom:4px;"><i class="fas fa-calendar-check"></i> 2. Status e Planejamento</h4>
+                <div style="font-size:13px; color:var(--text-2); margin-top:4px;">
                     <strong>Status Atual:</strong> <span class="man-badge ${statusClass}">${esc(a.status)}</span>
                 </div>
                 ${htmlPlanejamento}
-                ${a.justificativa && a.status !== 'Aprovado' ? `<div style="font-size:13px; color:var(--man-text-secondary); margin-top:4px;"><strong>Justificativa:</strong> ${esc(a.justificativa)}</div>` : ''}
+                ${a.justificativa && a.status !== 'Aprovado' ? `<div style="font-size:13px; color:var(--text-2); margin-top:4px;"><strong>Justificativa:</strong> ${esc(a.justificativa)}</div>` : ''}
             </div>
 
             ${(a.status === 'Em Execucao' || a.status === 'Concluido' || a.status === 'Nao Executado') ? `
-                <div style="margin-bottom:16px; border-bottom:1px solid var(--man-border-color); padding-bottom:12px;">
-                    <h4 style="color:var(--man-green); margin-bottom:4px;"><i class="fas fa-tools"></i> 3. Execução</h4>
+                <div style="margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+                    <h4 style="color:var(--green); margin-bottom:4px;"><i class="fas fa-tools"></i> 3. Execução</h4>
                     ${htmlExecucao}
                 </div>
             ` : ''}
@@ -1408,7 +1408,7 @@
     const pageData = agendamentos.slice(start, start + ITEMS_PER_PAGE);
 
     const tbody = document.getElementById('man-programadaTableBody');
-    if(pageData.length === 0) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--man-text-secondary);">Nenhuma manutenção programada.</td></tr>`; } 
+    if(pageData.length === 0) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-2);">Nenhuma manutenção programada.</td></tr>`; } 
     else {
       tbody.innerHTML = pageData.map(a => {
         const sc = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
@@ -1422,14 +1422,14 @@
         } else if(a.status === 'Em Execucao') {
           acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
         } else {
-          acoes += `<span style="font-size:12px; color:var(--man-text-secondary);">${esc(a.justificativa || '-')}</span>`;
+          acoes += `<span style="font-size:12px; color:var(--text-2);">${esc(a.justificativa || '-')}</span>`;
         }
         if(_podeEditarManutProg && (a.status === 'Aprovado' || a.status === 'Pendente')) {
-          acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--man-blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
+          acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
         }
 
         const deleteIcon = (_podeEditarManutProg && a.status === 'Pendente')
-          ? `<span style="color:var(--man-red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
+          ? `<span style="color:var(--red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
           : '';
 
         let estimadoDisplay = '-';
@@ -1465,6 +1465,16 @@
   // 5. DASHBOARD (Visão Executiva)
   // ============================================================
   let chartInstance = null;
+
+  // Canvas (Chart.js) não entende var(--xxx) — só aceita cor já resolvida
+  // (hex/rgb literal). Lê o valor ATUAL da variável global do tema (mesma
+  // que o resto da SPA usa — ver styles.css), pra o gráfico acompanhar o
+  // tema escolhido (claro/escuro/lightwall) em vez de uma cor fixa
+  // exclusiva desta página. Mesmo padrão já usado em setor-qualidade.js.
+  function _corTema(nomeVar, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(nomeVar).trim();
+    return v || fallback;
+  }
 
   function renderDashboard() {
     const totalAbertos = manutencoes.filter(m => !m.etiquetaFechada).length;
@@ -1506,7 +1516,7 @@
         const mediaMin = data.total / data.count;
         const mediaHoras = mediaMin / 60;
         const horasFormatadas = mediaHoras.toFixed(1);
-        mttrHtml += `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--man-border-soft); font-size:14px; color:var(--man-text-secondary);"><span>${esc(maq)}</span><span style="color:var(--man-orange); font-weight:600;">${horasFormatadas} h</span></div>`;
+        mttrHtml += `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:14px; color:var(--text-2);"><span>${esc(maq)}</span><span style="color:var(--accent); font-weight:600;">${horasFormatadas} h</span></div>`;
       }
     }
     document.getElementById('man-mttrContainer').innerHTML = mttrHtml || 'Nenhum dado de MTTR disponível.';
@@ -1523,13 +1533,16 @@
 
     if (chartInstance) chartInstance.destroy();
     const ctx = document.getElementById('man-chartManutencao').getContext('2d');
+    const corVermelho = _corTema('--red', '#ef4444');
+    const corVerde = _corTema('--green', '#10b981');
+    const corTextoEixo = _corTema('--text-2', '#9aa3b2');
     chartInstance = new Chart(ctx, {
       type: 'bar', data: { labels: labels, datasets: [
-          { label: 'Abertos', data: abertos, backgroundColor: 'rgba(255, 92, 108, 0.7)', borderColor: '#ff5c6c', borderWidth: 1 },
-          { label: 'Fechados', data: fechados, backgroundColor: 'rgba(46, 211, 163, 0.7)', borderColor: '#2ed3a3', borderWidth: 1 }
+          { label: 'Abertos', data: abertos, backgroundColor: corVermelho + 'b3', borderColor: corVermelho, borderWidth: 1 },
+          { label: 'Fechados', data: fechados, backgroundColor: corVerde + 'b3', borderColor: corVerde, borderWidth: 1 }
         ]
       },
-      options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#a0b8d0' } } }, scales: { x: { ticks: { color: '#a0b8d0' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#a0b8d0' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+      options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: corTextoEixo } } }, scales: { x: { ticks: { color: corTextoEixo }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: corTextoEixo }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
     });
   }
 
