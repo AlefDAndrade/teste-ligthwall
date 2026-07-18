@@ -613,7 +613,7 @@
   .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
   .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
   .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .af-paineis-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
   .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
   .af-pallet-tipo { font-size:.66rem; font-weight:600; background:var(--border); color:var(--text-3); padding:2px 8px; border-radius:999px; }

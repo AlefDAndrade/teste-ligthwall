@@ -416,7 +416,17 @@
       height: ${ALTURA_CHART_TURNOS_PX}px;
       padding: ${PAD_TOP_CHART_TURNOS_PX}px 4px ${PAD_BOTTOM_CHART_TURNOS_PX}px;
       box-sizing: border-box;
+      overflow-x: auto; overflow-y: hidden;
     `;
+
+    // Cada barra soma flex:1 1 0 (some espaço igual, encolhe se
+    // preciso) com um piso mínimo — com poucas barras, elas preenchem
+    // a largura toda; com muitas (período longo = muitas datas/turnos),
+    // encolher até sumir deixaria a barra ilegível, então a partir de
+    // ~40 barras troca pra colunas de largura FIXA (28px, ainda dá pra
+    // ver a barra de verdade) e deixa o container rolar na horizontal
+    // (overflow-x:auto, acima) em vez de continuar espremendo.
+    const muitasBarras = labels.length > 40;
 
     // Linha de referência em 85% (meta comum de OEE "classe mundial" é ~85%)
     const linhaRef = document.createElement('div');
@@ -431,10 +441,9 @@
       const bruto = values[i];
 
       const col = document.createElement('div');
-      col.style.cssText = `
-        position: relative; flex: 1 1 0; min-width: 4px; height: 100%;
-        display: flex; align-items: flex-end;
-      `;
+      col.style.cssText = muitasBarras
+        ? `position: relative; flex: 0 0 28px; height: 100%; display: flex; align-items: flex-end;`
+        : `position: relative; flex: 1 1 0; min-width: 4px; height: 100%; display: flex; align-items: flex-end;`;
 
       const bar = document.createElement('div');
       if (bruto === null || bruto === undefined) {
