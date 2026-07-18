@@ -529,6 +529,13 @@ h4 {
   .op-info-column {
     position: static;
   }
+  /* 4 "colunas" -> 2x2 — cada coluna vira largura igual (a 4ª perde o
+     2fr especial, que só fazia sentido ao lado de outras 3 mais
+     estreitas). Ver breakpoint de celular, abaixo, pra empilhar tudo
+     numa coluna só. */
+  .ao-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .page-header {
@@ -828,6 +835,19 @@ h4 {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+}
+
+/* Análise Operacional — 4 "colunas" de KPI lado a lado (Produção /
+   Ciclo / Atrasos / Eficiência+Melhor-Pior), a última mais larga (2fr)
+   porque tem uma sub-grade dentro. Não dá pra usar .kpi-grid (auto-fit
+   simples) direto porque essas "colunas" não são cards individuais —
+   cada uma é uma coluna com 2-3 cards empilhados dentro. Em telas
+   menores agrupa 2x2 e depois empilha tudo — ver @media abaixo. */
+.ao-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 2fr;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .kpi-card {
@@ -1861,6 +1881,11 @@ td.mono {
 
   .op-grid-controle {
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* 2x2 (ver breakpoint de 1200px, acima) -> 1 coluna só, tudo empilhado. */
+  .ao-kpi-grid {
+    grid-template-columns: 1fr;
   }
 
   /* Card de status: badge/botões de um lado, timer do outro — em telas
