@@ -538,8 +538,6 @@
     document.getElementById('man-manTipos').value = '[]';
     document.getElementById('man-manTempoGasto').value = '';
     document.getElementById('man-supTempoGasto').value = '';
-    const btnSalvarNovo = document.getElementById('man-btnSalvarManutencao');
-    if (btnSalvarNovo) btnSalvarNovo.style.display = 'inline-block';
     document.getElementById('man-manEmpresaExternaRow').style.display = 'none';
     document.getElementById('man-manTipoEtiqueta').value = 'Azul';
     prioridadeSelecionada = ''; tiposSelecionados = [];
@@ -1396,6 +1394,25 @@
   // progresso sem precisar abrir cada uma. Chamada sempre que o estado
   // muda (novoChamado, editarManutencao, aceitar/recusar, etc.) — única
   // fonte de verdade de "o que está visível agora".
+  // "Salvar Chamado" só faz sentido — e só aparece — na etapa que a
+  // pessoa está vendo AGORA, e só se ela tem o quê editar ali (ver
+  // conversa: "os botões ficam aparecendo o tempo todo" — antes, a
+  // visibilidade era calculada 1x ao abrir o chamado, usando "tem algo
+  // editável em QUALQUER seção", e nunca era recalculada ao trocar de
+  // etapa — então o botão continuava visível mesmo em etapas onde não
+  // havia nada pra salvar ali). "Fechamento" nunca mostra Salvar: quem
+  // fecha usa o botão próprio dessa etapa (abrirModalFechamento).
+  function _manPodeSalvarNaEtapaAtual() {
+    const m = _chamadoEmEdicao;
+    if (!m) return _manStepAtual === 'abertura'; // chamado novo: só "Abertura" existe
+    switch (_manStepAtual) {
+      case 'abertura': return _podeEditarAberturaChamadoAtual(m);
+      case 'execucao': return m.aceito === 'Sim' && _podeAceitarChamadoAtual();
+      case 'peca': return m.pedidoPecaAceito === 'Sim' && _podeAceitarPedidoPecaAtual();
+      default: return false; // 'fechamento'
+    }
+  }
+
   function _manAplicarStepAtual() {
     const m = _chamadoEmEdicao;
     Object.entries(MAN_ZONAS_ETAPA).forEach(([step, elId]) => {
@@ -1403,6 +1420,9 @@
       if (el) el.style.display = (step === _manStepAtual) ? 'block' : 'none';
     });
     if (_manStepAtual === 'fechamento') _manRenderizarFechamento(m);
+
+    const btnSalvar = document.getElementById('man-btnSalvarManutencao');
+    if (btnSalvar) btnSalvar.style.display = _manPodeSalvarNaEtapaAtual() ? 'inline-block' : 'none';
 
     const temAguardandoPecas = document.getElementById('man-manAguardandoPecas')?.value === 'Sim';
     const pillPeca = document.getElementById('man-wizardStepPeca');
@@ -1573,16 +1593,6 @@
         else if (m.recusaResultado === 'Negada') partes.push(`Recusa negada por ${esc(m.recusaRevisadoPor || '—')} em ${_formatarDataHoraCurta(m.recusaRevisadoEm)}`);
         aceiteInfo.textContent = partes.join(' · ');
       }
-
-      // Botão "Salvar Chamado" só aparece pra quem tem ALGO editável
-      // nesta tela — Abertura/Detalhes, OU Execução (se já aceito), OU
-      // Acompanhamento (se pedido de peça já aceito). Puro espectador
-      // (ex: perfil sem nenhum desses acessos, olhando um chamado que
-      // não abriu) não vê botão de salvar nenhum.
-      const podeExecucao = m.aceito === 'Sim' && _podeAceitarChamadoAtual();
-      const podeAcompanhamento = m.pedidoPecaAceito === 'Sim' && _podeAceitarPedidoPecaAtual();
-      const btnSalvar = document.getElementById('man-btnSalvarManutencao');
-      if (btnSalvar) btnSalvar.style.display = (podeAbertura || podeExecucao || podeAcompanhamento) ? 'inline-block' : 'none';
 
       _manDefinirStepInicial(m);
       _manAplicarStepAtual();

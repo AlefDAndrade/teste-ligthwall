@@ -162,3 +162,45 @@ test('Manutencao (com área manutencao completa): etapa Fechamento oferece o bot
     window.close();
   }
 });
+
+// ─── Botão "Salvar Chamado" — visibilidade por etapa ────────────────────────
+// Regressão de outro bug real: a visibilidade do botão era calculada 1x só,
+// quando o chamado era aberto ("tem algo editável em QUALQUER seção do
+// formulário?") — nunca recalculada ao trocar de etapa no assistente. Quem
+// podia editar Abertura via o botão SEMPRE visível, em toda etapa (inclusive
+// "Fechamento", que já tem seu próprio botão dedicado) — dando a impressão
+// de "o botão fica aparecendo o tempo todo" (ver conversa que motivou isso).
+// Agora _manPodeSalvarNaEtapaAtual() (manutencao.js) é recalculada toda vez
+// que a etapa muda (_manAplicarStepAtual()), olhando só pra etapa ATUAL.
+test('botão "Salvar Chamado" só aparece na etapa onde há algo editável — some em "Fechamento", reaparece ao voltar pra "Abertura"', async () => {
+  const id = await criarChamado('wizard-btn');
+  const dom = await carregarSpaComo('encarregado.wizardbtn.teste', 'Encarregado');
+  const { window } = dom;
+
+  try {
+    window.showPage('manutencao');
+    await new Promise(r => setTimeout(r, 200));
+    window.editarManutencao(id);
+    await new Promise(r => setTimeout(r, 100));
+
+    const btnSalvar = window.document.getElementById('man-btnSalvarManutencao');
+    // offsetParent/offsetWidth não são confiáveis no JSDOM (não faz layout
+    // de verdade — sempre null/0 independente do CSS real); o que reflete
+    // o que o navegador realmente decidiria é o display computado.
+    const visivel = () => window.getComputedStyle(btnSalvar).display !== 'none';
+
+    window._manIrParaStep('abertura');
+    assert.equal(visivel(), true, 'Encarregado pode editar Abertura — botão deveria aparecer');
+
+    window.document.getElementById('man-manSituacao').value = 'Concluido';
+    window._manIrParaStep('execucao');
+    window.aoMudarSituacao();
+    window._manIrParaStep('fechamento');
+    assert.equal(visivel(), false, 'etapa Fechamento tem botão próprio — "Salvar Chamado" não deveria aparecer aqui');
+
+    window._manIrParaStep('abertura');
+    assert.equal(visivel(), true, 'voltando pra Abertura, o botão deveria reaparecer');
+  } finally {
+    window.close();
+  }
+});
