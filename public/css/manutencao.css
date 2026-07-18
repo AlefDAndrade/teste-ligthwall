@@ -131,21 +131,28 @@
 .man-kpi-card .man-kpi-number { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: var(--text); }
 .man-kpi-card .man-kpi-label { font-size: 11px; color: var(--text-3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* ── BOARD KANBAN — Chamados Corretivos ──────────────────────────────────
-   Substitui a antiga tabela única (ver conversa que motivou isso: "não
-   estou satisfeito com o fluxo do chamado" → falta de clareza de quem
-   precisa agir). Cada coluna é uma FASE do chamado (calculada em
-   _corretivaColuna(), manutencao.js — nunca gravada como campo, é sempre
-   derivada do estado atual), cada cartão mostra, se aplicável, "de quem é
-   a vez agora" (ver _acaoPendenteCard()). Rola na horizontal em telas
-   estreitas (mesma ideia de .man-table-wrap pra tabelas largas) — colunas
-   fixas, cartões dentro de cada uma rolam na vertical.  */
-.man-kanban-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
-.man-kanban-col { flex: 1 1 240px; min-width: 240px; max-width: 300px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; max-height: 70vh; }
-.man-kanban-col-head { padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.man-kanban-col-head .count { margin-left: auto; background: var(--bg-3); color: var(--text-2); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
-.man-kanban-col-cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
-.man-kanban-col-vazio { font-size: 12px; color: var(--text-3); text-align: center; padding: 16px 4px; opacity: .7; }
+/* ── ACORDEÃO DE FASES — Chamados Corretivos (topo da página) ───────────
+   Sucede o board Kanban lado-a-lado (ver conversa: "cada card do kanban
+   vira tipo um select" — clique abre/fecha, feito com <button
+   aria-expanded> pra ficar acessível por teclado também). Só uma fase
+   fica aberta por vez (_manToggleFase(), manutencao.js) — mesma
+   sensação de um <select> nativo: clique, veja o que tem, feche. As
+   fichas usadas dentro de cada fase são as MESMAS .man-kanban-card de
+   sempre (calculadas em _corretivaColuna()/_acaoPendenteCard(),
+   manutencao.js — sempre derivadas do estado atual, nunca um campo
+   salvo à parte), só que empilhadas numa grade em vez de coluna
+   estreita. */
+.man-kanban-accordion { display: flex; flex-direction: column; gap: 8px; }
+.man-accordion-fase { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-2); overflow: hidden; }
+.man-accordion-fase-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: none; border: none; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; }
+.man-accordion-fase-head .count { background: var(--bg-3); color: var(--text-2); border-radius: 10px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+.man-accordion-fase-head .count.tem-pendencia { background: var(--accent-dim); color: var(--accent); }
+.man-accordion-fase-head .chevron { margin-left: auto; transition: transform .2s; color: var(--text-3); }
+.man-accordion-fase.aberta .man-accordion-fase-head .chevron { transform: rotate(180deg); }
+.man-accordion-fase.aberta .man-accordion-fase-head { border-bottom: 1px solid var(--border); }
+.man-accordion-fase-corpo { display: none; padding: 12px; }
+.man-accordion-fase.aberta .man-accordion-fase-corpo { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.man-accordion-fase-vazia { font-size: 12px; color: var(--text-3); text-align: center; padding: 12px; grid-column: 1 / -1; }
 
 .man-kanban-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: .15s; }
 .man-kanban-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }

@@ -136,9 +136,15 @@ test('criar um chamado corretivo: preencher o formulário e salvar reflete na ta
   await window.salvarManutencao();
   await new Promise(r => setTimeout(r, 300));
 
-  const board = window.document.getElementById('man-corretivaBoard');
-  assert.ok(board.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer em algum cartão do board');
-  assert.ok(board.querySelector('.man-kanban-card'), 'o chamado deveria aparecer como um cartão no board Kanban');
+  // A tabela de consulta lá embaixo sempre mostra tudo, sem precisar abrir nada.
+  const tabela = window.document.getElementById('man-corretivaTableBody');
+  assert.ok(tabela.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer na tabela de consulta');
+
+  // Chamado novo (ainda não aceito) cai na fase "Aguardando Aceite" do
+  // acordeão — só aparece como cartão depois de abrir essa fase.
+  window._manToggleFase('aceite');
+  const acc = window.document.getElementById('man-corretivaAccordion');
+  assert.ok(acc.querySelector('.man-kanban-card'), 'o chamado deveria aparecer como um cartão ao abrir a fase "Aguardando Aceite"');
 
   const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
   const data = await resp.json();

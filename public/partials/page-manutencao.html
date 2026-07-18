@@ -63,6 +63,19 @@
       <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
     </div>
 
+    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
+         cima" + "cada card vira tipo um select"). Fica ANTES do
+         formulário de propósito — é a primeira coisa que a pessoa vê ao
+         entrar na aba, pra bater o olho no que está pendente antes de
+         abrir qualquer chamado específico. Clicar num cartão dentro de
+         uma fase aberta ainda abre o mesmo formulário/assistente de
+         sempre (editarManutencao) — a área de ação continua sendo aqui;
+         a tabela lá embaixo é só consulta. -->
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
+      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
+    </div>
+
     <!-- FORMULÁRIO -->
     <div id="man-formCard" class="man-card" style="display: none;">
       <div class="man-card-title">
@@ -242,15 +255,32 @@
       </form>
     </div>
 
-    <!-- PAINEL DE CHAMADOS — board Kanban (ver conversa que motivou a troca
-         do modelo antigo de tabela única: falta de clareza de quem
-         precisa agir agora). Colunas fixas (Aguardando Aceite → Em
-         Execução → Aguardando Peça → Aguardando Fechamento → Concluído),
-         montadas 100% em JS (renderCorretiva(), manutencao.js) — cada
-         cartão já mostra "de quem é a vez" quando aplicável. -->
+    <!-- TODOS OS CHAMADOS — tabela somente-leitura (ver conversa: "sem a
+         opção de editar, só pra visualizar todos os chamados tipo numa
+         tabela"). Clique na linha abre a trajetória completa
+         (abrirHistorico) — não abre o formulário/assistente de edição;
+         quem quer agir usa o acordeão lá em cima. Mesmos filtros da
+         página se aplicam aqui também (mesmo conjunto de dados
+         filtrados de renderCorretiva()). -->
     <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
-      <div class="man-kanban-board" id="man-corretivaBoard"></div>
+      <div class="man-card-title"><i class="fas fa-list"></i> Todos os Chamados (consulta)</div>
+      <div class="man-table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width: 9%;">Nº</th>
+            <th style="width: 12%;">Máquina</th>
+            <th style="width: 9%;">Setor</th>
+            <th style="width: 9%;">Turno</th>
+            <th style="width: 11%;">Observador</th>
+            <th style="width: 9%;">Tipo</th>
+            <th style="width: 8%;">Prioridade</th>
+            <th style="width: 8%;">Etiqueta</th>
+            <th style="width: 12%;">Status</th>
+            <th style="width: 13%;">Supervisão</th>
+          </tr></thead>
+          <tbody id="man-corretivaTableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 

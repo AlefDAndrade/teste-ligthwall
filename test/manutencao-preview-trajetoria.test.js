@@ -61,6 +61,11 @@ before(async () => {
   window.setPrioridade('ALTA');
   await window.salvarManutencao();
   await new Promise(r => setTimeout(r, 300));
+
+  // Cartões do acordeão só existem no DOM quando a fase está aberta (ver
+  // conversa: "cada card do kanban vira tipo um select") — chamado novo
+  // (ainda não aceito) cai na fase "Aguardando Aceite".
+  window._manToggleFase('aceite');
 });
 
 after(async () => {
@@ -74,9 +79,9 @@ function dispararMouseEvent(el, tipo, opts = {}) {
 }
 
 test('sem Ctrl, passar o mouse na linha NÃO mostra o preview da trajetória', async () => {
-  const board = window.document.getElementById('man-corretivaBoard');
-  const linha = board.querySelector('.man-kanban-card');
-  assert.ok(linha, 'deveria ter pelo menos um cartão no board');
+  const acc = window.document.getElementById('man-corretivaAccordion');
+  const linha = acc.querySelector('.man-kanban-card');
+  assert.ok(linha, 'deveria ter pelo menos um cartão na fase aberta do acordeão');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: false });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: false });
@@ -86,8 +91,8 @@ test('sem Ctrl, passar o mouse na linha NÃO mostra o preview da trajetória', a
 });
 
 test('segurando Ctrl e passando o mouse na linha, o preview aparece com o stepper', async () => {
-  const board = window.document.getElementById('man-corretivaBoard');
-  const linha = board.querySelector('.man-kanban-card');
+  const acc = window.document.getElementById('man-corretivaAccordion');
+  const linha = acc.querySelector('.man-kanban-card');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: true });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: true });
@@ -100,8 +105,8 @@ test('segurando Ctrl e passando o mouse na linha, o preview aparece com o steppe
 });
 
 test('mouseleave esconde o preview', async () => {
-  const board = window.document.getElementById('man-corretivaBoard');
-  const linha = board.querySelector('.man-kanban-card');
+  const acc = window.document.getElementById('man-corretivaAccordion');
+  const linha = acc.querySelector('.man-kanban-card');
 
   dispararMouseEvent(linha, 'mouseenter', { ctrlKey: true });
   dispararMouseEvent(linha, 'mousemove', { ctrlKey: true });

@@ -1235,6 +1235,40 @@
     </div>`;
   }
 
+  // Só uma fase do acordeão aberta por vez (mesma sensação de um <select>
+  // nativo — ver conversa). Guardado fora da função de render pra
+  // sobreviver a um re-render (ex: depois de salvar um chamado, a fase
+  // que a pessoa tinha aberto continua aberta).
+  let _manFaseAberta = null;
+
+  function _manToggleFase(faseId) {
+    _manFaseAberta = (_manFaseAberta === faseId) ? null : faseId;
+    renderCorretiva();
+  }
+
+  // Badge de Status/Supervisão da tabela de consulta — mesma lógica visual
+  // que a tabela original sempre teve (ver histórico do arquivo).
+  function _badgesLinhaCorretiva(m) {
+    const situacao = m.situacao || 'Aguardando';
+    const sc = situacao === 'Concluido' ? 'man-badge-green'
+      : situacao === 'Em Manutencao' ? 'man-badge-blue'
+      : situacao === 'Recusado' ? 'man-badge-red'
+      : 'man-badge-gray';
+    let supClass = 'man-badge-green', supText = '✅ OK';
+    if ((m.aguardandoPecas || '') === 'Sim') {
+      if (m.pedidoPecaAceito !== 'Sim') { supText = 'Pedido de peça (aguardando aceite)'; supClass = 'man-badge-yellow'; }
+      else if (m.statusCompra) {
+        supText = m.statusCompra;
+        if (m.statusCompra === 'Em Análise') supClass = 'man-badge-yellow';
+        else if (m.statusCompra === 'Cotação em andamento') supClass = 'man-badge-orange';
+        else if (m.statusCompra === 'Pedido efetuado') supClass = 'man-badge-blue';
+        else if (m.statusCompra === 'Peça em transporte') supClass = 'man-badge-purple';
+        else if (m.statusCompra === 'Peça recebida') supClass = 'man-badge-green';
+      } else { supText = 'Sob Supervisão'; supClass = 'man-badge-orange'; }
+    }
+    return { situacao, sc, supClass, supText };
+  }
+
   function renderCorretiva() {
     try {
       const filtroID = document.getElementById('man-filtroID')?.value?.toLowerCase()?.trim() || '';
@@ -1254,27 +1288,63 @@
       if (filtroStatus) dados = dados.filter(m => (m.situacao || '') === filtroStatus);
       if (filtroEtiqueta) dados = dados.filter(m => (m.tipoEtiqueta || '') === filtroEtiqueta);
 
-      const board = document.getElementById('man-corretivaBoard');
-      if (!board) return;
+      // ── ACORDEÃO (topo) ──────────────────────────────────────────
+      const acc = document.getElementById('man-corretivaAccordion');
+      if (acc) {
+        const porFase = {};
+        MAN_COLUNAS_CORRETIVA.forEach(c => { porFase[c.id] = []; });
+        dados.forEach(m => { const f = _corretivaColuna(m); (porFase[f] || porFase.aceite).push(m); });
 
-      const porColuna = {};
-      MAN_COLUNAS_CORRETIVA.forEach(c => { porColuna[c.id] = []; });
-      dados.forEach(m => { const col = _corretivaColuna(m); (porColuna[col] || porColuna.aceite).push(m); });
+        acc.innerHTML = MAN_COLUNAS_CORRETIVA.map(fase => {
+          const itens = porFase[fase.id] || [];
+          const pendentes = itens.filter(m => !!_acaoPendenteCard(m)?.urgente).length;
+          const aberta = _manFaseAberta === fase.id;
+          const corpo = itens.length
+            ? itens.map(_renderizarCartaoCorretiva).join('')
+            : `<div class="man-accordion-fase-vazia">Nenhum chamado nesta fase.</div>`;
+          return `<div class="man-accordion-fase ${aberta ? 'aberta' : ''}" data-fase="${fase.id}">
+            <button type="button" class="man-accordion-fase-head" aria-expanded="${aberta}" onclick="_manToggleFase('${fase.id}')">
+              <i class="fas ${fase.icone}"></i> ${fase.titulo}
+              <span class="count ${pendentes > 0 ? 'tem-pendencia' : ''}">${pendentes > 0 ? pendentes + ' pendente' + (pendentes > 1 ? 's' : '') + ' · ' : ''}${itens.length} no total</span>
+              <i class="fas fa-chevron-down chevron"></i>
+            </button>
+            <div class="man-accordion-fase-corpo">${aberta ? corpo : ''}</div>
+          </div>`;
+        }).join('');
+      }
 
-      board.innerHTML = MAN_COLUNAS_CORRETIVA.map(col => {
-        const itens = porColuna[col.id] || [];
-        const cartoes = itens.length
-          ? itens.map(_renderizarCartaoCorretiva).join('')
-          : `<div class="man-kanban-col-vazio">Nenhum chamado aqui.</div>`;
-        return `<div class="man-kanban-col" data-col="${col.id}">
-          <div class="man-kanban-col-head"><i class="fas ${col.icone}"></i> ${col.titulo} <span class="count">${itens.length}</span></div>
-          <div class="man-kanban-col-cards">${cartoes}</div>
-        </div>`;
-      }).join('');
+      // ── TABELA DE CONSULTA (rodapé) — só visualização, sem editar.
+      // Clique na linha abre a trajetória (abrirHistorico), não o
+      // formulário/assistente — quem quer agir usa o acordeão acima.
+      const tbody = document.getElementById('man-corretivaTableBody');
+      if (tbody) {
+        tbody.innerHTML = dados.length ? dados.map(m => {
+          const { situacao, sc, supClass, supText } = _badgesLinhaCorretiva(m);
+          const prioridade = m.prioridade || 'BAIXA';
+          const tipo = m.tipoManutencao || '-';
+          const tpc = tipo === 'Elétrica' ? 'var(--accent)' : 'var(--blue)';
+          const etiqueta = m.tipoEtiqueta || 'Azul';
+          const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
+          const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
+          const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock" title="Etiqueta fechada"></i>' : '';
+          return `<tr style="cursor:pointer;" onclick="abrirHistorico('${m.id}')" title="Ver trajetória do chamado">
+            <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon}</td>
+            <td data-label="Máquina">${esc(m.maquina || '-')}</td>
+            <td data-label="Setor">${esc(m.setor || '-')}</td>
+            <td data-label="Turno"><strong>${esc(m.turno || '-')}</strong></td>
+            <td data-label="Observador">${esc(m.observador || '-')}</td>
+            <td data-label="Tipo"><span style="color:${tpc};">${esc(tipo)}</span></td>
+            <td data-label="Prioridade"><span style="color:${_corPrioridade(prioridade)};">${esc(prioridade)}</span></td>
+            <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
+            <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
+            <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
+      }
     } catch (error) {
-      console.error("Erro ao renderizar o board corretivo:", error);
-      const board = document.getElementById('man-corretivaBoard');
-      if (board) board.innerHTML = `<div style="color:var(--red); padding:20px;">Erro ao carregar os chamados.</div>`;
+      console.error("Erro ao renderizar a área de corretiva:", error);
+      const acc = document.getElementById('man-corretivaAccordion');
+      if (acc) acc.innerHTML = `<div style="color:var(--red); padding:20px;">Erro ao carregar os chamados.</div>`;
     }
   }
 
@@ -2292,6 +2362,7 @@
   window._mostrarPreviewTrajetoria = _mostrarPreviewTrajetoria;
   window._esconderPreviewTrajetoria = _esconderPreviewTrajetoria;
   window._manIrParaStep = _manIrParaStep;
+  window._manToggleFase = _manToggleFase;
   window.abrirModalFechamento = MAN.abrirModalFechamento;
   window.abrirModalFinalizar = MAN.abrirModalFinalizar;
   window.abrirModalInicio = MAN.abrirModalInicio;
