@@ -169,6 +169,27 @@ test('salvarManutencao recusa salvar sem os campos obrigatórios preenchidos', a
   assert.equal(totalDepois, totalAntes, 'não deveria adicionar nenhum registro sem os campos obrigatórios');
 });
 
+test('o formulário do chamado (título, seções e botões Salvar/Cancelar) fica todo DENTRO de #man-formCard — nada escapa pra fora por HTML mal-fechado', () => {
+  // Regressão de um bug real herdado do arquivo original: uma </div> a
+  // mais logo depois da Seção 2 fechava o <form>/#man-formCard cedo
+  // demais (o parser HTML5 não avisa, só reorganiza a árvore em
+  // silêncio) — Execução, Peça, Fechamento e a barra de Salvar/Cancelar
+  // acabavam como filhos de #man-manutencao, FORA do cartão visual do
+  // formulário. Sintoma relatado: botões pareciam "flutuar fora" do
+  // formulário, Salvar fechava só uma parte dele (e os botões
+  // continuavam visíveis), Cancelar parecia não fazer nada.
+  const formCard = window.document.getElementById('man-formCard');
+  ['man-manForm', 'man-wizardNav', 'man-zonaAbertura', 'man-techSection',
+    'man-supervisorSection', 'man-zonaFechamento', 'man-btnSalvarManutencao'].forEach(id => {
+    const el = window.document.getElementById(id);
+    assert.ok(el, `elemento #${id} deveria existir`);
+    assert.ok(formCard.contains(el), `#${id} deveria estar DENTRO de #man-formCard`);
+  });
+  const btnCancelar = [...window.document.querySelectorAll('.man-btn-outline')].find(b => b.textContent.includes('Cancelar'));
+  assert.ok(btnCancelar, 'botão Cancelar deveria existir');
+  assert.ok(formCard.contains(btnCancelar), 'botão Cancelar deveria estar DENTRO de #man-formCard');
+});
+
 test('o menu lateral e o menu principal têm um item/card pra Manutenção', () => {
   const navItem = window.document.querySelector('.sidebar [data-page="manutencao"]');
   assert.ok(navItem, 'deveria existir um botão de navegação pra "manutencao" no sidebar');
