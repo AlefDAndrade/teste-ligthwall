@@ -1407,6 +1407,11 @@
   function toggleMark(el) {
     if (viewMode) return;
     const id = el.dataset.id;
+    // Borracha selecionada — clique normal limpa a placa inteira, em vez
+    // de adicionar marca (ver conversa que motivou: substitui o gesto de
+    // toque longo no celular por uma ferramenta selecionável, igual
+    // cor/forma já são — mesmo clique de sempre, só muda o que ele faz).
+    if (selectedShape === 'eraser') { _limparPainel(id, el); return; }
     if (!slabState[id]) slabState[id] = [];
     const shape = selectedShape;
     // X nunca usa a cor escolhida na paleta — é sempre cinza fixo
@@ -1479,21 +1484,42 @@
     if (_marcaExigeMotivo({ role, color })) _abrirSeletorMotivo(id);
   }
 
-  // Apagar — toque longo (touch) ou clique direito (mouse) numa placa.
-  // Remove UMA ocorrência da cor+forma ATUALMENTE SELECIONADA na paleta
-  // (mesmo seletor de sempre — só muda o que o gesto faz com ele). Como
-  // marcas idênticas são visualmente indistinguíveis entre si, remove
-  // sempre a primeira que encontrar — não importa qual das repetidas
-  // some, o resultado visual é o mesmo. Apaga também marcas de
-  // IDENTIFICAÇÃO automáticas (auto: true) — a paleta continua completa
-  // de propósito (ver conversa que motivou: manter cor+forma manuais)
-  // exatamente pra permitir reconstruir a combinação certa (ex:
-  // amarelo+traço) e apagar uma identificação automática, se precisar.
-  // Ver _ligarGestoApagar, que liga isso no elemento da placa (contextmenu
-  // + long-press por touch).
+  // Borracha (ver toggleMark) — apaga TODAS as marcas de uma placa de
+  // uma vez, diferente de toggleMarkErase (abaixo, clique direito no
+  // computador) que remove só UMA marca da cor/forma selecionada. Também
+  // limpa o motivo salvo, se houver (_atualizarMotivoAposDesmarcar já
+  // decide isso). Não faz nada (nem entra no histórico de Desfazer) numa
+  // placa que já está vazia.
+  function _limparPainel(id, el) {
+    if (!slabState[id] || !slabState[id].length) {
+      toast('Essa placa já está vazia.', 'error');
+      return;
+    }
+    pushState();
+    slabState[id] = [];
+    renderMarks(el, slabState[id]);
+    validateAllSlabs();
+    _atualizarMotivoAposDesmarcar(id);
+  }
+
+  // Apagar — clique direito (mouse) numa placa. Com a Borracha
+  // selecionada (ver toggleMark/_limparPainel), tem o mesmo efeito do
+  // clique normal: limpa a placa inteira. Com qualquer outra ferramenta
+  // selecionada, remove UMA ocorrência da cor+forma ATUALMENTE
+  // SELECIONADA na paleta (mesmo seletor de sempre — só muda o que o
+  // gesto faz com ele). Como marcas idênticas são visualmente
+  // indistinguíveis entre si, remove sempre a primeira que encontrar —
+  // não importa qual das repetidas some, o resultado visual é o mesmo.
+  // Apaga também marcas de IDENTIFICAÇÃO automáticas (auto: true) — a
+  // paleta continua completa de propósito (ver conversa que motivou:
+  // manter cor+forma manuais) exatamente pra permitir reconstruir a
+  // combinação certa (ex: amarelo+traço) e apagar uma identificação
+  // automática, se precisar. Ver _ligarGestoApagar, que liga isso no
+  // elemento da placa (contextmenu).
   function toggleMarkErase(el) {
     if (viewMode) return;
     const id = el.dataset.id;
+    if (selectedShape === 'eraser') { _limparPainel(id, el); return; }
     const shape = selectedShape;
     const color = shape === 'x' ? COR_NAO_PREENCHIDO : selectedColor;
     const marcas = slabState[id] || [];
@@ -1509,59 +1535,20 @@
     _atualizarMotivoAposDesmarcar(id);
   }
 
-  // Liga o gesto de apagar (toque longo / clique direito) num elemento de
-  // placa — chamada 1x por placa, na criação (ver renderStacks). Clique
-  // direito: usa o evento nativo 'contextmenu' (mais confiável entre
-  // navegadores do que checar e.button===2 em 'click'), suprime o menu de
-  // contexto do navegador. Toque longo: temporizador de 500ms armado no
-  // 'touchstart', cancelado se o dedo mover mais que uma folga pequena
-  // (evita disparar sem querer durante um scroll) ou soltar antes da hora.
-  const LONG_PRESS_MS = 500;
-  const LONG_PRESS_TOLERANCIA_PX = 10;
+  // Liga o gesto de apagar (clique direito) num elemento de placa —
+  // chamada 1x por placa, na criação (ver renderStacks). Usa o evento
+  // nativo 'contextmenu', suprime o menu de contexto do navegador.
+  //
+  // O gesto de toque longo (celular) que existia aqui foi removido — ver
+  // conversa que motivou a mudança: a Borracha (ferramenta selecionável,
+  // igual cor/forma) cobre o mesmo caso de uso, com clique/toque normal,
+  // sem precisar segurar o dedo parado nem torcer pra não disparar um
+  // scroll sem querer no meio do caminho.
   function _ligarGestoApagar(el) {
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
       toggleMarkErase(el);
     });
-
-    let timer = null;
-    let origem = null;
-    let disparou = false;
-
-    function limpar() {
-      if (timer) { clearTimeout(timer); timer = null; }
-      origem = null;
-    }
-
-    el.addEventListener('touchstart', e => {
-      if (viewMode) return;
-      const t = e.touches && e.touches[0];
-      if (!t) return; // evento de toque sem dados de posição — não dá pra medir movimento, ignora com segurança
-      origem = { x: t.clientX, y: t.clientY };
-      disparou = false;
-      timer = setTimeout(() => {
-        disparou = true;
-        toggleMarkErase(el);
-      }, LONG_PRESS_MS);
-    }, { passive: true });
-
-    el.addEventListener('touchmove', e => {
-      if (!origem) return;
-      const t = e.touches && e.touches[0];
-      if (!t) return;
-      const dx = Math.abs(t.clientX - origem.x);
-      const dy = Math.abs(t.clientY - origem.y);
-      if (dx > LONG_PRESS_TOLERANCIA_PX || dy > LONG_PRESS_TOLERANCIA_PX) limpar();
-    }, { passive: true });
-
-    el.addEventListener('touchend', e => {
-      // O toque longo já disparou o apagar — impede que o 'click'
-      // sintético que o navegador dispara em seguida também adicione
-      // uma marca (senão apagava uma e adicionava outra na sequência).
-      if (disparou) e.preventDefault();
-      limpar();
-    });
-    el.addEventListener('touchcancel', limpar);
   }
 
   // Desmarcar uma cor azul/vermelho pode deixar o painel sem NENHUMA marca
@@ -1687,11 +1674,12 @@
     document.querySelectorAll('.sq-btn-shape').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedShape = shape;
-    // X nunca usa cor (é sempre cinza fixo, ver COR_NAO_PREENCHIDO) —
-    // desabilita a paleta visualmente pra não sugerir que a cor
-    // escolhida ali vai valer pra ele. Some outra forma é escolhida de
+    // X nunca usa cor (é sempre cinza fixo, ver COR_NAO_PREENCHIDO) e
+    // Borracha não grava marca nenhuma — nos dois casos a paleta de cor
+    // não tem efeito, então desabilita visualmente pra não sugerir que
+    // a cor escolhida ali vai valer. Some outra forma é escolhida de
     // novo, a paleta volta a funcionar normalmente.
-    document.querySelectorAll('.sq-btn-color').forEach(b => b.classList.toggle('sq-btn-color-disabled', shape === 'x'));
+    document.querySelectorAll('.sq-btn-color').forEach(b => b.classList.toggle('sq-btn-color-disabled', shape === 'x' || shape === 'eraser'));
   }
 
   // Liga/desliga o botão "I" — decide o PAPEL (`role`) da próxima marca

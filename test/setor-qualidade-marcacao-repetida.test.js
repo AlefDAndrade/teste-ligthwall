@@ -3,12 +3,16 @@
 // motivou): antes, clicar de novo na MESMA cor+forma apagava a marca — isso
 // impedia repetir a mesma combinação na mesma placa. Agora:
 //   1. Clique normal SEMPRE adiciona uma marca (permite repetir).
-//   2. Clique direito (mouse) ou toque longo (touch) apaga UMA ocorrência
-//      da cor+forma atualmente selecionada.
-//   3. Limite de 6 marcas por placa.
-//   4. X continua exclusivo (substitui tudo, e é substituído por
+//   2. Clique direito (mouse) apaga UMA ocorrência da cor+forma atualmente
+//      selecionada.
+//   3. Ferramenta "Borracha" (selecionável, igual cor/forma) — clique ou
+//      toque normal numa placa limpa TODAS as marcas dela de uma vez.
+//      Substituiu o gesto de toque longo, que foi removido (ver último
+//      teste deste arquivo).
+//   4. Limite de 6 marcas por placa.
+//   5. X continua exclusivo (substitui tudo, e é substituído por
 //      qualquer marca real).
-//   5. Botão "🧹 Limpar" por pallet (substituiu o dropdown de cores, que
+//   6. Botão "🧹 Limpar" por pallet (substituiu o dropdown de cores, que
 //      era redundante com "⚡ Todas" + a paleta principal).
 //
 // Mesmo harness de test/setor-qualidade-trava.test.js — ver
@@ -75,7 +79,41 @@ test('clique direito sem nenhuma marca correspondente não quebra nada (placa co
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-circle').length, 0);
 });
 
-test('toque longo (>=500ms parado) remove uma marca; toque curto ou com movimento não remove', async () => {
+test('Borracha selecionada + clique numa placa: limpa TODAS as marcas dela de uma vez', async () => {
+  const { window } = dom;
+  await abrirFormulario(window);
+
+  window.document.querySelector('.sq-btn-color.verde').click();
+  const slab = window.document.querySelector('.sq-slab[data-id="stack1-2"]');
+  window.document.querySelector('.sq-btn-color.vermelho').click();
+  window.document.querySelector('.sq-btn-shape.dash').click();
+  slab.click(); // marca vermelho+traço
+  window.document.querySelector('.sq-btn-color.verde').click();
+  window.document.querySelector('.sq-btn-shape.circle').click();
+  slab.click(); slab.click(); // + 2 marcas verde+círculo
+  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle, .sq-slab[data-id="stack1-2"] .sq-mark-dash').length, 3, 'pré-condição: placa deveria ter 3 marcas');
+
+  window.document.querySelector('.sq-btn-shape.eraser').click();
+  slab.click();
+
+  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle, .sq-slab[data-id="stack1-2"] .sq-mark-dash').length, 0, 'a Borracha deveria ter apagado TODAS as marcas da placa, não só uma');
+});
+
+test('Borracha selecionada + clique direito: mesmo efeito do clique normal (limpa tudo)', async () => {
+  const { window } = dom;
+  await abrirFormulario(window);
+
+  window.document.querySelector('.sq-btn-color.verde').click();
+  const slab = window.document.querySelector('.sq-slab[data-id="stack1-1"]');
+  slab.click(); slab.click();
+
+  window.document.querySelector('.sq-btn-shape.eraser').click();
+  slab.dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-1"] .sq-mark-circle').length, 0, 'clique direito com a Borracha selecionada também deveria limpar a placa inteira');
+});
+
+test('o gesto de toque longo foi removido — segurar o dedo numa placa não apaga mais nada', async () => {
   const { window } = dom;
   await abrirFormulario(window);
 
@@ -84,25 +122,10 @@ test('toque longo (>=500ms parado) remove uma marca; toque curto ou com moviment
   slab.click();
   assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 1);
 
-  // Toque longo de verdade — remove.
   slab.dispatchEvent(criarTouchEvent(window, 'touchstart', 100, 100));
   await new Promise(r => setTimeout(r, 600));
-  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 0, 'toque longo deveria ter removido a marca');
-
-  // Toque curto — não remove.
-  slab.click(); // recoloca 1 marca
-  slab.dispatchEvent(criarTouchEvent(window, 'touchstart', 50, 50));
-  await new Promise(r => setTimeout(r, 100));
-  slab.dispatchEvent(criarTouchEvent(window, 'touchend', 50, 50));
-  await new Promise(r => setTimeout(r, 600));
-  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 1, 'toque curto não deveria remover nada');
-
-  // Toque com movimento além da tolerância — cancela, não remove.
-  slab.dispatchEvent(criarTouchEvent(window, 'touchstart', 50, 50));
-  await new Promise(r => setTimeout(r, 100));
-  slab.dispatchEvent(criarTouchEvent(window, 'touchmove', 200, 200));
-  await new Promise(r => setTimeout(r, 600));
-  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 1, 'mover o dedo deveria cancelar o toque longo, sem remover nada');
+  slab.dispatchEvent(criarTouchEvent(window, 'touchend', 100, 100));
+  assert.equal(window.document.querySelectorAll('.sq-slab[data-id="stack1-2"] .sq-mark-circle').length, 1, 'segurar o toque não deveria apagar nada — o gesto foi removido, ver Borracha');
 });
 
 test('limite de 6 marcas por placa é respeitado, com aviso', async () => {

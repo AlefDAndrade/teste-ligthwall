@@ -1025,6 +1025,17 @@
   color: var(--sq-cor-cinza);
 }
 
+/* Botão de forma "Borracha" — clique numa placa (com ela selecionada)
+   limpa TODAS as marcas daquela placa de uma vez (ver conversa que
+   motivou a mudança: tirar o gesto de toque longo no celular, trocar
+   por uma ferramenta selecionável igual cor/forma já são). Mesma
+   family de ícone neutro do "X" — também não usa a cor escolhida na
+   paleta (ver .sq-btn-color-disabled, mesma regra do "X", abaixo). */
+.sq-btn-shape.eraser i {
+  font-size: .8rem;
+  color: var(--sq-cor-cinza);
+}
+
 /* Botão "I" — Indicador de qualidade (toggleIndicadorAtivo, ver
    setor-qualidade.js). Fica FORA do grupo .sq-btn-shape de propósito
    (não conta pro contador de atalhos Ctrl+nº nem ganha o badge numerado
@@ -1054,9 +1065,10 @@
   color: #fff;
 }
 
-/* Paleta de cor desabilitada enquanto a forma "X" está selecionada — X
-   nunca usa a cor escolhida (é sempre --sq-cor-cinza, ver
-   COR_NAO_PREENCHIDO em setor-qualidade.js). */
+/* Paleta de cor desabilitada enquanto "X" ou "Borracha" está
+   selecionada — nenhuma das duas usa a cor escolhida (X é sempre
+   --sq-cor-cinza, ver COR_NAO_PREENCHIDO; Borracha nem grava marca
+   nenhuma, não faz sentido nenhuma cor "valer" pra ela). */
 .sq-btn-color-disabled {
   opacity: .3;
   pointer-events: none;
