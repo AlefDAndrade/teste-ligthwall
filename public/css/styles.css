@@ -557,6 +557,53 @@ h4 {
   gap: 12px;
 }
 
+/* Modal de Configurações (⚙, na topbar) — menu lateral (8 abas) +
+   conteúdo lado a lado, largura fixa de 190px pro menu, sem NENHUM
+   ajuste pra tela estreita. Num celular (modal com max-width:95vw —
+   ~356px numa tela de 375px, menos 2x32px de padding = ~292px de
+   sobra), sobrava menos de 100px pro conteúdo depois do menu — pior
+   caso encontrado nesse pente-fino de responsividade do app inteiro.
+   Como a maior parte do estilo aqui é INLINE (o próprio JS que troca
+   de aba troca o `style=""` do botão inteiro, não uma classe — ver
+   cfgMostrarSecao, app-core.js), inline sempre vence uma classe normal
+   por especificidade; as regras abaixo usam !important só onde
+   realmente precisa virar (não é preguiça — é a única forma de vencer
+   inline sem reescrever a troca de aba toda). */
+@media (max-width: 700px) {
+  .cfg-modal-box {
+    padding: 16px !important;
+  }
+
+  .cfg-modal-layout {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  /* Menu lateral vira uma fileira de abas no TOPO, rolável na
+     horizontal se não couber tudo — em vez de uma coluna fixa de
+     190px ao lado do conteúdo (que não sobrava quase nada pra ele). */
+  .cfg-modal-nav {
+    width: 100% !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0 !important;
+    padding-bottom: 12px !important;
+  }
+
+  .cfg-modal-nav button {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .cfg-modal-content {
+    max-height: none !important;
+    padding-right: 0 !important;
+  }
+}
+
 @media (max-width: 1200px) {
   .op-layout-grid {
     grid-template-columns: 1fr;

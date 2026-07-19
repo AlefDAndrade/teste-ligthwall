@@ -1,7 +1,7 @@
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
-    <div
+    <div class="cfg-modal-box"
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:880px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
@@ -15,10 +15,10 @@
         </div>
       </div>
 
-      <div style="display:flex;gap:24px;align-items:flex-start">
+      <div class="cfg-modal-layout" style="display:flex;gap:24px;align-items:flex-start">
 
         <!-- ---- Menu lateral ---- -->
-        <div style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--border);padding-right:20px">
+        <div class="cfg-modal-nav" style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--border);padding-right:20px">
           <button type="button" id="cfg-nav-dados" onclick="cfgMostrarSecao('dados')"
             style="text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600">
             🔧 Baterias e Montagem</button>
@@ -46,7 +46,7 @@
         </div>
 
         <!-- ---- Conteúdo ---- -->
-        <div style="flex:1;min-width:0;max-height:68vh;overflow-y:auto;padding-right:6px">
+        <div class="cfg-modal-content" style="flex:1;min-width:0;max-height:68vh;overflow-y:auto;padding-right:6px">
 
           <!-- ========== SEÇÃO: Baterias e Tipos de Montagem ========== -->
           <div id="cfg-secao-dados">
