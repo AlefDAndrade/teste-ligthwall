@@ -546,6 +546,17 @@ h4 {
   margin-bottom: 12px;
 }
 
+/* Página de Turnos — mini-grid de 6 estatísticas (Baterias/m²/Painéis/
+   %Atraso/Tempo Médio/2P-SP) dentro de cada card de turno (1º/2º/3º).
+   2 colunas seguram bem até telas bem estreitas (são só rótulo+valor
+   compactos, não campo de formulário) — só empilha de vez no celular
+   menor, ver @media abaixo. */
+.turnos-kpi-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 @media (max-width: 1200px) {
   .op-layout-grid {
     grid-template-columns: 1fr;
@@ -2015,6 +2026,12 @@ td.mono {
   /* 2 -> 1 coluna — tudo empilhado, inclusive a Taxa de Acerto (span 2
      não faz diferença com só 1 coluna existindo). */
   .qt-kpi-grid-6 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Mini-grid de estatísticas de cada card de turno — só empilha de
+     vez aqui, em celular de verdade (ver .turnos-kpi-mini-grid). */
+  .turnos-kpi-mini-grid {
     grid-template-columns: 1fr;
   }
 
