@@ -556,6 +556,14 @@ h4 {
   .paradas-layout-grid {
     grid-template-columns: 1fr;
   }
+
+  /* 6 -> 3 colunas — o card da Taxa de Acerto (grid-column:span 2, no
+     HTML) automaticamente vira 2/3 da linha, sem precisar mudar nada
+     nele; só a contagem de colunas do grid muda. Ver breakpoint de
+     tablet/celular, abaixo, pra reduzir mais. */
+  .qt-kpi-grid-6 {
+    grid-template-columns: repeat(3, 1fr);
+  }
   /* 4 "colunas" -> 2x2 — cada coluna vira largura igual (a 4ª perde o
      2fr especial, que só fazia sentido ao lado de outras 3 mais
      estreitas). Ver breakpoint de celular, abaixo, pra empilhar tudo
@@ -875,6 +883,17 @@ h4 {
   grid-template-columns: repeat(3, 1fr) 2fr;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+/* Qualidade de Traços (CEP) — linha 1 de KPIs: Taxa de Acerto (card
+   maior, ocupa 2 das 6 colunas) + Total de Ajustes + Média/Traço +
+   Receita Estável + Receita Instável = 6 colunas ao todo. Ver @media
+   abaixo pra reduzir sem perder a proporção do card da Taxa. */
+.qt-kpi-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .kpi-card {
@@ -1871,6 +1890,13 @@ td.mono {
     grid-template-columns: 1fr;
   }
 
+  /* 3 -> 2 colunas — Taxa de Acerto (span 2) já vira linha inteira
+     sozinha aqui (ver .qt-kpi-grid-6, e o breakpoint de 1200px, que
+     leva de 6 pra 3 colunas primeiro). */
+  .qt-kpi-grid-6 {
+    grid-template-columns: 1fr 1fr;
+  }
+
   /* Topbar: logo + assinatura + fila pendente + usuário + Debriefing +
      data/hora/tema/sair não cabem mais numa linha só a partir daqui —
      deixa quebrar em 2 linhas (a .topbar já não tem mais altura fixa,
@@ -1983,6 +2009,12 @@ td.mono {
   /* Início/Término da parada: 1 campo por linha — só aqui, em tela de
      celular de verdade (ver .paradas-form-datas, acima). */
   .paradas-form-datas {
+    grid-template-columns: 1fr;
+  }
+
+  /* 2 -> 1 coluna — tudo empilhado, inclusive a Taxa de Acerto (span 2
+     não faz diferença com só 1 coluna existindo). */
+  .qt-kpi-grid-6 {
     grid-template-columns: 1fr;
   }
 
