@@ -144,7 +144,7 @@
    estreita. */
 .man-kanban-accordion { display: flex; flex-direction: column; gap: 8px; }
 .man-accordion-fase { border: 1px solid var(--border); border-radius: 10px; background: var(--bg-2); overflow: hidden; }
-.man-accordion-fase-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: none; border: none; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; }
+.man-accordion-fase-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: none; border: none; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; flex-wrap: wrap; row-gap: 4px; }
 .man-accordion-fase-head .count { background: var(--bg-3); color: var(--text-2); border-radius: 10px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
 .man-accordion-fase-head .count.tem-pendencia { background: var(--accent-dim); color: var(--accent); }
 .man-accordion-fase-head .chevron { margin-left: auto; transition: transform .2s; color: var(--text-3); }
