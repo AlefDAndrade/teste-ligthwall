@@ -64,7 +64,10 @@ function _poRenderGrid() {
         ondragenter="this.classList.add('po-pallet-col-dragover')"
         ondragleave="this.classList.remove('po-pallet-col-dragover')">
         <span class="po-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro palete"
-          ondragstart="poIniciarArrastar(event,'${sid}')" style="border-color:${cor};color:${cor}">PALETE ${n}</span>
+          ondragstart="poIniciarArrastar(event,'${sid}')"
+          ontouchstart="_poTouchStart(event,'${sid}')" ontouchmove="_poTouchMove(event)"
+          ontouchend="_poTouchEnd(event)" ontouchcancel="_poTouchCancel()"
+          style="border-color:${cor};color:${cor}">PALETE ${n}</span>
       </div>`;
   }).join('');
 }
@@ -95,10 +98,11 @@ function poPermitirDrop(e) {
 // prática: depois de soltar, o clique parece "grudado"/travado até
 // recarregar a página). Só o _poRenderGrid() inicial (poRenderTudo,
 // fora de qualquer drag em andamento) pode reconstruir a grade inteira.
-function poSoltar(e, destSid) {
-  e.preventDefault();
-  e.currentTarget?.classList.remove('po-pallet-col-dragover');
-  const origemSid = e.dataTransfer.getData('application/x-lw-pallet-ordem');
+//
+// Compartilhada entre o drop do mouse (poSoltar) e o toque (_poTouchEnd,
+// abaixo) — as duas pontas terminam chamando isto pra fazer a troca de
+// verdade, cada uma só cuidando de COMO descobriu origem/destino.
+function _poTrocarPosicoes(origemSid, destSid) {
   if (!origemSid || origemSid === destSid || !_poRascunho) return;
 
   const colOrigem = document.querySelector(`.po-pallet-col[data-pallet-id="${origemSid}"]`);
@@ -112,6 +116,80 @@ function poSoltar(e, destSid) {
   colOrigem.style.order = String(posDest);
   colDest.style.order = String(posOrigem);
 }
+
+function poSoltar(e, destSid) {
+  e.preventDefault();
+  e.currentTarget?.classList.remove('po-pallet-col-dragover');
+  const origemSid = e.dataTransfer.getData('application/x-lw-pallet-ordem');
+  _poTrocarPosicoes(origemSid, destSid);
+}
+
+// ── Versão por TOQUE (celular/tablet) ────────────────────────────────
+// O Drag and Drop nativo do HTML5 (ondragstart/ondrop, acima) é uma API
+// baseada em mouse — a maioria dos navegadores de celular (Safari iOS em
+// particular) simplesmente NÃO dispara esses eventos em resposta a
+// toque. Resultado: arrastar um palete no celular não fazia nada, nem
+// visualmente (nenhum evento chegava a disparar) — ver conversa que
+// motivou isso. Aqui embaixo, os mesmos 3 eventos de sempre
+// (touchstart/touchmove/touchend), procurando o palete por baixo do dedo
+// via elementFromPoint (o touch, ao contrário do mouse, não dispara
+// eventos nos elementos que o dedo passa por cima — só no elemento onde
+// o toque COMEÇOU), terminando na mesma _poTrocarPosicoes de sempre.
+let _poTouchOrigemSid = null;
+let _poTouchColAlvo = null; // .po-pallet-col destacado no momento (pra tirar o destaque se o dedo sair de cima)
+
+function _poTouchStart(e, sid) {
+  // Só 1 dedo — um gesto de pinça/zoom não deveria iniciar um arraste.
+  if (e.touches.length !== 1) return;
+  _poTouchOrigemSid = sid;
+  e.currentTarget.classList.add('po-pallet-label-arrastando');
+}
+
+function _poColSobPonto(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('.po-pallet-col') : null;
+}
+
+function _poTouchMove(e) {
+  if (!_poTouchOrigemSid) return;
+  // Impede a página de rolar enquanto o dedo arrasta o palete — sem
+  // isso, tentar arrastar na vertical só rola a tela do modal.
+  e.preventDefault();
+  const t = e.touches[0];
+  if (!t) return;
+  const col = _poColSobPonto(t.clientX, t.clientY);
+  if (col !== _poTouchColAlvo) {
+    _poTouchColAlvo?.classList.remove('po-pallet-col-dragover');
+    _poTouchColAlvo = col;
+    col?.classList.add('po-pallet-col-dragover');
+  }
+}
+
+function _poTouchEnd(e) {
+  if (!_poTouchOrigemSid) return;
+  const label = document.querySelector('.po-pallet-label-arrastando');
+  label?.classList.remove('po-pallet-label-arrastando');
+  _poTouchColAlvo?.classList.remove('po-pallet-col-dragover');
+
+  // touchend não traz coordenadas em e.touches (já soltou) — usa
+  // changedTouches, que tem a posição de ONDE o dedo estava ao soltar.
+  const t = e.changedTouches && e.changedTouches[0];
+  const col = t ? _poColSobPonto(t.clientX, t.clientY) : null;
+  const destSid = col?.dataset.palletId;
+
+  _poTrocarPosicoes(_poTouchOrigemSid, destSid);
+
+  _poTouchOrigemSid = null;
+  _poTouchColAlvo = null;
+}
+
+function _poTouchCancel() {
+  document.querySelector('.po-pallet-label-arrastando')?.classList.remove('po-pallet-label-arrastando');
+  _poTouchColAlvo?.classList.remove('po-pallet-col-dragover');
+  _poTouchOrigemSid = null;
+  _poTouchColAlvo = null;
+}
+
 
 // Chamada por cfgSalvar() (app-core.js) — devolve o rascunho validado
 // pra entrar no payload de POST /salvar-config, ou lança erro

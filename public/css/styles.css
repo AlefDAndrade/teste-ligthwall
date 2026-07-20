@@ -712,10 +712,22 @@ h4 {
   background: var(--bg-3);
   cursor: grab;
   user-select: none;
+  /* Essencial pro arraste por toque (ver _poTouchMove, paletes-ordem.js)
+     — sem isso, tentar arrastar na vertical só rola a página/modal em
+     vez de mover o palete; o navegador nunca chega a considerar isso
+     um "arraste", trata como um scroll comum. */
+  touch-action: none;
 }
 
 .po-pallet-label:active {
   cursor: grabbing;
+}
+
+/* Enquanto o dedo segura um palete (touchstart até touchend/touchcancel)
+   — mesma ideia visual do :active do mouse, só que esse cobre o tempo
+   TODO do arraste por toque (não só o instante do toque em si). */
+.po-pallet-label-arrastando {
+  opacity: .5;
 }
 
 .po-pallet-col.po-pallet-col-dragover .po-pallet-label {
