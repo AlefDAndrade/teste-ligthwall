@@ -552,6 +552,17 @@
         else turnoSelect.value = '3º TURNO';
     }
 
+    // Observador — preenche sozinho com quem está logado agora (mesma
+    // fonte usada em outras telas do sistema, ver LW.nomeDeQuemEstaLogado).
+    // Só um ponto de partida, continua editável — quem abriu o chamado
+    // pode não ser a mesma pessoa que está relatando a anomalia (ex:
+    // alguém abrindo em nome de outro operador).
+    const observadorInput = document.getElementById('man-manObservador');
+    if (observadorInput) {
+        const meuNome = typeof LW !== 'undefined' && LW.nomeDeQuemEstaLogado ? LW.nomeDeQuemEstaLogado() : null;
+        observadorInput.value = meuNome || '';
+    }
+
     // Chamado novo (ainda sem ID salvo) — só a etapa "Abertura" faz
     // sentido; as outras (Execução/Peça/Fechamento) ficam desabilitadas
     // no assistente até o chamado existir de verdade (ver
@@ -1503,7 +1514,16 @@
       if (execEl) execEl.value = m.tipoExecucao || 'Interno';
       toggleEmpresaExterna();
       document.getElementById('man-manEmpresaExterna').value = m.empresaExterna || '';
-      document.getElementById('man-manResponsavel').value = m.responsavel || '';
+      // Responsável Técnico — preenche sozinho com quem ACEITOU o chamado
+      // (m.aceitoPor, gravado no servidor no momento do aceite — ver
+      // nomeDeQuemAceita(), lib/rotas/manutencao.js — não dá pra
+      // falsificar mandando outro nome pelo corpo da requisição). Só
+      // como PONTO DE PARTIDA: se a pessoa já tiver digitado um nome
+      // diferente aqui (ex: quem aceitou não foi quem executou de
+      // verdade) e salvo, m.responsavel deixa de estar vazio e o campo
+      // passa a carregar ESSE valor — nunca sobrescreve o que já foi
+      // digitado e salvo.
+      document.getElementById('man-manResponsavel').value = m.responsavel || (m.aceito === 'Sim' ? (m.aceitoPor || '') : '');
       
       if (m.fotoOperador) {
           const preview = document.getElementById('man-fotoOperadorPreview');
@@ -1575,7 +1595,13 @@
           document.getElementById('man-manPrevisaoChegada').value = m.previsaoChegada || '';
           document.getElementById('man-manFornecedor').value = m.fornecedor || '';
           document.getElementById('man-manCustoPecas').value = m.custoPecas || '';
-          document.getElementById('man-manRespSupervisor').value = m.respSupervisor || '';
+          // Responsável pela Análise — mesma lógica do Responsável
+          // Técnico, acima: preenche sozinho com quem ACEITOU o pedido
+          // de peça (m.pedidoPecaAceitoPor, gravado no servidor), só
+          // como ponto de partida — se alguém já digitou e salvou outro
+          // nome aqui, m.respSupervisor deixa de estar vazio e passa a
+          // valer esse.
+          document.getElementById('man-manRespSupervisor').value = m.respSupervisor || (m.pedidoPecaAceito === 'Sim' ? (m.pedidoPecaAceitoPor || '') : '');
           document.getElementById('man-manObsSupervisor').value = m.obsSupervisor || '';
           _atualizarGateAcompanhamento();
       }
