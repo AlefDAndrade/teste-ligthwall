@@ -832,11 +832,11 @@
       <tr style="cursor:pointer" data-tooltip="${tituloLinha}"
         onclick="LWDash.onClickLinhaRegistro(window._lwRegistroMapTemp[${idx}], event)">
         <td data-col="data" class="mono">${b.data ? b.data.split('-').reverse().join('/') : '—'}</td>
+        <td data-col="id_operacao" class="mono">${LW.escaparHtml(b.id || '—')}</td>
         <td data-col="turno"><span class="badge badge-gray">${b.turno || '—'}</span></td>
         <td data-col="dimensao">${b.dimensao || '—'}</td>
         <td data-col="capacidade">${b.capacidade || '—'}</td>
         <td data-col="id_bateria">${LW.escaparHtml(b.id_bateria || '—')}</td>
-        <td data-col="id_operacao" class="mono">${LW.escaparHtml(b.id || '—')}</td>
         <td data-col="inicio" class="mono">${b.inicio ? LW.formatTime(b.inicio) : '—'}</td>
         <td data-col="fim" class="mono">${b.fim ? LW.formatTime(b.fim) : '—'}</td>
         <td data-col="desemplaque" class="mono">${LW.formatDateTime(b.desemplaque || LW.calcularDesemplaque(b.fim))}</td>
@@ -875,11 +875,11 @@
   // dinamicamente em runtime por _garantirColunasDinamicasTipo() — ver abaixo.
   const COLUNAS_REGISTRO_BASE = [
     { key: 'data', label: 'Data' },
+    { key: 'id_operacao', label: 'ID Operação' },
     { key: 'turno', label: 'Turno' },
     { key: 'dimensao', label: 'Dimensão' },
     { key: 'capacidade', label: 'Cap. Berços' },
     { key: 'id_bateria', label: 'ID Bateria' },
-    { key: 'id_operacao', label: 'ID Operação' },
     { key: 'inicio', label: 'Início' },
     { key: 'fim', label: 'Fim' },
     { key: 'desemplaque', label: 'Previsão Desemplaque' },
@@ -909,11 +909,11 @@
   function _valorOrdenacaoRegistro(b, col) {
     switch (col) {
       case 'data':             return b.data || '';
+      case 'id_operacao':      return b.id || '';
       case 'turno':            return b.turno || '';
       case 'dimensao':         return b.dimensao || '';
       case 'capacidade':       return Number(b.capacidade) || 0;
       case 'id_bateria':       return b.id_bateria || '';
-      case 'id_operacao':      return b.id || '';
       case 'inicio':           return b.inicio || '';
       case 'fim':              return b.fim || '';
       case 'desemplaque':      return b.desemplaque || LW.calcularDesemplaque(b.fim) || '';
@@ -1549,6 +1549,7 @@
 
   const EXPORT_COLUNAS_BASE = [
     { campo: 'data', header: 'Data', padrao: true, fmt: v => v ? v.split('-').reverse().join('/') : '' },
+    { campo: 'id', header: 'ID Operação', padrao: true },
     { campo: 'turno', header: 'Turno', padrao: true },
     { campo: 'id_bateria', header: 'ID Bateria', padrao: true },
     { campo: 'dimensao', header: 'Dimensão', padrao: true },
@@ -1577,6 +1578,7 @@
     { campo: 'm2_total', header: 'm² Total', padrao: true, fmt: v => typeof v === 'number' ? v.toFixed(2).replace('.', ',') : '0,00' },
     { campo: 'm2_2p', header: 'm² 2/P', padrao: false, fmt: v => typeof v === 'number' ? v.toFixed(2).replace('.', ',') : '0,00' },
     { campo: 'm2_sp', header: 'm² S/P', padrao: false, fmt: v => typeof v === 'number' ? v.toFixed(2).replace('.', ',') : '0,00' },
+    { campo: 'operador_nome', header: 'Registrado por', padrao: true, fmt: v => v || '—' },
   ];
 
   // Tipos nativos já cobertos pela lista acima (paineis_2p/sp, m2_2p/sp)
