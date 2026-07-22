@@ -64,12 +64,29 @@ function _poRenderGrid() {
         ondragenter="this.classList.add('po-pallet-col-dragover')"
         ondragleave="this.classList.remove('po-pallet-col-dragover')">
         <span class="po-pallet-label" draggable="true" title="Arraste para trocar de lugar com outro palete"
+          data-pallet-id="${sid}"
           ondragstart="poIniciarArrastar(event,'${sid}')"
-          ontouchstart="_poTouchStart(event,'${sid}')" ontouchmove="_poTouchMove(event)"
-          ontouchend="_poTouchEnd(event)" ontouchcancel="_poTouchCancel()"
           style="border-color:${cor};color:${cor}">PALETE ${n}</span>
       </div>`;
   }).join('');
+  // Handlers de toque ligados via addEventListener (não como atributo
+  // inline ontouchmove="...") — ESSENCIAL: alguns navegadores de celular
+  // tratam touchstart/touchmove ligados por atributo/propriedade como
+  // "passivos" por padrão (otimização de rolagem), e um listener passivo
+  // NUNCA consegue chamar preventDefault() de verdade (falha calada, sem
+  // erro) — o gesto de arrastar era interrompido pelo scroll da página
+  // no meio do caminho, sem trocar nada, nem visualmente (ver conversa
+  // que motivou isso: "continua não funcionando no celular", mesmo já
+  // tendo os handlers de toque). Passando { passive: false } aqui,
+  // explicitamente, garante que preventDefault() SEMPRE funciona,
+  // em qualquer navegador.
+  el.querySelectorAll('.po-pallet-label').forEach(label => {
+    const sid = label.dataset.palletId;
+    label.addEventListener('touchstart', e => _poTouchStart(e, sid), { passive: true });
+    label.addEventListener('touchmove', _poTouchMove, { passive: false });
+    label.addEventListener('touchend', _poTouchEnd, { passive: true });
+    label.addEventListener('touchcancel', _poTouchCancel, { passive: true });
+  });
 }
 
 // Usa um tipo de dataTransfer PRÓPRIO ('application/x-lw-pallet-ordem'),

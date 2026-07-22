@@ -90,17 +90,27 @@ function toqueFake(x, y) {
   return { clientX: x, clientY: y };
 }
 
-test('abrir Configurações renderiza a grade com os handlers de toque (ontouchstart/move/end) prontos, além dos de mouse', () => {
+test('abrir Configurações renderiza a grade com os listeners de toque já ligados (addEventListener, não atributo inline) — respondem a um touchstart de verdade', () => {
   window.abrirConfig();
   window.cfgMostrarSecao('paletes');
 
   const labels = document.querySelectorAll('.po-pallet-label');
   assert.equal(labels.length, 4);
-  labels.forEach(label => {
-    assert.ok(label.getAttribute('ontouchstart'), 'label deveria ter ontouchstart além de ondragstart');
-    assert.ok(label.getAttribute('ontouchmove'));
-    assert.ok(label.getAttribute('ontouchend'));
-  });
+
+  // Dispara um touchstart de verdade (Event real, não chamando a função
+  // direto) — só passa se um addEventListener('touchstart', ...) tiver
+  // sido registrado de fato; usar atributo inline (ontouchstart="...")
+  // é o que causava o listener virar "passivo" por padrão em alguns
+  // navegadores de celular (ver conversa que motivou essa reescrita).
+  const label1 = document.querySelector('.po-pallet-col[data-pallet-id="stack1"] .po-pallet-label');
+  const ev = new window.Event('touchstart', { bubbles: true, cancelable: true });
+  ev.touches = [{ clientX: 10, clientY: 10 }];
+  label1.dispatchEvent(ev);
+
+  assert.ok(label1.classList.contains('po-pallet-label-arrastando'), 'o listener de touchstart deveria ter respondido ao evento disparado');
+
+  // Limpa o estado pra não vazar pro próximo teste.
+  window._poTouchCancel();
 });
 
 test('arrastar por TOQUE (não mouse) PALETE 1 pra cima de PALETE 2 troca os dois — mesmo resultado do drag por mouse', () => {

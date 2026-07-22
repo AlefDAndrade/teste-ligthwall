@@ -712,6 +712,12 @@ h4 {
   background: var(--bg-3);
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
+  /* Sem isso, segurar o dedo no iOS Safari abre o menu de "Copiar" /
+     lupa de seleção de texto ANTES do toque virar um gesto de arraste —
+     ele "rouba" o toque, e nem touchstart chega a dar a entender que um
+     arraste começou. Ver conversa que motivou isso. */
+  -webkit-touch-callout: none;
   /* Essencial pro arraste por toque (ver _poTouchMove, paletes-ordem.js)
      — sem isso, tentar arrastar na vertical só rola a página/modal em
      vez de mover o palete; o navegador nunca chega a considerar isso
