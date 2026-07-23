@@ -1530,6 +1530,20 @@ td.mono {
   color: #f59e0b;
 }
 
+/* Pausa é uma exceção operacional, não um alarme — por isso só um
+   apagamento sutil (opacidade + cor neutra), sem pulsar ou chamar
+   atenção como .danger/.warning acima. */
+.timer-display.timer-pausado {
+  color: var(--text-3);
+  opacity: .7;
+  animation: none;
+}
+
+#btn-pausar-operacao.btn-pausar-ativo {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, .35);
+}
+
 @keyframes pulse-danger {
 
   0%,

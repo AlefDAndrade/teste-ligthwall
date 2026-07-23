@@ -23,6 +23,13 @@
     inicio: null,
     fim: null,
     status: 'idle',      // idle | running | finished
+    // Pausas dentro de uma injeção 'running' — cada item é
+    // { pausado_em, retomado_em }. retomado_em fica null enquanto a
+    // pausa está ativa. Existe pra cobrir o caso extraordinário de
+    // precisar interromper e continuar a mesma bateria depois (ex: outro
+    // dia) sem que o tempo parado conte como tempo de injeção — ver
+    // tempoPausadoMin() e o tick do cronômetro, abaixo.
+    pausas: [],
     tracos: [],
     modo_teste: false,
     bercos_personalizados: null, // [tipo|null, ...] — só usado quando tipo_montagem === 'PERSONALIZADA'
@@ -87,6 +94,10 @@
     clearInterval(timerInterval);
     if (dados) {
       state = dados;
+      // Compat: rascunhos salvos antes deste campo existir não têm
+      // 'pausas' — sem isso, estaPausada()/tempoPausadoMin() quebrariam
+      // ao ler .length/.reduce de undefined.
+      if (!Array.isArray(state.pausas)) state.pausas = [];
     } else {
       resetState();
     }
@@ -259,6 +270,7 @@
     });
     $('btn-iniciar').addEventListener('click', iniciarInjecao);
     $('btn-finalizar').addEventListener('click', finalizarInjecao);
+    $('btn-pausar-operacao').addEventListener('click', togglePausaOperacao);
     $('btn-registrar').addEventListener('click', registrarOperacao);
     $('btn-resetar').addEventListener('click', resetarOperacao);
     $('btn-add-traco').addEventListener('click', addTraco);
@@ -554,14 +566,75 @@
     $('btn-iniciar').disabled = true;
     $('btn-finalizar').disabled = false;
     startTimerUI();
+    _atualizarBtnPausar();
     persist();
     updateStatusBanner();
     updatePendencias();
   }
 
+  // Pausa ativa = último item de state.pausas ainda sem retomado_em.
+  function estaPausada() {
+    if (!state.pausas || !state.pausas.length) return false;
+    return !state.pausas[state.pausas.length - 1].retomado_em;
+  }
+
+  // Soma o tempo pausado até 'refISO' (agora, ou o fim da injeção na hora
+  // de finalizar). Uma pausa ainda ativa conta até refISO — é assim que o
+  // cronômetro "congela" no tick: enquanto pausada, o tempo pausado cresce
+  // no mesmo ritmo que o tempo bruto, então a diferença (tempo líquido)
+  // fica parada sem precisar de nenhum caso especial no tick.
+  function tempoPausadoMin(refISO) {
+    if (!state.pausas || !state.pausas.length) return 0;
+    return state.pausas.reduce((acc, p) => {
+      const fimPausa = p.retomado_em || refISO;
+      return acc + LW.diffMinutes(p.pausado_em, fimPausa);
+    }, 0);
+  }
+
+  async function togglePausaOperacao() {
+    if (state.status !== 'running') return;
+    if (_bloqueadoPorAutorizacao()) return;
+
+    if (!estaPausada()) {
+      // Pausar é a ação incomum/de exceção — pede confirmação.
+      const confirmou = await LW.mostrarConfirmacao(
+        'O cronômetro desta injeção vai congelar e a operação não poderá ser registrada até você retomar. Use isso só em situações extraordinárias, como precisar continuar a mesma bateria em outro dia.',
+        { titulo: 'Pausar esta operação?', textoConfirmar: 'Pausar', icon: '⏸' }
+      );
+      if (!confirmou) return;
+      state.pausas.push({ pausado_em: nowBrasilia().toISOString(), retomado_em: null });
+    } else {
+      // Retomar não pede confirmação — é só voltar ao trabalho normal.
+      state.pausas[state.pausas.length - 1].retomado_em = nowBrasilia().toISOString();
+    }
+
+    persist();
+    _atualizarBtnPausar();
+    updateStatusBanner();
+    updatePendencias();
+  }
+
+  function _atualizarBtnPausar() {
+    const btn = $('btn-pausar-operacao');
+    if (!btn) return;
+    btn.style.display = state.status === 'running' ? 'inline-flex' : 'none';
+    if (estaPausada()) {
+      btn.innerHTML = '▶ Retomar';
+      btn.classList.add('btn-pausar-ativo');
+    } else {
+      btn.innerHTML = '⏸ Pausar';
+      btn.classList.remove('btn-pausar-ativo');
+    }
+    // Enquanto pausada, encerrar a injeção não faz sentido (o horário de
+    // fim ficaria contaminado pela pausa em aberto) — só faz sentido
+    // depois de retomar.
+    if ($('btn-finalizar')) $('btn-finalizar').disabled = estaPausada() || state.status !== 'running';
+  }
+
   async function finalizarInjecao() {
     if (state.status !== 'running') return false;
     if (_bloqueadoPorAutorizacao()) return false;
+    if (estaPausada()) return false; // trava extra, além do disabled no botão
 
     const confirmou = await LW.mostrarConfirmacao(
       'Isso vai parar o cronômetro e travar os campos de tempo desta operação.',
@@ -574,6 +647,7 @@
     clearInterval(timerInterval);
     $('op-fim').value = LW.formatTime(state.fim);
     $('btn-finalizar').disabled = true;
+    _atualizarBtnPausar(); // esconde o botão — não há mais o que pausar
 
     // Horário do desemplaque = fim da injeção + tempo de cura (8h, regra
     // operacional fixa) — calculado a partir do FIM, nunca do início.
@@ -581,8 +655,14 @@
     $('op-desemplaque').textContent = LW.formatDateTime(state.desemplaque);
     $('op-desemplaque-row').style.display = 'block';
 
-    const minutos = LW.diffMinutes(state.inicio, state.fim);
+    // Tempo líquido — desconta qualquer pausa que tenha havido nesta
+    // injeção, senão uma pausa (ex: de um dia pro outro) infla o tempo
+    // total e o atraso/desempenho registrados ficam mentindo.
+    const minutosBruto = LW.diffMinutes(state.inicio, state.fim);
+    const minutosPausados = tempoPausadoMin(state.fim);
+    const minutos = minutosBruto - minutosPausados;
     state.tempo_min = minutos;
+    state.tempo_pausado_min = minutosPausados;
 
     const atraso = minutos > LW.LIMITE_INJECAO_MIN;
     state.houve_atraso = atraso ? 'SIM' : 'NÃO';
@@ -610,12 +690,17 @@
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       if (!state.inicio) return;
-      const elapsed = LW.diffMinutes(state.inicio, nowBrasilia().toISOString());
+      const agora = nowBrasilia().toISOString();
+      // Tempo líquido = tempo corrido menos o que ficou pausado. Se a
+      // pausa está ativa, tempoPausadoMin cresce junto com o tempo bruto
+      // (ver a função) — por isso 'elapsed' fica parado sozinho, sem
+      // precisar de um branch separado aqui pro caso pausado.
+      const elapsed = LW.diffMinutes(state.inicio, agora) - tempoPausadoMin(agora);
       const el = $('timer-display');
       if (!el) return;
       el.textContent = LW.formatDuration(elapsed);
       const m = Math.floor(elapsed);
-      el.className = 'timer-display' + (m >= LW.LIMITE_INJECAO_MIN ? ' danger' : m >= 50 ? ' warning' : '');
+      el.className = 'timer-display' + (m >= LW.LIMITE_INJECAO_MIN ? ' danger' : m >= 50 ? ' warning' : '') + (estaPausada() ? ' timer-pausado' : '');
     }, 1000);
   }
 
@@ -624,7 +709,9 @@
     if (state.status === 'idle') {
       banner.innerHTML = '<span class="badge badge-gray">⬤ Aguardando início</span>';
     } else if (state.status === 'running') {
-      banner.innerHTML = '<span class="badge badge-amber">◉ Injeção em andamento</span>';
+      banner.innerHTML = estaPausada()
+        ? '<span class="badge badge-amber">⏸ Injeção pausada</span>'
+        : '<span class="badge badge-amber">◉ Injeção em andamento</span>';
     } else {
       banner.innerHTML = '<span class="badge badge-green">✓ Finalizado</span>';
     }
@@ -2151,6 +2238,7 @@
       { label: 'ID da bateria', ok: !!state.id_bateria },
       { label: 'Injeção iniciada', ok: !!state.inicio },
       { label: 'Injeção finalizada', ok: !!state.fim },
+      { label: 'Operação não pode estar pausada', ok: !estaPausada() },
       { label: 'Motivo do atraso', ok: state.houve_atraso === 'NÃO' || !!state.motivo_atraso },
       { label: 'Ao menos 1 traço', ok: state.tracos.length > 0 },
       { label: 'Informações do traço (todos os campos obrigatórios)', ok: tracosCompletos },
@@ -2511,6 +2599,7 @@
       fim: null,
       desemplaque: null,
       status: 'idle',
+      pausas: [],
       tracos: [],
       // Sempre volta pra false — exige reativar o toggle a cada operação
       // nova, de propósito: evita o risco de "esquecer ligado" e uma
@@ -2580,6 +2669,7 @@
 
     $('btn-iniciar').disabled = state.status !== 'idle';
     $('btn-finalizar').disabled = state.status !== 'running';
+    _atualizarBtnPausar(); // depende do disabled do finalizar já estar setado acima
 
     // Cronômetro: reflete o estado atual sempre que a tela é renderizada.
     // Sem isso, depois de Resetar (ou Finalizar) o relógio ficava "congelado"
