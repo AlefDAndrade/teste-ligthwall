@@ -16,6 +16,9 @@
   // ---- Data selecionada (estado interno) ----
   let _dataSelecionada = null;
 
+  // ---- Aba ativa (estado interno) — 'operacao' ou 'avaliacao' ----
+  let _abaAtiva = 'operacao';
+
   function todayBrasiliaLocal() {
     const fmt = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Sao_Paulo',
@@ -31,6 +34,24 @@
         hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
       });
     } catch (_) { return '—'; }
+  }
+
+  /**
+   * Extrai a data (AAAA-MM-DD) de um timestamp ISO de avaliação
+   * (registeredAt/dtDesmoldagem), pra comparar com a data selecionada no
+   * popover. Usa timeZone:'UTC' de propósito — MESMA convenção de
+   * horaBrasilia() acima: os timestamps do sistema já são gravados como
+   * horário de Brasília "disfarçado" de UTC (sem isso, o dia viraria com a
+   * conversão real de fuso e uma avaliação feita às 23h apareceria no dia
+   * seguinte, ou de madrugada no dia anterior).
+   */
+  function dataDoISO(isoString) {
+    if (!isoString) return null;
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(new Date(isoString));
+    } catch (_) { return null; }
   }
 
   /**
@@ -92,13 +113,15 @@
   }
 
   async function carregarDados() {
-    const [historico, relatorio] = await Promise.all([
+    const [historico, relatorio, avaliacoes] = await Promise.all([
       fetch('db/historico.json').then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('db/relatorio_injecao.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch('db/avaliacoes_qualidade.json').then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
     return {
       historico: Array.isArray(historico) ? historico : [],
-      relatorio: Array.isArray(relatorio) ? relatorio : []
+      relatorio: Array.isArray(relatorio) ? relatorio : [],
+      avaliacoes: Array.isArray(avaliacoes) ? avaliacoes : []
     };
   }
 
@@ -258,14 +281,96 @@
     return html;
   }
 
+  /**
+   * Calcula os KPIs de Avaliação (Setor de Qualidade) do dia — MESMA
+   * lógica/definições do Dashboard do Setor de Qualidade (ver
+   * renderDashboard, setor-qualidade.js): "Painéis Avaliados" é o total
+   * de painéis das avaliações do dia; "Taxa de Aprovação" é
+   * aprovados / (aprovados + reprovados) — não conta painéis "sem
+   * marcação"/"múltiplas"/"outros" nem os de fila excluída sem avaliação.
+   *
+   * Avaliações com excluidaDaFila=true (bateria tirada da fila sem ser
+   * avaliada de verdade — ver comentário em renderDashboard) ficam de
+   * fora, igual lá: não são avaliação de verdade, só um marcador interno.
+   *
+   * "linha === '2ª'" é lido direto do campo já gravado (ver CREATE TABLE
+   * avaliacao_paineis, db.js) — sem o recálculo por `marcas` que
+   * setor-qualidade.js faz via _linhaDoPainel() pra registros bem antigos
+   * (anteriores ao campo `linha` existir). Não recriamos aquele fallback
+   * aqui de propósito: é lógica de reconstrução de UI (papel/cor de
+   * marca) que não faz sentido duplicar num resumo somente-leitura: na
+   * pior hipótese, uma avaliação muito antiga sem `linha` gravada conta
+   * como 1ª linha aqui (resultado 'aprovado' nunca muda).
+   */
+  function calcularEstatisticasAvaliacao(avaliacoes, data) {
+    const doDia = avaliacoes.filter(a =>
+      !a.excluidaDaFila && dataDoISO(a.dtDesmoldagem || a.registeredAt) === data
+    );
+    const paineis = doDia.flatMap(a => Array.isArray(a.paineis) ? a.paineis : []);
+    const aprovados = paineis.filter(p => p.resultado === 'aprovado').length;
+    const reprovados = paineis.filter(p => p.resultado === 'reprovado').length;
+    const segundaLinha = paineis.filter(p => p.linha === '2ª').length;
+    const totalClassificado = aprovados + reprovados;
+    const taxaAprovacao = totalClassificado ? (aprovados / totalClassificado) * 100 : null;
+    return {
+      totalRegistros: doDia.length,
+      paineisAvaliados: paineis.length,
+      segundaLinha,
+      aprovados,
+      reprovados,
+      taxaAprovacao
+    };
+  }
+
+  function renderAvaliacao(stats, data) {
+    const [y, m, d] = data.split('-');
+    const dataFmt = `${d}/${m}/${y}`;
+
+    if (!stats.totalRegistros) {
+      return `<div class="dbf-empty-state">🗒️ Nenhuma avaliação de qualidade registrada para ${dataFmt}.</div>`;
+    }
+
+    return `<div class="dbf-stats dbf-stats-3col">
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${stats.totalRegistros}</span>
+        <span class="dbf-stat-label">Total de Registros</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${stats.paineisAvaliados}</span>
+        <span class="dbf-stat-label">Painéis Avaliados</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val is-blue">${stats.segundaLinha}</span>
+        <span class="dbf-stat-label">Painéis 2ª Linha</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val is-green">${stats.aprovados}</span>
+        <span class="dbf-stat-label">Painéis Aprovados</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val is-red">${stats.reprovados}</span>
+        <span class="dbf-stat-label">Painéis Reprovados</span>
+      </div>
+      <div class="dbf-stat">
+        <span class="dbf-stat-val">${stats.taxaAprovacao !== null ? fmtNum(stats.taxaAprovacao, 1) + '%' : '—'}</span>
+        <span class="dbf-stat-label">Taxa de Aprovação</span>
+      </div>
+    </div>`;
+  }
+
   async function atualizarConteudo(data) {
     const el = $('debriefing-content');
     if (!el) return;
     el.textContent = 'Carregando...';
     try {
-      const { historico, relatorio } = await carregarDados();
-      const estrutura = montarEstrutura(historico, relatorio, data);
-      el.innerHTML = renderRelatorio(estrutura, data);
+      const { historico, relatorio, avaliacoes } = await carregarDados();
+      if (_abaAtiva === 'avaliacao') {
+        const stats = calcularEstatisticasAvaliacao(avaliacoes, data);
+        el.innerHTML = renderAvaliacao(stats, data);
+      } else {
+        const estrutura = montarEstrutura(historico, relatorio, data);
+        el.innerHTML = renderRelatorio(estrutura, data);
+      }
     } catch (_) {
       el.innerHTML = '<div class="dbf-empty-state">⚠️ Não foi possível carregar o debriefing.</div>';
     }
@@ -292,6 +397,18 @@
     mudarData(valor) {
       if (!valor) return;
       _dataSelecionada = valor;
+      atualizarConteudo(_dataSelecionada);
+    },
+    trocarAba(aba, event) {
+      if (event) event.stopPropagation();
+      if (aba !== 'operacao' && aba !== 'avaliacao') return;
+      if (aba === _abaAtiva) return;
+      _abaAtiva = aba;
+      const btnOp = $('debriefing-tab-operacao');
+      const btnAv = $('debriefing-tab-avaliacao');
+      if (btnOp) btnOp.classList.toggle('active', aba === 'operacao');
+      if (btnAv) btnAv.classList.toggle('active', aba === 'avaliacao');
+      if (!_dataSelecionada) _dataSelecionada = todayBrasiliaLocal();
       atualizarConteudo(_dataSelecionada);
     }
   };

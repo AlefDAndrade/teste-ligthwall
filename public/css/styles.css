@@ -2739,12 +2739,50 @@ td.mono {
   user-select: text;
 }
 
+/* ---- Abas do Debriefing (Operação / Avaliação) ---- */
+.debriefing-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  flex-shrink: 0;
+}
+
+.debriefing-tab-btn {
+  background: transparent;
+  color: var(--text-3);
+  border: none;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 10px 7px;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  font-family: var(--font-body);
+}
+
+.debriefing-tab-btn:hover {
+  color: var(--text-2);
+}
+
+.debriefing-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
 /* ---- KPIs de resumo do dia ---- */
 .dbf-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-bottom: 14px;
+}
+
+/* Variante com 3 colunas — usada na aba Avaliação (6 KPIs = 2 linhas de 3,
+   cabe melhor que 4+2 na largura do popover). */
+.dbf-stats-3col {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .dbf-stat {
@@ -2765,6 +2803,13 @@ td.mono {
   font-weight: 700;
   color: var(--accent);
 }
+
+/* Variantes de cor — mesma semântica dos kpi-card green/red do Setor de
+   Qualidade (ver setor-qualidade.js renderDashboard): aprovado/2ª linha em
+   destaque positivo, reprovado em alerta. */
+.dbf-stat-val.is-green { color: var(--green); }
+.dbf-stat-val.is-red   { color: var(--red); }
+.dbf-stat-val.is-blue  { color: var(--sq-cor-azul, var(--blue)); }
 
 .dbf-stat-label {
   font-size: .64rem;

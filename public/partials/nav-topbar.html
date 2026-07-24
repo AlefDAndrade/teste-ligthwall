@@ -26,6 +26,10 @@
             <span class="debriefing-header-label">📓 Debriefing</span>
             <input type="date" id="debriefing-data-input" class="debriefing-date-input" oninput="LWDebriefing.mudarData(this.value)">
           </div>
+          <div class="debriefing-tabs">
+            <button class="debriefing-tab-btn active" id="debriefing-tab-operacao" onclick="LWDebriefing.trocarAba('operacao', event)">Operação</button>
+            <button class="debriefing-tab-btn" id="debriefing-tab-avaliacao" onclick="LWDebriefing.trocarAba('avaliacao', event)">Avaliação</button>
+          </div>
           <div class="debriefing-paper" id="debriefing-content">Carregando...</div>
         </div>
       </div>
