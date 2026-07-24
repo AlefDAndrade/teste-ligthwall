@@ -1,0 +1,20 @@
+# ─── deploy/Caddyfile.exemplo ───────────────────────────────────────────────
+# Modelo de referência — normalmente você não precisa mexer aqui na mão,
+# deploy/instalar-https.sh já gera este arquivo sozinho em
+# /etc/caddy/Caddyfile com o IP certo. Guardado aqui só pra consulta ou
+# ajuste manual, e como documentação do que o script faz de fato.
+#
+# Troque "34-123-45-67" pelo IP externo desta VM (Console do Google Cloud →
+# Compute Engine → VM instances → coluna "External IP"), com PONTOS
+# trocados por HÍFENS. Ex: IP 34.123.45.67 -> 34-123-45-67.nip.io
+#
+# Troque "5000" pela porta que o Node está escutando, se for diferente
+# (ver PORT em server.js — padrão 5000).
+
+34-123-45-67.nip.io {
+    reverse_proxy localhost:5000
+}
+
+# Depois de editar, aplique com: sudo systemctl reload caddy
+# (portas 80 e 443 precisam estar liberadas no firewall da VM pro Caddy
+# conseguir emitir/renovar o certificado Let's Encrypt automaticamente).

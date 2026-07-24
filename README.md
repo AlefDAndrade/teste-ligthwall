@@ -258,6 +258,8 @@ Toda vez que um chamado corretivo **NOVO** é aberto (`POST /manutencao/corretiv
 - **Ativar no dispositivo** — botão 🔔 na barra superior (só aparece logado e com o navegador suportando Web Push); pede permissão de notificação do navegador e inscreve o dispositivo (`lib/notificacoes-push.js`, `public/js/notificacoes-push.js`). Cada pessoa pode ativar em vários dispositivos ao mesmo tempo (PC do chão de fábrica + celular pessoal, por exemplo).
 - **Envio** — Web Push padrão (VAPID), sem depender de nenhum serviço de terceiro; chave gerada na 1ª subida e guardada em `private/vapid-keys.json` (fora do git). Disparo é *fire-and-forget*: uma falha ou demora no envio nunca atrasa nem quebra a abertura do chamado em si; inscrições que o próprio serviço de push confirma como mortas (404/410) são removidas automaticamente.
 - **Rotas**: `GET /push/config` (chave pública + se há sessão), `POST /push/inscrever`, `POST /push/desinscrever` (ver `lib/rotas/notificacoes.js`).
+- **Exige HTTPS** (ou `localhost`) — exigência da própria Web Push API do navegador, não do código deste projeto: em HTTP simples o navegador nem expõe `navigator.serviceWorker`/`PushManager`, então o sino de notificações fica escondido (ver `_suportado()`, `public/js/notificacoes-push.js`). Se a instalação roda numa VM sem domínio/HTTPS (ex: acessada só pelo IP), veja **`deploy/instalar-https.sh`** — coloca um HTTPS válido de graça na frente do Node usando Caddy + nip.io, sem precisar comprar domínio.
+- **Diagnóstico** — `node scripts/diagnosticar-push.js [usuário]` confere de uma vez: chaves VAPID, permissão de notificação de cada usuário cadastrado e quais dispositivos têm inscrição salva.
 
 ## Autoria automática de registro
 
