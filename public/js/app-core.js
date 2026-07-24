@@ -656,6 +656,12 @@
         }
       }
 
+      // Notificações push (ver public/js/notificacoes-push.js) — só
+      // atualiza a aparência do sino (mostra/some, "ativado" ou não);
+      // NUNCA pede permissão de notificação sozinho aqui (isso só
+      // acontece no clique explícito do usuário no botão).
+      if (window.LWPush) LWPush.iniciar();
+
       // Lógica do botão Sidebar
       const sidebar = document.querySelector('.sidebar');
       const backdrop = document.getElementById('sidebar-backdrop');

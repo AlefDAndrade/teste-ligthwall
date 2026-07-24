@@ -3294,3 +3294,14 @@ td.mono {
 [data-tooltip] {
   cursor: help;
 }
+
+/* Sino de notificações push (topbar) — estado "ativado neste
+   dispositivo" (ver public/js/notificacoes-push.js). Reaproveita
+   --accent/--accent-dim, mesmo par de cores usado no badge de fila
+   pendente (nav-topbar.html), pra sinalizar "ligado" sem introduzir uma
+   cor nova ao tema. */
+#btn-notificacoes-push.btn-push-ativo {
+  background: rgba(245, 158, 11, .12);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}

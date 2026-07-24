@@ -117,3 +117,52 @@ self.addEventListener('fetch', (event) => {
       )
   );
 });
+
+// ============================================================
+//  NOTIFICAÇÕES PUSH — ver lib/notificacoes-push.js (servidor) e
+//  public/js/notificacoes-push.js (inscrição/ativação neste dispositivo)
+// ============================================================
+// Segunda responsabilidade deste service worker (a 1ª é o app shell,
+// acima) — as duas coexistem sem conflito: 'fetch' só intercepta GET de
+// arquivo estático; 'push'/'notificationclick' são eventos totalmente
+// separados, nunca disparados pelo mesmo fluxo.
+
+self.addEventListener('push', (event) => {
+  let dados = { titulo: 'Lightwall SC', corpo: 'Você tem uma notificação nova.', url: '/index.html' };
+  try {
+    if (event.data) dados = { ...dados, ...event.data.json() };
+  } catch (_) {
+    // Payload não era JSON (não deveria acontecer, ver
+    // lib/notificacoes-push.js, que sempre manda JSON.stringify) — cai
+    // no texto padrão acima em vez de quebrar a notificação inteira.
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(dados.titulo, {
+      body: dados.corpo,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      tag: dados.tag || undefined, // mesma tag = navegador AGRUPA/substitui em vez de empilhar notificação repetida do mesmo chamado
+      data: { url: dados.url || '/index.html' },
+    })
+  );
+});
+
+// Clique na notificação — foca uma aba já aberta do app se existir
+// (evita abrir 10 abas iguais toda vez que alguém clica), senão abre uma
+// nova. Mesmo padrão de qualquer PWA de notificação.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const urlAlvo = (event.notification.data && event.notification.data.url) || '/index.html';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
+      for (const janela of janelas) {
+        if (janela.url.includes(self.location.origin) && 'focus' in janela) {
+          return janela.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(urlAlvo);
+    })
+  );
+});

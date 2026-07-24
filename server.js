@@ -93,6 +93,16 @@ const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, P
 // consultam isto ANTES de cair no hardcoded.
 const perfisFixosOverrides = require('./lib/perfis-fixos-overrides.js')({ fs, path, PRIVATE_DIR, itensPermissao });
 
+// Notificações push (ver lib/notificacoes-push.js) — "toda vez que um
+// chamado for aberto, quem tem a permissão 'Notificar Abertura de
+// Chamado' marcada no perfil é notificado" (PC e celular, via Web
+// Push/PWA). Depende de perfis/perfisCustomizados/perfisFixosOverrides
+// (acima) pra resolver, na hora de notificar, quem tem a permissão
+// marcada — mesma cascata fixo/override/customizado de podeEditarArea.
+const notificacoesPush = require('./lib/notificacoes-push.js')({
+  fs, path, PRIVATE_DIR, db, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao,
+});
+
 // ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
 // Todas as páginas são abertas pra VISUALIZAÇÃO; o que cada perfil pode
 // EDITAR/registrar é validado aqui, rota a rota, por área ('injetora',
@@ -246,8 +256,9 @@ const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, neg
 const rotasManutencao = require('./lib/rotas/manutencao.js')({
   db, podeEditarArea, negarEdicao, podeExcluirChamado,
   podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca, nomeDeQuemAceita,
-  nomeParaVisualizacao,
+  nomeParaVisualizacao, notificarAberturaChamado: notificacoesPush.notificarAberturaChamado,
 });
+const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemAceita });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
@@ -276,7 +287,7 @@ const rotasBackup = require('./lib/rotas/backup.js')({
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

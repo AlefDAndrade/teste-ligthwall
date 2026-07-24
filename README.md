@@ -7,7 +7,7 @@ Sistema interno de controle de operações de injeção de baterias (placas cime
 - **Backend**: Node.js puro (módulo `http`, sem framework), servindo arquivos estáticos e uma API simples em JSON. A lógica vinha toda num `server.js` só; está sendo fatiada por fases pra `lib/` (ver *Fatiamento de server.js*, abaixo).
 - **Frontend**: HTML/CSS/JS sem framework — `index.html` é gerado a partir de pedaços (`public/partials/` + `public/index.template.html`) por um pequeno script (`build-index.js`), em vez de ser editado à mão como um arquivo só de 5 mil linhas (ver *Fatiamento de index.html*, abaixo). Fora isso, continua sem framework nem bundler — é só um passo extra antes de rodar/editar.
 - **"Banco de dados"**: em migração, por fases, de arquivos JSON (`public/db/`) pra **SQLite** (`better-sqlite3`) — ver seção dedicada, abaixo. Os arquivos JSON que ainda não foram migrados continuam exatamente como sempre.
-- **Dependências**: `xlsx` (exportação/importação de Excel), `jszip` (geração e leitura de backups `.zip`), `ws` (WebSocket da Operação em Andamento), `better-sqlite3` (banco de dados). Nenhuma dependência nova foi adicionada nas mudanças de segurança/testes abaixo — `lib/sessao.js` usa só `crypto` nativo do Node, e os testes usam o test runner nativo (`node:test`).
+- **Dependências**: `xlsx` (exportação/importação de Excel), `jszip` (geração e leitura de backups `.zip`), `ws` (WebSocket da Operação em Andamento), `better-sqlite3` (banco de dados), `web-push` (notificações push de novo chamado de manutenção — ver *Notificações Push*, abaixo). `lib/sessao.js` usa só `crypto` nativo do Node, e os testes usam o test runner nativo (`node:test`).
 
 ## Como rodar
 
@@ -249,6 +249,15 @@ Pontos específicos desse domínio:
 - **Excluir uma peça** remove também todo o seu histórico de movimentações (cascata manual, já que `foreign_keys` está ativado no banco).
 - **Upload de foto/PDF** ainda é só visual — os campos existem na tela mas não fazem upload de verdade (limitação conhecida, ver abaixo).
 - Só `GET`/`POST` (nunca `DELETE`/`PUT`) — mesmo padrão do resto do sistema; exclusão/edição usam rotas próprias com o verbo no path (`/manutencao/excluir-corretiva`, `/manutencao/editar-estoque`), pra ficarem cobertas pela mesma proteção de tamanho máximo de corpo que `server.js` só aplica a `POST`.
+
+## Notificações Push (novo chamado de Manutenção)
+
+Toda vez que um chamado corretivo **NOVO** é aberto (`POST /manutencao/corretiva` sem `id` existente), o servidor dispara uma notificação Web Push pra todo mundo cujo perfil tem a permissão marcada — funciona tanto em PC quanto em celular (Android: qualquer navegador; iOS: só com o app adicionado à Tela de Início, Safari 16.4+).
+
+- **Permissão** — item `"Notificar Abertura de Chamado"` no catálogo de permissões (`lib/itens-permissao.js`), dentro de Manutenção → Corretiva. Igual a qualquer outro item do catálogo, é configurável perfil a perfil (fixo ou customizado) em Configurações → Usuários. `Acesso Total` = recebe a notificação; `Apenas Visualizar`/`Ocultar` = não recebe. Padrão de fábrica pros 6 perfis fixos: quem já edita a área `manutencao` (Manutenção, Supervisão, Encarregado, Administrador, Operador de Injetora) recebe por padrão; quem não edita (Assistente de Qualidade), não recebe — mas o Administrador pode mudar isso a qualquer momento.
+- **Ativar no dispositivo** — botão 🔔 na barra superior (só aparece logado e com o navegador suportando Web Push); pede permissão de notificação do navegador e inscreve o dispositivo (`lib/notificacoes-push.js`, `public/js/notificacoes-push.js`). Cada pessoa pode ativar em vários dispositivos ao mesmo tempo (PC do chão de fábrica + celular pessoal, por exemplo).
+- **Envio** — Web Push padrão (VAPID), sem depender de nenhum serviço de terceiro; chave gerada na 1ª subida e guardada em `private/vapid-keys.json` (fora do git). Disparo é *fire-and-forget*: uma falha ou demora no envio nunca atrasa nem quebra a abertura do chamado em si; inscrições que o próprio serviço de push confirma como mortas (404/410) são removidas automaticamente.
+- **Rotas**: `GET /push/config` (chave pública + se há sessão), `POST /push/inscrever`, `POST /push/desinscrever` (ver `lib/rotas/notificacoes.js`).
 
 ## Autoria automática de registro
 

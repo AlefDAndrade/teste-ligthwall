@@ -585,6 +585,31 @@ db.exec(`
   -- dados reais em produção no momento da remoção.
   DROP TABLE IF EXISTS manutencao_movimentacoes;
   DROP TABLE IF EXISTS manutencao_estoque;
+
+  -- ============================================================
+  --  NOTIFICAÇÕES PUSH — Web Push (PC e celular via PWA)
+  --
+  --  Guarda a "inscrição" (PushSubscription) que o navegador devolve
+  --  depois que o usuário aceita receber notificações (ver
+  --  public/js/notificacoes-push.js) — endpoint + chaves públicas do
+  --  navegador (p256dh/auth), nunca uma senha nem nada sensível. 1
+  --  usuário pode ter VÁRIAS inscrições ao mesmo tempo (PC do chão de
+  --  fábrica + celular pessoal, por exemplo) — por isso "endpoint" é a
+  --  chave única (1 por dispositivo/navegador), não "usuario_nome".
+  --  "usuario_nome" é o texto livre do cadastro (mesmo campo usado como
+  --  autoria em outras tabelas, ex: manutencao_corretiva.observador) —
+  --  é contra ele que se decide, na hora de notificar, se o PERFIL
+  --  daquele nome tem a permissão "Notificar Abertura de Chamado" (ver
+  --  lib/itens-permissao.js e lib/notificacoes-push.js).
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint      TEXT PRIMARY KEY,
+    usuario_nome  TEXT NOT NULL,
+    p256dh        TEXT NOT NULL,
+    auth          TEXT NOT NULL,
+    user_agent    TEXT,
+    criado_em     TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_subscriptions_usuario ON push_subscriptions(usuario_nome);
 `);
 
 // ------------------------------------------------------------
@@ -3000,3 +3025,79 @@ function substituirManutencaoProgramada(lista) {
 
 module.exports.substituirManutencaoCorretiva = substituirManutencaoCorretiva;
 module.exports.substituirManutencaoProgramada = substituirManutencaoProgramada;
+
+// ============================================================
+//  NOTIFICAÇÕES PUSH — ver CREATE TABLE push_subscriptions, acima.
+// ============================================================
+
+const SQL_UPSERT_PUSH_SUBSCRIPTION = `
+  INSERT INTO push_subscriptions (endpoint, usuario_nome, p256dh, auth, user_agent, criado_em)
+  VALUES (@endpoint, @usuario_nome, @p256dh, @auth, @user_agent, datetime('now'))
+  ON CONFLICT(endpoint) DO UPDATE SET
+    usuario_nome = @usuario_nome, p256dh = @p256dh, auth = @auth, user_agent = @user_agent
+`;
+
+/**
+ * Salva (ou atualiza, se o endpoint já existir — ex: o navegador renovou
+ * a inscrição) uma inscrição de notificação push pra um usuário
+ * cadastrado. `subscription` é o objeto devolvido por
+ * PushManager.subscribe() no navegador: { endpoint, keys: { p256dh, auth } }.
+ */
+function salvarPushSubscription(usuarioNome, subscription, userAgent) {
+  if (!usuarioNome) throw new Error('usuarioNome é obrigatório.');
+  if (!subscription || !subscription.endpoint || !subscription.keys || !subscription.keys.p256dh || !subscription.keys.auth) {
+    throw new Error('Inscrição de notificação inválida — faltam endpoint/keys.');
+  }
+  db.prepare(SQL_UPSERT_PUSH_SUBSCRIPTION).run({
+    endpoint: subscription.endpoint,
+    usuario_nome: usuarioNome,
+    p256dh: subscription.keys.p256dh,
+    auth: subscription.keys.auth,
+    user_agent: userAgent || null,
+  });
+}
+
+/** Remove 1 inscrição específica (usuário desativou pelo próprio dispositivo). */
+function removerPushSubscription(endpoint) {
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+}
+
+/**
+ * Remove uma inscrição que o próprio serviço de push informou como morta
+ * (HTTP 404/410 — navegador desinstalado, permissão revogada no SO,
+ * etc.) — ver lib/notificacoes-push.js, enviarParaTodos(). Mesmo efeito
+ * de removerPushSubscription, nome separado só pra deixar claro QUEM
+ * chama (o sistema, não o próprio usuário) nos logs/leitura do código.
+ */
+function removerPushSubscriptionMorta(endpoint) {
+  removerPushSubscription(endpoint);
+}
+
+/** 1 inscrição específica, ou undefined — usado só pra checar posse antes de remover (ver POST /push/desinscrever, lib/rotas/notificacoes.js). */
+function obterPushSubscriptionPorEndpoint(endpoint) {
+  return db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
+}
+
+/** Todas as inscrições de 1 usuário (nome de cadastro, mesmo valor de nomeUsuario). */
+function listarPushSubscriptionsDoUsuario(usuarioNome) {
+  return db.prepare('SELECT * FROM push_subscriptions WHERE usuario_nome = ?').all(usuarioNome);
+}
+
+/**
+ * Todas as inscrições de uma LISTA de usuários — usada na hora de notificar
+ * (ver lib/notificacoes-push.js): já resolvida a lista de quem deve
+ * receber (perfil com a permissão marcada), busca de uma vez só as
+ * inscrições de todos eles.
+ */
+function listarPushSubscriptionsDosUsuarios(usuarioNomes) {
+  if (!Array.isArray(usuarioNomes) || usuarioNomes.length === 0) return [];
+  const placeholders = usuarioNomes.map(() => '?').join(',');
+  return db.prepare(`SELECT * FROM push_subscriptions WHERE usuario_nome IN (${placeholders})`).all(...usuarioNomes);
+}
+
+module.exports.salvarPushSubscription = salvarPushSubscription;
+module.exports.removerPushSubscription = removerPushSubscription;
+module.exports.removerPushSubscriptionMorta = removerPushSubscriptionMorta;
+module.exports.obterPushSubscriptionPorEndpoint = obterPushSubscriptionPorEndpoint;
+module.exports.listarPushSubscriptionsDoUsuario = listarPushSubscriptionsDoUsuario;
+module.exports.listarPushSubscriptionsDosUsuarios = listarPushSubscriptionsDosUsuarios;
