@@ -15,6 +15,11 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const https = require('node:https');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
 
 const SENHA_ADMIN = 'senha-admin-notificacoes-push-777';
@@ -22,14 +27,58 @@ const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').diges
 
 let servidor;
 
+// Servidor HTTPS local que finge ser o "serviço de push" — captura os
+// POSTs que o web-push (rodando dentro do processo do servidor testado,
+// ver lib/notificacoes-push.js) manda de verdade, sem precisar de rede
+// externa nenhuma. Usado só no teste de exclusão do autor, abaixo: prova
+// que o ENVIO de verdade (não só "não quebra") respeita quem deve ou não
+// receber. Precisa ser HTTPS (não HTTP) porque o web-push sempre fala
+// TLS com o endpoint, mesmo em testes — certificado autoassinado gerado
+// na hora com o `openssl` do próprio container.
+let capturaPush;
+let capturaPushUrl;
+const pushesRecebidos = [];
+
+function gerarCertificadoAutoassinado() {
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'lw-cert-'));
+  const chave = path.join(pasta, 'key.pem');
+  const cert = path.join(pasta, 'cert.pem');
+  execFileSync('openssl', [
+    'req', '-x509', '-newkey', 'rsa:2048', '-keyout', chave, '-out', cert,
+    '-days', '1', '-nodes', '-subj', '/CN=127.0.0.1',
+  ]);
+  return { key: fs.readFileSync(chave), cert: fs.readFileSync(cert) };
+}
+
 before(async () => {
+  // O processo do servidor testado precisa confiar no certificado
+  // autoassinado do servidor de captura acima — só afeta ESTE arquivo de
+  // teste (cada arquivo de teste roda em processo próprio do test
+  // runner) e só a saída HTTPS que o web-push faz de dentro do processo
+  // filho spawnado por iniciarServidorDeTeste, nunca produção.
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
   servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
   });
+
+  const certificado = gerarCertificadoAutoassinado();
+  capturaPush = https.createServer(certificado, (req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      pushesRecebidos.push({ caminho: req.url });
+      res.writeHead(201, { 'Content-Type': 'text/plain' });
+      res.end();
+    });
+  });
+  await new Promise((resolve) => capturaPush.listen(0, '127.0.0.1', resolve));
+  capturaPushUrl = `https://127.0.0.1:${capturaPush.address().port}`;
 });
 
 after(async () => {
   await servidor.parar();
+  await new Promise((resolve) => capturaPush.close(resolve));
 });
 
 function extrairCookie(resposta) {
@@ -78,6 +127,22 @@ function subscriptionFalsa(sufixo) {
     keys: {
       p256dh: 'BNJxw7YucFhSCPGdd5b8wxaqbXf6yv0zHOrM5T7VLYbBcgTHiehcS72xE0AGYAy_9BM_9sbgIN7wq3ceJ0OKTOQ',
       auth: 'k8JV6sAWQ2Q1_o8_pNjNzQ',
+    },
+  };
+}
+
+// Inscrição com uma chave EC (P-256) de verdade — diferente de
+// subscriptionFalsa() (endpoint inválido, só pra testar "não quebra"),
+// esta é usada quando o teste precisa que o web-push CONSIGA criptografar
+// e mandar de verdade pro servidor de captura local (capturaPushUrl).
+function subscriptionReal(caminho) {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+  return {
+    endpoint: `${capturaPushUrl}/${caminho}`,
+    keys: {
+      p256dh: ecdh.getPublicKey().toString('base64url'),
+      auth: crypto.randomBytes(16).toString('base64url'),
     },
   };
 }
@@ -287,4 +352,43 @@ test('perfil customizado com a permissão de notificação marcada não quebra a
     body: JSON.stringify(payloadChamado(id, { observador: 'push.custom.usuario' })),
   });
   assert.equal(respAbrir.status, 200);
+});
+
+test('quem abre o chamado NÃO recebe a própria notificação, mas outros com a permissão recebem', async () => {
+  // Dois usuários com perfil que recebe notificação por padrão
+  // (Manutencao/Encarregado); um deles é quem vai abrir o chamado.
+  const cookieAutor = await cadastrarELogar('push.autor.nao.notificado', 'Manutencao');
+  const cookieOutro = await cadastrarELogar('push.outro.recebe', 'Encarregado');
+
+  const subAutor = subscriptionReal('autor');
+  const subOutro = subscriptionReal('outro');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAutor },
+    body: JSON.stringify({ subscription: subAutor }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieOutro },
+    body: JSON.stringify({ subscription: subOutro }),
+  });
+
+  const id = 'MAN-push-exclusao-autor-' + Date.now();
+  const respAbrir = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAutor },
+    // "observador" é só quem relatou o problema (campo de tela) — de
+    // propósito diferente de quem está logado, pra provar que a exclusão
+    // usa a SESSÃO (quem realmente abriu), não este campo.
+    body: JSON.stringify(payloadChamado(id, { observador: 'Outro Operador Qualquer' })),
+  });
+  assert.equal(respAbrir.status, 200);
+
+  // O envio é fire-and-forget — espera um pouco pro POST assíncrono do
+  // web-push (dentro do processo do servidor testado) chegar no servidor
+  // de captura local antes de conferir.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/outro'), 'quem NÃO abriu deveria ter recebido a notificação');
+  assert.ok(!pushesRecebidos.some(p => p.caminho === '/autor'), 'quem abriu o chamado não deveria receber a própria notificação');
 });
