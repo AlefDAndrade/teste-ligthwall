@@ -541,22 +541,45 @@
       });
 
       // ---- Controle de acesso por perfil ----
-      const role = sessionStorage.getItem('lw_role');
+      let role = sessionStorage.getItem('lw_role');
 
-      // Sem role nenhum (sessionStorage vazia/adulterada) — volta pro
-      // login antes de tentar mais nada. NÃO existe mais uma lista fixa
-      // de "perfis válidos" aqui — perfis CUSTOMIZADOS (Configurações →
-      // Usuários → "+ Criar novo tipo de perfil", ver
-      // lib/perfis-customizados.js) têm ids GERADOS
-      // (ex: custom_lider-de-turno_1720000000000), então qualquer lista
-      // hardcoded aqui ficaria desatualizada assim que um perfil novo
-      // fosse criado — foi exatamente isso que aconteceu (perfil
-      // customizado sendo rejeitado no boot e mandado de volta pro
-      // login, mesmo com uma sessão real e válida no servidor). A
+      // Sem role nesta aba (sessionStorage vazia — ex: PWA fechado e
+      // reaberto direto no index.html, sem passar pelo auto-login do
+      // login.html) — antes de desistir e mandar pro login, tenta
+      // restaurar a partir da sessão de USUÁRIO CADASTRADO que ainda
+      // pode estar válida no servidor (cookie lw_usuario_sessao, 12h —
+      // ver lib/sessao-usuario.js e GET /minha-sessao, logo abaixo).
+      // Propositalmente não cobre o Administrador Master aqui: aquela
+      // sessão é outro cookie (lib/sessao.js) e continua sempre pedindo
+      // a senha de novo (ver AdminAuth/login.html) — nada muda pra ele.
+      if (!role) {
+        try {
+          const resAuto = await fetch('/minha-sessao');
+          const dataAuto = await resAuto.json();
+          if (dataAuto.ok && dataAuto.perfil) {
+            sessionStorage.setItem('lw_role', dataAuto.perfil);
+            sessionStorage.setItem('lw_nome_usuario', dataAuto.nomeUsuario);
+            sessionStorage.setItem('lw_pode_iniciar_operacao', dataAuto.podeIniciarOperacao ? 'true' : 'false');
+            role = dataAuto.perfil;
+          }
+        } catch (e) { /* sem rede — trata como sessão inválida, abaixo */ }
+      }
+
+      // Ainda sem role nenhum (sessionStorage vazia/adulterada, e sem
+      // sessão de usuário válida no servidor) — volta pro login antes de
+      // tentar mais nada. NÃO existe mais uma lista fixa de "perfis
+      // válidos" aqui — perfis CUSTOMIZADOS (Configurações → Usuários →
+      // "+ Criar novo tipo de perfil", ver lib/perfis-customizados.js)
+      // têm ids GERADOS (ex: custom_lider-de-turno_1720000000000), então
+      // qualquer lista hardcoded aqui ficaria desatualizada assim que um
+      // perfil novo fosse criado — foi exatamente isso que aconteceu
+      // (perfil customizado sendo rejeitado no boot e mandado de volta
+      // pro login, mesmo com uma sessão real e válida no servidor). A
       // validação de verdade pra qualquer perfil que não seja a senha
-      // mestra é a chamada a GET /minha-sessao logo abaixo — confirma
-      // que existe uma sessão de usuário REAL pra esse role específico,
-      // o que já rejeita um valor inventado/adulterado do mesmo jeito.
+      // mestra é a chamada a GET /minha-sessao logo acima/abaixo —
+      // confirma que existe uma sessão de usuário REAL pra esse role
+      // específico, o que já rejeita um valor inventado/adulterado do
+      // mesmo jeito.
       if (!role) {
         sessionStorage.clear();
         window.location.href = 'login.html';

@@ -17,9 +17,24 @@
         href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="css/login.css">
+    <style>
+        /* Esconde a tela de login enquanto _tentarAutoLogin() confere, no
+           servidor, se já existe uma sessão de usuário cadastrado válida
+           (cookie lw_usuario_sessao, 12h — ver lib/sessao-usuario.js) —
+           evita o "flash" do formulário de login antes de redirecionar
+           direto pro sistema. Removida assim que a checagem termina, se
+           der negativo (ver script no fim do body). */
+        html.lw-verificando-sessao body { visibility: hidden; }
+    </style>
 </head>
 
 <body>
+
+    <script>
+        // O mais cedo possível (antes do resto do body pintar) — ver
+        // estilo html.lw-verificando-sessao no <head>.
+        document.documentElement.classList.add('lw-verificando-sessao');
+    </script>
 
     <div class="bg-grid"></div>
     <div class="bg-vignette"></div>
@@ -80,6 +95,39 @@
 
     <script src="js/admin-auth.js"></script>
     <script>
+        // ─── Auto-login: se já existe uma sessão de USUÁRIO CADASTRADO
+        // válida no servidor (cookie lw_usuario_sessao, dura 12h — ver
+        // lib/sessao-usuario.js), entra direto no sistema sem mostrar o
+        // formulário — a pessoa só volta a ver esta tela se clicar em
+        // "Sair" (destrói o cookie, ver AdminAuth.logout()) ou se a
+        // sessão realmente expirar. Propositalmente NÃO cobre o
+        // Administrador Master: aquele usa outro cookie/fluxo
+        // (lib/sessao.js) e continua sempre pedindo a senha de novo aqui,
+        // de propósito (ver solicitarSenhaAdmin, mais abaixo) — nada
+        // muda pra ele.
+        //
+        // sessionStorage (não localStorage) pelo mesmo motivo de sempre:
+        // é o que o resto do sistema já lê (~23 pontos, ver app-core.js)
+        // — só que agora ela é REPOPULADA aqui a partir do cookie, em vez
+        // de depender só do clique manual no formulário.
+        (async function _tentarAutoLogin() {
+            try {
+                const res = await fetch('/minha-sessao');
+                const data = await res.json();
+                if (data.ok && data.perfil) {
+                    sessionStorage.setItem('lw_role', data.perfil);
+                    sessionStorage.setItem('lw_nome_usuario', data.nomeUsuario);
+                    sessionStorage.setItem('lw_pode_iniciar_operacao', data.podeIniciarOperacao ? 'true' : 'false');
+                    window.location.href = 'index.html';
+                    return; // mantém a tela escondida até a navegação acontecer
+                }
+            } catch (e) {
+                // Sem rede/servidor fora — mostra o formulário normalmente,
+                // não trava a pessoa numa tela escondida pra sempre.
+            }
+            document.documentElement.classList.remove('lw-verificando-sessao');
+        })();
+
         // ─── Restaura o estado normal da tela se a página voltar do cache do
         // navegador (bfcache) — ex: botão "Voltar" depois de já ter entrado
         // num perfil. Sem isso, a tela volta "congelada" no overlay de
