@@ -21,7 +21,15 @@
 // funciona direto no navegador, sem precisar instalar nada.
 'use strict';
 
-const LWPush = (function () {
+// Exposto direto em window (não `const` solto) de propósito — o boot
+// em app-core.js checa `if (window.LWPush)` antes de chamar
+// LWPush.iniciar(); um `const LWPush = ...` aqui criaria a variável no
+// escopo global (funcionando se você chamar `LWPush.algo()` direto no
+// Console, o que mascarou esse bug por um tempo), mas SEM virar
+// propriedade de `window` — `window.LWPush` ficava sempre `undefined` e
+// o sino nunca era ativado sozinho no carregamento da página. Mesmo
+// padrão de `window.LW = {...}` em data.js.
+window.LWPush = (function () {
 
   const BOTAO_ID = 'btn-notificacoes-push';
 
