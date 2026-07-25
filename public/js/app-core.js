@@ -3211,7 +3211,18 @@
     }
 
     async function cfgRenderUsuarios() {
-      await cfgAtualizarCampoPodeIniciarOperacao(); // garante _perfisInfoCache pronto e o campo certo já visível
+      // Garante _perfisInfoCache pronto ANTES de tudo — tanto
+      // _cfgPopularSelectPerfil() (rótulos/ids das opções) quanto
+      // cfgAtualizarCampoPodeIniciarOperacao() (perfisComControleDeOperacao)
+      // dependem dele.
+      if (!_perfisInfoCache) {
+        try {
+          const res = await fetch('/perfis');
+          _perfisInfoCache = await res.json();
+        } catch (e) {
+          _perfisInfoCache = { perfisComControleDeOperacao: [] };
+        }
+      }
       // Preenche o <select> de perfil (fixos + customizados — ver
       // lib/perfis-customizados.js) e a lista de perfis customizados já
       // criados (ver public/js/perfis-customizados.js) — funções globais
@@ -3219,6 +3230,17 @@
       // módulo compartilha o mesmo escopo global da página.
       if (typeof _cfgPopularSelectPerfil === 'function') _cfgPopularSelectPerfil();
       if (typeof cfgRenderPerfisCustomizados === 'function') cfgRenderPerfisCustomizados();
+
+      // SÓ AGORA o <select> já tem opções e um valor selecionado — antes
+      // disso, document.getElementById('cfg-usuario-perfil').value vinha
+      // vazio (select ainda sem <option>), e a checagem de
+      // perfisComControleDeOperacao.includes('') sempre dava falso, então
+      // o checkbox "Pode iniciar/encerrar operações" nunca aparecia no
+      // primeiro carregamento da tela — só depois de trocar o <select>
+      // manualmente (dispara o onchange) ou de cadastrar um usuário (que
+      // re-renderiza tudo e, aí sim, o <select> já estava populado de
+      // antes). Bug relatado pelo usuário — corrigido invertendo a ordem.
+      await cfgAtualizarCampoPodeIniciarOperacao();
 
       const elStatus = document.getElementById('cfg-usuarios-status');
       const elLista = document.getElementById('cfg-usuarios-lista');
