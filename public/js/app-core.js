@@ -769,23 +769,24 @@
     // todo fim de dia — ver server.js). Só leitura/download aqui; a criação
     // e a rotação (manter só os últimos 3) são feitas no servidor, sem
     // depender de ninguém com essa tela aberta.
-    // GET /backups-automaticos agora exige sessão de Administrador (ver
-    // lib/sessao.js) — pede a senha já ao abrir este painel (em vez de só
-    // na hora de um download específico), já que tudo aqui dentro lida
-    // com backups que incluem security.json.
+    // GET /backups-automaticos exige sessão de Administrador (ver
+    // lib/sessao.js), mas essa sessão já foi criada no login como
+    // Administrador (mesma senha, ver login.html) — não pedimos de novo
+    // aqui. Se a sessão tiver expirado (30 min, ver lib/sessao.js), o
+    // servidor responde 403 e mostramos um aviso pedindo pra relogar, em
+    // vez de reabrir o modal de senha (ficava redundante com o login).
     function _carregarBackupsAutomaticos() {
       const el = document.getElementById('backup-hub-automaticos');
       if (!el) return;
       el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
 
-      if (typeof AdminAuth === 'undefined') {
-        el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Não foi possível confirmar a senha de administrador nesta tela.</span>';
-        return;
-      }
-
-      AdminAuth.abrirModal(async function onSuccess() {
+      (async () => {
         try {
           const res = await fetch('/backups-automaticos');
+          if (res.status === 403) {
+            el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Sua sessão de administrador expirou — saia e entre novamente como Administrador.</span>';
+            return;
+          }
           const json = await res.json();
           if (!json.ok) throw new Error(json.erro || 'Erro ao listar backups automáticos.');
 
@@ -804,9 +805,7 @@
         } catch (e) {
           el.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
         }
-      }, function onCancel() {
-        el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Cancelado — feche e reabra este painel pra tentar de novo.</span>';
-      });
+      })();
     }
 
     // ---- Backup de Dados (admin) ----
@@ -816,23 +815,24 @@
     // conversa que motivou a reformulação de Backup de Dados vs Backup
     // Geral). Só dados de produção — sem config.json/security.json/
     // usuarios.json (exclusivos do Backup Geral, abaixo).
-    // Exige sessão de Administrador (ver lib/sessao.js) — pede a senha
-    // antes de gerar/baixar o zip.
+    // Exige sessão de Administrador (ver lib/sessao.js), já criada no
+    // login como Administrador — não pedimos a senha de novo aqui (ficava
+    // redundante). Se a sessão tiver expirado nesse meio tempo, o
+    // servidor responde 403 e avisamos pra relogar.
     function fazerBackupDados() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
-      if (typeof AdminAuth === 'undefined') {
-        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
-        return;
-      }
 
       const card = document.getElementById('backup-hub-card-dados');
 
-      AdminAuth.abrirModal(async function onSuccess() {
+      (async () => {
         try {
           if (card) card.style.pointerEvents = 'none';
           _statusBackupHub('Gerando backup de dados...');
 
           const res = await fetch('/backup-dados');
+          if (res.status === 403) {
+            throw new Error('Sua sessão de administrador expirou — saia e entre novamente como Administrador.');
+          }
           if (!res.ok) throw new Error('HTTP ' + res.status);
 
           const cd = res.headers.get('Content-Disposition') || '';
@@ -856,7 +856,7 @@
           if (card) card.style.pointerEvents = '';
           _statusBackupHub(null);
         }
-      });
+      })();
     }
 
     // ---- Backup Geral (admin) ----
@@ -866,23 +866,24 @@
     // Reformulado (ver conversa que motivou a mudança): ANTES incluía o
     // PROJETO INTEIRO (código-fonte) — isso saiu, já que código-fonte
     // tem controle de versão próprio (Git). GET /backup-geral exige
-    // sessão de Administrador (ver lib/sessao.js) — pede a senha aqui,
-    // antes de gerar/baixar o zip (que inclui security.json/usuarios.json).
+    // sessão de Administrador (ver lib/sessao.js), já criada no login
+    // como Administrador — não pedimos a senha de novo aqui (ficava
+    // redundante). Se a sessão tiver expirado nesse meio tempo, o
+    // servidor responde 403 e avisamos pra relogar.
     function fazerBackupGeral() {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
-      if (typeof AdminAuth === 'undefined') {
-        LW.mostrarAlerta('Não foi possível confirmar a senha de administrador nesta tela.', { tipo: 'erro' });
-        return;
-      }
 
       const card = document.getElementById('backup-hub-card-geral');
 
-      AdminAuth.abrirModal(async function onSuccess() {
+      (async () => {
         try {
           if (card) card.style.pointerEvents = 'none';
           _statusBackupHub('Gerando backup geral... pode levar alguns segundos.');
 
           const res = await fetch('/backup-geral');
+          if (res.status === 403) {
+            throw new Error('Sua sessão de administrador expirou — saia e entre novamente como Administrador.');
+          }
           if (!res.ok) throw new Error('HTTP ' + res.status);
 
           // Tenta usar o nome de arquivo sugerido pelo servidor; se não vier,
@@ -908,7 +909,7 @@
           if (card) card.style.pointerEvents = '';
           _statusBackupHub(null);
         }
-      });
+      })();
     }
 
     // ---- Restaurar Backup de Dados (admin) ----
