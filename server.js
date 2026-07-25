@@ -40,6 +40,14 @@ const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
 // conhecidas"). GET /usuarios (lib/rotas/usuarios.js) nunca devolve
 // senhaHash, só {id, nomeUsuario, perfil}.
 const USUARIOS_PATH = path.join(PRIVATE_DIR, 'usuarios.json');
+// Perfis customizados (ver lib/perfis-customizados.js) — cada usuário
+// cadastrado pode referenciar um destes por id. Precisa entrar no Backup
+// Geral JUNTO com usuarios.json: restaurar um usuarios.json sem também
+// restaurar os perfis customizados que ele referencia deixa usuário(s)
+// "órfão(s)" (perfil que não existe mais em lugar nenhum), travando
+// qualquer tentativa de cadastrar/remover OUTRO usuário depois (ver
+// POST /salvar-usuarios, lib/rotas/usuarios.js).
+const PERFIS_CUSTOMIZADOS_PATH = path.join(PRIVATE_DIR, 'perfis-customizados.json');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
 // Migração automática, só na 1ª vez que sobe depois desta mudança: se o
@@ -282,7 +290,7 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
 });
 const rotasBackup = require('./lib/rotas/backup.js')({
   db, fs, path, JSZip,
-  ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH,
+  ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH, PERFIS_CUSTOMIZADOS_PATH,
   auth, sessao: sessaoOuAdmin,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
