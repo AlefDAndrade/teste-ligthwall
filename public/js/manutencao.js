@@ -1336,6 +1336,18 @@
           const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
           const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
           const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock" title="Etiqueta fechada"></i>' : '';
+          // Excluir na tabela de consulta é exclusivo do Administrador
+          // (master OU perfil Administrativo) — pedido do usuário:
+          // diferente do ícone de excluir do card no acordeão (que some
+          // depois que o chamado é processado/fechado, ver
+          // _renderizarCartaoCorretiva), aqui o admin precisa conseguir
+          // excluir QUALQUER chamado, aberto ou já finalizado. A
+          // validação que vale de verdade continua sendo do servidor
+          // (podeExcluirChamado, server.js); isto aqui só decide se o
+          // botão aparece.
+          const acaoExcluir = _souAdminAtual()
+            ? `<span style="color:var(--red); cursor:pointer;" title="Excluir chamado" onclick="event.stopPropagation(); excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>`
+            : '';
           return `<tr style="cursor:pointer;" onclick="abrirHistorico('${m.id}')" title="Ver trajetória do chamado">
             <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon}</td>
             <td data-label="Máquina">${esc(m.maquina || '-')}</td>
@@ -1347,8 +1359,9 @@
             <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
             <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
             <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
+            <td data-label="Ações" onclick="event.stopPropagation();">${acaoExcluir}</td>
           </tr>`;
-        }).join('') : `<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
+        }).join('') : `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
       }
     } catch (error) {
       console.error("Erro ao renderizar a área de corretiva:", error);
@@ -1631,7 +1644,13 @@
 
   async function excluirManutencao(id) { 
     const m = manutencoes.find(x => x.id === id); 
-    if (m && (m.etiquetaFechada || m.situacao !== 'Aguardando')) { 
+    // Trava de "só dá pra excluir enquanto ainda tá Aguardando" vale só
+    // pra quem NÃO é admin — pedido do usuário: o Administrador (master
+    // ou perfil Administrativo) precisa poder excluir qualquer chamado
+    // da lista "Todos os Chamados", aberto ou já finalizado/fechado. A
+    // trava de fundo continua sendo o servidor (podeExcluirChamado,
+    // server.js), isto aqui é só a checagem de UX.
+    if (m && !_souAdminAtual() && (m.etiquetaFechada || m.situacao !== 'Aguardando')) { 
       toast('Este chamado não pode mais ser excluído (já foi processado).', 'error'); 
       return; 
     } 
