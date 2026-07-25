@@ -151,6 +151,15 @@ const LWPush = (function () {
       btn.addEventListener('click', alternar);
     }
     atualizarBotao();
+
+    // Rede de segurança: reaplica o estado do botão no 'load' (depois
+    // que TUDO terminou de carregar, não só o HTML). Idempotente — só
+    // reafirma o que já devia estar certo. Existe por causa de um bug
+    // real de boot em que uma falha silenciosa ANTES desta chamada
+    // (dentro do fluxo de login/permissões, app-core.js) impedia o sino
+    // de aparecer sem deixar erro visível no console — ver conversa que
+    // motivou isso. Com o boot já corrigido lá, isso aqui é só reforço.
+    window.addEventListener('load', atualizarBotao, { once: true });
   }
 
   return { iniciar, ativar, desativar, alternar, atualizarBotao };

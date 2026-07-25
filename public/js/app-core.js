@@ -614,25 +614,38 @@
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = 'none');
 
-        await _carregarPermissoesDoServidor();
-        _aplicarVisibilidadeDoMenu();
+        // Isolado num try/catch de propósito: uma falha aqui (ex: rede
+        // instável bem no meio do fetch de /perfis, mais fácil de
+        // acontecer logo depois de trocar pra HTTPS/reverse proxy) NÃO
+        // pode travar o resto do boot — o nome no topbar e o sino de
+        // notificações (LWPush.iniciar(), mais abaixo) SEMPRE precisam
+        // rodar, mesmo se essa etapa de permissões falhar. Sem isso, uma
+        // exceção aqui simplesmente cortava tudo que vinha depois, sem
+        // deixar rastro visível (some sem erro no console se o DevTools
+        // não estava aberto no instante exato do carregamento).
+        try {
+          await _carregarPermissoesDoServidor();
+          _aplicarVisibilidadeDoMenu();
 
-        // "⚙ Configurações" no topbar não tem mais data-admin-only (ver
-        // nav-topbar.html) — agora é revelado pra qualquer perfil que
-        // tenha PELO MENOS UMA aba liberada lá dentro (mesmo raciocínio
-        // de abrirConfig(), app-core.js — hoje sempre verdade, já que
-        // "config-atalhos" está em todos os perfis cadastráveis).
-        const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
-        document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
+          // "⚙ Configurações" no topbar não tem mais data-admin-only (ver
+          // nav-topbar.html) — agora é revelado pra qualquer perfil que
+          // tenha PELO MENOS UMA aba liberada lá dentro (mesmo raciocínio
+          // de abrirConfig(), app-core.js — hoje sempre verdade, já que
+          // "config-atalhos" está em todos os perfis cadastráveis).
+          const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
+          document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
 
-        if (role === 'OperadorInjetora') {
-          // Operador de Injetora sempre entra direto na tela de trabalho
-          // (Registrar Operação), mesmo comportamento de sempre — os
-          // outros perfis restauram a última página vista, ou caem no
-          // Menu Principal na 1ª vez.
-          showPage('operacao');
-        } else {
-          _restaurarUltimaPagina();
+          if (role === 'OperadorInjetora') {
+            // Operador de Injetora sempre entra direto na tela de trabalho
+            // (Registrar Operação), mesmo comportamento de sempre — os
+            // outros perfis restauram a última página vista, ou caem no
+            // Menu Principal na 1ª vez.
+            showPage('operacao');
+          } else {
+            _restaurarUltimaPagina();
+          }
+        } catch (erroBoot) {
+          console.warn('[boot] Falha ao carregar permissões/restaurar página — o resto do boot continua mesmo assim:', erroBoot);
         }
       }
 
