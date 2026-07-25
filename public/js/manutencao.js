@@ -2292,6 +2292,33 @@
     a.click(); URL.revokeObjectURL(url); toast('Exportação CSV concluída!');
   }
 
+  // Deep-link de notificação push ("Novo chamado de manutenção" — ver
+  // lib/notificacoes-push.js e o listener 'message'/URL de boot em
+  // app-core.js): abre a página de Manutenção já com ESTE chamado
+  // específico selecionado, no mesmo estado que editarManutencao(id)
+  // deixaria se a pessoa tivesse clicado nele manualmente na lista
+  // (inclui a caixa "Aceitar/Recusar", ver _atualizarGateExecucao).
+  //
+  // SEMPRE recarrega do servidor antes de tentar abrir — mesmo que a
+  // página já estivesse inicializada nesta aba — porque o motivo de
+  // existir aqui é justamente um chamado que pode ter acabado de ser
+  // criado, ainda não presente no `manutencoes` já carregado em memória.
+  // Marca window._manInit ANTES de chamar init() de propósito: showPage()
+  // (app-core.js) confere essa flag pra decidir se dispara MAN.init() de
+  // novo — sem marcar aqui primeiro, os dois chamados de init() rodariam
+  // em paralelo (duas buscas concorrentes, mesmo resultado final, mas
+  // desperdício e mais uma fonte de corrida sem necessidade nenhuma).
+  async function abrirChamado(id) {
+    if (!id) return;
+    window._manInit = true;
+    await init();
+    if (!manutencoes.some(m => m.id === id)) {
+      toast('Chamado não encontrado — pode já ter sido fechado ou removido.', 'error');
+      return;
+    }
+    editarManutencao(id);
+  }
+
   // ============================================================
   // 7. INICIALIZAÇÃO
   // ============================================================
@@ -2354,6 +2381,7 @@
      do HTML (estático E gerado dinamicamente) para
      onclick="MAN.excluirManutencao(...)". */
   window.MAN = {
+    abrirChamado,
     abrirDetalhesProgramada,
     abrirHistorico,
     _construirPassosTrajetoria,

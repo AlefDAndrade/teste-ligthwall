@@ -151,6 +151,13 @@ self.addEventListener('push', (event) => {
 // Clique na notificação — foca uma aba já aberta do app se existir
 // (evita abrir 10 abas iguais toda vez que alguém clica), senão abre uma
 // nova. Mesmo padrão de qualquer PWA de notificação.
+//
+// Focar uma aba já aberta NÃO navega ela sozinho (é uma SPA — trocar a
+// URL da aba faria um reload completo, perdendo o estado da tela) —
+// por isso manda uma mensagem pro app (ver listener 'message' em
+// app-core.js) com a MESMA url que iria pra uma aba nova, pra ele
+// decidir sozinho como levar a pessoa até o chamado certo sem recarregar
+// a página.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const urlAlvo = (event.notification.data && event.notification.data.url) || '/index.html';
@@ -159,6 +166,7 @@ self.addEventListener('notificationclick', (event) => {
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
       for (const janela of janelas) {
         if (janela.url.includes(self.location.origin) && 'focus' in janela) {
+          janela.postMessage({ tipo: 'lw-notificacao-clique', url: urlAlvo });
           return janela.focus();
         }
       }

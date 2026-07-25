@@ -129,6 +129,52 @@
       });
     }
 
+    // Deep-link de notificação push de chamado de manutenção (ver
+    // lib/notificacoes-push.js, que agora manda a URL como
+    // "/index.html?chamado=ID", e public/service-worker.js, que repassa
+    // essa URL tanto abrindo uma aba nova quanto focando uma já aberta).
+    // Extrai só o id — usada tanto no boot (location.href) quanto na
+    // mensagem que o service worker manda pra uma aba já aberta (ver
+    // listener 'message' logo abaixo).
+    function _extrairChamadoIdDaUrl(urlStr) {
+      try {
+        return new URL(urlStr, window.location.origin).searchParams.get('chamado');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Leva a pessoa direto pra tela de Manutenção, já com o chamado
+    // específico aberto (a mesma caixa "Aceitar/Recusar" que aparece
+    // hoje ao abrir manualmente — ver MAN.abrirChamado, manutencao.js).
+    // MAN.abrirChamado já garante os dados carregados/atualizados antes
+    // de tentar abrir (o chamado pode ter sido criado agora mesmo), então
+    // só chamamos showPage() DEPOIS, só pra deixar a aba/página visível
+    // — sem isso, o MAN.init() disparado de dentro de showPage() rodaria
+    // em paralelo com o carregamento que MAN.abrirChamado já está fazendo.
+    async function _abrirChamadoDeNotificacao(id) {
+      if (!id) return false;
+      if (!_paginaPermitida('manutencao')) return false; // perfil sem acesso à página — ignora silenciosamente, cai no boot normal
+      if (typeof MAN === 'undefined' || typeof MAN.abrirChamado !== 'function') return false;
+      await MAN.abrirChamado(id);
+      showPage('manutencao');
+      return true;
+    }
+
+    // Recebido do service worker quando a notificação é clicada com uma
+    // aba do app JÁ aberta (ver 'notificationclick', service-worker.js —
+    // nesse caso ele só FOCA a aba existente, sem recarregar a página, e
+    // avisa aqui pra gente navegar internamente até o chamado certo).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const dados = event.data || {};
+        if (dados.tipo !== 'lw-notificacao-clique') return;
+        const id = _extrairChamadoIdDaUrl(dados.url);
+        if (id) _abrirChamadoDeNotificacao(id);
+      });
+    }
+
+
     // Restaura, depois de um F5, a última página que a pessoa estava
     // vendo nesta aba (ver showPage, que grava sessionStorage a cada
     // navegação) — sem isso, todo refresh jogava de volta pro Menu,
@@ -496,6 +542,17 @@
 
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
+      // Veio de um clique em notificação de chamado de manutenção? (ver
+      // _extrairChamadoIdDaUrl, acima, e lib/notificacoes-push.js) —
+      // capturado JÁ AQUI, antes de qualquer outra coisa, porque limpamos
+      // o parâmetro da URL logo abaixo (senão um F5 nesta aba reabriria o
+      // mesmo chamado de novo pra sempre).
+      const _chamadoIdDaNotificacao = _extrairChamadoIdDaUrl(window.location.href);
+      if (_chamadoIdDaNotificacao) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+
       // Re-renderiza Configurações → Atalhos se a resposta de
       // GET /meus-atalhos (assíncrona, ver keyboard-shortcuts.js,
       // _carregarOverrides) chegar DEPOIS que a pessoa já abriu essa aba
@@ -599,7 +656,9 @@
         document.getElementById('btn-config').style.display = 'inline-flex';
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
-        _restaurarUltimaPagina();
+        if (!(_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao))) {
+          _restaurarUltimaPagina();
+        }
 
       } else {
         // Todo o resto (Operador, Analista, Qualidade, Manutencao,
@@ -658,7 +717,10 @@
           const temAlgumaAbaDeConfig = ['dados', 'atalhos', 'usuarios', 'automacao', 'sql'].some(s => _paginaPermitida('config-' + s));
           document.getElementById('btn-config').style.display = temAlgumaAbaDeConfig ? 'inline-flex' : 'none';
 
-          if (role === 'OperadorInjetora') {
+          if (_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao)) {
+            // já navegou pro chamado — nem Operação (Operador de Injetora)
+            // nem "última página" entram em jogo neste boot específico.
+          } else if (role === 'OperadorInjetora') {
             // Operador de Injetora sempre entra direto na tela de trabalho
             // (Registrar Operação), mesmo comportamento de sempre — os
             // outros perfis restauram a última página vista, ou caem no
