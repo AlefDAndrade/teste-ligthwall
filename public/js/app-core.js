@@ -2099,7 +2099,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -2125,7 +2125,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2147,7 +2147,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2203,6 +2203,7 @@
       const elDispositivos = document.getElementById('cfg-secao-dispositivos');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
+      const elNotificacoes = document.getElementById('cfg-secao-notificacoes');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elPaletes) elPaletes.style.display = secao === 'paletes' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
@@ -2211,6 +2212,7 @@
       if (elDispositivos) elDispositivos.style.display = secao === 'dispositivos' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
+      if (elNotificacoes) elNotificacoes.style.display = secao === 'notificacoes' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
@@ -2222,6 +2224,7 @@
       const navDispositivos = document.getElementById('cfg-nav-dispositivos');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
+      const navNotificacoes = document.getElementById('cfg-nav-notificacoes');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navPaletes) navPaletes.style.cssText = secao === 'paletes' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
@@ -2230,6 +2233,7 @@
       if (navDispositivos) navDispositivos.style.cssText = secao === 'dispositivos' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navNotificacoes) navNotificacoes.style.cssText = secao === 'notificacoes' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
