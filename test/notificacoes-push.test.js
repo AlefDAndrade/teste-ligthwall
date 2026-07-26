@@ -1,16 +1,19 @@
 // ─── test/notificacoes-push.test.js ─────────────────────────────────────────
-// Testa o sistema de notificação push de abertura de chamado de manutenção
-// (ver conversa que motivou isso: "toda vez que um chamado for aberto, quem
-// tem a permissão de notificação marcada no perfil é notificado", PC e
-// celular via Web Push/PWA).
+// Testa o sistema de notificação push de chamados de manutenção — abertura
+// de chamado, pedido de peça e peça recebida (ver conversa que motivou
+// isso: "toda vez que um chamado for aberto/tiver um pedido de peça/tiver
+// a peça recebida, quem tem a permissão de notificação marcada no perfil é
+// notificado", PC e celular via Web Push/PWA).
 //
-// Cobre: o novo item de catálogo 'manutencao-notificacao-abertura' (ver
-// lib/itens-permissao.js), os padrões calculados pros 6 perfis fixos (ver
-// lib/perfis.js, permissoesPadraoDoPerfilFixo), a cascata override/perfil-
-// customizado (ver lib/notificacoes-push.js), as rotas GET /push/config,
-// POST /push/inscrever, POST /push/desinscrever, e que abrir um chamado
-// NOVO nunca falha/atrasa por causa do envio da notificação (mesmo com uma
-// inscrição de push "morta"/inalcançável cadastrada).
+// Cobre: os itens de catálogo 'manutencao-notificacao-abertura',
+// 'manutencao-notificacao-pedido-peca' e
+// 'manutencao-notificacao-peca-recebida' (ver lib/itens-permissao.js), os
+// padrões calculados pros 6 perfis fixos (ver lib/perfis.js,
+// permissoesPadraoDoPerfilFixo), a cascata override/perfil-customizado (ver
+// lib/notificacoes-push.js), as rotas GET /push/config, POST
+// /push/inscrever, POST /push/desinscrever, e que salvar um chamado NUNCA
+// falha/atrasa por causa do envio da notificação (mesmo com uma inscrição
+// de push "morta"/inalcançável cadastrada).
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -557,4 +560,122 @@ test('salvar de novo um chamado que já estava com aguardandoPecas=Sim não noti
   await new Promise((resolve) => setTimeout(resolve, 1500));
   const totalDepois = pushesRecebidos.filter(p => p.caminho === '/peca-repeticao-supervisor').length;
   assert.equal(totalDepois, 1, 'não deveria notificar de novo pro mesmo pedido já em aberto');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Notificação de PEÇA RECEBIDA (statusCompra = 'Peça recebida')
+// ═══════════════════════════════════════════════════════════════════════
+// Pedido do usuário: avisar Manutenção, Administrador, Supervisão e
+// Encarregado quando um chamado for salvo com "Status da Compra = Peça
+// recebida" — mesma infraestrutura das notificações acima, item de
+// catálogo e grupo de destinatários próprios (ver lib/notificacoes-push.js,
+// lib/itens-permissao.js, lib/rotas/manutencao.js).
+
+test('catálogo de permissões inclui o item de notificação de peça recebida', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/catalogo-permissoes`);
+  const data = await resp.json();
+  assert.equal(data.ok, true);
+  const item = data.catalogo.find(i => i.id === 'manutencao-notificacao-peca-recebida');
+  assert.ok(item, 'item de notificação de peça recebida deveria estar no catálogo');
+  assert.equal(item.pai, 'manutencao-corretiva');
+  assert.equal(item.area, undefined, 'não deve conceder nenhuma área de edição');
+});
+
+test('padrão do item de peça recebida: Manutenção/Supervisão/Encarregado/Administrador recebem; os demais não', async () => {
+  const respManutencao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Manutencao`);
+  assert.equal((await respManutencao.json()).permissoes['manutencao-notificacao-peca-recebida'], 'total');
+
+  const respSupervisao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Supervisao`);
+  assert.equal((await respSupervisao.json()).permissoes['manutencao-notificacao-peca-recebida'], 'total');
+
+  const respEncarregado = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Encarregado`);
+  assert.equal((await respEncarregado.json()).permissoes['manutencao-notificacao-peca-recebida'], 'total');
+
+  const respAdmin = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Administrativo`);
+  assert.equal((await respAdmin.json()).permissoes['manutencao-notificacao-peca-recebida'], 'total');
+
+  const respOperador = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=OperadorInjetora`);
+  assert.equal((await respOperador.json()).permissoes['manutencao-notificacao-peca-recebida'], 'ocultar');
+
+  const respQualidade = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=AssistenteQualidade`);
+  assert.equal((await respQualidade.json()).permissoes['manutencao-notificacao-peca-recebida'], 'ocultar');
+});
+
+test('chamado salvo com statusCompra="Peça recebida" notifica quem tem a permissão, exceto quem salvou', async () => {
+  const cookieAbre = await cadastrarELogar('recebida.abre.chamado', 'Encarregado');
+  const cookieTecnicoMarca = await cadastrarELogar('recebida.tecnico.marca', 'Manutencao');
+  const cookieSupervisorRecebe = await cadastrarELogar('recebida.supervisor.recebe', 'Supervisao');
+  const cookieEncarregadoRecebe = await cadastrarELogar('recebida.encarregado.recebe', 'Encarregado');
+
+  const id = 'MAN-push-recebida-1-' + Date.now();
+  await abrirEAceitarChamado(id, cookieAbre, cookieTecnicoMarca);
+
+  // Inscrições feitas só DEPOIS do chamado já aberto/aceito — de
+  // propósito, pra não confundir com as notificações de abertura/pedido
+  // de peça (outros eventos, já testados acima).
+  const subSupervisorRecebe = subscriptionReal('recebida-supervisor-recebe');
+  const subEncarregadoRecebe = subscriptionReal('recebida-encarregado-recebe');
+  const subTecnicoMarca = subscriptionReal('recebida-tecnico-marca');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisorRecebe },
+    body: JSON.stringify({ subscription: subSupervisorRecebe }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregadoRecebe },
+    body: JSON.stringify({ subscription: subEncarregadoRecebe }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnicoMarca },
+    body: JSON.stringify({ subscription: subTecnicoMarca }),
+  });
+
+  // Técnico marca o status da compra como "Peça recebida" — é isso que
+  // deve disparar (perfil elegível pra tanto editar quanto receber, então
+  // prova de verdade a exclusão de quem salvou, não só a permissão).
+  const respRecebida = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnicoMarca },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', aguardandoPecas: 'Sim', statusCompra: 'Peça recebida' })),
+  });
+  assert.equal(respRecebida.status, 200);
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/recebida-supervisor-recebe'), 'Supervisão deveria ter recebido a notificação de peça recebida');
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/recebida-encarregado-recebe'), 'Encarregado deveria ter recebido a notificação de peça recebida');
+  assert.ok(!pushesRecebidos.some(p => p.caminho === '/recebida-tecnico-marca'), 'quem marcou a peça como recebida não deveria receber a própria notificação');
+});
+
+test('salvar de novo um chamado que já estava com statusCompra="Peça recebida" não notifica de novo (só na transição)', async () => {
+  const cookieAbre = await cadastrarELogar('recebida.repeticao.abre', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('recebida.repeticao.tecnico', 'Manutencao');
+  const cookieSupervisor = await cadastrarELogar('recebida.repeticao.supervisor', 'Supervisao');
+
+  const id = 'MAN-push-recebida-2-' + Date.now();
+  await abrirEAceitarChamado(id, cookieAbre, cookieTecnico);
+
+  const subSupervisor = subscriptionReal('recebida-repeticao-supervisor');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisor },
+    body: JSON.stringify({ subscription: subSupervisor }),
+  });
+
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida' })),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const totalAposPrimeiraMarcacao = pushesRecebidos.filter(p => p.caminho === '/recebida-repeticao-supervisor').length;
+  assert.equal(totalAposPrimeiraMarcacao, 1, 'deveria ter notificado uma vez quando a peça foi marcada como recebida');
+
+  // Salva de novo o mesmo chamado, já com a peça recebida (sem transição
+  // nova) — não deveria notificar de novo.
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisor },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida', fornecedor: 'Fornecedor Teste' })),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const totalDepois = pushesRecebidos.filter(p => p.caminho === '/recebida-repeticao-supervisor').length;
+  assert.equal(totalDepois, 1, 'não deveria notificar de novo pro mesmo chamado já com a peça recebida');
 });

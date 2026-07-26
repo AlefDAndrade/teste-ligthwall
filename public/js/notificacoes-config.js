@@ -1,14 +1,15 @@
 // ─── notificacoes-config.js — Configurações → Notificações ─────────────────
 // "Gerenciar quem recebe cada notificação (por perfil)" — pedido do
 // usuário. NÃO cria rota nova nenhuma no servidor: reaproveita os mesmos
-// 2 itens de notificação já existentes no catálogo de permissões
-// (`manutencao-notificacao-abertura`/`manutencao-notificacao-pedido-peca`,
-// ver lib/itens-permissao.js) e as mesmas rotas de leitura/escrita que já
-// existem pra permissões de perfil (GET/POST /permissoes-perfil-fixo pros
-// 6 fixos, POST /editar-perfil-customizado pros customizados) — a única
-// coisa nova aqui é a TELA: uma lista focada só nesses 2 toggles, em vez
-// do catálogo inteiro (páginas, dashboards, Configurações etc.) que já
-// existe em "+ Criar novo tipo de perfil" (ver public/js/perfis-customizados.js).
+// 3 itens de notificação já existentes no catálogo de permissões
+// (`manutencao-notificacao-abertura`/`manutencao-notificacao-pedido-peca`/
+// `manutencao-notificacao-peca-recebida`, ver lib/itens-permissao.js) e as
+// mesmas rotas de leitura/escrita que já existem pra permissões de perfil
+// (GET/POST /permissoes-perfil-fixo pros 6 fixos, POST
+// /editar-perfil-customizado pros customizados) — a única coisa nova aqui
+// é a TELA: uma lista focada só nesses 3 toggles, em vez do catálogo
+// inteiro (páginas, dashboards, Configurações etc.) que já existe em "+
+// Criar novo tipo de perfil" (ver public/js/perfis-customizados.js).
 //
 // Funções globais (mesmo padrão do resto do projeto — scripts sem
 // módulo, tudo no mesmo escopo da página), chamadas por
@@ -17,6 +18,7 @@
 
 const _NC_ITEM_ABERTURA = 'manutencao-notificacao-abertura';
 const _NC_ITEM_PEDIDO_PECA = 'manutencao-notificacao-pedido-peca';
+const _NC_ITEM_PECA_RECEBIDA = 'manutencao-notificacao-peca-recebida';
 
 let _ncCarregando = false;
 
@@ -98,6 +100,7 @@ function _ncRenderLinha({ perfilId, rotulo, ehCustomizado, permissoes }) {
       </div>
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_ABERTURA, 'Abertura de Chamado', '🆕', permissoes[_NC_ITEM_ABERTURA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PEDIDO_PECA, 'Pedido de Peça', '🔧', permissoes[_NC_ITEM_PEDIDO_PECA] === 'total')}
+      ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PECA_RECEBIDA, 'Peça Recebida', '📦', permissoes[_NC_ITEM_PECA_RECEBIDA] === 'total')}
     </div>
   `;
 }
