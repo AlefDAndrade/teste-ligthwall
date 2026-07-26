@@ -173,6 +173,10 @@
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                   <button type="button" id="man-btnAceitarChamado" class="man-btn man-btn-warning" onclick="aceitarChamado()"><i class="fas fa-hand-paper"></i> Aceitar Chamado</button>
                   <button type="button" id="man-btnRecusarChamado" class="man-btn man-btn-outline" style="border-color:var(--red); color:var(--red);" onclick="abrirModalRecusaChamado()"><i class="fas fa-times-circle"></i> Recusar Chamado</button>
+                  <!-- "Renotificar" — visível só pra Encarregado/Supervisão/Admin (ver
+                       _podeRenotificarAtual, manutencao.js); exibido/ocultado em
+                       _atualizarGateExecucao(). -->
+                  <button type="button" id="man-btnRenotificarChamado" class="man-btn man-btn-outline" style="display:none;" onclick="renotificarChamado()"><i class="fas fa-bell"></i> Renotificar</button>
                 </div>
               </div>
               <div id="man-recusaPendenteBox" style="display:none;">
@@ -215,7 +219,13 @@
             <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-user-shield"></i> Acompanhamento (Supervisão)</div>
             <div id="man-aceitarPedidoPecaBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--green); border-radius:6px; background:var(--green-dim);">
               <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarPedidoPecaTexto">Há um pedido de peça pendente. Os campos de acompanhamento só aparecem depois que Supervisão, Encarregado ou Administrador aceitarem o pedido.</span></p>
-              <button type="button" id="man-btnAceitarPedidoPeca" class="man-btn man-btn-success" onclick="aceitarPedidoPeca()"><i class="fas fa-hand-paper"></i> Aceitar Pedido de Peça</button>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button type="button" id="man-btnAceitarPedidoPeca" class="man-btn man-btn-success" onclick="aceitarPedidoPeca()"><i class="fas fa-hand-paper"></i> Aceitar Pedido de Peça</button>
+                <!-- "Renotificar" — visível só pra Encarregado/Supervisão/Admin (ver
+                     _podeRenotificarAtual, manutencao.js); exibido/ocultado em
+                     _atualizarGateAcompanhamento(). -->
+                <button type="button" id="man-btnRenotificarPedidoPeca" class="man-btn man-btn-outline" style="display:none;" onclick="renotificarPedidoPeca()"><i class="fas fa-bell"></i> Renotificar</button>
+              </div>
             </div>
             <div id="man-supCampos">
             <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataInicio" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraInicio" onchange="calcularTempoSupervisao()"></div></div>

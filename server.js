@@ -261,6 +261,23 @@ function podeAceitarPedidoPeca(req) {
   return dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
 }
 
+// Confere se quem está fazendo a requisição pode RENOTIFICAR (reenviar a
+// notificação push de um aceite que está pendente — chamado aberto
+// aguardando aceite da Manutenção, ou pedido de peça aguardando aceite da
+// Supervisão) — pedido do usuário: só Encarregado, Administrativo, Admin
+// Master ou Supervisão (mesmo grupo de podeAceitarPedidoPeca, mas checagem
+// própria/nomeada por intenção: quem RENOTIFICA não precisa ser o mesmo
+// grupo de quem ACEITA — coincide hoje, mas são conceitos diferentes,
+// assim como podeAceitarChamado/podeAceitarPedidoPeca já são checagens
+// separadas mesmo quando os grupos se sobrepõem). Perfil Manutenção
+// propositalmente FICA DE FORA: quem cobra o aceite não é quem executa.
+function podeRenotificarManutencao(req) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  return dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
+}
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
@@ -272,7 +289,8 @@ const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ 
 const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
 const rotasManutencao = require('./lib/rotas/manutencao.js')({
   db, podeEditarArea, negarEdicao, podeExcluirChamado,
-  podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca, nomeDeQuemAceita,
+  podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca,
+  podeRenotificarManutencao, nomeDeQuemAceita,
   nomeParaVisualizacao, notificarAberturaChamado: notificacoesPush.notificarAberturaChamado,
   notificarPedidoPeca: notificacoesPush.notificarPedidoPeca,
   notificarPecaRecebida: notificacoesPush.notificarPecaRecebida,

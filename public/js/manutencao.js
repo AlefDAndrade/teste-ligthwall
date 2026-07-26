@@ -198,6 +198,15 @@
     const p = _meuPerfilAtual();
     return p === 'Supervisao' || p === 'Encarregado';
   }
+  // Mesma regra de podeRenotificarManutencao (server.js) — Encarregado,
+  // Administrativo, Admin Master ou Supervisão (pedido do usuário: só
+  // quem cobra o aceite, perfil Manutenção fica de fora do botão
+  // "Renotificar").
+  function _podeRenotificarAtual() {
+    if (_souAdminAtual()) return true;
+    const p = _meuPerfilAtual();
+    return p === 'Supervisao' || p === 'Encarregado';
+  }
 
   function _idsSecaoAbertura() {
     return ['man-manSetor', 'man-manMaquina', 'man-manTurno', 'man-manData', 'man-manObservador'];
@@ -256,6 +265,7 @@
     const normal = document.getElementById('man-aceitarChamadoNormal');
     const btnAceitar = document.getElementById('man-btnAceitarChamado');
     const btnRecusar = document.getElementById('man-btnRecusarChamado');
+    const btnRenotificar = document.getElementById('man-btnRenotificarChamado');
     const recusaBox = document.getElementById('man-recusaPendenteBox');
     const recusaBotoes = document.getElementById('man-recusaBotoesRevisor');
     const recusaSolicitante = document.getElementById('man-recusaInfoSolicitante');
@@ -287,6 +297,11 @@
       const podeAgir = _podeAceitarChamadoAtual(); // mesmo grupo: Manutenção/Supervisão/Encarregado/Admin
       btnAceitar.style.display = podeAgir ? 'inline-block' : 'none';
       btnRecusar.style.display = podeAgir ? 'inline-block' : 'none';
+      // "Renotificar" — pedido do usuário: visível só pra quem cobra o
+      // aceite (Encarregado/Supervisão/Admin), NÃO pra Manutenção (mesmo
+      // grupo que aceita o chamado, mas checagem própria — ver
+      // _podeRenotificarAtual, acima).
+      if (btnRenotificar) btnRenotificar.style.display = _podeRenotificarAtual() ? 'inline-block' : 'none';
     }
   }
 
@@ -298,6 +313,7 @@
     const box = document.getElementById('man-aceitarPedidoPecaBox');
     const campos = document.getElementById('man-supCampos');
     const btn = document.getElementById('man-btnAceitarPedidoPeca');
+    const btnRenotificar = document.getElementById('man-btnRenotificarPedidoPeca');
     if (!box || !campos || !btn) return;
     const m = _chamadoEmEdicao;
     const pedidoAceito = m && m.pedidoPecaAceito === 'Sim';
@@ -309,6 +325,10 @@
       campos.style.display = 'none';
       box.style.display = 'block';
       btn.style.display = _podeAceitarPedidoPecaAtual() ? 'inline-block' : 'none';
+      // "Renotificar" — mesmo raciocínio de _atualizarGateExecucao,
+      // acima: hoje o grupo coincide com quem aceita o pedido de peça,
+      // mas é uma checagem própria (_podeRenotificarAtual).
+      if (btnRenotificar) btnRenotificar.style.display = _podeRenotificarAtual() ? 'inline-block' : 'none';
     }
   }
 
@@ -331,6 +351,53 @@
       editarManutencao(id); // reabre o formulário já com o novo estado
     } catch (e) {
       toast('Erro ao aceitar: ' + e.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Reenvia a notificação push de "chamado aguardando aceite" — pedido
+  // do usuário: botão "Renotificar" ao lado de "Aceitar Chamado"/
+  // "Recusar Chamado", visível só pra Encarregado/Supervisão/Admin (ver
+  // _podeRenotificarAtual, acima; o servidor valida de verdade, ver
+  // podeRenotificarManutencao, server.js).
+  async function renotificarChamado() {
+    const id = document.getElementById('man-manId')?.value;
+    if (!id) return;
+    const btn = document.getElementById('man-btnRenotificarChamado');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch('/manutencao/renotificar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, tipo: 'chamado' }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao renotificar.');
+      toast('Notificação reenviada pra quem pode aceitar o chamado.');
+    } catch (e) {
+      toast('Erro ao renotificar: ' + e.message, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Mesma ideia de renotificarChamado(), acima, pro pedido de peça —
+  // botão ao lado de "Aceitar Pedido de Peça".
+  async function renotificarPedidoPeca() {
+    const id = document.getElementById('man-manId')?.value;
+    if (!id) return;
+    const btn = document.getElementById('man-btnRenotificarPedidoPeca');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch('/manutencao/renotificar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, tipo: 'pedidoPeca' }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.erro || 'Erro ao renotificar.');
+      toast('Notificação reenviada pra quem pode aceitar o pedido de peça.');
+    } catch (e) {
+      toast('Erro ao renotificar: ' + e.message, 'error');
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -2404,6 +2471,8 @@
     responderRecusaChamado,
     aceitarChamado,
     aceitarPedidoPeca,
+    renotificarChamado,
+    renotificarPedidoPeca,
     aoMudarSituacao,
     aplicarFiltrosCorretiva,
     aprovarAgendamento,
@@ -2464,6 +2533,8 @@
   window.responderRecusaChamado = MAN.responderRecusaChamado;
   window.aceitarChamado = MAN.aceitarChamado;
   window.aceitarPedidoPeca = MAN.aceitarPedidoPeca;
+  window.renotificarChamado = MAN.renotificarChamado;
+  window.renotificarPedidoPeca = MAN.renotificarPedidoPeca;
   window.aoMudarSituacao = MAN.aoMudarSituacao;
   window.aplicarFiltrosCorretiva = MAN.aplicarFiltrosCorretiva;
   window.aprovarAgendamento = MAN.aprovarAgendamento;
