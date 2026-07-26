@@ -18,6 +18,15 @@ function numOuNulo(v) {
 }
 
 const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
+// HOST: por padrão só escuta em localhost (127.0.0.1) — quando há um
+// reverse proxy na frente (Caddy, ver deploy/instalar-https.sh), ninguém
+// de fora consegue bater direto em IP-EXTERNO:PORTA, só passando pelo
+// HTTPS do proxy; o próprio Caddy, rodando na mesma máquina, continua
+// alcançando normal via "localhost:PORTA" no Caddyfile. Pra voltar ao
+// comportamento antigo (aceitar conexão de qualquer interface — útil só
+// em rede local sem proxy na frente, nunca com IP público exposto), defina
+// HOST=0.0.0.0 no ambiente.
+const HOST = process.env.HOST || '127.0.0.1';
 const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
@@ -865,8 +874,8 @@ function broadcastDadosSqlExcluidos(info, origemClientId) {
   _enviarWsParaTodos({ tipo: 'dados_sql_excluidos', ...info, origemClientId });
 }
 
-server.listen(PORT, () => {
-  console.log(`Lightwall rodando em http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Lightwall rodando em http://${HOST}:${PORT}`);
 
   // Checa a cada minuto se já é "fim de dia" e falta fazer o backup
   // automático de hoje. Roda também uma vez já no boot, pro caso do
