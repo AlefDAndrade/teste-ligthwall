@@ -1408,7 +1408,15 @@
     if (m.recusaPendente === 'Sim') { _manStepAtual = 'execucao'; return; }
     if (m.aceito !== 'Sim') { _manStepAtual = 'execucao'; return; }
     if (m.situacao === 'Concluido' && !m.etiquetaFechada) { _manStepAtual = 'fechamento'; return; }
-    if ((m.aguardandoPecas || '') === 'Sim' && m.pedidoPecaAceito !== 'Sim') { _manStepAtual = 'peca'; return; }
+    // Enquanto o chamado estiver "aguardando peça" — do momento em que o
+    // pedido nasce até a peça efetivamente chegar (statusCompra = 'Peça
+    // recebida') — a próxima ação relevante está na etapa "Peça", esteja
+    // o pedido ainda pendente de aceite (Sup./Encarregado/Admin aceitam)
+    // OU já aceito e só acompanhando compra/entrega. Antes, esta condição
+    // exigia pedidoPecaAceito !== 'Sim', então assim que alguém aceitava o
+    // pedido, reabrir o chamado pela fila caía de volta na etapa
+    // "Execução" — mesmo com a peça ainda a caminho.
+    if ((m.aguardandoPecas || '') === 'Sim' && m.statusCompra !== 'Peça recebida') { _manStepAtual = 'peca'; return; }
     _manStepAtual = 'execucao';
   }
 
