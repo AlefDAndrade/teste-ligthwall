@@ -583,8 +583,20 @@
           <!-- ========== SEÇÃO: Notificações ========== -->
           <div id="cfg-secao-notificacoes" style="display:none">
             <div class="card-title">🔔 Notificações</div>
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;color:var(--text-3);font-size:.85rem">
-              🚧 Em construção
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Escolha, perfil a perfil, quem recebe as notificações push de Manutenção — <strong>Abertura de
+              Chamado</strong> (novo chamado corretivo aberto) e <strong>Pedido de Peça</strong> (chamado já em
+              execução ficou aguardando peça). Cada pessoa também precisa ter clicado em "Ativar notificações"
+              (🔔 na barra superior) no próprio dispositivo pra receber de verdade.
+            </p>
+            <p style="font-size:.74rem;color:var(--text-3);margin-bottom:18px;line-height:1.5;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
+              ℹ️ O <strong>Administrador Master</strong> (senha mestra da tela de login) não aparece nesta lista —
+              ele nunca é um usuário cadastrado, então não tem como se inscrever pra receber push. Se quiser que
+              quem usa a senha mestra também seja avisado, crie um usuário cadastrado com perfil "Administrador"
+              (aba Usuários) e ative as notificações logado com ele.
+            </p>
+            <div id="cfg-notificacoes-lista" style="display:flex;flex-direction:column;gap:8px">
+              <span style="color:var(--text-3);font-size:.82rem">Carregando…</span>
             </div>
           </div>
           <!-- ========== /SEÇÃO: Notificações ========== -->

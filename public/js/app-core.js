@@ -2241,6 +2241,7 @@
       if (secao === 'dispositivos') cfgRenderDispositivos();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
+      if (secao === 'notificacoes') cfgRenderNotificacoes();
 
       // Reaplica por último, de propósito: os `navX.style.cssText = ...`
       // acima SUBSTITUEM o style inteiro do botão (é assim que o destaque
