@@ -278,6 +278,21 @@ function podeRenotificarManutencao(req) {
   return dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
 }
 
+// Confere se quem está fazendo a requisição pode CONFIRMAR RECEBIMENTO de
+// uma peça (ver conversa que motivou isso: 3º portão do fluxo de peça —
+// depois de "Status da Compra = Peça recebida", a Manutenção precisa
+// confirmar que recebeu a peça de verdade nas mãos, ANTES de o
+// formulário de Execução reabrir). Mesmo grupo de podeAceitarChamado
+// (Manutenção/Supervisão/Encarregado/Admin) — quem confirma é o mesmo
+// público que executa a manutenção, não um portão à parte com regras
+// próprias de quem pode agir.
+function podeConfirmarRecebimentoPeca(req) {
+  if (temPoderesDeAdmin(req)) return true;
+  const dados = sessaoUsuario.dadosDaSessao(req);
+  if (!dados) return false;
+  return dados.perfil === 'Manutencao' || dados.perfil === 'Supervisao' || dados.perfil === 'Encarregado';
+}
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
@@ -290,7 +305,7 @@ const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, neg
 const rotasManutencao = require('./lib/rotas/manutencao.js')({
   db, podeEditarArea, negarEdicao, podeExcluirChamado,
   podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca,
-  podeRenotificarManutencao, nomeDeQuemAceita,
+  podeRenotificarManutencao, podeConfirmarRecebimentoPeca, nomeDeQuemAceita,
   nomeParaVisualizacao, notificarAberturaChamado: notificacoesPush.notificarAberturaChamado,
   notificarPedidoPeca: notificacoesPush.notificarPedidoPeca,
   notificarPecaRecebida: notificacoesPush.notificarPecaRecebida,

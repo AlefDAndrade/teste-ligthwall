@@ -3008,6 +3008,17 @@
                 <button type="button" id="man-btnRenotificarPedidoPeca" class="man-btn man-btn-outline" style="display:none;" onclick="renotificarPedidoPeca()"><i class="fas fa-bell"></i> Renotificar</button>
               </div>
             </div>
+            <!-- 3º portão do fluxo de peça (ver conversa que motivou isso):
+                 depois que a Supervisão marca "Status da Compra = Peça
+                 recebida", o formulário de Execução NÃO reabre direto —
+                 a Manutenção precisa confirmar aqui que recebeu a peça de
+                 verdade nas mãos. Visível só quando
+                 _pecaAguardandoConfirmacao() é true (ver
+                 _atualizarGateAcompanhamento, manutencao.js). -->
+            <div id="man-confirmarRecebimentoBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--green); border-radius:6px; background:var(--green-dim);">
+              <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-box-open"></i> A Supervisão marcou a peça como <strong>recebida</strong>. Antes de continuar a manutenção, confirme que a peça chegou de verdade nas mãos.</p>
+              <button type="button" id="man-btnConfirmarRecebimento" class="man-btn man-btn-success" onclick="confirmarRecebimentoPeca()"><i class="fas fa-check-double"></i> Confirmar Recebimento da Peça</button>
+            </div>
             <div id="man-supCampos">
             <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataInicio" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraInicio" onchange="calcularTempoSupervisao()"></div></div>
             <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataFim" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraFim" onchange="calcularTempoSupervisao()"></div></div>
