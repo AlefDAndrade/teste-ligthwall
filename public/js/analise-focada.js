@@ -328,15 +328,74 @@
       onclick="LWFocada.abrir('${op.id}')">${rotulo}</button>`;
   }
 
+  // ── Berços enchidos de UM traço — mesma técnica de correlacaoTracoBerco
+  // (db.js): olha só os berços dentro do range [berco_inicio,
+  // berco_finalizacao] daquele traço (Math.min/max cobre início > fim
+  // digitado errado) e conta quantos NÃO têm nenhum lado marcado
+  // "nao_enchido" — esse é o estado que representa "painel nunca existiu
+  // pra avaliar" (distinto de "baixou"/vazamento, ver _renderBercos,
+  // acima). Devolve null se não dá pra calcular (sem berços visuais
+  // registrados ainda, ou range inválido/não numérico).
+  function _bercosEnchidosDoTraco(bercosVisuais, bercoInicio, bercoFim) {
+    if (!bercosVisuais || !bercosVisuais.length) return null;
+    const ini = Math.min(parseInt(bercoInicio, 10), parseInt(bercoFim, 10));
+    const fim = Math.max(parseInt(bercoInicio, 10), parseInt(bercoFim, 10));
+    if (isNaN(ini) || isNaN(fim)) return null;
+    const doTraco = bercosVisuais.filter(b => b.ordem >= ini && b.ordem <= fim);
+    if (!doTraco.length) return null;
+    const enchidos = doTraco.filter(b => b.estado_esquerda !== 'nao_enchido' && b.estado_direita !== 'nao_enchido').length;
+    return { enchidos, total: doTraco.length };
+  }
+
+  // ── Resumo da operação — médias de Flow, Densidade e Berços Enchidos
+  // por traço, calculadas em cima da MESMA lista de traços mostrada
+  // logo abaixo (t.flow/t.densidade já vêm com a regra "última remedição
+  // OU original", ver db.detalheOperacao). Cada média ignora traços sem
+  // aquele dado (null/undefined/vazio/não numérico) em vez de tratar
+  // como zero — senão um traço sem Flow registrado puxaria a média pra
+  // baixo artificialmente.
+  function _calcularResumoTracos(tracos, bercosVisuais) {
+    const flows = [], densidades = [], bercosEnchidos = [];
+    tracos.forEach(t => {
+      const flow = Number(t.flow);
+      if (t.flow !== null && t.flow !== undefined && t.flow !== '' && !isNaN(flow)) flows.push(flow);
+
+      const densidade = Number(t.densidade);
+      if (t.densidade !== null && t.densidade !== undefined && t.densidade !== '' && !isNaN(densidade)) densidades.push(densidade);
+
+      const info = _bercosEnchidosDoTraco(bercosVisuais, t.berco_inicio, t.berco_finalizacao);
+      if (info) bercosEnchidos.push(info.enchidos);
+    });
+    const media = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    return {
+      mediaFlow: media(flows),
+      mediaDensidade: media(densidades),
+      mediaBercosEnchidos: media(bercosEnchidos),
+      qtdTracos: tracos.length,
+    };
+  }
+
+  function _renderResumoTracos(tracos, bercosVisuais) {
+    const r = _calcularResumoTracos(tracos, bercosVisuais);
+    const fmt1 = v => v === null ? '—' : v.toFixed(1);
+    return `
+      <div class="af-cabecalho-grid" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+        <div class="af-campo"><div class="af-label">Média de Flow</div><div class="af-valor">${fmt1(r.mediaFlow)}</div></div>
+        <div class="af-campo"><div class="af-label">Média de Densidade</div><div class="af-valor">${r.mediaDensidade === null ? '—' : fmt1(r.mediaDensidade) + ' kg/m³'}</div></div>
+        <div class="af-campo"><div class="af-label">Média de Berços Enchidos por Traço</div><div class="af-valor">${fmt1(r.mediaBercosEnchidos)}</div></div>
+      </div>`;
+  }
+
   // ── Receita utilizada (traços + ajustes) ─────────────────────
-  function _renderReceita(tracos) {
+  function _renderReceita(tracos, bercosVisuais) {
     const el = document.getElementById('af-receita');
     if (!el) return;
     if (!tracos || !tracos.length) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Nenhum traço vinculado a esta operação.</div>`;
       return;
     }
-    el.innerHTML = tracos.map(t => {
+    const resumoHtml = _renderResumoTracos(tracos, bercosVisuais);
+    el.innerHTML = resumoHtml + tracos.map(t => {
       const semAjuste = !t.ajustes.length;
       const camposReceita = [
         ['Cimento', _fmtKg(t.original.cimento), 'kg'],
@@ -348,6 +407,8 @@
         ['Densidade', t.densidade ?? null, 'kg/m³'],
         ['Flow', t.flow ?? null, ''],
       ];
+      const infoBercos = _bercosEnchidosDoTraco(bercosVisuais, t.berco_inicio, t.berco_finalizacao);
+      camposReceita.push(['Berços Enchidos', infoBercos ? `${infoBercos.enchidos}/${infoBercos.total}` : null, '']);
       const receitaHtml = camposReceita.map(([label, valor, unidade]) =>
         `<div>${label}: <strong>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`
       ).join('');
@@ -540,7 +601,7 @@
 
     _renderCabecalho(detalhe.operacao);
     _renderBercos(detalhe.bercosVisuais, detalhe.operacao);
-    _renderReceita(detalhe.tracos);
+    _renderReceita(detalhe.tracos, detalhe.bercosVisuais);
     _renderParadas(paradasDaJanela);
     _renderAvaliacao(detalhe.avaliacao);
   }
@@ -665,6 +726,9 @@
   ${_corPorTipoBerco}
   ${_renderBercos}
   ${_badgeOperacao}
+  ${_bercosEnchidosDoTraco}
+  ${_calcularResumoTracos}
+  ${_renderResumoTracos}
   ${_renderReceita}
   ${_renderParadas}
   ${_labelPainel}
@@ -673,7 +737,7 @@
 
   _renderCabecalho(DETALHE.operacao || {});
   _renderBercos(DETALHE.bercosVisuais, DETALHE.operacao);
-  _renderReceita(DETALHE.tracos);
+  _renderReceita(DETALHE.tracos, DETALHE.bercosVisuais);
   _renderParadas(PARADAS);
   _renderAvaliacao(DETALHE.avaliacao);
 })();
