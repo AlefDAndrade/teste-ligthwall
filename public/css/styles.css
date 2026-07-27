@@ -2851,6 +2851,32 @@ td.mono {
   letter-spacing: .05em;
 }
 
+/* ---- Insights da aba Avaliação — linhas de texto abaixo dos KPIs
+   (ex: principal motivo de reprovação, comparação com a média
+   histórica). Cada insight ocupa 1 linha própria, empilhados. ---- */
+.dbf-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dbf-insight {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 8px 10px;
+  font-size: .78rem;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.dbf-insight strong {
+  color: var(--text-1);
+}
+
+.dbf-insight .is-green { color: var(--green); font-weight: 700; }
+.dbf-insight .is-red   { color: var(--red); font-weight: 700; }
+
 /* ---- Estados vazios / erro ---- */
 .dbf-empty-state {
   text-align: center;
