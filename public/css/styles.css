@@ -2785,6 +2785,29 @@ td.mono {
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* ---- Layout da aba Avaliação: 3 fileiras (grande / média / grande) ---- */
+.dbf-avaliacao-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.dbf-avaliacao-grid .dbf-stats {
+  margin-bottom: 0;
+}
+
+/* Fileiras "grandes" — 2 cards em destaque (topo: registros/painéis;
+   base: percentuais de refugo/aprovação). */
+.dbf-stats-lg {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* Fileira "média" — 3 cards menores no meio (1ª linha, 2ª linha, reprovado). */
+.dbf-stats-md {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .dbf-stat {
   display: flex;
   flex-direction: column;
@@ -2795,6 +2818,16 @@ td.mono {
   border-radius: var(--radius-lg);
   padding: 10px 6px;
   text-align: center;
+}
+
+/* Card "grande" — mais padding e valor com fonte maior, para dar destaque
+   às fileiras do topo e da base no layout da aba Avaliação. */
+.dbf-stat-lg {
+  padding: 16px 8px;
+}
+
+.dbf-stat-lg .dbf-stat-val {
+  font-size: 1.5rem;
 }
 
 .dbf-stat-val {

@@ -310,15 +310,19 @@
     const aprovados = paineis.filter(p => p.resultado === 'aprovado').length;
     const reprovados = paineis.filter(p => p.resultado === 'reprovado').length;
     const segundaLinha = paineis.filter(p => p.linha === '2ª').length;
+    const primeiraLinha = paineis.filter(p => p.linha === '1ª').length;
     const totalClassificado = aprovados + reprovados;
     const taxaAprovacao = totalClassificado ? (aprovados / totalClassificado) * 100 : null;
+    const taxaReprovacao = totalClassificado ? (reprovados / totalClassificado) * 100 : null;
     return {
       totalRegistros: doDia.length,
       paineisAvaliados: paineis.length,
       segundaLinha,
+      primeiraLinha,
       aprovados,
       reprovados,
-      taxaAprovacao
+      taxaAprovacao,
+      taxaReprovacao
     };
   }
 
@@ -330,30 +334,40 @@
       return `<div class="dbf-empty-state">🗒️ Nenhuma avaliação de qualidade registrada para ${dataFmt}.</div>`;
     }
 
-    return `<div class="dbf-stats dbf-stats-3col">
-      <div class="dbf-stat">
-        <span class="dbf-stat-val">${stats.totalRegistros}</span>
-        <span class="dbf-stat-label">Total de Registros</span>
+    return `<div class="dbf-avaliacao-grid">
+      <div class="dbf-stats dbf-stats-lg">
+        <div class="dbf-stat dbf-stat-lg">
+          <span class="dbf-stat-val">${stats.totalRegistros}</span>
+          <span class="dbf-stat-label">Total de Registros</span>
+        </div>
+        <div class="dbf-stat dbf-stat-lg">
+          <span class="dbf-stat-val">${stats.paineisAvaliados}</span>
+          <span class="dbf-stat-label">Painéis Avaliados</span>
+        </div>
       </div>
-      <div class="dbf-stat">
-        <span class="dbf-stat-val">${stats.paineisAvaliados}</span>
-        <span class="dbf-stat-label">Painéis Avaliados</span>
+      <div class="dbf-stats dbf-stats-md">
+        <div class="dbf-stat">
+          <span class="dbf-stat-val">${stats.primeiraLinha}</span>
+          <span class="dbf-stat-label">1ª Linha</span>
+        </div>
+        <div class="dbf-stat">
+          <span class="dbf-stat-val is-blue">${stats.segundaLinha}</span>
+          <span class="dbf-stat-label">2ª Linha</span>
+        </div>
+        <div class="dbf-stat">
+          <span class="dbf-stat-val is-red">${stats.reprovados}</span>
+          <span class="dbf-stat-label">Reprovado</span>
+        </div>
       </div>
-      <div class="dbf-stat">
-        <span class="dbf-stat-val is-blue">${stats.segundaLinha}</span>
-        <span class="dbf-stat-label">Painéis 2ª Linha</span>
-      </div>
-      <div class="dbf-stat">
-        <span class="dbf-stat-val is-green">${stats.aprovados}</span>
-        <span class="dbf-stat-label">Painéis Aprovados</span>
-      </div>
-      <div class="dbf-stat">
-        <span class="dbf-stat-val is-red">${stats.reprovados}</span>
-        <span class="dbf-stat-label">Painéis Reprovados</span>
-      </div>
-      <div class="dbf-stat">
-        <span class="dbf-stat-val">${stats.taxaAprovacao !== null ? fmtNum(stats.taxaAprovacao, 1) + '%' : '—'}</span>
-        <span class="dbf-stat-label">Taxa de Aprovação</span>
+      <div class="dbf-stats dbf-stats-lg">
+        <div class="dbf-stat dbf-stat-lg">
+          <span class="dbf-stat-val is-red">${stats.taxaReprovacao !== null ? fmtNum(stats.taxaReprovacao, 1) + '%' : '—'}</span>
+          <span class="dbf-stat-label">Refugo %</span>
+        </div>
+        <div class="dbf-stat dbf-stat-lg">
+          <span class="dbf-stat-val is-green">${stats.taxaAprovacao !== null ? fmtNum(stats.taxaAprovacao, 1) + '%' : '—'}</span>
+          <span class="dbf-stat-label">Aprovação %</span>
+        </div>
       </div>
     </div>`;
   }
