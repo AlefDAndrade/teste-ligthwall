@@ -114,9 +114,9 @@ body {
 }
 
 .logo-hex {
-    font-size: 3rem;
-    line-height: 1;
-    margin-bottom: 14px;
+    height: 3rem;
+    width: auto;
+    margin: 0 auto 14px;
     display: block;
     animation: spin-in .8s ease both;
 }

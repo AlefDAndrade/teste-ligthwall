@@ -67,8 +67,14 @@ html, body {
   font-size: 1.8rem;
   color: var(--text);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
+}
+
+.tv-logo-mark {
+  height: 34px;
+  width: auto;
+  display: block;
 }
 
 .tv-logo-sub {
