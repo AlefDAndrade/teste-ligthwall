@@ -413,19 +413,25 @@
     return { media, diasConsiderados: taxasPorDia.length };
   }
 
+  /**
+   * Resumo & Insights — mesmo padrão da caixa "Resumo & Insights" do
+   * dashboard do Setor de Qualidade (ver _atualizarDashboardStandalone
+   * / SQ.atualizarDashboard em setor-qualidade.js): uma única caixa com
+   * um parágrafo de texto corrido, em vez de um card por insight.
+   * Combina o motivo de reprovação mais frequente do dia com a
+   * comparação da taxa de aprovação frente à média histórica.
+   */
   function renderInsights(avaliacoes, data, stats) {
     if (!stats.totalRegistros) return '';
 
     const motivoTop = calcularMotivoTopDoDia(avaliacoes, data);
     const mediaHist = calcularMediaHistoricaAprovacao(avaliacoes, data);
 
-    const linhas = [];
+    let summ = '';
 
     if (motivoTop) {
-      linhas.push(`<div class="dbf-insight">
-        📌 Principal motivo de reprovação hoje: <strong>${escapeHtml(motivoTop.nome)}</strong>
-        (${motivoTop.codigo}) — ${motivoTop.qtd} de ${motivoTop.totalReprovados} painel(éis) reprovado(s).
-      </div>`);
+      summ += `Principal motivo de reprovação hoje: <strong>${escapeHtml(motivoTop.nome)}</strong>
+        (${motivoTop.codigo}) — ${motivoTop.qtd} de ${motivoTop.totalReprovados} painel(éis) reprovado(s). `;
     }
 
     if (mediaHist && stats.taxaAprovacao !== null) {
@@ -433,15 +439,17 @@
       const sinal = diff >= 0 ? '+' : '';
       const classe = diff >= 0 ? 'is-green' : 'is-red';
       const seta = diff >= 0 ? '▲' : '▼';
-      linhas.push(`<div class="dbf-insight">
-        📊 Taxa de aprovação de hoje (${fmtNum(stats.taxaAprovacao, 1)}%) está
+      summ += `Taxa de aprovação de hoje (${fmtNum(stats.taxaAprovacao, 1)}%) está
         <span class="${classe}">${seta} ${sinal}${fmtNum(diff, 1)}pp</span>
-        em relação à média histórica (${fmtNum(mediaHist.media, 1)}%, ${mediaHist.diasConsiderados} dia(s)).
-      </div>`);
+        em relação à média histórica (${fmtNum(mediaHist.media, 1)}%, ${mediaHist.diasConsiderados} dia(s)).`;
     }
 
-    if (!linhas.length) return '';
-    return `<div class="dbf-insights">${linhas.join('')}</div>`;
+    if (!summ) summ = 'Nenhum insight disponível para o dia selecionado.';
+
+    return `<div class="dbf-summary-box">
+      <h4><i class="fas fa-file-alt"></i> Resumo &amp; Insights</h4>
+      <p>${summ}</p>
+    </div>`;
   }
 
   function renderAvaliacao(stats, data, insightsHtml) {
