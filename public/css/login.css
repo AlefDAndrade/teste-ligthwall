@@ -147,15 +147,6 @@ body {
     color: var(--accent);
 }
 
-.logo-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: .68rem;
-    color: var(--text-2);
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    margin-top: 8px;
-}
-
 /* Card */
 .login-card {
     background: var(--bg-card);

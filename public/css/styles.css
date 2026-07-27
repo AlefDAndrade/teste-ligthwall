@@ -278,15 +278,6 @@ h4 {
   color: var(--accent);
 }
 
-.topbar-sub {
-  font-size: .72rem;
-  color: var(--text-3);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  border-left: 1px solid var(--border);
-  padding-left: 16px;
-}
-
 .topbar-right {
   margin-left: auto;
   display: flex;
@@ -1893,21 +1884,6 @@ td.mono {
   padding: 40px 32px;
 }
 
-.menu-page-header {
-  margin-bottom: 40px;
-}
-
-.menu-page-title {
-  font-size: 2.6rem;
-  margin-bottom: 6px;
-}
-
-.menu-page-subtitle {
-  color: var(--text-3);
-  font-size: .9rem;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-}
 
 .menu-grid {
   display: grid;
@@ -1999,10 +1975,6 @@ td.mono {
     row-gap: 6px;
   }
 
-  .topbar-sub {
-    display: none;
-  }
-
   .topbar-right {
     margin-left: 0;
     flex-wrap: wrap;
@@ -2072,14 +2044,6 @@ td.mono {
 
   .menu-page-wrap {
     padding: 24px 16px;
-  }
-
-  .menu-page-header {
-    margin-bottom: 24px;
-  }
-
-  .menu-page-title {
-    font-size: 1.9rem;
   }
 }
 
