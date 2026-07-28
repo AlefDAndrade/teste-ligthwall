@@ -124,6 +124,73 @@
     return parseInt(dados.bercos_reais) || (bateria?.bercos || 0);
   }
 
+  // ── Posição no Palete ───────────────────────────────────────────────
+  // SEMPRE o nº de berços CADASTRADO pra bateria (nunca bercos_reais,
+  // diferente de _baCapacidade acima) — o direcionamento é sobre ONDE
+  // FISICAMENTE cada berço empilha (a grade do molde), que não muda
+  // numa operação parcial, só a quantidade de painéis muda. Mesma
+  // distinção já documentada em _paleteDoBerco (setor-qualidade.js).
+  function _baCapacidadeConfigurada(dados) {
+    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === dados.id_bateria);
+    return bateria?.bercos || 0;
+  }
+
+  // Mesmas 4 cores já usadas em paletes-config.js/paletes-ordem.js/
+  // setor-qualidade.js pra identificar pallet1..pallet4 — duplicado aqui
+  // (mesmo padrão já usado nos outros 3 arquivos) só por consistência
+  // visual, o mesmo palete sempre com a mesma cor em qualquer tela.
+  const BA_CORES_PALETE = { 1: '#66bb6a', 2: '#42a5f5', 3: '#ab47bc', 4: '#ffa726' };
+
+  // Mesmo mapeamento berço→palete de _paletePorMetadeELado/_paleteDoBerco
+  // (setor-qualidade.js), duplicado aqui (não importado de lá, pra não
+  // acoplar este card à tela de Qualidade) — fonte da verdade em ambos
+  // os lugares é sempre LW.PALETES_CONFIG (Configurações → Bateria e
+  // Montagem → "Definir Paletes"), nunca hardcoded.
+  function _baPaletePorMetadeELado() {
+    const cfg = LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT;
+    return {
+      esquerdo: { primeira: cfg.esquerdoPrimeira, segunda: cfg.esquerdoSegunda },
+      direito:  { primeira: cfg.direitoPrimeira,  segunda: cfg.direitoSegunda },
+    };
+  }
+
+  // Berço + lado -> { pallet, posicao, metade } (posicao É o número
+  // mostrado dentro daquele palete, sempre 1..metade; metade devolvida
+  // junto pra desenhar a grade inteira do palete no modal de detalhes).
+  // null se não houver capacidade configurada ainda (bateria não
+  // encontrada/sem berços cadastrados).
+  function _baPaleteDoBerco(bercoNum, lado, capacidade) {
+    if (!capacidade || capacidade <= 0) return null;
+    const metade = Math.ceil(capacidade / 2);
+    const primeiraMetade = bercoNum <= metade;
+    const pallet = _baPaletePorMetadeELado()[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
+    if (!pallet) return null;
+    const posicao = primeiraMetade ? bercoNum : bercoNum - metade;
+    return { pallet, posicao, metade };
+  }
+
+  // Desenho em miniatura de UM palete (grade 1..metade, só a posição do
+  // berço atual acesa, o resto acinzentado) — mesmo espírito visual de
+  // .ba-grid/.ba-celula, só que compacto o bastante pra caber 2 lado a
+  // lado (Direito/Esquerdo) dentro da caixa de detalhes.
+  function _baDesenhoPaleteMini(pos) {
+    if (!pos) return '<div class="ba-det-valor">—</div>';
+    const cor = BA_CORES_PALETE[pos.pallet] || 'var(--accent)';
+    const slots = [];
+    for (let i = 1; i <= pos.metade; i++) {
+      const ativo = i === pos.posicao;
+      slots.push(
+        `<span class="ba-palete-slot${ativo ? ' ba-palete-slot-ativo' : ''}"
+          style="${ativo ? `background:${cor};border-color:${cor}` : ''}">${i}</span>`
+      );
+    }
+    return `
+      <div class="ba-palete-mini">
+        <div class="ba-palete-mini-titulo" style="color:${cor}">Palete 0${pos.pallet}</div>
+        <div class="ba-palete-mini-grid">${slots.join('')}</div>
+      </div>`;
+  }
+
   /**
    * Lista de tipos por berço (1 posição por berço, 1-indexed na exibição):
    *  - Montagem Personalizada: usa bercos_personalizados direto (cada
@@ -433,6 +500,13 @@
 
     const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num))}` : 'Ainda não definido';
 
+    // Posição no Palete — cada berço enche 2 painéis (Direito/Esquerdo),
+    // e cada lado pode cair num palete diferente (ver LW.PALETES_CONFIG),
+    // então mostra os dois separados.
+    const capacidadePalete = _baCapacidadeConfigurada(dados);
+    const posicaoDireito = _baPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
+    const posicaoEsquerdo = _baPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
+
     const overlay = document.createElement('div');
     overlay.id = 'ba-modal-detalhes-berco';
     overlay.className = 'ba-detalhes-overlay';
@@ -470,6 +544,19 @@
           <div class="ba-detalhes-campo">
             <label class="form-label">Traço Usado</label>
             <div class="ba-det-valor">${labelTraco}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Posição no Palete</label>
+            <div class="ba-detalhes-paletes">
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Direito</span>
+                ${_baDesenhoPaleteMini(posicaoDireito)}
+              </div>
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Esquerdo</span>
+                ${_baDesenhoPaleteMini(posicaoEsquerdo)}
+              </div>
+            </div>
           </div>
         </div>
 

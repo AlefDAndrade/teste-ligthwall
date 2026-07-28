@@ -3348,6 +3348,73 @@ td.mono {
   gap: 10px;
 }
 
+/* Posição no Palete (dentro de .ba-detalhes-campos, acima) — Direito e
+   Esquerdo lado a lado, cada um com o desenho em miniatura de .ba-palete-mini
+   (ver _baDesenhoPaleteMini, bateria-atual.js). */
+.ba-detalhes-paletes {
+  display: flex;
+  gap: 18px;
+  padding-top: 4px;
+}
+
+.ba-detalhes-palete-lado {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ba-detalhes-palete-lado-label {
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-3);
+}
+
+.ba-palete-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.ba-palete-mini-titulo {
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+/* Grade do palete inteiro — cada posição é um "slot" numerado; só a
+   posição que este berço ocupa fica acesa (background/borda na cor do
+   palete, ver BA_CORES_PALETE), as demais ficam acinzentadas. */
+.ba-palete-mini-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  max-width: 150px;
+}
+
+.ba-palete-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-size: .68rem;
+  font-weight: 600;
+}
+
+.ba-palete-slot-ativo {
+  color: #fff;
+  box-shadow: 0 0 6px rgba(0, 0, 0, .35);
+}
+
 /* ============================================================
    MÓDULO DE PARADAS
    ============================================================ */
