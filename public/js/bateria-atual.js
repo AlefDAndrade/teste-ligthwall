@@ -85,6 +85,18 @@
   // resetado por _sincronizarMarcacoes nem entra em _renderSeMudou.
   let _modoMarcarNaoEnchido = false;
 
+  // Modo "📋 Detalhes do Berço" — mesma ideia do modo "Não Enchido" acima
+  // (liga/desliga por um botão, estado só LOCAL, não sincroniza entre
+  // dispositivos), mas MUTUAMENTE EXCLUSIVO com ele: os dois mudam o que
+  // um clique na grade faz (marcar lado x abrir modal), então nunca ficam
+  // ligados ao mesmo tempo (ver os 2 listeners de botão, abaixo — cada um
+  // desliga o outro modo ao ligar o próprio). Enquanto ATIVO, clicar em
+  // QUALQUER PARTE da célula (não só nos indicadores) abre o modal de
+  // detalhes daquele berço (ver _abrirDetalhesBerco) — os indicadores não
+  // recebem listener próprio nesse modo, então o clique neles só borbulha
+  // pro listener da célula, sem também alternar baixou/não enchido.
+  let _modoDetalhesBerco = false;
+
   // Cor por tipo de montagem de UM berço. As duas situações guardam o
   // tipo de um jeito DIFERENTE, então precisam de funções diferentes pra
   // resolver a cor:
@@ -186,17 +198,26 @@
           ${_modoMarcarNaoEnchido ? '✕ Marcando Não Enchido — clique p/ desligar' : '🚫 Marcar Não Enchido'}
         </button>`
       : '';
-    const dica = !podeMarcar
-      ? `<div class="ba-dica">🔒 Só o computador que está no controle desta operação pode marcar os vazamentos.</div>`
-      : _modoMarcarNaoEnchido
-        ? `<div class="ba-dica ba-dica-nao-enchido">✕ Clique num indicador para marcar aquele lado como <strong>não enchido</strong> — o painel correspondente sai da grade de avaliação da Qualidade.</div>`
-        : `<div class="ba-dica">🖱️ Clique num indicador (•) para marcar que aquele lado do berço baixou ou vazou</div>`;
+    // Botão "📋 Detalhes do Berço" — ao contrário do botão acima, aparece
+    // pra TODO MUNDO (mesmo sem podeMarcar): só ABRIR o modal (visualizar)
+    // não exige controle da operação — quem não tem controle só não vê os
+    // campos editáveis dentro dele (ver _abrirDetalhesBerco).
+    const botaoDetalhes = `<button type="button" id="ba-btn-detalhes-berco" class="btn btn-sm ${_modoDetalhesBerco ? 'btn-accent' : 'btn-ghost'}">
+        ${_modoDetalhesBerco ? '📋 Detalhes — clique num berço' : '📋 Detalhes do Berço'}
+      </button>`;
+    const dica = _modoDetalhesBerco
+      ? `<div class="ba-dica ba-dica-detalhes">📋 Clique em um berço (ex: B11) pra ver e editar os detalhes dele.</div>`
+      : !podeMarcar
+        ? `<div class="ba-dica">🔒 Só o computador que está no controle desta operação pode marcar os vazamentos.</div>`
+        : _modoMarcarNaoEnchido
+          ? `<div class="ba-dica ba-dica-nao-enchido">✕ Clique num indicador para marcar aquele lado como <strong>não enchido</strong> — o painel correspondente sai da grade de avaliação da Qualidade.</div>`
+          : `<div class="ba-dica">🖱️ Clique num indicador (•) para marcar que aquele lado do berço baixou ou vazou</div>`;
     // Fileira única: 1 2 3 4 5 6 7 8 ... (ver .ba-grid no CSS — flex row
     // que DIVIDE a largura disponível igualmente entre os berços, ficando
     // mais fina ou mais grossa conforme a quantidade, sem gerar scroll —
     // ver comentário em .ba-grid/.ba-celula no CSS). A célula em si NÃO é
     // clicável — só os 2 indicadores dentro dela (ver abaixo).
-    const grid = `<div class="ba-grid${podeMarcar ? '' : ' ba-grid-bloqueada'}">${tipos.map((tipo, i) => {
+    const grid = `<div class="ba-grid${podeMarcar ? '' : ' ba-grid-bloqueada'}${_modoDetalhesBerco ? ' ba-grid-detalhes' : ''}">${tipos.map((tipo, i) => {
       const cor = _baCorPorTipo(ehPersonalizada, tipo);
       const numero = String(i + 1).padStart(2, '0');
       const berco = 'B' + (i + 1);
@@ -224,21 +245,50 @@
         </div>`;
     }).join('')}</div>`;
 
-    el.innerHTML = resumo + botaoModo + dica + grid;
+    el.innerHTML = resumo + `<div class="ba-botoes">${botaoModo}${botaoDetalhes}</div>` + dica + grid;
 
     if (podeMarcar) {
       const btnModo = $('ba-btn-nao-enchido');
       if (btnModo) {
         btnModo.addEventListener('click', () => {
           _modoMarcarNaoEnchido = !_modoMarcarNaoEnchido;
+          if (_modoMarcarNaoEnchido) _modoDetalhesBerco = false; // mutuamente exclusivo, ver comentário de _modoDetalhesBerco
           _renderBateriaAtual(_dadosAtuais); // redesenha na hora (botão, dica e cursor dos indicadores mudam com o modo) — não passa por _renderSeMudou de propósito, é só estado local, não precisa da checagem de assinatura
         });
       }
     }
 
+    // Botão de Detalhes — wired incondicionalmente (funciona mesmo sem
+    // podeMarcar, ver comentário acima de botaoDetalhes).
+    const btnDetalhes = $('ba-btn-detalhes-berco');
+    if (btnDetalhes) {
+      btnDetalhes.addEventListener('click', () => {
+        _modoDetalhesBerco = !_modoDetalhesBerco;
+        if (_modoDetalhesBerco) _modoMarcarNaoEnchido = false; // mutuamente exclusivo
+        _renderBateriaAtual(_dadosAtuais);
+      });
+    }
+
+    // Clique na CÉLULA inteira (não só nos indicadores) abre o modal de
+    // detalhes daquele berço — só ligado quando o modo está ativo, e
+    // funciona mesmo sem podeMarcar (o modal só esconde os campos
+    // editáveis nesse caso, ver _abrirDetalhesBerco). Como os indicadores
+    // não recebem listener próprio neste modo (ver abaixo), um clique
+    // neles só borbulha pra este listener, sem também alternar
+    // baixou/não enchido — os dois nunca disparam juntos.
+    if (_modoDetalhesBerco) {
+      el.querySelectorAll('.ba-celula').forEach(cel => {
+        cel.addEventListener('click', () => _abrirDetalhesBerco(cel.getAttribute('data-berco')));
+      });
+    }
+
     // Sem dono, os indicadores nem recebem listener de clique — trava já
     // na origem, não só no CSS (que só cuida da aparência/cursor).
     if (!podeMarcar) return;
+
+    // No modo Detalhes, os indicadores ficam sem listener próprio de
+    // propósito (ver comentário acima) — só a célula inteira reage.
+    if (_modoDetalhesBerco) return;
 
     // Cada indicador marca/desmarca seu PRÓPRIO lado — independente do
     // outro indicador do mesmo berço (ver _baCliqueDot, abaixo). O modo
@@ -310,6 +360,144 @@
       if (typeof LW !== 'undefined' && LW.mostrarAlerta) {
         LW.mostrarAlerta(e.message || 'Não consegui marcar o berço agora.', { tipo: 'erro' });
       }
+    }
+  }
+
+  // ============================================================
+  //  📋 Detalhes do Berço — modal com o "raio-x" de UM berço específico
+  //  (desenho + dados), aberto pelo modo "📋 Detalhes do Berço" (ver
+  //  botaoDetalhes/_modoDetalhesBerco, acima). Mostra Tipo de Montagem,
+  //  Tipo de Bateria, Dimensão, Data de Enchimento e Traço Usado — os 2
+  //  primeiros dados (montagem/dimensão) podem ser editados aqui direto
+  //  (ver aplicarDetalhesBerco, operacao.js); Tipo de Bateria, Data de
+  //  Enchimento e Traço Usado são só informativos (não fazem sentido
+  //  editar por aqui: bateria é escolhida lá em cima, data é automática,
+  //  e o traço é resolvido a partir do que já foi lançado nos traços da
+  //  operação, nunca digitado à mão).
+  // ============================================================
+
+  // Acha, dentre os traços já lançados nesta operação (dados.tracos), qual
+  // deles cobre o berço informado — mesma técnica de correlação usada em
+  // analise-focada.js (_bercosEnchidosDoTraco/db.correlacaoTracoBerco), só
+  // que aqui em cima do estado AO VIVO (berco_ini/berco_fim, ainda em
+  // memória) em vez dos campos já persistidos (berco_inicio/berco_finalizacao)
+  // de uma operação já registrada. Math.min/max cobre um "De/Até" digitado
+  // invertido. Devolve null se nenhum traço cobre esse berço ainda (ainda
+  // não definido) ou se o range do traço não é numérico.
+  function _tracoQueEncheuBerco(dados, numeroBerco) {
+    const tracos = Array.isArray(dados?.tracos) ? dados.tracos : [];
+    for (const t of tracos) {
+      const ini = parseInt(t.berco_ini, 10);
+      const fim = parseInt(t.berco_fim, 10);
+      if (isNaN(ini) || isNaN(fim)) continue;
+      if (numeroBerco >= Math.min(ini, fim) && numeroBerco <= Math.max(ini, fim)) return t;
+    }
+    return null;
+  }
+
+  function _abrirDetalhesBerco(berco) {
+    const dados = _dadosAtuais;
+    if (!dados || !berco) return;
+    document.getElementById('ba-modal-detalhes-berco')?.remove();
+
+    const numeroBerco = parseInt(berco.replace(/\D/g, ''), 10);
+    const capacidade = _baCapacidade(dados);
+    const tipos = _baTiposPorBerco(dados, capacidade);
+    const ehPersonalizada = dados.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
+    const podeEditar = _podeMarcarVazamento(dados); // mesma trava de "quem controla a operação"
+    const tipoAtualCodigo = tipos[numeroBerco - 1] || null;
+    const cor = _baCorPorTipo(ehPersonalizada, tipoAtualCodigo);
+    const marcadoBerco = _bercosMarcados[berco] || {};
+    const traco = _tracoQueEncheuBerco(dados, numeroBerco);
+
+    // Rótulo amigável do tipo atual — se Personalizada, tipoAtualCodigo já
+    // é o CÓDIGO ('sp','2p'...), resolvido pro label via MONTAGEM_OPCOES;
+    // se não, tipoAtualCodigo já É o label (bateria uniforme).
+    const labelTipoAtual = ehPersonalizada
+      ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
+      : (tipoAtualCodigo || '—');
+
+    const dataEnchimento = dados.inicio ? LW.formatDateTime(dados.inicio) : LW.formatDateTime(new Date());
+
+    const opcoesSimples = (LW.MONTAGEM_OPCOES || []).filter(o => o.modo === 'simples');
+    const campoTipo = podeEditar
+      ? `<select id="ba-det-tipo" class="form-input">
+          <option value="">— não alterar (${LW.escaparHtml(labelTipoAtual)}) —</option>
+          ${opcoesSimples.map(o => `<option value="${o.tipo}">${LW.escaparHtml(o.label)}</option>`).join('')}
+        </select>`
+      : `<div class="ba-det-valor">${LW.escaparHtml(labelTipoAtual)}</div>`;
+
+    const campoDimensao = podeEditar
+      ? `<input type="text" id="ba-det-dimensao" class="form-input" value="${LW.escaparHtml(dados.dimensao || '')}" placeholder="Ex: 9,5 cm">`
+      : `<div class="ba-det-valor">${LW.escaparHtml(dados.dimensao || '—')}</div>`;
+
+    const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num))}` : 'Ainda não definido';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ba-modal-detalhes-berco';
+    overlay.className = 'ba-detalhes-overlay';
+    overlay.innerHTML = `
+      <div class="ba-detalhes-box">
+        <button type="button" class="ba-detalhes-fechar" id="ba-det-fechar" aria-label="Fechar" title="Fechar">✕</button>
+        <h3 class="ba-detalhes-titulo">Detalhes do Berço ${LW.escaparHtml(berco)}</h3>
+
+        <div class="ba-detalhes-desenho">
+          <div class="ba-detalhes-celula"
+            style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:2px solid ${cor ? cor.borda : 'var(--border)'}">
+            <span class="ba-detalhes-dot${marcadoBerco.direita === 'nao_enchido' ? ' ba-detalhes-dot-x' : ''}">${marcadoBerco.direita === 'nao_enchido' ? '✕' : '•'}</span>
+            <span class="ba-detalhes-label">${LW.escaparHtml(berco)}</span>
+            <span class="ba-detalhes-dot${marcadoBerco.esquerda === 'nao_enchido' ? ' ba-detalhes-dot-x' : ''}">${marcadoBerco.esquerda === 'nao_enchido' ? '✕' : '•'}</span>
+          </div>
+        </div>
+
+        <div class="ba-detalhes-campos">
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Tipo de Montagem</label>
+            ${campoTipo}
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Tipo de Bateria</label>
+            <div class="ba-det-valor">${LW.escaparHtml(dados.id_bateria || '—')}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Dimensão</label>
+            ${campoDimensao}
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Data de Enchimento</label>
+            <div class="ba-det-valor">${LW.escaparHtml(dataEnchimento)}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Traço Usado</label>
+            <div class="ba-det-valor">${labelTraco}</div>
+          </div>
+        </div>
+
+        <div class="ba-detalhes-acoes">
+          <button type="button" class="btn btn-ghost" id="ba-det-cancelar">${podeEditar ? 'Cancelar' : 'Fechar'}</button>
+          ${podeEditar ? `<button type="button" class="btn btn-primary" id="ba-det-salvar">Salvar</button>` : ''}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const fechar = () => overlay.remove();
+    $('ba-det-fechar').addEventListener('click', fechar);
+    $('ba-det-cancelar').addEventListener('click', fechar);
+    // Clicar fora da caixa (no fundo escurecido) também fecha — diferente
+    // do seletor de motivo da Qualidade (que é obrigatório de propósito),
+    // aqui não há nada obrigatório a escolher, então sair sem salvar é
+    // sempre uma saída válida.
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
+
+    if (podeEditar) {
+      $('ba-det-salvar').addEventListener('click', () => {
+        const novoTipo = $('ba-det-tipo').value || null;
+        const novaDimensao = $('ba-det-dimensao').value;
+        if (window.LWOp && typeof window.LWOp.aplicarDetalhesBerco === 'function') {
+          window.LWOp.aplicarDetalhesBerco(numeroBerco, novoTipo, novaDimensao);
+        }
+        fechar();
+      });
     }
   }
 

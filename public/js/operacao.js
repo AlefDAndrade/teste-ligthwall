@@ -2724,9 +2724,86 @@
     updatePendencias();
   }
 
+  /**
+   * Aplica as edições feitas no modal "📋 Detalhes do Berço" (ver
+   * bateria-atual.js, _abrirDetalhesBerco) — Tipo de Montagem e/ou
+   * Dimensão de UM berço específico da operação atual. `novoTipo` é o
+   * CÓDIGO de um tipo simples (ex: 'sp','2p') ou null/'' (não mexer);
+   * `novaDimensao` é o texto digitado no campo (ou '' pra não mexer).
+   *
+   * Dimensão SEMPRE foi um dado da OPERAÇÃO inteira, nunca de 1 berço só
+   * (todo berço de uma bateria tem o mesmo tamanho físico) — editar aqui
+   * é só um atalho de UI pra não precisar fechar o modal e ir até o
+   * campo "Dimensão" lá em cima; mesma trava de manual usada por
+   * editarDimensao()/updateCapacidade() (state.dimensaoManual).
+   *
+   * Tipo de Montagem SÓ existe por berço numa bateria Personalizada
+   * (cada berço guarda seu próprio código, ver bercos_personalizados).
+   * Se a bateria ainda for uniforme (Simples ou Híbrida) e a pessoa
+   * pedir pra mudar o tipo de 1 berço só, convertemos pra Personalizada
+   * na hora — MAS só quando o tipo uniforme atual for, ele mesmo, um
+   * tipo simples reconhecido (tem código equivalente em
+   * LW.MONTAGEM_OPCOES): todos os outros berços herdam esse mesmo
+   * código (preservando o que a bateria já era) e só o berço editado
+   * recebe o novo. Uma bateria Híbrida não converte automaticamente
+   * (não existe 1 código simples que represente os 2 tipos misturados)
+   * — nesse caso, orienta a usar "🔧 Configurar Berços" em vez de tentar
+   * adivinhar uma divisão que a pessoa não pediu.
+   */
+  function aplicarDetalhesBerco(numeroBerco, novoTipo, novaDimensao) {
+    let mudouAlgo = false;
+
+    if (typeof novaDimensao === 'string' && novaDimensao.trim() !== '') {
+      const valorFormatado = _formatarDimensaoLive(novaDimensao.trim(), true);
+      if (valorFormatado !== (state.dimensao || '')) {
+        state.dimensao = valorFormatado;
+        state.dimensaoManual = valorFormatado !== '';
+        mudouAlgo = true;
+      }
+    }
+
+    if (novoTipo) {
+      const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+      const capacidade = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
+      if (!capacidade || numeroBerco < 1 || numeroBerco > capacidade) {
+        LW.mostrarAlerta('Berço fora da capacidade atual da bateria.', { tipo: 'erro' });
+      } else if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        if (!Array.isArray(state.bercos_personalizados) || state.bercos_personalizados.length !== capacidade) {
+          const atual = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+          state.bercos_personalizados = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
+        }
+        state.bercos_personalizados[numeroBerco - 1] = novoTipo;
+        mudouAlgo = true;
+      } else {
+        const codigoUniforme = (LW.MONTAGEM_OPCOES || [])
+          .find(o => o.modo === 'simples' && o.label === state.tipo_montagem)?.tipo || null;
+        if (!codigoUniforme) {
+          LW.mostrarAlerta(
+            'Não é possível alterar o tipo de montagem de um berço individual nesta bateria (Híbrida, ou tipo não reconhecido) — use "🔧 Configurar Berços" para Montagem Personalizada.',
+            { tipo: 'aviso' }
+          );
+        } else {
+          state.tipo_montagem = LW.TIPO_MONTAGEM_PERSONALIZADA;
+          state.bercos_personalizados = Array.from({ length: capacidade }, () => codigoUniforme);
+          state.bercos_personalizados[numeroBerco - 1] = novoTipo;
+          mudouAlgo = true;
+        }
+      }
+    }
+
+    if (mudouAlgo) {
+      if (!state.dimensaoManual) updateCapacidade(); // reaplica o automático se a dimensão foi limpa
+      recalcPaineis();
+      persist();
+      renderAll(); // reflete tipo_montagem/dimensao/bercos_personalizados nos campos do formulário (select, input, botão "Configurar Berços"...)
+      LW.mostrarAlerta('Detalhes do berço atualizados.', { tipo: 'sucesso' });
+    }
+  }
+
   // ---- Public API ----
   window.LWOp = {
     init,
+    aplicarDetalhesBerco,
     // Usado por app-core.js (ver _aoReceberDadosSqlExcluidosDeOutroDispositivo)
     // pra saber se é seguro recarregar a página agora ou se precisa
     // esperar — true só quando o cronômetro está de fato rodando (uma
