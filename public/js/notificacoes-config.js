@@ -19,6 +19,7 @@
 const _NC_ITEM_ABERTURA = 'manutencao-notificacao-abertura';
 const _NC_ITEM_PEDIDO_PECA = 'manutencao-notificacao-pedido-peca';
 const _NC_ITEM_PECA_RECEBIDA = 'manutencao-notificacao-peca-recebida';
+const _NC_ITEM_PROGRAMADA = 'manutencao-notificacao-programada';
 
 let _ncCarregando = false;
 
@@ -101,6 +102,7 @@ function _ncRenderLinha({ perfilId, rotulo, ehCustomizado, permissoes }) {
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_ABERTURA, 'Abertura de Chamado', '🆕', permissoes[_NC_ITEM_ABERTURA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PEDIDO_PECA, 'Pedido de Peça', '🔧', permissoes[_NC_ITEM_PEDIDO_PECA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PECA_RECEBIDA, 'Peça Recebida', '📦', permissoes[_NC_ITEM_PECA_RECEBIDA] === 'total')}
+      ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PROGRAMADA, 'Manutenção Programada', '📅', permissoes[_NC_ITEM_PROGRAMADA] === 'total')}
     </div>
   `;
 }

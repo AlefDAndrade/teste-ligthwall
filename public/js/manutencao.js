@@ -2474,6 +2474,29 @@
     editarManutencao(id);
   }
 
+  // Mesma ideia de abrirChamado, acima, só que pra um AGENDAMENTO de
+  // manutenção PROGRAMADA (ver notificarManutencaoProgramada,
+  // lib/notificacoes-push.js, e _abrirProgramadaDeNotificacao,
+  // app-core.js) — chamado quando a pessoa clica na notificação push de
+  // "Manutenção programada agendada". SEMPRE recarrega do servidor antes
+  // de tentar abrir, mesmo motivo de abrirChamado: o agendamento pode ter
+  // sido criado agora mesmo, ainda não presente no `agendamentos` já
+  // carregado em memória. Também troca pra aba "Programada" (navegar),
+  // já que abrirDetalhesProgramada só monta o modal — sem isso a pessoa
+  // cairia na aba "Corretiva" (padrão) com o modal aberto por cima, mas
+  // sem a lista de fundo condizente.
+  async function abrirAgendamentoProgramada(id) {
+    if (!id) return;
+    window._manInit = true;
+    await init();
+    if (!agendamentos.some(a => a.id === id)) {
+      toast('Agendamento não encontrado — pode já ter sido excluído.', 'error');
+      return;
+    }
+    navegar('programada');
+    abrirDetalhesProgramada(id);
+  }
+
   // ============================================================
   // 7. INICIALIZAÇÃO
   // ============================================================
@@ -2537,6 +2560,7 @@
      onclick="MAN.excluirManutencao(...)". */
   window.MAN = {
     abrirChamado,
+    abrirAgendamentoProgramada,
     abrirDetalhesProgramada,
     abrirHistorico,
     _construirPassosTrajetoria,

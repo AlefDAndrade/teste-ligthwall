@@ -144,6 +144,19 @@
       }
     }
 
+    // Mesma ideia de _extrairChamadoIdDaUrl, acima, só que pro deep-link
+    // de notificação de MANUTENÇÃO PROGRAMADA (ver
+    // notificarManutencaoProgramada, lib/notificacoes-push.js, que manda
+    // a URL como "/index.html?programada=ID" — parâmetro diferente de
+    // "chamado" de propósito, pra não confundir com um chamado corretivo).
+    function _extrairProgramadaIdDaUrl(urlStr) {
+      try {
+        return new URL(urlStr, window.location.origin).searchParams.get('programada');
+      } catch (e) {
+        return null;
+      }
+    }
+
     // Leva a pessoa direto pra tela de Manutenção, já com o chamado
     // específico aberto (a mesma caixa "Aceitar/Recusar" que aparece
     // hoje ao abrir manualmente — ver MAN.abrirChamado, manutencao.js).
@@ -161,6 +174,19 @@
       return true;
     }
 
+    // Mesma ideia de _abrirChamadoDeNotificacao, acima, só que leva a
+    // pessoa direto pra aba "Programada" com o AGENDAMENTO específico
+    // aberto (ver MAN.abrirAgendamentoProgramada, manutencao.js) — usada
+    // pelo deep-link da notificação de "Manutenção programada agendada".
+    async function _abrirProgramadaDeNotificacao(id) {
+      if (!id) return false;
+      if (!_paginaPermitida('manutencao')) return false; // perfil sem acesso à página — ignora silenciosamente, cai no boot normal
+      if (typeof MAN === 'undefined' || typeof MAN.abrirAgendamentoProgramada !== 'function') return false;
+      await MAN.abrirAgendamentoProgramada(id);
+      showPage('manutencao');
+      return true;
+    }
+
     // Recebido do service worker quando a notificação é clicada com uma
     // aba do app JÁ aberta (ver 'notificationclick', service-worker.js —
     // nesse caso ele só FOCA a aba existente, sem recarregar a página, e
@@ -170,7 +196,9 @@
         const dados = event.data || {};
         if (dados.tipo !== 'lw-notificacao-clique') return;
         const id = _extrairChamadoIdDaUrl(dados.url);
-        if (id) _abrirChamadoDeNotificacao(id);
+        if (id) { _abrirChamadoDeNotificacao(id); return; }
+        const idProgramada = _extrairProgramadaIdDaUrl(dados.url);
+        if (idProgramada) _abrirProgramadaDeNotificacao(idProgramada);
       });
     }
 
@@ -548,7 +576,14 @@
       // o parâmetro da URL logo abaixo (senão um F5 nesta aba reabriria o
       // mesmo chamado de novo pra sempre).
       const _chamadoIdDaNotificacao = _extrairChamadoIdDaUrl(window.location.href);
-      if (_chamadoIdDaNotificacao) {
+      // Mesma ideia, pro deep-link de "Manutenção programada agendada"
+      // (ver _extrairProgramadaIdDaUrl, acima) — os dois parâmetros nunca
+      // vêm juntos na mesma URL (cada notificação manda só um), mas
+      // capturamos os dois aqui, antes de limpar a URL, pelo mesmo
+      // motivo: um F5 nesta aba não pode reabrir o mesmo registro de
+      // novo pra sempre.
+      const _programadaIdDaNotificacao = _extrairProgramadaIdDaUrl(window.location.href);
+      if (_chamadoIdDaNotificacao || _programadaIdDaNotificacao) {
         window.history.replaceState(null, '', window.location.pathname);
       }
 
@@ -656,7 +691,8 @@
         document.getElementById('btn-config').style.display = 'inline-flex';
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = '');
         document.querySelectorAll('[data-hide-analista]').forEach(el => el.style.display = '');
-        if (!(_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao))) {
+        if (!(_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao))
+            && !(_programadaIdDaNotificacao && await _abrirProgramadaDeNotificacao(_programadaIdDaNotificacao))) {
           _restaurarUltimaPagina();
         }
 
@@ -720,6 +756,8 @@
           if (_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao)) {
             // já navegou pro chamado — nem Operação (Operador de Injetora)
             // nem "última página" entram em jogo neste boot específico.
+          } else if (_programadaIdDaNotificacao && await _abrirProgramadaDeNotificacao(_programadaIdDaNotificacao)) {
+            // idem, só que pro agendamento de manutenção programada.
           } else if (role === 'OperadorInjetora') {
             // Operador de Injetora sempre entra direto na tela de trabalho
             // (Registrar Operação), mesmo comportamento de sempre — os

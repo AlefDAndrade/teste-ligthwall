@@ -3025,6 +3025,18 @@ function listarManutencaoProgramada() {
   return rows.map(_rowParaManutencaoProgramada);
 }
 
+// Busca 1 agendamento por id — usada pela rota (lib/rotas/manutencao.js)
+// pra saber, ANTES de salvar, se um POST /manutencao/programada é uma
+// criação nova ou só um update de status (aprovar/reprovar/executar), e
+// assim decidir se dispara a notificação de "agendamento novo" (ver
+// notificarManutencaoProgramada, lib/notificacoes-push.js) — mesmo
+// raciocínio de obterManutencaoCorretiva, já existente, só que pra esta
+// tabela.
+function obterManutencaoProgramada(id) {
+  const row = db.prepare('SELECT * FROM manutencao_programada WHERE id = ?').get(id);
+  return row ? _rowParaManutencaoProgramada(row) : null;
+}
+
 function salvarManutencaoProgramada(a) {
   db.prepare(SQL_UPSERT_MANUTENCAO_PROGRAMADA).run({
     id: a.id,
@@ -3065,6 +3077,7 @@ module.exports.responderRecusaManutencaoCorretiva = responderRecusaManutencaoCor
 module.exports.marcarVisualizadoManutencaoCorretiva = marcarVisualizadoManutencaoCorretiva;
 module.exports.excluirManutencaoCorretiva = excluirManutencaoCorretiva;
 module.exports.listarManutencaoProgramada = listarManutencaoProgramada;
+module.exports.obterManutencaoProgramada = obterManutencaoProgramada;
 module.exports.salvarManutencaoProgramada = salvarManutencaoProgramada;
 module.exports.excluirManutencaoProgramada = excluirManutencaoProgramada;
 /**
