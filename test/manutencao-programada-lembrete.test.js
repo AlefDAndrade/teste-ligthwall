@@ -309,6 +309,61 @@ test('agendamento "Aprovado" pra OUTRO dia (não hoje) não é lembrado', async 
   }
 });
 
+test('reagendar (mudar a data) reseta o "já lembrado" — volta a ser elegível se cair de novo em hoje', async () => {
+  const servidor = await iniciarServidorDeTeste({
+    seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+    env: { LW_TEST_RELOGIO_ISO: '2026-07-12T09:05:00-03:00' },
+  });
+  const captura = await subirCapturaPush();
+  try {
+    const cookieAdmin = await logarComoAdminMaster(servidor.baseUrl);
+    const cookieDestino = await cadastrarELogar(servidor.baseUrl, 'lembrete.reagendado', 'Manutencao');
+
+    const id = 'PRG-lembrete-reagendado-' + Date.now();
+    const base = { id, setor: 'Producao', maquina: 'Injetora 3', solicitante: 'Maria' };
+
+    // Cria já Aprovado pra HOJE e deixa o job lembrar (mesmo fluxo do
+    // teste "É lembrado depois das 09h", acima).
+    await criarAgendamento(servidor.baseUrl, cookieAdmin, { ...base, data: '2026-07-12', statusFinal: 'Aprovado' });
+    await inscreverPush(servidor.baseUrl, cookieDestino, subscriptionReal(captura.url, 'reagendado'));
+    await dispararJobDeLembrete(servidor.baseUrl);
+    assert.equal(
+      captura.pushesRecebidos.filter(p => p.caminho === '/reagendado').length, 1,
+      'deveria ter lembrado na primeira vez, hoje'
+    );
+
+    // Adia pra semana que vem (muda só a `data`) — não deveria lembrar
+    // de novo (dia diferente de hoje).
+    await fetch(`${servidor.baseUrl}/manutencao/programada`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+      body: JSON.stringify({ ...base, data: '2026-07-20', status: 'Aprovado' }),
+    });
+    await dispararJobDeLembrete(servidor.baseUrl);
+    assert.equal(
+      captura.pushesRecebidos.filter(p => p.caminho === '/reagendado').length, 1,
+      'não deveria lembrar de novo — agora a data é outro dia'
+    );
+
+    // Traz de volta pra HOJE — o reagendamento resetou o "já enviado",
+    // então deveria lembrar de novo (ver CASE em
+    // SQL_UPSERT_MANUTENCAO_PROGRAMADA, db.js).
+    await fetch(`${servidor.baseUrl}/manutencao/programada`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+      body: JSON.stringify({ ...base, data: '2026-07-12', status: 'Aprovado' }),
+    });
+    await dispararJobDeLembrete(servidor.baseUrl);
+    assert.equal(
+      captura.pushesRecebidos.filter(p => p.caminho === '/reagendado').length, 2,
+      'voltando pro mesmo dia de hoje, deveria lembrar de novo'
+    );
+  } finally {
+    await servidor.parar();
+    await captura.fechar();
+  }
+});
+
 test('perfil com o item de lembrete desativado (override) não recebe', async () => {
   const servidor = await iniciarServidorDeTeste({
     seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },

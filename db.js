@@ -592,7 +592,10 @@ db.exec(`
     -- executarLembreteManutencaoProgramadaSeNecessario,
     -- lib/notificacoes-push.js) já foi disparado pra este agendamento —
     -- evita reenviar a cada checagem do setInterval (roda a cada minuto).
-    -- Um novo registro sempre nasce com o default 0.
+    -- Um novo registro sempre nasce com o default 0. Reseta sozinho pra
+    -- 0 se a "data" do agendamento mudar (ver CASE em
+    -- SQL_UPSERT_MANUTENCAO_PROGRAMADA, abaixo) — reagendar pra outro
+    -- dia e voltar pro mesmo dia de novo volta a ser elegível.
     lembrete_dia_enviado  INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_manutencao_programada_data ON manutencao_programada(data);
@@ -3030,7 +3033,18 @@ const SQL_UPSERT_MANUTENCAO_PROGRAMADA = `
     justificativa=@justificativa, data_inicio_estimado=@data_inicio_estimado,
     hora_inicio_estimado=@hora_inicio_estimado, data_fim_estimado=@data_fim_estimado,
     hora_fim_estimado=@hora_fim_estimado, execucao_data_inicio=@execucao_data_inicio,
-    execucao_hora_inicio=@execucao_hora_inicio, execucao=@execucao, autor_nome=@autor_nome
+    execucao_hora_inicio=@execucao_hora_inicio, execucao=@execucao, autor_nome=@autor_nome,
+    -- Se a DATA do agendamento mudou (reagendado pra outro dia), o
+    -- lembrete "já enviado" desta ocorrência antiga não vale mais pro
+    -- novo dia — reseta pra 0 (elegível de novo, ver
+    -- listarManutencaoProgramadaParaLembreteDoDia). \`data\`, aqui (sem
+    -- prefixo), se refere ao valor ANTIGO da linha (antes deste UPDATE) —
+    -- semântica padrão de SQL: todas as expressões do SET são avaliadas
+    -- contra a linha como estava antes do comando, mesmo já havendo
+    -- \`data=@data\` mais acima na mesma lista. Se a data não mudou, mantém
+    -- o valor que já estava (não desmarca um lembrete já enviado hoje à
+    -- toa só por causa de um update em outro campo, tipo aprovar/reprovar).
+    lembrete_dia_enviado = CASE WHEN data <> @data THEN 0 ELSE lembrete_dia_enviado END
 `;
 
 function listarManutencaoProgramada() {
@@ -3085,7 +3099,11 @@ function excluirManutencaoProgramada(id) {
 // status = 'Aprovado' (Pendente/Reprovado ainda não têm data confirmada;
 // Em Execucao/Concluido/Nao Executado já foram tratados, não faz sentido
 // lembrar) e o lembrete ainda não foi enviado (evita reenviar a cada
-// checagem do setInterval, que roda a cada minuto).
+// checagem do setInterval, que roda a cada minuto). Reagendar um
+// agendamento (mudar a `data`) reseta esse "já enviado" automaticamente
+// — ver o CASE em SQL_UPSERT_MANUTENCAO_PROGRAMADA, acima — então um
+// agendamento adiado pra depois e trazido de volta pro mesmo dia de
+// novo volta a ser elegível.
 function listarManutencaoProgramadaParaLembreteDoDia(hoje) {
   const rows = db.prepare(
     `SELECT * FROM manutencao_programada
