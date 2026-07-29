@@ -3388,14 +3388,63 @@
         ? `<span class="badge badge-green">✓ ${_usuariosCache.length} usuário(s) cadastrado(s)</span>`
         : `<span class="badge badge-gray">⬤ Nenhum usuário cadastrado ainda — ninguém consegue logar com usuário+senha (só o botão "Entrar como Administrador" continua funcionando).</span>`;
 
+      // "Pode iniciar/encerrar operações" só faz sentido pra perfis com
+      // controle de operação de verdade (mesma lista usada em
+      // cfgAtualizarCampoPodeIniciarOperacao, acima) — pros outros nem
+      // mostra o toggle, pra não sugerir uma opção que não teria efeito.
+      const perfisComControle = _perfisInfoCache.perfisComControleDeOperacao || [];
+
       elLista.innerHTML = _usuariosCache.map(u => `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
       <span style="font-size:.85rem;font-weight:700;color:var(--text);min-width:120px">${_escaparHtmlLocal(u.nomeUsuario)}</span>
       <span class="badge badge-blue">${_escaparHtmlLocal(_rotuloPerfil(u.perfil))}</span>
-      ${u.podeIniciarOperacao ? '<span class="badge badge-green" title="Pode iniciar/encerrar operações">▶ Inicia Operação</span>' : ''}
       <button onclick="cfgRemoverUsuario('${_escaparHtmlLocal(u.id)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+      ${perfisComControle.includes(u.perfil) ? `
+      <div style="flex-basis:100%;display:flex;align-items:center;gap:10px;padding-top:8px;margin-top:2px;border-top:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--text-2);cursor:pointer" title="Pode iniciar/encerrar operações em Registrar Operação">
+          <span class="switch">
+            <input type="checkbox" ${u.podeIniciarOperacao ? 'checked' : ''} onchange="cfgToggleIniciarOperacao('${_escaparHtmlLocal(u.id)}', this)">
+            <span class="switch-slider"></span>
+          </span>
+          Pode iniciar/encerrar operações em Registrar Operação
+        </label>
+      </div>` : ''}
     </div>
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum usuário cadastrado ainda.</span>';
+    }
+
+    // Alterna "Pode iniciar/encerrar operações em Registrar Operação" pra
+    // um usuário JÁ CADASTRADO, direto na lista — sem precisar remover e
+    // recriar. Reenvia a lista inteira pro mesmo POST /salvar-usuarios de
+    // sempre (só o campo deste usuário muda), o que também significa que
+    // pede a senha de Administrador Master de novo (AdminAuth, dentro de
+    // _cfgSalvarUsuarios) — mesma trava de segurança usada em
+    // Adicionar/Remover usuário. Se cancelar ou der erro, o switch volta
+    // pro estado anterior (o onchange já tinha marcado o novo antes de
+    // chegar aqui).
+    async function cfgToggleIniciarOperacao(id, inputEl) {
+      const usuario = _usuariosCache.find(u => u.id === id);
+      if (!usuario) return;
+
+      const valorAnterior = !!usuario.podeIniciarOperacao;
+      const novoValor = inputEl.checked;
+
+      const listaParaEnviar = _usuariosCache.map(u => ({
+        id: u.id,
+        nomeUsuario: u.nomeUsuario,
+        perfil: u.perfil,
+        podeIniciarOperacao: u.id === id ? novoValor : u.podeIniciarOperacao,
+      }));
+
+      try {
+        await _cfgSalvarUsuarios(listaParaEnviar);
+      } catch (e) {
+        inputEl.checked = valorAnterior;
+        if (!e.silencioso) LW.mostrarAlerta('Erro ao atualizar: ' + e.message, { tipo: 'erro' });
+        return;
+      }
+
+      cfgRenderUsuarios();
     }
 
     // POST /salvar-usuarios exige sessão de Administrador Master (ver
