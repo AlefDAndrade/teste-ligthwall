@@ -169,10 +169,13 @@
     return { pallet, posicao, metade };
   }
 
-  // Desenho em miniatura de UM palete (grade 1..metade, só a posição do
-  // berço atual acesa, o resto acinzentado) — mesmo espírito visual de
-  // .ba-grid/.ba-celula, só que compacto o bastante pra caber 2 lado a
-  // lado (Direito/Esquerdo) dentro da caixa de detalhes.
+  // Desenho em miniatura de UM palete (pilha 1..metade, só a posição do
+  // berço atual acesa, o resto acinzentado) — mesmo espírito visual da
+  // pilha de placas do Setor de Qualidade (.sq-slab-stack/.sq-slab, ver
+  // setor-qualidade.css), só que compacto o bastante pra caber 2 lado a
+  // lado (Direito/Esquerdo) dentro da caixa de detalhes. Posição 1 fica
+  // na BASE da pilha (embaixo) e vai empilhando pra cima, igual ao
+  // palete físico — por isso o container usa column-reverse (ver CSS).
   function _baDesenhoPaleteMini(pos) {
     if (!pos) return '<div class="ba-det-valor">—</div>';
     const cor = BA_CORES_PALETE[pos.pallet] || 'var(--accent)';
@@ -187,7 +190,7 @@
     return `
       <div class="ba-palete-mini">
         <div class="ba-palete-mini-titulo" style="color:${cor}">Palete 0${pos.pallet}</div>
-        <div class="ba-palete-mini-grid">${slots.join('')}</div>
+        <div class="ba-palete-mini-stack">${slots.join('')}</div>
       </div>`;
   }
 

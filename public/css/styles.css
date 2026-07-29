@@ -3398,24 +3398,26 @@ td.mono {
   font-weight: 700;
 }
 
-/* Grade do palete inteiro — cada posição é um "slot" numerado; só a
-   posição que este berço ocupa fica acesa (background/borda na cor do
-   palete, ver BA_CORES_PALETE), as demais ficam acinzentadas. */
-.ba-palete-mini-grid {
+/* Pilha do palete inteiro — cada posição é um retângulo empilhado
+   (mesmo espírito visual de .sq-slab-stack/.sq-slab, ver
+   setor-qualidade.css); só a posição que este berço ocupa fica acesa
+   (background/borda na cor do palete, ver BA_CORES_PALETE), as demais
+   ficam acinzentadas. column-reverse pra posição 1 ficar na BASE da
+   pilha (embaixo), empilhando pra cima — igual ao palete físico. */
+.ba-palete-mini-stack {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 3px;
-  max-width: 150px;
+  flex-direction: column-reverse;
+  gap: 2px;
+  width: 70px;
 }
 
 .ba-palete-slot {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 100%;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-2);
   color: var(--text-3);
