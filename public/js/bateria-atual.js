@@ -522,9 +522,17 @@
     // controla a Dimensão, abaixo).
     const campoTipo = `<div class="ba-det-valor">${LW.escaparHtml(labelTipoAtual)}</div>`;
 
+    // Dimensão DESTE berço específico — usa o override individual
+    // (dados.bercos_dimensoes[numeroBerco-1]) se já existir; senão cai
+    // pra dimensão geral da operação (dados.dimensao), igual a todo
+    // berço que ainda não teve a dimensão editada por aqui. Salvar
+    // NUNCA mais altera dados.dimensao — só a posição deste berço (ver
+    // aplicarDetalhesBerco, operacao.js).
+    const dimensaoBercoAtual = (Array.isArray(dados.bercos_dimensoes) && dados.bercos_dimensoes[numeroBerco - 1])
+      || dados.dimensao || '';
     const campoDimensao = podeEditar
-      ? `<input type="text" id="ba-det-dimensao" class="form-input" value="${LW.escaparHtml(dados.dimensao || '')}" placeholder="Ex: 9,5 cm">`
-      : `<div class="ba-det-valor">${LW.escaparHtml(dados.dimensao || '—')}</div>`;
+      ? `<input type="text" id="ba-det-dimensao" class="form-input" value="${LW.escaparHtml(dimensaoBercoAtual)}" placeholder="Ex: 9,5 cm">`
+      : `<div class="ba-det-valor">${LW.escaparHtml(dimensaoBercoAtual || '—')}</div>`;
 
     const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num))}` : 'Ainda não definido';
 

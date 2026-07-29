@@ -56,6 +56,15 @@ db.exec(`
     -- (tamanho fixo = capacidade da bateria) e nunca é consultado sozinho,
     -- só lido junto com a operação inteira.
     bercos_personalizados TEXT,
+    -- Override de Dimensão por berço específico (ver "📋 Detalhes do
+    -- Berço", bateria-atual.js) — 1 array JSON, 1 item por berço
+    -- (null = usa a coluna "dimensao" acima, a dimensão geral da
+    -- operação, pra aquele berço). Normalmente toda bateria tem berços
+    -- fisicamente idênticos, mas isso permite corrigir/registrar a
+    -- dimensão de UM berço específico sem afetar os demais. Mesmo
+    -- padrão de bercos_personalizados, acima (tamanho fixo = capacidade
+    -- da bateria, nunca consultado sozinho).
+    bercos_dimensoes      TEXT,
     total_paineis         INTEGER,
     m2_total              REAL,
     placas_cimenticia     INTEGER,
@@ -823,6 +832,13 @@ if (!_colunasOperacoes.includes('operador_nome')) {
   db.exec('ALTER TABLE operacoes ADD COLUMN operador_nome TEXT');
   console.log('[migração] Coluna "operador_nome" adicionada à tabela operacoes.');
 }
+// bercos_dimensoes — ver comentário na CREATE TABLE operacoes, acima.
+// Adicionada depois da primeira versão da tabela, daí a migração leve,
+// mesmo padrão das demais.
+if (!_colunasOperacoes.includes('bercos_dimensoes')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN bercos_dimensoes TEXT');
+  console.log('[migração] Coluna "bercos_dimensoes" adicionada à tabela operacoes.');
+}
 const _colunasParadas = db.prepare("PRAGMA table_info(paradas)").all().map(c => c.name);
 if (!_colunasParadas.includes('operador_nome')) {
   db.exec('ALTER TABLE paradas ADD COLUMN operador_nome TEXT');
@@ -1028,6 +1044,7 @@ function operacaoParaRow(r) {
     tipo_montagem: r.tipo_montagem ?? null,
     bercos_reais: r.bercos_reais ?? null,
     bercos_personalizados: r.bercos_personalizados ? JSON.stringify(r.bercos_personalizados) : null,
+    bercos_dimensoes: r.bercos_dimensoes ? JSON.stringify(r.bercos_dimensoes) : null,
     total_paineis: r.total_paineis ?? null,
     m2_total: r.m2_total ?? null,
     placas_cimenticia: r.placas_cimenticia ?? null,
@@ -1067,6 +1084,7 @@ function rowParaOperacao(row) {
     tipo_montagem: row.tipo_montagem,
     bercos_reais: row.bercos_reais,
     ...(row.bercos_personalizados ? { bercos_personalizados: JSON.parse(row.bercos_personalizados) } : {}),
+    ...(row.bercos_dimensoes ? { bercos_dimensoes: JSON.parse(row.bercos_dimensoes) } : {}),
     total_paineis: row.total_paineis,
     m2_total: row.m2_total,
     placas_cimenticia: row.placas_cimenticia,
@@ -1086,13 +1104,13 @@ const SQL_INSERIR_OPERACAO = `
   INSERT INTO operacoes (
     id, data, turno, dimensao, capacidade, id_bateria, inicio, fim, desemplaque,
     tempo_min, qtd_tracos, houve_atraso, motivo_atraso, tipo_montagem, bercos_reais,
-    bercos_personalizados, total_paineis, m2_total, placas_cimenticia,
+    bercos_personalizados, bercos_dimensoes, total_paineis, m2_total, placas_cimenticia,
     paineis_por_tipo, m2_por_tipo, paineis_2p, paineis_sp, m2_2p, m2_sp,
     tracos_json, avaliado, modo_teste, operador_nome, criado_em
   ) VALUES (
     @id, @data, @turno, @dimensao, @capacidade, @id_bateria, @inicio, @fim, @desemplaque,
     @tempo_min, @qtd_tracos, @houve_atraso, @motivo_atraso, @tipo_montagem, @bercos_reais,
-    @bercos_personalizados, @total_paineis, @m2_total, @placas_cimenticia,
+    @bercos_personalizados, @bercos_dimensoes, @total_paineis, @m2_total, @placas_cimenticia,
     @paineis_por_tipo, @m2_por_tipo, @paineis_2p, @paineis_sp, @m2_2p, @m2_sp,
     @tracos_json, @avaliado, @modo_teste, @operador_nome, @criado_em
   )
