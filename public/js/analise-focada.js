@@ -23,6 +23,11 @@
 
 (function () {
   let _idAtual = null;
+  // Último `detalhe` carregado por render() (operacao/bercosVisuais/tracos)
+  // — cache simples pra "📋 Detalhes do Berço" (ver abrirDetalhesBerco,
+  // abaixo) não precisar buscar tudo de novo num clique que é só um
+  // recorte visual do que a página já tem na tela.
+  let _ultimoDetalhe = null;
 
   // ── Cache dos dados usados pela BUSCA e pela cadeia de reaproveitamento
   // — carregados uma vez só (lazy, na 1ª busca ou no 1º render de uma
@@ -222,10 +227,222 @@
     return ehPersonalizada ? LW.corPorTipoSimples(tipo) : LW.corMontagemPorLabel(tipo);
   }
 
+  // ============================================================
+  //  📋 Detalhes do Berço — SÓ LEITURA
+  //
+  //  Mesmo modal do card "Bateria Atual" (ver _abrirDetalhesBerco,
+  //  bateria-atual.js) — aqui reaproveita as mesmas classes CSS
+  //  (.ba-detalhes-*, styles.css), mas SEM o campo de Dimensão editável
+  //  nem o botão Salvar: esta é uma operação já REGISTRADA, não faz
+  //  sentido editar berço a berço por aqui (quem precisa corrigir usa
+  //  "Editar Operação"). Os helpers abaixo (_afCapacidade.../
+  //  _afPaleteDoBerco/_afDesenhoPaleteMini/AF_CORES_PALETE) são cópias
+  //  das equivalentes em bateria-atual.js — duplicadas de propósito,
+  //  mesmo padrão já usado no resto deste arquivo (_corPorTipoBerco,
+  //  acima), pra não acoplar esta tela à de Registro.
+  // ============================================================
+
+  function _afCapacidade(op) {
+    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === op.id_bateria);
+    return parseInt(op.bercos_reais) || (bateria?.bercos || 0);
+  }
+
+  // SEMPRE o nº de berços CADASTRADO pra bateria (nunca bercos_reais) —
+  // mesma distinção de _baCapacidadeConfigurada (bateria-atual.js).
+  function _afCapacidadeConfigurada(op) {
+    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === op.id_bateria);
+    return bateria?.bercos || 0;
+  }
+
+  const AF_CORES_PALETE = { 1: '#66bb6a', 2: '#42a5f5', 3: '#ab47bc', 4: '#ffa726' };
+
+  function _afPaletePorMetadeELado() {
+    const cfg = LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT;
+    return {
+      esquerdo: { primeira: cfg.esquerdoPrimeira, segunda: cfg.esquerdoSegunda },
+      direito:  { primeira: cfg.direitoPrimeira,  segunda: cfg.direitoSegunda },
+    };
+  }
+
+  function _afPaleteDoBerco(bercoNum, lado, capacidade) {
+    if (!capacidade || capacidade <= 0) return null;
+    const metade = Math.ceil(capacidade / 2);
+    const primeiraMetade = bercoNum <= metade;
+    const pallet = _afPaletePorMetadeELado()[lado]?.[primeiraMetade ? 'primeira' : 'segunda'];
+    if (!pallet) return null;
+    const posicao = primeiraMetade ? bercoNum : bercoNum - metade;
+    return { pallet, posicao, metade };
+  }
+
+  function _afDesenhoPaleteMini(pos) {
+    if (!pos) return '<div class="ba-det-valor">—</div>';
+    const cor = AF_CORES_PALETE[pos.pallet] || 'var(--accent)';
+    const slots = [];
+    for (let i = 1; i <= pos.metade; i++) {
+      const ativo = i === pos.posicao;
+      slots.push(
+        `<span class="ba-palete-slot${ativo ? ' ba-palete-slot-ativo' : ''}"
+          style="${ativo ? `background:${cor};border-color:${cor}` : ''}">${i}</span>`
+      );
+    }
+    return `
+      <div class="ba-palete-mini">
+        <div class="ba-palete-mini-titulo" style="color:${cor}">Palete 0${pos.pallet}</div>
+        <div class="ba-palete-mini-stack">${slots.join('')}</div>
+      </div>`;
+  }
+
+  function _afTiposPorBerco(op, capacidade, gradePersonalizada, ehPersonalizada) {
+    if (ehPersonalizada) {
+      return Array.from({ length: capacidade }, (_, i) => gradePersonalizada[i] || null);
+    }
+    return Array.from({ length: capacidade }, () => op.tipo_montagem || null);
+  }
+
+  // Acha, dentre os traços já registrados desta operação, qual cobre o
+  // berço informado — mesma técnica de _tracoQueEncheuBerco
+  // (bateria-atual.js), só que aqui em cima dos campos já PERSISTIDOS
+  // (berco_inicio/berco_finalizacao, ver detalheOperacao em db.js) em
+  // vez do estado ao vivo (berco_ini/berco_fim, ainda em memória).
+  function _afTracoDoBerco(tracos, numeroBerco) {
+    for (const t of (tracos || [])) {
+      const ini = parseInt(t.berco_inicio, 10);
+      const fim = parseInt(t.berco_finalizacao, 10);
+      if (isNaN(ini) || isNaN(fim)) continue;
+      if (numeroBerco >= Math.min(ini, fim) && numeroBerco <= Math.max(ini, fim)) return t;
+    }
+    return null;
+  }
+
+  // Chamada pelo clique numa célula da grade (ver _renderBercos, abaixo)
+  // — usa _ultimoDetalhe (preenchido por render()) em vez de receber os
+  // dados por parâmetro, pra poder ser referenciada direto no onclick
+  // inline da célula (mesmo padrão de _badgeOperacao, mais abaixo).
+  function abrirDetalhesBerco(numeroBerco) {
+    if (!_ultimoDetalhe || !_ultimoDetalhe.operacao) return;
+    const op = _ultimoDetalhe.operacao;
+    const bercosVisuais = _ultimoDetalhe.bercosVisuais || [];
+    const tracos = _ultimoDetalhe.tracos || [];
+    document.getElementById('af-modal-detalhes-berco')?.remove();
+
+    const ehPersonalizada = op.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
+    // Linha crua da tabela — bercos_personalizados/bercos_dimensoes
+    // chegam como STRING JSON (ver detalheOperacao, db.js), igual ao
+    // que _renderBercos (abaixo) já normaliza pra desenhar a grade.
+    let gradePersonalizada = [];
+    if (ehPersonalizada && op.bercos_personalizados) {
+      gradePersonalizada = typeof op.bercos_personalizados === 'string'
+        ? (() => { try { return JSON.parse(op.bercos_personalizados); } catch (_) { return []; } })()
+        : op.bercos_personalizados;
+    }
+    let bercosDimensoes = null;
+    if (op.bercos_dimensoes) {
+      bercosDimensoes = typeof op.bercos_dimensoes === 'string'
+        ? (() => { try { return JSON.parse(op.bercos_dimensoes); } catch (_) { return null; } })()
+        : op.bercos_dimensoes;
+    }
+
+    const capacidade = _afCapacidade(op);
+    const tipos = _afTiposPorBerco(op, capacidade, gradePersonalizada, ehPersonalizada);
+    const tipoAtualCodigo = tipos[numeroBerco - 1] || null;
+    const cor = _corPorTipoBerco(ehPersonalizada, tipoAtualCodigo);
+    const labelTipoAtual = ehPersonalizada
+      ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
+      : (tipoAtualCodigo || '—');
+
+    const berco = bercosVisuais.find(b => b.ordem === numeroBerco) || {};
+    const dirNaoEnchido = berco.estado_direita === 'nao_enchido';
+    const esqNaoEnchido = berco.estado_esquerda === 'nao_enchido';
+    const dirMarcado = berco.estado_direita === 'baixou' || dirNaoEnchido;
+    const esqMarcado = berco.estado_esquerda === 'baixou' || esqNaoEnchido;
+
+    // Dimensão DESTE berço específico — mesmo override individual usado
+    // em bateria-atual.js (bercos_dimensoes), só que aqui SÓ pra
+    // exibição (sem input, ver campos abaixo).
+    const dimensaoBerco = (Array.isArray(bercosDimensoes) && bercosDimensoes[numeroBerco - 1]) || op.dimensao || '—';
+    const dataEnchimento = op.inicio ? LW.formatDateTime(op.inicio) : '—';
+    const traco = _afTracoDoBerco(tracos, numeroBerco);
+    const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num_traco ?? traco.id_traco))}` : 'Não identificado';
+
+    const capacidadePalete = _afCapacidadeConfigurada(op);
+    const posicaoDireito = _afPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
+    const posicaoEsquerdo = _afPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
+
+    const numeroFmt = String(numeroBerco).padStart(2, '0');
+    const overlay = document.createElement('div');
+    overlay.id = 'af-modal-detalhes-berco';
+    overlay.className = 'ba-detalhes-overlay';
+    overlay.innerHTML = `
+      <div class="ba-detalhes-box">
+        <button type="button" class="ba-detalhes-fechar" id="af-det-fechar" aria-label="Fechar" title="Fechar">✕</button>
+        <h3 class="ba-detalhes-titulo">Detalhes do Berço B${numeroFmt}</h3>
+
+        <div class="ba-detalhes-desenho">
+          <div class="ba-detalhes-celula"
+            style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:2px solid ${cor ? cor.borda : 'var(--border)'}">
+            <span class="ba-detalhes-dot${dirNaoEnchido ? ' ba-detalhes-dot-x' : dirMarcado ? ' ba-detalhes-dot-vazou' : ''}" title="${dirNaoEnchido ? 'Direito — Não enchido' : dirMarcado ? 'Direito — Baixou/Vazou' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
+            <span class="ba-detalhes-label">B${numeroFmt}</span>
+            <span class="ba-detalhes-dot${esqNaoEnchido ? ' ba-detalhes-dot-x' : esqMarcado ? ' ba-detalhes-dot-vazou' : ''}" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : esqMarcado ? 'Esquerdo — Baixou/Vazou' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
+          </div>
+        </div>
+
+        <div class="ba-detalhes-campos">
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Tipo de Montagem</label>
+            <div class="ba-det-valor">${LW.escaparHtml(labelTipoAtual)}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Tipo de Bateria</label>
+            <div class="ba-det-valor">${LW.escaparHtml(op.id_bateria || '—')}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Dimensão</label>
+            <div class="ba-det-valor">${LW.escaparHtml(dimensaoBerco)}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Data de Enchimento</label>
+            <div class="ba-det-valor">${LW.escaparHtml(dataEnchimento)}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Traço Usado</label>
+            <div class="ba-det-valor">${labelTraco}</div>
+          </div>
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Posição no Palete</label>
+            <div class="ba-detalhes-paletes">
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Direito</span>
+                ${_afDesenhoPaleteMini(posicaoDireito)}
+              </div>
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Esquerdo</span>
+                ${_afDesenhoPaleteMini(posicaoEsquerdo)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ba-detalhes-acoes">
+          <button type="button" class="btn btn-ghost" id="af-det-fechar-btn">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const fechar = () => overlay.remove();
+    document.getElementById('af-det-fechar').addEventListener('click', fechar);
+    document.getElementById('af-det-fechar-btn').addEventListener('click', fechar);
+    // Clicar fora da caixa também fecha — nada é obrigatório de
+    // preencher aqui (é tudo só leitura), então sair é sempre válido.
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
+  }
+
   // ── Desenho da bateria (berços visuais) ──────────────────────
   // Mesma grade visual usada no popover de hover do Relatório de Berços
   // e no card "Bateria Atual" (.ba-grid/.ba-celula/.ba-dot, ver
-  // css/styles.css) — aqui só leitura, sem clique nenhum.
+  // css/styles.css). Na tela ao vivo (LWFocada existe), cada célula abre
+  // "📋 Detalhes do Berço" em modo SÓ LEITURA (ver abrirDetalhesBerco,
+  // acima); no HTML exportado standalone (ver _gerarHtmlAfStandalone,
+  // mais abaixo — LWFocada não existe lá) continua só visual, sem clique.
   function _renderBercos(bercosVisuais, op) {
     const el = document.getElementById('af-bercos');
     if (!el) return;
@@ -247,6 +464,8 @@
         : op.bercos_personalizados;
     }
 
+    const podeAbrirDetalhes = typeof LWFocada !== 'undefined';
+
     el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
       // "✕" (não enchido) é um estado À PARTE de "baixou" (vazamento) —
       // mesma distinção de bateria-atual.js: o painel nunca existiu pra
@@ -260,8 +479,10 @@
       const numero = String(b.ordem).padStart(2, '0');
       const tipoBerco = ehPersonalizada ? (gradePersonalizada[b.ordem - 1] || null) : (op ? op.tipo_montagem : null);
       const cor = _corPorTipoBerco(ehPersonalizada, tipoBerco);
+      const estiloClique = podeAbrirDetalhes ? 'cursor:pointer;' : '';
+      const clique = podeAbrirDetalhes ? ` onclick="LWFocada.abrirDetalhesBerco(${b.ordem})"` : '';
       return `
-        <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+        <div class="ba-celula" style="${estiloClique}background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-2)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}"${clique} title="${podeAbrirDetalhes ? 'Clique para ver detalhes do berço' : ''}">
           <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${dirNaoEnchido ? 'Direito — Não enchido' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
           <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
@@ -596,6 +817,7 @@
     }
 
     if (content) content.style.display = '';
+    _ultimoDetalhe = detalhe;
     _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
     const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
 
@@ -750,5 +972,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, abrirDetalhesBerco, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
 })();
