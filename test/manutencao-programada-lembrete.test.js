@@ -135,19 +135,17 @@ async function dispararJobDeLembrete(baseUrl) {
 // Cria um agendamento já 'Pendente' e, se o status final pedido for
 // diferente, faz um SEGUNDO POST (update) pra chegar nele — de propósito
 // em DUAS chamadas, nunca criando já com status='Aprovado' na hora: a
-// rota real (lib/rotas/manutencao.js, `!existente` — NÃO
-// lib/rotas/manutencao-rotas.js, que é um arquivo morto/nunca
-// `require`ado por server.js) dispara a notificação JÁ EXISTENTE de
-// "agendamento criado" só na CRIAÇÃO (não em updates de status
-// seguintes). Se criássemos direto com status='Aprovado' e só DEPOIS
-// inscrevêssemos o push, tudo bem — mas os testes daqui inscrevem o push
-// e então esperam ZERO notificação (casos "não deveria lembrar"), e a
-// notificação de "criado" usa a MESMA permissão padrão ('total' pra todo
-// perfil) e o MESMO destinatário, contaminando o teste. Criar em duas
-// etapas ANTES de inscrever o push evita esse falso positivo, isolando
-// de verdade o comportamento do LEMBRETE (o que estes testes querem
-// verificar), não o da notificação de criação (já coberta em
-// test/notificacoes-push.test.js).
+// rota real (lib/rotas/manutencao.js, `!existente`) dispara a
+// notificação JÁ EXISTENTE de "agendamento criado" só na CRIAÇÃO (não em
+// updates de status seguintes). Se criássemos direto com
+// status='Aprovado' e só DEPOIS inscrevêssemos o push, tudo bem — mas os
+// testes daqui inscrevem o push e então esperam ZERO notificação (casos
+// "não deveria lembrar"), e a notificação de "criado" usa a MESMA
+// permissão padrão ('total' pra todo perfil) e o MESMO destinatário,
+// contaminando o teste. Criar em duas etapas ANTES de inscrever o push
+// evita esse falso positivo, isolando de verdade o comportamento do
+// LEMBRETE (o que estes testes querem verificar), não o da notificação
+// de criação (já coberta em test/notificacoes-push.test.js).
 async function criarAgendamento(baseUrl, cookieAdmin, { id, data, statusFinal }) {
   const base = { id, data, setor: 'Producao', maquina: 'Injetora 3', solicitante: 'Maria' };
   await fetch(`${baseUrl}/manutencao/programada`, {
