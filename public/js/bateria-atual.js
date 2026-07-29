@@ -466,6 +466,32 @@
     return null;
   }
 
+  // Formata o texto digitado em "Dimensão" pra já virar "9,5 cm" sem a
+  // pessoa precisar escrever o "cm" — mesma lógica de _formatarDimensaoLive
+  // (operacao.js, tela de Registrar Operação), duplicada aqui (não
+  // importada de lá, mesmo padrão já usado nas outras funções
+  // duplicadas deste arquivo, ver BA_CORES_PALETE/_baPaletePorMetadeELado
+  // acima) pra não acoplar este modal à tela de Registro. Regras, na
+  // ordem aplicada:
+  //  1) descarta qualquer caractere que não seja número, vírgula ou ponto
+  //     — o campo é só pra medida, não aceita texto livre;
+  //  2) ponto vira vírgula (9.5 -> 9,5), separador decimal padrão do
+  //     sistema;
+  //  3) o que sobrar (só o número) recebe " cm" no final automaticamente.
+  // `final`: true na formatação de fechamento (blur/Enter) — aí uma
+  // vírgula sem nada depois (ex: "9,") é descartada e vira só "9 cm".
+  function _baFormatarDimensaoLive(bruto, final) {
+    let v = (bruto || '');
+    v = v.replace(/\s*cm\s*$/i, '');
+    v = v.replace(/[^\d,.]/g, '');
+    v = v.replace(/\./g, ',');
+    const partes = v.split(',');
+    if (partes.length > 2) v = partes[0] + ',' + partes.slice(1).join('');
+    if (final && /,$/.test(v)) v = v.replace(/,+$/, '');
+    if (v === '') return '';
+    return v + ' cm';
+  }
+
   function _abrirDetalhesBerco(berco) {
     const dados = _dadosAtuais;
     if (!dados || !berco) return;
@@ -579,6 +605,23 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
 
     if (podeEditar) {
+      // Mesmo formato em tempo real do campo "Dimensão" da tela de
+      // Registrar Operação (ver op-dimensao/_formatarDimensaoLive,
+      // operacao.js): só número e vírgula, " cm" adicionado sozinho no
+      // final, sem precisar digitar. Mantém a posição do cursor pra não
+      // "pular" pro fim do campo a cada tecla.
+      $('ba-det-dimensao').addEventListener('input', e => {
+        const input = e.target;
+        const cursorPos = input.selectionStart;
+        const antes = input.value;
+        const formatado = _baFormatarDimensaoLive(antes);
+        if (formatado !== antes) {
+          input.value = formatado;
+          const novaPos = Math.min(cursorPos, formatado.length);
+          input.setSelectionRange(novaPos, novaPos);
+        }
+      });
+
       $('ba-det-salvar').addEventListener('click', () => {
         // Tipo de Montagem não é mais editável por aqui (ver campoTipo,
         // acima) — só a Dimensão. novoTipo fica null pra
