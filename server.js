@@ -80,12 +80,12 @@ const auth = require('./lib/auth.js')(SECURITY_PATH);
 // Sessão de Administrador (token em cookie HttpOnly) — extraído pra
 // lib/sessao.js. Cobre as 2 rotas que não tinham proteção própria nenhuma
 // antes desta mudança: GET /db/security.json e POST /salvar-security.
-const sessao = require('./lib/sessao.js')();
+const sessao = require('./lib/sessao.js')(db);
 
 // Sessão de USUÁRIO CADASTRADO (Operador/Analista/Qualidade/Manutenção/
 // Administrativo — ver lib/perfis.js) — diferente de `sessao` acima, que é
 // só pro Administrador Master (senha única mestra). Ver lib/sessao-usuario.js.
-const sessaoUsuario = require('./lib/sessao-usuario.js')();
+const sessaoUsuario = require('./lib/sessao-usuario.js')(db);
 
 // Mapa central de permissões por perfil (o que cada um vê e o que pode
 // EDITAR) — ver lib/perfis.js. Usado tanto por GET /perfis (front monta o

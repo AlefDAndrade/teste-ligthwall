@@ -634,7 +634,39 @@ db.exec(`
     criado_em     TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_push_subscriptions_usuario ON push_subscriptions(usuario_nome);
+
+  -- ============================================================
+  --  SESSÕES — Admin Master e Usuário Cadastrado
+  --
+  --  Antes viviam só num Map em memória (lib/sessao.js e
+  --  lib/sessao-usuario.js) — todo mundo era deslogado a cada restart/
+  --  deploy do servidor (no caso do usuário cadastrado, isso podia
+  --  acontecer NO MEIO DE UM TURNO de 12h). Persistir aqui (mesmo banco
+  --  que já existe pros dados de produção, sem dependência nova) resolve
+  --  isso: um restart do processo não derruba mais ninguém, só expira no
+  --  horário normal de cada uma. "expira_em" é epoch ms (Date.now()),
+  --  não TEXT, pra comparar direto com Date.now() nas queries sem
+  --  conversão.
+  CREATE TABLE IF NOT EXISTS sessoes_admin (
+    token      TEXT PRIMARY KEY,
+    expira_em  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessoes_admin_expira ON sessoes_admin(expira_em);
+
+  -- "dados_json" guarda {usuarioId, nomeUsuario, perfil,
+  -- podeIniciarOperacao} serializado — mesmo raciocínio de outras colunas
+  -- *_json deste arquivo (ex: bercos_personalizados): um dicionário
+  -- pequeno e fechado, nunca consultado por campo individual (só lido
+  -- inteiro, ver lib/sessao-usuario.js), então não vale a pena virar
+  -- colunas próprias.
+  CREATE TABLE IF NOT EXISTS sessoes_usuario (
+    token      TEXT PRIMARY KEY,
+    dados_json TEXT NOT NULL,
+    expira_em  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessoes_usuario_expira ON sessoes_usuario(expira_em);
 `);
+
 
 // ------------------------------------------------------------
 //  Migração: bercos_visuais -> 1 LINHA POR OPERAÇÃO (berços em JSON)
@@ -3231,3 +3263,73 @@ module.exports.removerPushSubscriptionMorta = removerPushSubscriptionMorta;
 module.exports.obterPushSubscriptionPorEndpoint = obterPushSubscriptionPorEndpoint;
 module.exports.listarPushSubscriptionsDoUsuario = listarPushSubscriptionsDoUsuario;
 module.exports.listarPushSubscriptionsDosUsuarios = listarPushSubscriptionsDosUsuarios;
+
+// ============================================================
+//  SESSÕES — ver CREATE TABLE sessoes_admin/sessoes_usuario, acima.
+//
+//  Consultadas por lib/sessao.js (Admin Master) e lib/sessao-usuario.js
+//  (Usuário Cadastrado) no lugar do Map em memória de antes — mesmo
+//  contrato (token -> válido/dados), só que sobrevive a um restart do
+//  processo. Cada módulo continua sozinho responsável por gerar o
+//  token, montar o cookie e decidir a duração; aqui só persiste/lê/apaga.
+// ============================================================
+
+function criarSessaoAdmin(token, expiraEm) {
+  db.prepare('INSERT INTO sessoes_admin (token, expira_em) VALUES (?, ?)').run(token, expiraEm);
+}
+
+/** Devolve `true`/`false` — já apaga a linha sozinho se tiver expirado (evita acumular lixo até a limpeza periódica passar). */
+function sessaoAdminValida(token) {
+  if (!token) return false;
+  const linha = db.prepare('SELECT expira_em FROM sessoes_admin WHERE token = ?').get(token);
+  if (!linha) return false;
+  if (Date.now() > linha.expira_em) {
+    db.prepare('DELETE FROM sessoes_admin WHERE token = ?').run(token);
+    return false;
+  }
+  return true;
+}
+
+function destruirSessaoAdmin(token) {
+  if (token) db.prepare('DELETE FROM sessoes_admin WHERE token = ?').run(token);
+}
+
+/** Apaga todas as sessões de admin já expiradas — chamado periodicamente por lib/sessao.js. */
+function limparSessoesAdminExpiradas() {
+  db.prepare('DELETE FROM sessoes_admin WHERE expira_em < ?').run(Date.now());
+}
+
+function criarSessaoUsuario(token, dados, expiraEm) {
+  db.prepare('INSERT INTO sessoes_usuario (token, dados_json, expira_em) VALUES (?, ?, ?)')
+    .run(token, JSON.stringify(dados), expiraEm);
+}
+
+/** Devolve os dados salvos ({usuarioId, nomeUsuario, perfil, podeIniciarOperacao}) ou `null` se não houver sessão válida — já apaga sozinho se expirada, mesmo raciocínio de sessaoAdminValida. */
+function dadosSessaoUsuario(token) {
+  if (!token) return null;
+  const linha = db.prepare('SELECT dados_json, expira_em FROM sessoes_usuario WHERE token = ?').get(token);
+  if (!linha) return null;
+  if (Date.now() > linha.expira_em) {
+    db.prepare('DELETE FROM sessoes_usuario WHERE token = ?').run(token);
+    return null;
+  }
+  return JSON.parse(linha.dados_json);
+}
+
+function destruirSessaoUsuario(token) {
+  if (token) db.prepare('DELETE FROM sessoes_usuario WHERE token = ?').run(token);
+}
+
+/** Apaga todas as sessões de usuário já expiradas — chamado periodicamente por lib/sessao-usuario.js. */
+function limparSessoesUsuarioExpiradas() {
+  db.prepare('DELETE FROM sessoes_usuario WHERE expira_em < ?').run(Date.now());
+}
+
+module.exports.criarSessaoAdmin = criarSessaoAdmin;
+module.exports.sessaoAdminValida = sessaoAdminValida;
+module.exports.destruirSessaoAdmin = destruirSessaoAdmin;
+module.exports.limparSessoesAdminExpiradas = limparSessoesAdminExpiradas;
+module.exports.criarSessaoUsuario = criarSessaoUsuario;
+module.exports.dadosSessaoUsuario = dadosSessaoUsuario;
+module.exports.destruirSessaoUsuario = destruirSessaoUsuario;
+module.exports.limparSessoesUsuarioExpiradas = limparSessoesUsuarioExpiradas;
