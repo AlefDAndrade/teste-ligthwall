@@ -587,7 +587,13 @@ db.exec(`
     -- JSON opcional — ver comentário acima da tabela.
     execucao              TEXT,
     autor_nome            TEXT,
-    data_criacao          TEXT NOT NULL DEFAULT (datetime('now'))
+    data_criacao          TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Marca se o LEMBRETE do dia (às 09h da data agendada, ver
+    -- executarLembreteManutencaoProgramadaSeNecessario,
+    -- lib/notificacoes-push.js) já foi disparado pra este agendamento —
+    -- evita reenviar a cada checagem do setInterval (roda a cada minuto).
+    -- Um novo registro sempre nasce com o default 0.
+    lembrete_dia_enviado  INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS idx_manutencao_programada_data ON manutencao_programada(data);
   CREATE INDEX IF NOT EXISTS idx_manutencao_programada_status ON manutencao_programada(status);
@@ -801,6 +807,12 @@ if (!_colunasManutencaoProgramada.includes('execucao_data_inicio')) {
   db.exec('ALTER TABLE manutencao_programada ADD COLUMN execucao_data_inicio TEXT');
   db.exec('ALTER TABLE manutencao_programada ADD COLUMN execucao_hora_inicio TEXT');
   console.log('[migração] Colunas "execucao_data_inicio"/"execucao_hora_inicio" adicionadas à tabela manutencao_programada.');
+}
+// lembrete_dia_enviado — ver comentário na CREATE TABLE manutencao_programada
+// (acima). Adicionada depois da primeira versão da tabela, daí a migração.
+if (!_colunasManutencaoProgramada.includes('lembrete_dia_enviado')) {
+  db.exec('ALTER TABLE manutencao_programada ADD COLUMN lembrete_dia_enviado INTEGER NOT NULL DEFAULT 0');
+  console.log('[migração] Coluna "lembrete_dia_enviado" adicionada à tabela manutencao_programada.');
 }
 // Fluxo de aceite de chamado / aceite de pedido de peça (ver comentário
 // na CREATE TABLE manutencao_corretiva, acima) — adicionadas depois da
@@ -2996,6 +3008,7 @@ function _rowParaManutencaoProgramada(row) {
     ...(row.execucao ? { execucao: JSON.parse(row.execucao) } : {}),
     autorNome: row.autor_nome,
     dataCriacao: row.data_criacao,
+    lembreteDiaEnviado: !!row.lembrete_dia_enviado,
   };
 }
 
@@ -3066,6 +3079,29 @@ function excluirManutencaoProgramada(id) {
   db.prepare('DELETE FROM manutencao_programada WHERE id = ?').run(id);
 }
 
+// Agendamentos elegíveis pro LEMBRETE do dia (ver
+// executarLembreteManutencaoProgramadaSeNecessario,
+// lib/notificacoes-push.js): data = hoje (o dia do próprio agendamento),
+// status = 'Aprovado' (Pendente/Reprovado ainda não têm data confirmada;
+// Em Execucao/Concluido/Nao Executado já foram tratados, não faz sentido
+// lembrar) e o lembrete ainda não foi enviado (evita reenviar a cada
+// checagem do setInterval, que roda a cada minuto).
+function listarManutencaoProgramadaParaLembreteDoDia(hoje) {
+  const rows = db.prepare(
+    `SELECT * FROM manutencao_programada
+     WHERE data = ? AND status = 'Aprovado' AND lembrete_dia_enviado = 0`
+  ).all(hoje);
+  return rows.map(_rowParaManutencaoProgramada);
+}
+
+// Marca que o lembrete do dia já foi disparado pra este agendamento —
+// chamado logo depois de notificarLembreteManutencaoProgramada ter sido
+// disparado com sucesso (ver notificacoes-push.js), pra nunca mais
+// reaparecer em listarManutencaoProgramadaParaLembreteDoDia.
+function marcarLembreteDiaEnviado(id) {
+  db.prepare('UPDATE manutencao_programada SET lembrete_dia_enviado = 1 WHERE id = ?').run(id);
+}
+
 module.exports.listarManutencaoCorretiva = listarManutencaoCorretiva;
 module.exports.obterManutencaoCorretiva = obterManutencaoCorretiva;
 module.exports.salvarManutencaoCorretiva = salvarManutencaoCorretiva;
@@ -3080,6 +3116,8 @@ module.exports.listarManutencaoProgramada = listarManutencaoProgramada;
 module.exports.obterManutencaoProgramada = obterManutencaoProgramada;
 module.exports.salvarManutencaoProgramada = salvarManutencaoProgramada;
 module.exports.excluirManutencaoProgramada = excluirManutencaoProgramada;
+module.exports.listarManutencaoProgramadaParaLembreteDoDia = listarManutencaoProgramadaParaLembreteDoDia;
+module.exports.marcarLembreteDiaEnviado = marcarLembreteDiaEnviado;
 /**
  * Substitui TODOS os chamados de manutenção corretiva pelos da lista —
  * usada só por POST /restaurar-backup-dados e /restaurar-backup-geral

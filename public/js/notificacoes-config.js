@@ -1,13 +1,14 @@
 // ─── notificacoes-config.js — Configurações → Notificações ─────────────────
 // "Gerenciar quem recebe cada notificação (por perfil)" — pedido do
 // usuário. NÃO cria rota nova nenhuma no servidor: reaproveita os mesmos
-// 3 itens de notificação já existentes no catálogo de permissões
+// itens de notificação já existentes no catálogo de permissões
 // (`manutencao-notificacao-abertura`/`manutencao-notificacao-pedido-peca`/
-// `manutencao-notificacao-peca-recebida`, ver lib/itens-permissao.js) e as
-// mesmas rotas de leitura/escrita que já existem pra permissões de perfil
-// (GET/POST /permissoes-perfil-fixo pros 6 fixos, POST
+// `manutencao-notificacao-peca-recebida`/`manutencao-notificacao-programada`/
+// `manutencao-notificacao-programada-lembrete`, ver lib/itens-permissao.js)
+// e as mesmas rotas de leitura/escrita que já existem pra permissões de
+// perfil (GET/POST /permissoes-perfil-fixo pros 6 fixos, POST
 // /editar-perfil-customizado pros customizados) — a única coisa nova aqui
-// é a TELA: uma lista focada só nesses 3 toggles, em vez do catálogo
+// é a TELA: uma lista focada só nesses toggles, em vez do catálogo
 // inteiro (páginas, dashboards, Configurações etc.) que já existe em "+
 // Criar novo tipo de perfil" (ver public/js/perfis-customizados.js).
 //
@@ -20,6 +21,7 @@ const _NC_ITEM_ABERTURA = 'manutencao-notificacao-abertura';
 const _NC_ITEM_PEDIDO_PECA = 'manutencao-notificacao-pedido-peca';
 const _NC_ITEM_PECA_RECEBIDA = 'manutencao-notificacao-peca-recebida';
 const _NC_ITEM_PROGRAMADA = 'manutencao-notificacao-programada';
+const _NC_ITEM_PROGRAMADA_LEMBRETE = 'manutencao-notificacao-programada-lembrete';
 
 let _ncCarregando = false;
 
@@ -103,6 +105,7 @@ function _ncRenderLinha({ perfilId, rotulo, ehCustomizado, permissoes }) {
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PEDIDO_PECA, 'Pedido de Peça', '🔧', permissoes[_NC_ITEM_PEDIDO_PECA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PECA_RECEBIDA, 'Peça Recebida', '📦', permissoes[_NC_ITEM_PECA_RECEBIDA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PROGRAMADA, 'Manutenção Programada', '📅', permissoes[_NC_ITEM_PROGRAMADA] === 'total')}
+      ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PROGRAMADA_LEMBRETE, 'Lembrete no Dia (09h)', '⏰', permissoes[_NC_ITEM_PROGRAMADA_LEMBRETE] === 'total')}
     </div>
   `;
 }

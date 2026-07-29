@@ -118,6 +118,12 @@ const perfisFixosOverrides = require('./lib/perfis-fixos-overrides.js')({ fs, pa
 // marcada — mesma cascata fixo/override/customizado de podeEditarArea.
 const notificacoesPush = require('./lib/notificacoes-push.js')({
   fs, path, PRIVATE_DIR, db, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao,
+  // Injetados também pro job do lembrete diário de manutenção programada
+  // (ver executarLembreteManutencaoProgramadaSeNecessario,
+  // lib/notificacoes-push.js) — mesmas funções de relógio já usadas pelo
+  // backup automático, function declarations então já estão hoisted
+  // neste ponto do arquivo mesmo definidas mais abaixo.
+  todayBrasiliaServer, horaMinutoBrasiliaServer,
 });
 
 // ─── PERMISSÕES DE EDIÇÃO POR ÁREA (modelo novo, ver lib/perfis.js) ────────
@@ -374,6 +380,21 @@ const MIME = {
   '.ico':  'image/x-icon',
 };
 
+// "Agora" usado pelas duas funções de relógio abaixo — SEMPRE `new Date()`
+// de verdade em produção. Só existe esta indireção pra permitir que a
+// suíte de testes (ver test/manutencao-programada-lembrete.test.js)
+// congele o relógio do servidor e teste deterministicamente o job do
+// lembrete das 09h (ver executarLembreteManutencaoProgramadaSeNecessario,
+// lib/notificacoes-push.js), sem precisar esperar a hora real do dia
+// bater 09h. LW_TEST_RELOGIO_ISO só é lido se alguém setar a variável de
+// ambiente explicitamente (nunca acontece numa instalação normal/`npm
+// start`) — mesmo espírito do "Modo de Teste" já existente pra Registrar
+// Operação (ver DB_TESTE_DIR, abaixo): nunca interfere com uso real.
+function _agoraServer() {
+  if (process.env.LW_TEST_RELOGIO_ISO) return new Date(process.env.LW_TEST_RELOGIO_ISO);
+  return new Date();
+}
+
 // Retorna a data de hoje em Brasília no formato YYYY-MM-DD (consistente com
 // todayBrasilia() do frontend), independente do fuso horário do servidor.
 function todayBrasiliaServer() {
@@ -381,7 +402,7 @@ function todayBrasiliaServer() {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric', month: '2-digit', day: '2-digit',
   });
-  return fmt.format(new Date()); // en-CA já formata como YYYY-MM-DD
+  return fmt.format(_agoraServer()); // en-CA já formata como YYYY-MM-DD
 }
 
 // Retorna { hora, minuto } de agora em Brasília — usado pelo backup
@@ -391,7 +412,7 @@ function horaMinutoBrasiliaServer() {
     timeZone: 'America/Sao_Paulo',
     hour: '2-digit', minute: '2-digit', hour12: false,
   });
-  const partes = fmt.formatToParts(new Date());
+  const partes = fmt.formatToParts(_agoraServer());
   const hora = parseInt(partes.find(p => p.type === 'hour').value, 10);
   const minuto = parseInt(partes.find(p => p.type === 'minute').value, 10);
   return { hora, minuto };
@@ -773,6 +794,23 @@ const server = http.createServer((req, res) => {
     if (modulo(req, res, urlPath, queryParams)) return;
   }
 
+  // Rota INTERNA só pra testes automatizados (ver
+  // test/manutencao-programada-lembrete.test.js) — dispara na hora o job
+  // do lembrete diário (normalmente só chamado pelo setInterval de 60s
+  // ou no boot, ver server.listen abaixo), pra não precisar esperar até
+  // 1 minuto de verdade em cada teste. SÓ existe (registrada) quando
+  // LW_TEST_RELOGIO_ISO está setada (mesma variável que já congela o
+  // relógio do servidor, ver _agoraServer() acima) — nunca ativa numa
+  // instalação normal (`npm start`), então nunca é uma rota alcançável
+  // em produção.
+  if (process.env.LW_TEST_RELOGIO_ISO && req.method === 'POST' && urlPath === '/__test__/executar-lembrete-programada') {
+    notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario().then(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+
   // Servir arquivos estáticos normalmente
   let filePath = path.join(DIR, urlPath === '/' ? 'login.html' : urlPath);
   const ext = path.extname(filePath);
@@ -921,4 +959,15 @@ server.listen(PORT, HOST, () => {
   // chamada por uma rota HTTP, só por este setInterval.
   setInterval(rotasBackup.executarBackupAutomaticoSeNecessario, 60 * 1000);
   rotasBackup.executarBackupAutomaticoSeNecessario();
+
+  // Checa a cada minuto se já é 09h da manhã e existe alguma manutenção
+  // PROGRAMADA (status='Aprovado') marcada pra HOJE que ainda não teve o
+  // lembrete do dia disparado — pedido do usuário: "agendamento pro dia
+  // 12, quero um lembrete no dia 12 às 09h". Roda também uma vez já no
+  // boot, mesmo raciocínio do backup automático acima (servidor subindo
+  // depois das 09h não pode perder o lembrete do dia). A função em si
+  // vive em lib/notificacoes-push.js (executarLembreteManutencaoProgramadaSeNecessario)
+  // — nunca é chamada por uma rota HTTP, só por este setInterval.
+  setInterval(notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario, 60 * 1000);
+  notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario();
 });

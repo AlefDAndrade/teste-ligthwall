@@ -36,6 +36,10 @@ const ARQUIVOS_NECESSARIOS = ['server.js', 'db.js', 'lib', 'public', 'package.js
  *   disto — ver DEVICE_ID_TESTE_PADRAO, exportado abaixo, pra usar um
  *   deviceId consistente entre `dispositivosAutorizados` aqui e a query
  *   string `?deviceId=...` de cada fetch().
+ * @param {object} [opcoes.env] - variáveis de ambiente extras pro processo
+ *   do servidor de teste (ex: LW_TEST_RELOGIO_ISO, ver server.js/
+ *   _agoraServer() — congela o relógio do servidor pra testar jobs
+ *   baseados em hora/data deterministicamente).
  */
 async function iniciarServidorDeTeste(opcoes = {}) {
   fs.mkdirSync(PASTA_TMP_BASE, { recursive: true });
@@ -65,7 +69,7 @@ async function iniciarServidorDeTeste(opcoes = {}) {
   const porta = 4000 + Math.floor(Math.random() * 5000);
   const processo = spawn('node', ['server.js'], {
     cwd: pastaTemp,
-    env: { ...process.env, PORT: String(porta) },
+    env: { ...process.env, PORT: String(porta), ...(opcoes.env || {}) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
