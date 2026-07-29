@@ -3325,6 +3325,19 @@ td.mono {
   text-shadow: 0 0 6px var(--sq-cor-azul, var(--blue));
 }
 
+/* Indicador marcado como "baixou/vazou" dentro do modal de Detalhes do
+   Berço — mesma cor vermelha usada em .ba-dot-marcado (grade principal
+   de bateria-atual.js) e em relatorio-bercos.js/analise-focada.js, pra
+   manter o mesmo código de cores em toda a aplicação (vermelho =
+   vazamento observado, azul = painel nunca existiu pra avaliar). Antes
+   deste modal só marcava visualmente o "não enchido" (✕), deixando
+   berços com vazamento aparentando estar tudo normal. */
+.ba-detalhes-dot-vazou {
+  opacity: 1;
+  color: var(--red);
+  text-shadow: 0 0 6px var(--red);
+}
+
 .ba-detalhes-label {
   font-size: 1.05rem;
 }

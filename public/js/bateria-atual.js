@@ -518,9 +518,9 @@
         <div class="ba-detalhes-desenho">
           <div class="ba-detalhes-celula"
             style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:2px solid ${cor ? cor.borda : 'var(--border)'}">
-            <span class="ba-detalhes-dot${marcadoBerco.direita === 'nao_enchido' ? ' ba-detalhes-dot-x' : ''}">${marcadoBerco.direita === 'nao_enchido' ? '✕' : '•'}</span>
+            <span class="ba-detalhes-dot${marcadoBerco.direita === 'nao_enchido' ? ' ba-detalhes-dot-x' : marcadoBerco.direita === 'baixou' ? ' ba-detalhes-dot-vazou' : ''}" title="${marcadoBerco.direita === 'nao_enchido' ? 'Direito — Não enchido' : marcadoBerco.direita === 'baixou' ? 'Direito — Baixou/Vazou' : 'Direito'}">${marcadoBerco.direita === 'nao_enchido' ? '✕' : '•'}</span>
             <span class="ba-detalhes-label">${LW.escaparHtml(berco)}</span>
-            <span class="ba-detalhes-dot${marcadoBerco.esquerda === 'nao_enchido' ? ' ba-detalhes-dot-x' : ''}">${marcadoBerco.esquerda === 'nao_enchido' ? '✕' : '•'}</span>
+            <span class="ba-detalhes-dot${marcadoBerco.esquerda === 'nao_enchido' ? ' ba-detalhes-dot-x' : marcadoBerco.esquerda === 'baixou' ? ' ba-detalhes-dot-vazou' : ''}" title="${marcadoBerco.esquerda === 'nao_enchido' ? 'Esquerdo — Não enchido' : marcadoBerco.esquerda === 'baixou' ? 'Esquerdo — Baixou/Vazou' : 'Esquerdo'}">${marcadoBerco.esquerda === 'nao_enchido' ? '✕' : '•'}</span>
           </div>
         </div>
 
