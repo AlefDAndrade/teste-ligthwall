@@ -437,13 +437,14 @@
   //  📋 Detalhes do Berço — modal com o "raio-x" de UM berço específico
   //  (desenho + dados), aberto pelo modo "📋 Detalhes do Berço" (ver
   //  botaoDetalhes/_modoDetalhesBerco, acima). Mostra Tipo de Montagem,
-  //  Tipo de Bateria, Dimensão, Data de Enchimento e Traço Usado — os 2
-  //  primeiros dados (montagem/dimensão) podem ser editados aqui direto
-  //  (ver aplicarDetalhesBerco, operacao.js); Tipo de Bateria, Data de
-  //  Enchimento e Traço Usado são só informativos (não fazem sentido
-  //  editar por aqui: bateria é escolhida lá em cima, data é automática,
-  //  e o traço é resolvido a partir do que já foi lançado nos traços da
-  //  operação, nunca digitado à mão).
+  //  Tipo de Bateria, Dimensão, Data de Enchimento e Traço Usado — só a
+  //  Dimensão pode ser editada aqui direto (ver aplicarDetalhesBerco,
+  //  operacao.js); Tipo de Montagem, Tipo de Bateria, Data de Enchimento
+  //  e Traço Usado são só informativos (Tipo de Montagem é definido lá
+  //  em cima, na configuração da bateria/grade de montagem — não faz
+  //  sentido reeditar berço a berço por aqui; bateria é escolhida lá em
+  //  cima, data é automática, e o traço é resolvido a partir do que já
+  //  foi lançado nos traços da operação, nunca digitado à mão).
   // ============================================================
 
   // Acha, dentre os traços já lançados nesta operação (dados.tracos), qual
@@ -489,13 +490,11 @@
 
     const dataEnchimento = dados.inicio ? LW.formatDateTime(dados.inicio) : LW.formatDateTime(new Date());
 
-    const opcoesSimples = (LW.MONTAGEM_OPCOES || []).filter(o => o.modo === 'simples');
-    const campoTipo = podeEditar
-      ? `<select id="ba-det-tipo" class="form-input">
-          <option value="">— não alterar (${LW.escaparHtml(labelTipoAtual)}) —</option>
-          ${opcoesSimples.map(o => `<option value="${o.tipo}">${LW.escaparHtml(o.label)}</option>`).join('')}
-        </select>`
-      : `<div class="ba-det-valor">${LW.escaparHtml(labelTipoAtual)}</div>`;
+    // Tipo de Montagem: sempre somente-leitura por aqui (definido lá em
+    // cima, na configuração da bateria/grade de montagem) — nunca editável
+    // berço a berço neste modal, mesmo quando podeEditar é true (que só
+    // controla a Dimensão, abaixo).
+    const campoTipo = `<div class="ba-det-valor">${LW.escaparHtml(labelTipoAtual)}</div>`;
 
     const campoDimensao = podeEditar
       ? `<input type="text" id="ba-det-dimensao" class="form-input" value="${LW.escaparHtml(dados.dimensao || '')}" placeholder="Ex: 9,5 cm">`
@@ -581,10 +580,12 @@
 
     if (podeEditar) {
       $('ba-det-salvar').addEventListener('click', () => {
-        const novoTipo = $('ba-det-tipo').value || null;
+        // Tipo de Montagem não é mais editável por aqui (ver campoTipo,
+        // acima) — só a Dimensão. novoTipo fica null pra
+        // aplicarDetalhesBerco (operacao.js) não alterar o tipo.
         const novaDimensao = $('ba-det-dimensao').value;
         if (window.LWOp && typeof window.LWOp.aplicarDetalhesBerco === 'function') {
-          window.LWOp.aplicarDetalhesBerco(numeroBerco, novoTipo, novaDimensao);
+          window.LWOp.aplicarDetalhesBerco(numeroBerco, null, novaDimensao);
         }
         fechar();
       });
