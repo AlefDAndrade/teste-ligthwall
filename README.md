@@ -208,7 +208,7 @@ Só um lugar no projeto faz `require('./db.js')` hoje (`server.js`) — o que re
 
 Ordem pensada do **menor pro maior risco** (mesmo critério usado no fatiamento de `server.js`): começar pelos domínios pequenos e isolados (manutenção, push, sessão) pra validar o padrão de extração com `db.js`, e deixar Traços e Operações/Qualidade — os maiores e mais centrais — por último, quando o processo já estiver rodado (e testado) várias vezes.
 
-**Status:** plano ainda não iniciado — nenhuma fase começou.
+**Status:** Fases 2 a 7 concluídas e mescladas — Manutenção Programada (`lib/db/manutencao-programada.js`), Manutenção Corretiva (`lib/db/manutencao-corretiva.js`), Notificações Push (`lib/db/notificacoes-push.js`), Sessões (`lib/db/sessoes.js`), Sobra + Contador de Traços (`lib/db/sobra-contador-tracos.js`) e Paradas (`lib/db/paradas.js`). Faltam as Fases 8 (Traços) e 9 (Operações/Berços/Qualidade) — deixadas por último de propósito, por serem as maiores e de maior risco — e a Fase 10 (migrações legadas já concluídas, candidata a mover/remover).
 
 ## Perfis de usuário
 
