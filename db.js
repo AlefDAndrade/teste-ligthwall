@@ -1890,93 +1890,14 @@ module.exports.migrarHistoricoSeNecessario = migrarHistoricoSeNecessario;
 // ============================================================
 //  FASE 3 — paradas.json -> tabela paradas
 // ============================================================
-
-/** Converte uma parada no formato paradas.json pros parâmetros nomeados do INSERT/UPDATE. */
-function paradaParaRow(p) {
-  return {
-    id: p.id,
-    inicio: p.inicio,
-    fim: p.fim,
-    duracao_min: p.duracao_min ?? null,
-    motivo: p.motivo ?? null,
-    equipamento: p.equipamento ?? null,
-    classificacao: p.classificacao ?? null,
-    obs: p.obs ?? null,
-    registrado_em: p.registrado_em ?? null,
-    // Ver comentário em paradas.operador_nome (CREATE TABLE, acima).
-    operador_nome: p.operador_nome || null,
-  };
-}
-
-/** Caminho inverso: 1 linha da tabela "paradas" -> objeto no formato paradas.json. */
-function rowParaParada(row) {
-  return {
-    id: row.id,
-    inicio: row.inicio,
-    fim: row.fim,
-    duracao_min: row.duracao_min,
-    motivo: row.motivo,
-    equipamento: row.equipamento,
-    classificacao: row.classificacao,
-    obs: row.obs,
-    registrado_em: row.registrado_em,
-    operador_nome: row.operador_nome || null,
-  };
-}
-
-const SQL_INSERIR_PARADA = `
-  INSERT INTO paradas (id, inicio, fim, duracao_min, motivo, equipamento, classificacao, obs, registrado_em, operador_nome)
-  VALUES (@id, @inicio, @fim, @duracao_min, @motivo, @equipamento, @classificacao, @obs, @registrado_em, @operador_nome)
-`;
-
-module.exports.paradaParaRow = paradaParaRow;
-module.exports.rowParaParada = rowParaParada;
-module.exports.SQL_INSERIR_PARADA = SQL_INSERIR_PARADA;
-
-/**
- * Migração automática (Fase 3) — mesmo critério/padrão de
- * migrarHistoricoSeNecessario(): só faz algo se a tabela "paradas"
- * estiver vazia E paradas.json ainda existir com esse nome; renomeia
- * pra ".migrado-<timestamp>" depois (nunca apaga).
- */
-function migrarParadasSeNecessario(dbDir) {
-  const path = require('path');
-  const fs = require('fs');
-
-  const jaTemDados = db.prepare('SELECT COUNT(*) AS n FROM paradas').get().n > 0;
-  if (jaTemDados) return;
-
-  const paradasPath = path.join(dbDir, 'paradas.json');
-  if (!fs.existsSync(paradasPath)) return;
-
-  let paradas = [];
-  try {
-    const texto = fs.readFileSync(paradasPath, 'utf8').trim();
-    paradas = texto ? JSON.parse(texto) : [];
-  } catch (e) {
-    console.error('[migração] Não consegui ler paradas.json — abortando migração:', e.message);
-    return;
-  }
-  if (!Array.isArray(paradas) || !paradas.length) {
-    try { fs.renameSync(paradasPath, paradasPath + '.migrado-' + Date.now()); } catch (_) {}
-    return;
-  }
-
-  const inserirParada = db.prepare(SQL_INSERIR_PARADA);
-  const migrarTudo = db.transaction((registros) => {
-    for (const p of registros) inserirParada.run(paradaParaRow(p));
-  });
-  migrarTudo(paradas);
-  console.log(`[migração] ${paradas.length} parada(s) migrada(s) de paradas.json pra SQLite.`);
-
-  try {
-    fs.renameSync(paradasPath, paradasPath + '.migrado-' + Date.now());
-  } catch (e) {
-    console.error('[migração] Migrei os dados, mas não consegui renomear paradas.json:', e.message);
-  }
-}
-
-module.exports.migrarParadasSeNecessario = migrarParadasSeNecessario;
+// Fase 7 do fatiamento de db.js (ver README) — os conversores de formato
+// e a migração deste domínio moram agora em lib/db/paradas.js, sem
+// mudar lógica nenhuma. Continuam pendurados aqui no objeto `db`
+// (module.exports = db, acima) — lib/rotas/paradas.js e
+// lib/rotas/backup.js continuam usando db.paradaParaRow/db.rowParaParada/
+// db.SQL_INSERIR_PARADA sem precisar mudar nada, e server.js continua
+// chamando db.migrarParadasSeNecessario(DB_DIR) no boot, como sempre.
+Object.assign(module.exports, require('./lib/db/paradas.js')(db));
 
 // ============================================================
 //  FASE 4 — sobra.json -> tabela sobra; contador_tracos.json -> tabela
