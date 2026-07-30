@@ -9,6 +9,7 @@ const WebSocket = require('ws');
 // nenhuma rota usa isto ainda — segue tudo lendo/escrevendo os JSONs de
 // public/db/ exatamente como antes, até cada fase ser migrada de verdade.
 const db = require('./db.js');
+const logger = require('./lib/logger');
 
 // Converte pra número, ou null se vazio/nulo/indefinido — usado ao montar
 // parâmetros de colunas SQL a partir de valores de formulário (que chegam
@@ -582,9 +583,9 @@ function migrarFilaNaoAvaliadasSeNecessario() {
   if (fs.existsSync(OPERACOES_NAO_AVALIADAS_PATH)) return; // já existe — não é a 1ª vez, nada a fazer
   try {
     const qtd = recalcularFilaNaoAvaliadasApartirDoSql();
-    console.log(`[migração] operacoes_nao_avaliadas.json criado com ${qtd} operação(ões) pendente(s) (calculado a partir do estado atual do banco).`);
+    logger.info('migracao', `operacoes_nao_avaliadas.json criado com ${qtd} operação(ões) pendente(s) (calculado a partir do estado atual do banco)`);
   } catch (e) {
-    console.error('[migração] Falha ao criar operacoes_nao_avaliadas.json — seguindo com fila vazia:', e.message);
+    logger.error('migracao', 'Falha ao criar operacoes_nao_avaliadas.json — seguindo com fila vazia', { erro: e.message });
     try { salvarOperacoesNaoAvaliadasNoDisco([]); } catch (_) { /* pior caso: arquivo continua ausente, lerOperacoesNaoAvaliadas() já trata isso como fila vazia */ }
   }
 }
@@ -948,7 +949,7 @@ function broadcastDadosSqlExcluidos(info, origemClientId) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`Lightwall rodando em http://${HOST}:${PORT}`);
+  logger.info('server', `Lightwall rodando em http://${HOST}:${PORT}`);
 
   // Checa a cada minuto se já é "fim de dia" e falta fazer o backup
   // automático de hoje. Roda também uma vez já no boot, pro caso do
