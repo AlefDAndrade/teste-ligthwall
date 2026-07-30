@@ -185,6 +185,31 @@ As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `opera
 
 **Limitação conhecida da instalação**: `better-sqlite3` compila um módulo nativo na instalação (`npm install`) — normalmente automático, mas se o `npm install` falhar por falta de binário pré-compilado pra sua versão exata do Node, o fallback é compilar do código-fonte, o que exige ferramentas de build (`build-essential`/`python3` no Linux) e acesso de rede pra baixar os headers do Node. Em ambientes com rede restrita, isso pode falhar — use `npm install` (nunca `npm ci`) na primeira vez depois de puxar essa mudança, já que o `package-lock.json` ainda não tem a entrada de `better-sqlite3` resolvida de verdade.
 
+## Fatiamento de db.js (plano)
+
+`db.js` está com 3.353 linhas — cresceu por fases (ver "Banco de Dados (SQLite)", acima) sem nunca ser reorganizado depois, então hoje mistura schema, migrações de JSON legado e regras de negócio de domínios sem nenhuma relação entre si (traço, manutenção, sessão de usuário) num arquivo só. Isso está **planejado**, seguindo o mesmo padrão já validado no fatiamento de `server.js`: um domínio por vez, sem mudar lógica nenhuma — só onde o código mora —, com a suíte de testes daquele domínio (e uma bateria manual das rotas que o usam) rodando verde antes de seguir pra próxima fase.
+
+**Diferença importante em relação ao fatiamento de `server.js`**: `db.js` não é só um conjunto de funções — o módulo inteiro **é** a conexão viva com o SQLite (`module.exports = db`, o objeto de conexão do `better-sqlite3`, com as funções de cada domínio "penduradas" nele). Cada módulo extraído vai precisar **receber** essa conexão já aberta (via factory, mesmo padrão de `lib/rotas/`) em vez de abrir a própria — só existe uma conexão com o banco no processo inteiro, isso não muda.
+
+Só um lugar no projeto faz `require('./db.js')` hoje (`server.js`) — o que reduz bastante o risco de qualquer fase aqui: mudar a organização interna de `db.js` não exige tocar em `lib/rotas/*` nem em nenhum outro consumidor, só no que `server.js` importa de onde.
+
+| Fase | Domínio | Funções (exemplos) | Linhas aprox. hoje | Risco |
+|---|---|---|---|---|
+| 1 | Schema + setup do banco (infraestrutura, sem lógica de domínio) | `CREATE TABLE`s, `_colunasDe` | 1–705 | — (fica em `db.js`, é a base de tudo) |
+| 2 | Manutenção programada | `listarManutencaoProgramada`, `salvarManutencaoProgramada`, `marcarLembreteDiaEnviado` | 3042–3208 | Baixo — já bem isolada, boa cobertura de teste (`manutencao-programada-lembrete.test.js`) |
+| 3 | Manutenção corretiva | `salvarManutencaoCorretiva`, `aceitarManutencaoCorretiva`, `solicitarRecusaManutencaoCorretiva`, `responderRecusaManutencaoCorretiva` | 2659–3041 | Baixo/Médio — isolada, mas com fluxo de estados (aceite/recusa) que merece atenção redobrada |
+| 4 | Notificações push | `salvarPushSubscription`, `listarPushSubscriptionsDosUsuarios`, `removerPushSubscriptionMorta` | 3209–3284 | Baixo — pequena e isolada |
+| 5 | Sessões (admin + usuário) | `criarSessaoAdmin`, `criarSessaoUsuario`, `limparSessoesExpiradas` | 3285–3353 | Baixo — pequena, mas sensível (autenticação); testar com atenção extra |
+| 6 | Sobra de material + contador de traços do dia | `sobraParaRow`, `migrarSobraSeNecessario`, `migrarContadorTracosSeNecessario` | 1981–2107 | Baixo/Médio — migração de JSON legado embutida junto |
+| 7 | Paradas | `paradaParaRow`, `rowParaParada`, `migrarParadasSeNecessario` | 1892–1980 | Baixo/Médio — migração de JSON legado embutida junto |
+| 8 | Traços (ajustes, leituras, usos) | `todosOsTracos`, `substituirTracosEAjustes`, `mesclarTracosEAjustes`, `migrarRelatorioInjecaoSeNecessario` | 2108–2658 | Médio/Alto — é a maior fatia (~550 linhas), com a lógica de colapso original+ajustes citada na Fase 5 da migração SQLite; qualquer erro aqui afeta valor exibido pro usuário, não só onde o código mora |
+| 9 | Operações / berços / avaliação de qualidade | `detalheOperacao`, `relatorioBercos`, `correlacaoTracoBerco`, `salvarAvaliacaoQualidade`, `marcarOperacaoAvaliada` | 1003–1798 | Alto — é o núcleo do sistema (tela mais usada do dia a dia), com bastante entrelaçamento entre operação e avaliação de qualidade; extrair por último, com o máximo de cobertura de teste já validada nas fases anteriores |
+| 10 | Migrações de histórico legado (JSON → SQL, já concluídas) | `migrarHistoricoSeNecessario` | 1799–1889 | — (candidato a mover pra `lib/migracoes/` ou remover, se já não for mais necessário rodar em produção) |
+
+Ordem pensada do **menor pro maior risco** (mesmo critério usado no fatiamento de `server.js`): começar pelos domínios pequenos e isolados (manutenção, push, sessão) pra validar o padrão de extração com `db.js`, e deixar Traços e Operações/Qualidade — os maiores e mais centrais — por último, quando o processo já estiver rodado (e testado) várias vezes.
+
+**Status:** plano ainda não iniciado — nenhuma fase começou.
+
 ## Perfis de usuário
 
 Login em `login.html`: usuário + senha. O **perfil** de cada pessoa é definido no cadastro pelo Administrador (Configurações → Usuários) — quem loga não escolhe o próprio perfil, já entra direto com o que foi configurado.
