@@ -9,7 +9,8 @@
     "start": "node server.js",
     "predev": "node build-index.js",
     "dev": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "vendorizar:sheetjs": "node scripts/vendorizar-sheetjs.js"
   },
   "engines": {
     "node": ">=18.0.0"
