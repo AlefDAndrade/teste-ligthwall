@@ -1,0 +1,37 @@
+name: CI
+
+# Roda automaticamente:
+# - em todo push para a branch main
+# - em toda Pull Request que mira a branch main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-e-testes:
+    name: Lint + Testes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Instalar dependências (versões travadas do package-lock.json)
+        run: npm ci
+
+      - name: Rodar o build (gera public/index.html a partir do template)
+        run: npm run build
+
+      - name: Rodar o ESLint
+        run: npm run lint
+
+      - name: Rodar a suíte de testes
+        run: npm test
