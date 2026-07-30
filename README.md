@@ -208,7 +208,7 @@ Só um lugar no projeto faz `require('./db.js')` hoje (`server.js`) — o que re
 
 Ordem pensada do **menor pro maior risco** (mesmo critério usado no fatiamento de `server.js`): começar pelos domínios pequenos e isolados (manutenção, push, sessão) pra validar o padrão de extração com `db.js`, e deixar Traços e Operações/Qualidade — os maiores e mais centrais — por último, quando o processo já estiver rodado (e testado) várias vezes.
 
-**Status:** plano ainda não iniciado — nenhuma fase começou.
+**Status:** Fase 5 (Sessões) concluída nesta branch, em `lib/db/sessoes.js`. Fase 4 (Notificações push) concluída em PR separado (`refactor/db-fase-4-notificacoes-push`, ainda não mesclado). Demais fases ainda não iniciadas (Fases 2 e 3 em andamento em outra branch).
 
 ## Perfis de usuário
 
