@@ -568,8 +568,37 @@
       }, 3000);
     }
 
+    // ---- Tela de carregamento pós-login (boot) ────────────────────────
+    // Ver div#boot-loading-overlay (index.template.html) e o comentário
+    // lá — esconde a tela só quando navegação + topbar estão prontas de
+    // verdade (chamada no fim do boot, abaixo), não num tempo fixo.
+    let _relogioSegurancaBoot = null;
+    function _finalizarBootUI() {
+      if (_relogioSegurancaBoot) { clearTimeout(_relogioSegurancaBoot); _relogioSegurancaBoot = null; }
+      const overlay = document.getElementById('boot-loading-overlay');
+      if (!overlay) return; // já foi removida (ex: chamada 2x — idempotente)
+      const fill = document.getElementById('boot-loading-fill');
+      const lbl = document.getElementById('boot-loading-label');
+      if (fill) fill.style.width = '100%';
+      if (lbl) lbl.textContent = 'Pronto!';
+      overlay.classList.remove('active');
+      // Só tira do DOM depois da transição de opacidade (.3s, ver CSS) —
+      // limpa o `pointer-events:all` mais cedo (classe removida já faz
+      // isso) e evita um elemento fixed sobrando, cobrindo cliques por
+      // engano se algo mexer no z-index dele depois.
+      setTimeout(() => overlay.remove(), 400);
+    }
+
     // ---- Boot ----
     document.addEventListener('DOMContentLoaded', async () => {
+      // Rede de segurança: se o boot (fetches de sessão/permissões, mais
+      // abaixo) travar por qualquer motivo — rede instável, servidor
+      // lento — a tela de carregamento não pode prender a pessoa aqui
+      // pra sempre. Cancelada por _finalizarBootUI() assim que o boot
+      // termina normalmente; só dispara se isso NÃO acontecer dentro do
+      // tempo abaixo.
+      _relogioSegurancaBoot = setTimeout(_finalizarBootUI, 8000);
+
       // Veio de um clique em notificação de chamado de manutenção? (ver
       // _extrairChamadoIdDaUrl, acima, e lib/notificacoes-push.js) —
       // capturado JÁ AQUI, antes de qualquer outra coisa, porque limpamos
@@ -825,6 +854,15 @@
           backdrop.classList.remove('active');
         });
       });
+
+      // Navegação (menu, com permissões já aplicadas e página restaurada
+      // acima) e informações da topbar (nome, perfil, logo acima) estão
+      // prontas — esconde a tela de carregamento (ver
+      // div#boot-loading-overlay, index.template.html). O resto do
+      // sistema (dados de cada página, notificações push, etc.) continua
+      // carregando em segundo plano, cada um do seu jeito, como sempre —
+      // não faz sentido esperar a página INTEIRA aqui.
+      _finalizarBootUI();
     });
 
 

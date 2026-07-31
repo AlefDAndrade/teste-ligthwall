@@ -3603,3 +3603,64 @@ td.mono {
   border-color: var(--accent-dim);
   color: var(--accent);
 }
+
+/* ── Tela de carregamento pós-login (boot) ──────────────────────────────
+   Mesmas classes de login.css (.loading-overlay/.loading-role/etc), de
+   propósito — visual idêntico ao da transição de login, só que aqui ela
+   COBRE de verdade a página até a navegação (menu) e as informações da
+   topbar estarem prontas (ver _finalizarBootUI, app-core.js), em vez de
+   sumir sozinha depois de um tempo fixo, sem relação com o que já
+   carregou de fato. z-index bem alto de propósito: precisa cobrir
+   QUALQUER coisa que já exista no DOM nesse instante do boot (ex: os
+   modais do Setor de Qualidade chegam a z-index:99998). */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+
+.loading-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.loading-role {
+  font-family: 'Barlow Condensed', 'Oswald', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.loading-bar {
+  width: 180px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loading-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  width: 0%;
+  transition: width .6s ease;
+}
+
+.loading-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  color: var(--text-2);
+  letter-spacing: .1em;
+}

@@ -36,6 +36,28 @@
 
 <body>
 
+  <!-- Tela de carregamento pós-login — cobre a página desde a primeira
+       pintura (já nasce com a classe "active", sem precisar de JS pra
+       aparecer) até o boot terminar de verdade: navegação (menu, com as
+       permissões já aplicadas) e informações da topbar (nome, perfil)
+       prontas — ver _finalizarBootUI, chamada no fim do boot em
+       app-core.js (document.addEventListener('DOMContentLoaded', ...)).
+       Não espera a página INTEIRA carregar (dados de cada tela continuam
+       carregando em segundo plano, cada uma do seu jeito, como sempre) —
+       só o essencial pra já poder navegar e ver quem está logado. Tem
+       uma rede de segurança (_relogioSegurancaBoot, mesmo arquivo): se o
+       boot travar por qualquer motivo (rede caiu no meio, por exemplo),
+       a tela some sozinha depois de alguns segundos, pra nunca prender
+       ninguém aqui pra sempre. -->
+  <div class="loading-overlay active" id="boot-loading-overlay">
+    <img src="icons/logo-mark.svg" alt="" style="height:2.4rem">
+    <div class="loading-role" id="boot-loading-role">Lightwall</div>
+    <div class="loading-bar">
+      <div class="loading-fill" id="boot-loading-fill" style="width:40%"></div>
+    </div>
+    <div class="loading-label" id="boot-loading-label">Carregando sistema...</div>
+  </div>
+
   <div class="app-shell">
 
 <!-- ============ TOP BAR ============ -->
