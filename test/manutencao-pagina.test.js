@@ -136,9 +136,11 @@ test('criar um chamado corretivo: preencher o formulário e salvar reflete na ta
   await window.salvarManutencao();
   await new Promise(r => setTimeout(r, 300));
 
-  // A tabela de consulta lá embaixo sempre mostra tudo, sem precisar abrir nada.
-  const tabela = window.document.getElementById('man-corretivaTableBody');
-  assert.ok(tabela.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer na tabela de consulta');
+  // As tabelas de consulta lá embaixo sempre mostram tudo, sem precisar
+  // abrir nada. Chamado recém-criado ainda não tem etiqueta fechada, então
+  // cai na lista de Pendentes (ver _preencherTabelaCorretiva, manutencao.js).
+  const tabelaPendentes = window.document.getElementById('man-corretivaTableBodyPendentes');
+  assert.ok(tabelaPendentes.innerHTML.includes('M99'), 'a máquina do chamado deveria aparecer na tabela de pendentes');
 
   // Chamado novo (ainda não aceito) cai na fase "Aguardando Aceite" do
   // acordeão — só aparece como cartão depois de abrir essa fase.

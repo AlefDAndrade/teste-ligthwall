@@ -57,6 +57,17 @@
 .man-nav-tabs .man-btn.active { border-bottom-color: var(--accent); color: var(--text); background: transparent; }
 .man-nav-tabs .man-btn:hover:not(.active) { border-bottom-color: var(--border); color: var(--text-2); }
 
+/* Topbar compacta pra alternar entre duas listas dentro do MESMO card
+   (ver Pendentes/Concluídos em "Todos os Chamados" e no Painel de
+   Aprovação & Execução) — mais leve que .man-nav-tabs (que é pro nível
+   de página inteira), fica dentro de .man-card-title (já é flex). */
+.man-subtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.man-subtab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-2); border-radius: 20px; padding: 5px 12px; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: normal; cursor: pointer; transition: 0.15s; }
+.man-subtab:hover:not(.active) { border-color: var(--text-2); color: var(--text); }
+.man-subtab.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.man-subtab .count { background: var(--bg-3); color: var(--text-2); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-weight: 700; }
+.man-subtab.active .count { background: var(--accent); color: #fff; }
+
 .man-page { display: none; animation: manFadeIn 0.4s ease; }
 .man-page.active { display: block; }
 @keyframes manFadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }

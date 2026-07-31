@@ -283,9 +283,21 @@
          quem quer agir usa o acordeão lá em cima. Mesmos filtros da
          página se aplicam aqui também (mesmo conjunto de dados
          filtrados de renderCorretiva()). -->
+    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
+         por uma topbar de abas — critério é SEMPRE etiquetaFechada (ver
+         _preencherTabelaCorretiva()/_manToggleListaCorretiva(),
+         manutencao.js): etiquetaFechada=false → Pendentes;
+         etiquetaFechada=true → Concluídos. Os dois <tbody> são sempre
+         preenchidos por renderCorretiva(); só a visibilidade alterna. -->
     <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-list"></i> Todos os Chamados (consulta)</div>
-      <div class="man-table-wrap man-table-wrap--linha-unica">
+      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
+        <span><i class="fas fa-list"></i> Chamados (consulta)</span>
+        <div class="man-subtabs" id="man-corretivaSubtabs">
+          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaCorretiva('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-corretivaCountPendentes">0</span></button>
+          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaCorretiva('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-corretivaCountConcluidos">0</span></button>
+        </div>
+      </div>
+      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaPendentes">
         <table>
           <thead><tr>
             <th style="width: 9%;">Nº</th>
@@ -300,7 +312,25 @@
             <th style="width: 13%;">Supervisão</th>
             <th style="width: 6%;">Ações</th>
           </tr></thead>
-          <tbody id="man-corretivaTableBody"></tbody>
+          <tbody id="man-corretivaTableBodyPendentes"></tbody>
+        </table>
+      </div>
+      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaConcluidos" style="display:none;">
+        <table>
+          <thead><tr>
+            <th style="width: 9%;">Nº</th>
+            <th style="width: 12%;">Máquina</th>
+            <th style="width: 9%;">Setor</th>
+            <th style="width: 9%;">Turno</th>
+            <th style="width: 11%;">Observador</th>
+            <th style="width: 9%;">Tipo</th>
+            <th style="width: 8%;">Prioridade</th>
+            <th style="width: 8%;">Etiqueta</th>
+            <th style="width: 12%;">Status</th>
+            <th style="width: 13%;">Supervisão</th>
+            <th style="width: 6%;">Ações</th>
+          </tr></thead>
+          <tbody id="man-corretivaTableBodyConcluidos"></tbody>
         </table>
       </div>
     </div>
@@ -359,10 +389,38 @@
       </form>
     </div>
 
+    <!-- Duas listas em vez de uma tabela única — mesma lógica visual/
+         colunas de sempre, só separadas por status (ver
+         _agendamentoConcluido(), manutencao.js): Pendente/Aprovado/Em
+         Execução → Painel de Aprovação & Execução (ainda precisa de
+         ação); Concluído/Reprovado/Não Executado → lista de Concluídos
+         (só consulta, fim do fluxo). Paginação independente pra cada
+         uma (pageProgramadaPendentes/pageProgramadaConcluidos). -->
+    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
+         por uma topbar de abas — critério é SEMPRE o status atual (ver
+         _agendamentoConcluido()/_manToggleListaProgramada(), manutencao.js):
+         Pendente/Aprovado/Em Execução → Pendentes (ainda precisa de ação);
+         Concluído/Reprovado/Não Executado → Concluídos (só consulta, fim
+         do fluxo). Paginação independente pra cada lista continua
+         existindo (pageProgramadaPendentes/pageProgramadaConcluidos); só
+         a visibilidade das duas listas alterna, os dois <tbody> continuam
+         sempre preenchidos por renderProgramada(). -->
     <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</div>
-      <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
-      <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
+        <span><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</span>
+        <div class="man-subtabs" id="man-programadaSubtabs">
+          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaProgramada('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-programadaCountPendentes">0</span></button>
+          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaProgramada('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-programadaCountConcluidos">0</span></button>
+        </div>
+      </div>
+      <div id="man-programadaListaPendentes">
+        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
+        <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+      </div>
+      <div id="man-programadaListaConcluidos" style="display:none;">
+        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBodyConcluidos"></tbody></table></div>
+        <div id="man-pagProgramadaConcluidos" class="man-pagination man-no-print"></div>
+      </div>
     </div>
   </div>
 

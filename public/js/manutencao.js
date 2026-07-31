@@ -96,8 +96,21 @@
   }
 
   let pageCorretiva = 0;
-  let pageProgramada = 0;
+  // Duas paginações independentes — uma pra cada lista do Painel de
+  // Aprovação & Execução (ver renderProgramada() e
+  // _agendamentoConcluido() mais abaixo, mesma ideia de
+  // _preencherTabelaCorretiva() usada na Corretiva).
+  let pageProgramadaPendentes = 0;
+  let pageProgramadaConcluidos = 0;
   const ITEMS_PER_PAGE = 10;
+
+  // Reseta as duas paginações de uma vez — chamado sempre que a lista de
+  // agendamentos muda (agendar novo, aprovar, reprovar, iniciar,
+  // finalizar, excluir) pra evitar ficar numa página que não existe mais.
+  function _resetPaginacaoProgramada() {
+    pageProgramadaPendentes = 0;
+    pageProgramadaConcluidos = 0;
+  }
 
   function toast(msg, tipo='success') {
     const container = document.getElementById('man-toastContainer');
@@ -147,7 +160,7 @@
       });
       if(aba === 'dashboard') renderDashboard();
       if(aba === 'manutencao') { pageCorretiva = 0; renderCorretiva(); }
-      if(aba === 'programada') { pageProgramada = 0; renderProgramada(); }
+      if(aba === 'programada') { _resetPaginacaoProgramada(); renderProgramada(); }
     }
   }
 
@@ -1409,6 +1422,66 @@
     return { situacao, sc, supClass, supText };
   }
 
+  // Preenche um <tbody> da tabela de consulta com as linhas de `itens`.
+  // Extraída de renderCorretiva() pra ser reaproveitada pelas duas
+  // listas (Pendentes/Concluídos) sem duplicar o HTML da linha — ver
+  // chamada em renderCorretiva() logo abaixo.
+  function _preencherTabelaCorretiva(tbodyId, itens) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = itens.length ? itens.map(m => {
+      const { situacao, sc, supClass, supText } = _badgesLinhaCorretiva(m);
+      const prioridade = m.prioridade || 'BAIXA';
+      const tipo = m.tipoManutencao || '-';
+      const tpc = tipo === 'Elétrica' ? 'var(--accent)' : 'var(--blue)';
+      const etiqueta = m.tipoEtiqueta || 'Azul';
+      const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
+      const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
+      const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock" title="Etiqueta fechada"></i>' : '';
+      // Excluir na tabela de consulta é exclusivo do Administrador
+      // (master OU perfil Administrativo) — pedido do usuário:
+      // diferente do ícone de excluir do card no acordeão (que some
+      // depois que o chamado é processado/fechado, ver
+      // _renderizarCartaoCorretiva), aqui o admin precisa conseguir
+      // excluir QUALQUER chamado, aberto ou já finalizado. A
+      // validação que vale de verdade continua sendo do servidor
+      // (podeExcluirChamado, server.js); isto aqui só decide se o
+      // botão aparece.
+      const acaoExcluir = _souAdminAtual()
+        ? `<span style="color:var(--red); cursor:pointer;" title="Excluir chamado" onclick="event.stopPropagation(); excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>`
+        : '';
+      return `<tr style="cursor:pointer;" onclick="abrirHistorico('${m.id}')" title="Ver trajetória do chamado">
+        <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon}</td>
+        <td data-label="Máquina">${esc(m.maquina || '-')}</td>
+        <td data-label="Setor">${esc(m.setor || '-')}</td>
+        <td data-label="Turno"><strong>${esc(m.turno || '-')}</strong></td>
+        <td data-label="Observador">${esc(m.observador || '-')}</td>
+        <td data-label="Tipo"><span style="color:${tpc};">${esc(tipo)}</span></td>
+        <td data-label="Prioridade"><span style="color:${_corPrioridade(prioridade)};">${esc(prioridade)}</span></td>
+        <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
+        <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
+        <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
+        <td data-label="Ações" onclick="event.stopPropagation();">${acaoExcluir}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
+  }
+
+  // Alterna qual das duas listas (Pendentes/Concluídos) fica visível
+  // dentro do card "Chamados (consulta)" — os dois <tbody> já estão
+  // sempre preenchidos por renderCorretiva(), então aqui só troca a
+  // classe 'active' dos botões e o display dos wraps, sem re-renderizar
+  // nada (mesma ideia de _manToggleFase() acima, mas pra abas em vez de
+  // acordeão).
+  function _manToggleListaCorretiva(aba) {
+    document.querySelectorAll('#man-corretivaSubtabs .man-subtab').forEach(b => {
+      b.classList.toggle('active', b.dataset.subtab === aba);
+    });
+    const listaPendentes = document.getElementById('man-corretivaListaPendentes');
+    const listaConcluidos = document.getElementById('man-corretivaListaConcluidos');
+    if (listaPendentes) listaPendentes.style.display = aba === 'pendentes' ? '' : 'none';
+    if (listaConcluidos) listaConcluidos.style.display = aba === 'concluidos' ? '' : 'none';
+  }
+
   function renderCorretiva() {
     try {
       const filtroID = document.getElementById('man-filtroID')?.value?.toLowerCase()?.trim() || '';
@@ -1456,44 +1529,22 @@
       // ── TABELA DE CONSULTA (rodapé) — só visualização, sem editar.
       // Clique na linha abre a trajetória (abrirHistorico), não o
       // formulário/assistente — quem quer agir usa o acordeão acima.
-      const tbody = document.getElementById('man-corretivaTableBody');
-      if (tbody) {
-        tbody.innerHTML = dados.length ? dados.map(m => {
-          const { situacao, sc, supClass, supText } = _badgesLinhaCorretiva(m);
-          const prioridade = m.prioridade || 'BAIXA';
-          const tipo = m.tipoManutencao || '-';
-          const tpc = tipo === 'Elétrica' ? 'var(--accent)' : 'var(--blue)';
-          const etiqueta = m.tipoEtiqueta || 'Azul';
-          const etiquetaCor = etiqueta === 'Azul' ? 'var(--blue)' : 'var(--red)';
-          const etiquetaEmoji = etiqueta === 'Azul' ? '🔵' : '🔴';
-          const fechadoIcon = m.etiquetaFechada ? '<i class="fas fa-lock" title="Etiqueta fechada"></i>' : '';
-          // Excluir na tabela de consulta é exclusivo do Administrador
-          // (master OU perfil Administrativo) — pedido do usuário:
-          // diferente do ícone de excluir do card no acordeão (que some
-          // depois que o chamado é processado/fechado, ver
-          // _renderizarCartaoCorretiva), aqui o admin precisa conseguir
-          // excluir QUALQUER chamado, aberto ou já finalizado. A
-          // validação que vale de verdade continua sendo do servidor
-          // (podeExcluirChamado, server.js); isto aqui só decide se o
-          // botão aparece.
-          const acaoExcluir = _souAdminAtual()
-            ? `<span style="color:var(--red); cursor:pointer;" title="Excluir chamado" onclick="event.stopPropagation(); excluirManutencao('${m.id}')"><i class="fas fa-trash-alt"></i></span>`
-            : '';
-          return `<tr style="cursor:pointer;" onclick="abrirHistorico('${m.id}')" title="Ver trajetória do chamado">
-            <td data-label="Nº"><strong>${esc(m.id)}</strong> ${fechadoIcon}</td>
-            <td data-label="Máquina">${esc(m.maquina || '-')}</td>
-            <td data-label="Setor">${esc(m.setor || '-')}</td>
-            <td data-label="Turno"><strong>${esc(m.turno || '-')}</strong></td>
-            <td data-label="Observador">${esc(m.observador || '-')}</td>
-            <td data-label="Tipo"><span style="color:${tpc};">${esc(tipo)}</span></td>
-            <td data-label="Prioridade"><span style="color:${_corPrioridade(prioridade)};">${esc(prioridade)}</span></td>
-            <td data-label="Etiqueta"><span style="color:${etiquetaCor}; font-weight:600;">${etiquetaEmoji} ${esc(etiqueta)}</span></td>
-            <td data-label="Status"><span class="man-badge ${sc}">${esc(situacao)}</span></td>
-            <td data-label="Supervisão"><span class="man-badge ${supClass}">${esc(supText)}</span></td>
-            <td data-label="Ações" onclick="event.stopPropagation();">${acaoExcluir}</td>
-          </tr>`;
-        }).join('') : `<tr><td colspan="11" style="text-align:center; padding:20px; color:var(--text-2);">Nenhum chamado encontrado.</td></tr>`;
-      }
+      // Duas listas (Pendentes/Concluídos) dentro do mesmo card,
+      // alternadas por _manToggleListaCorretiva() — critério é SEMPRE
+      // etiquetaFechada (o mesmo campo que já governa o cadeado e a
+      // coluna "concluido" do acordeão, ver _corretivaColuna acima):
+      // etiquetaFechada = true → Concluídos; senão → Pendentes. Os dois
+      // <tbody> são sempre preenchidos (a aba escondida não some do DOM,
+      // só fica com display:none), então trocar de aba é instantâneo,
+      // sem re-renderizar.
+      const chamadosPendentes = dados.filter(m => !m.etiquetaFechada);
+      const chamadosConcluidos = dados.filter(m => !!m.etiquetaFechada);
+      _preencherTabelaCorretiva('man-corretivaTableBodyPendentes', chamadosPendentes);
+      _preencherTabelaCorretiva('man-corretivaTableBodyConcluidos', chamadosConcluidos);
+      const _cntCorrPend = document.getElementById('man-corretivaCountPendentes');
+      const _cntCorrConc = document.getElementById('man-corretivaCountConcluidos');
+      if (_cntCorrPend) _cntCorrPend.textContent = chamadosPendentes.length;
+      if (_cntCorrConc) _cntCorrConc.textContent = chamadosConcluidos.length;
     } catch (error) {
       console.error("Erro ao renderizar a área de corretiva:", error);
       const acc = document.getElementById('man-corretivaAccordion');
@@ -1959,7 +2010,7 @@
       document.getElementById('man-progSolicitante').value = ''; document.getElementById('man-progObs').value = ''; 
       const msg = document.getElementById('man-progMensagem');
       if (msg) msg.innerHTML = '';
-      pageProgramada = 0;
+      _resetPaginacaoProgramada();
       renderProgramada(); renderDashboard();
     } catch (e) {
       toast('Erro ao agendar: ' + e.message, 'error');
@@ -2111,7 +2162,7 @@
     a.status = 'Em Execucao';
     a.justificativa = `Iniciado em ${dtI} às ${hrI}`;
     if (!(await _salvarAgendamentoNoServidor(a))) return;
-    toast('Tarefa marcada como Em Execução!'); fecharModalInicio(); pageProgramada = 0; renderProgramada(); renderDashboard();
+    toast('Tarefa marcada como Em Execução!'); fecharModalInicio(); _resetPaginacaoProgramada(); renderProgramada(); renderDashboard();
   }
 
   function abrirModalFinalizar(id) {
@@ -2169,7 +2220,7 @@
     if(executado === 'Sim') { a.status = 'Concluido'; a.justificativa = `Executado por ${tipoExecucao === 'Externo' ? 'Empresa: ' + empresaExterna : tecnico} em ${dtF} às ${hrF}. Tempo: ${tempoGastoStr}.`; } 
     else { a.status = 'Nao Executado'; a.justificativa = `Não executado. Motivo: ${motivo}. Registrado por ${tecnico}.`; }
     if (!(await _salvarAgendamentoNoServidor(a))) return;
-    fecharModalFinalizar(); pageProgramada = 0; renderProgramada(); renderDashboard(); toast('Execução finalizada!');
+    fecharModalFinalizar(); _resetPaginacaoProgramada(); renderProgramada(); renderDashboard(); toast('Execução finalizada!');
   }
 
   function aprovarAgendamento(id) { abrirModalAprovacao(id); }
@@ -2200,7 +2251,7 @@
     a.justificativa = justificativa;
     if (!(await _salvarAgendamentoNoServidor(a))) return;
     fecharModalReprovacao();
-    pageProgramada = 0;
+    _resetPaginacaoProgramada();
     renderProgramada();
     renderDashboard();
     toast('Agendamento reprovado com justificativa registrada.');
@@ -2222,7 +2273,7 @@
       const json = await res.json();
       if (!json.ok) throw new Error(json.erro || 'Erro ao excluir agendamento.');
       await carregarAgendamentosDoServidor();
-      pageProgramada = 0; 
+      _resetPaginacaoProgramada(); 
       renderProgramada(); 
       renderDashboard(); 
       toast('Agendamento excluído.'); 
@@ -2266,7 +2317,82 @@
     a.dataInicioEstimado = dtI; a.horaInicioEstimado = hrI; a.dataFimEstimado = dtF; a.horaFimEstimado = hrF;
     a.status = 'Aprovado'; a.justificativa = `Aprovado por ${responsavel}. Previsto: ${dtI} ${hrI} a ${dtF} ${hrF}`;
     if (!(await _salvarAgendamentoNoServidor(a))) return;
-    toast('Aprovada!'); fecharModalAprovacao(); pageProgramada = 0; renderProgramada(); renderDashboard();
+    toast('Aprovada!'); fecharModalAprovacao(); _resetPaginacaoProgramada(); renderProgramada(); renderDashboard();
+  }
+
+  // Estados finais do fluxo de aprovação/execução — nada mais a fazer
+  // aqui (mesma ideia de etiquetaFechada na Corretiva, ver
+  // _preencherTabelaCorretiva() acima): quando o agendamento chega num
+  // desses três, ele sai do "Painel de Aprovação & Execução" (que só
+  // faz sentido pra quem ainda precisa agir — aprovar, reprovar,
+  // iniciar, finalizar) e passa pra lista de Concluídos, só consulta.
+  function _agendamentoConcluido(a) {
+    return a.status === 'Concluido' || a.status === 'Reprovado' || a.status === 'Nao Executado';
+  }
+
+  // Uma linha da tabela de programada — extraída pra ser reaproveitada
+  // pelas duas listas (Pendentes/Concluídos) sem duplicar o HTML.
+  function _renderizarLinhaProgramada(a) {
+    const sc = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
+    const _podeEditarManutProg = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
+    let acoes = `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirDetalhesProgramada('${a.id}')"><i class="fas fa-eye"></i></button> `;
+    if (!_podeEditarManutProg) {
+      // Visualização — sem ações de aprovar/reprovar/iniciar/finalizar,
+      // que exigem a área 'manutencao' completa (ver lib/perfis.js).
+    } else if(a.status === 'Aprovado' || a.status === 'Pendente') {
+      acoes += `<button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="aprovarAgendamento('${a.id}')"><i class="fas fa-check"></i></button><button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
+    } else if(a.status === 'Em Execucao') {
+      acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
+    } else {
+      acoes += `<span style="font-size:12px; color:var(--text-2);">${esc(a.justificativa || '-')}</span>`;
+    }
+    if(_podeEditarManutProg && (a.status === 'Aprovado' || a.status === 'Pendente')) {
+      acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
+    }
+
+    const deleteIcon = (_podeEditarManutProg && a.status === 'Pendente')
+      ? `<span style="color:var(--red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
+      : '';
+
+    let estimadoDisplay = '-';
+    if(a.dataInicioEstimado) { estimadoDisplay = `${a.dataInicioEstimado} ${a.horaInicioEstimado} → ${a.dataFimEstimado} ${a.horaFimEstimado}`; }
+    return `<tr>
+      <td data-label="Nº"><strong>${esc(a.id)}</strong></td>
+      <td data-label="Máquina">${esc(a.maquina || '-')} (${esc(a.setor || '-')})</td>
+      <td data-label="Solicitante">${esc(a.solicitante || '-')}</td>
+      <td data-label="Turno"><strong>${esc(a.turno || '-')}</strong></td>
+      <td data-label="Data">${esc(a.data || '-')}</td>
+      <td data-label="Sugestão">${esc(a.hora) || '-'}</td>
+      <td data-label="Estimado" style="font-size:11px;">${estimadoDisplay}</td>
+      <td data-label="Status"><span class="man-badge ${sc}">${esc(a.status)}</span></td>
+      <td data-label="Ações" style="justify-content:flex-end;"><div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">${acoes}${deleteIcon}</div></td>
+    </tr>`;
+  }
+
+  // Preenche uma lista (tbody + paginação) da tabela de programada —
+  // reaproveitada pelas duas listas, cada uma com sua própria página
+  // (ver pageProgramadaPendentes/pageProgramadaConcluidos acima).
+  function _preencherListaProgramada(itens, paginaAtual, setPagina, tbodyId, pagDivId, changeFnName, mensagemVazia) {
+    const total = itens.length;
+    const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
+    let pagina = paginaAtual;
+    if (pagina >= totalPages) pagina = totalPages - 1;
+    if (pagina < 0) pagina = 0;
+    setPagina(pagina);
+    const start = pagina * ITEMS_PER_PAGE;
+    const pageData = itens.slice(start, start + ITEMS_PER_PAGE);
+
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = pageData.length
+      ? pageData.map(_renderizarLinhaProgramada).join('')
+      : `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-2);">${mensagemVazia}</td></tr>`;
+
+    const pagDiv = document.getElementById(pagDivId);
+    pagDiv.innerHTML = `
+      <button onclick="${changeFnName}(-1)" ${pagina === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+      <span>${pagina + 1} / ${totalPages}</span>
+      <button onclick="${changeFnName}(1)" ${pagina === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+    `;
   }
 
   function renderProgramada() {
@@ -2275,64 +2401,53 @@
     document.getElementById('man-progAprovados').textContent = agendamentos.filter(a => a.status === 'Aprovado').length;
     document.getElementById('man-progReprovados').textContent = agendamentos.filter(a => a.status === 'Reprovado').length;
 
-    const total = agendamentos.length;
-    const totalPages = Math.ceil(total / ITEMS_PER_PAGE) || 1;
-    if (pageProgramada >= totalPages) pageProgramada = totalPages - 1;
-    if (pageProgramada < 0) pageProgramada = 0;
-    const start = pageProgramada * ITEMS_PER_PAGE;
-    const pageData = agendamentos.slice(start, start + ITEMS_PER_PAGE);
+    // Duas listas — critério é SEMPRE o status atual do agendamento
+    // (nunca um campo salvo à parte), via _agendamentoConcluido() acima:
+    // ainda pendente de alguma ação (Pendente/Aprovado/Em Execução) →
+    // Painel de Aprovação & Execução; já chegou ao fim do fluxo
+    // (Concluído/Reprovado/Não Executado) → lista de Concluídos.
+    const pendentes = agendamentos.filter(a => !_agendamentoConcluido(a));
+    const concluidos = agendamentos.filter(_agendamentoConcluido);
 
-    const tbody = document.getElementById('man-programadaTableBody');
-    if(pageData.length === 0) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-2);">Nenhuma manutenção programada.</td></tr>`; } 
-    else {
-      tbody.innerHTML = pageData.map(a => {
-        const sc = a.status === 'Aprovado' ? 'man-badge-green' : a.status === 'Reprovado' ? 'man-badge-red' : a.status === 'Nao Executado' ? 'man-badge-purple' : a.status === 'Em Execucao' ? 'man-badge-orange' : 'man-badge-yellow';
-        const _podeEditarManutProg = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
-        let acoes = `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirDetalhesProgramada('${a.id}')"><i class="fas fa-eye"></i></button> `;
-        if (!_podeEditarManutProg) {
-          // Visualização — sem ações de aprovar/reprovar/iniciar/finalizar,
-          // que exigem a área 'manutencao' completa (ver lib/perfis.js).
-        } else if(a.status === 'Aprovado' || a.status === 'Pendente') {
-          acoes += `<button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="aprovarAgendamento('${a.id}')"><i class="fas fa-check"></i></button><button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
-        } else if(a.status === 'Em Execucao') {
-          acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
-        } else {
-          acoes += `<span style="font-size:12px; color:var(--text-2);">${esc(a.justificativa || '-')}</span>`;
-        }
-        if(_podeEditarManutProg && (a.status === 'Aprovado' || a.status === 'Pendente')) {
-          acoes += `<button class="man-btn man-btn-primary" style="padding:2px 8px; font-size:11px; margin-right:4px; background:var(--blue);" onclick="abrirModalInicio('${a.id}')"><i class="fas fa-play"></i></button>`;
-        }
-
-        const deleteIcon = (_podeEditarManutProg && a.status === 'Pendente')
-          ? `<span style="color:var(--red); cursor:pointer; margin-left:8px;" onclick="excluirAgendamento('${a.id}')"><i class="fas fa-trash-alt"></i></span>` 
-          : '';
-
-        let estimadoDisplay = '-';
-        if(a.dataInicioEstimado) { estimadoDisplay = `${a.dataInicioEstimado} ${a.horaInicioEstimado} → ${a.dataFimEstimado} ${a.horaFimEstimado}`; }
-        return `<tr>
-          <td data-label="Nº"><strong>${esc(a.id)}</strong></td>
-          <td data-label="Máquina">${esc(a.maquina || '-')} (${esc(a.setor || '-')})</td>
-          <td data-label="Solicitante">${esc(a.solicitante || '-')}</td>
-          <td data-label="Turno"><strong>${esc(a.turno || '-')}</strong></td>
-          <td data-label="Data">${esc(a.data || '-')}</td>
-          <td data-label="Sugestão">${esc(a.hora) || '-'}</td>
-          <td data-label="Estimado" style="font-size:11px;">${estimadoDisplay}</td>
-          <td data-label="Status"><span class="man-badge ${sc}">${esc(a.status)}</span></td>
-          <td data-label="Ações" style="justify-content:flex-end;"><div style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">${acoes}${deleteIcon}</div></td>
-        </tr>`;
-      }).join('');
-    }
-
-    const pagDiv = document.getElementById('man-pagProgramada');
-    pagDiv.innerHTML = `
-      <button onclick="changePageProgramada(-1)" ${pageProgramada === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
-      <span>${pageProgramada + 1} / ${totalPages}</span>
-      <button onclick="changePageProgramada(1)" ${pageProgramada === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
-    `;
+    _preencherListaProgramada(
+      pendentes, pageProgramadaPendentes, (p) => { pageProgramadaPendentes = p; },
+      'man-programadaTableBody', 'man-pagProgramada', 'changePageProgramadaPendentes',
+      'Nenhuma manutenção programada pendente.'
+    );
+    _preencherListaProgramada(
+      concluidos, pageProgramadaConcluidos, (p) => { pageProgramadaConcluidos = p; },
+      'man-programadaTableBodyConcluidos', 'man-pagProgramadaConcluidos', 'changePageProgramadaConcluidos',
+      'Nenhuma manutenção programada concluída.'
+    );
+    const _cntProgPend = document.getElementById('man-programadaCountPendentes');
+    const _cntProgConc = document.getElementById('man-programadaCountConcluidos');
+    if (_cntProgPend) _cntProgPend.textContent = pendentes.length;
+    if (_cntProgConc) _cntProgConc.textContent = concluidos.length;
   }
 
-  function changePageProgramada(delta) {
-    pageProgramada += delta;
+  // Alterna qual das duas listas (Pendentes/Concluídos) fica visível
+  // dentro do card "Painel de Aprovação & Execução" — os dois <tbody>
+  // (e suas paginações) já estão sempre preenchidos por
+  // renderProgramada(), então aqui só troca a classe 'active' dos
+  // botões e o display dos blocos, sem re-renderizar nada (mesma ideia
+  // de _manToggleListaCorretiva() acima).
+  function _manToggleListaProgramada(aba) {
+    document.querySelectorAll('#man-programadaSubtabs .man-subtab').forEach(b => {
+      b.classList.toggle('active', b.dataset.subtab === aba);
+    });
+    const listaPendentes = document.getElementById('man-programadaListaPendentes');
+    const listaConcluidos = document.getElementById('man-programadaListaConcluidos');
+    if (listaPendentes) listaPendentes.style.display = aba === 'pendentes' ? '' : 'none';
+    if (listaConcluidos) listaConcluidos.style.display = aba === 'concluidos' ? '' : 'none';
+  }
+
+  function changePageProgramadaPendentes(delta) {
+    pageProgramadaPendentes += delta;
+    renderProgramada();
+  }
+
+  function changePageProgramadaConcluidos(delta) {
+    pageProgramadaConcluidos += delta;
     renderProgramada();
   }
 
@@ -2585,7 +2700,8 @@
     calcularTempoExecucao,
     calcularTempoGasto,
     calcularTempoSupervisao,
-    changePageProgramada,
+    changePageProgramadaPendentes,
+    changePageProgramadaConcluidos,
     confirmarAprovacao,
     confirmarFechamento,
     confirmarInicio,
@@ -2628,6 +2744,8 @@
   window._esconderPreviewTrajetoria = _esconderPreviewTrajetoria;
   window._manIrParaStep = _manIrParaStep;
   window._manToggleFase = _manToggleFase;
+  window._manToggleListaCorretiva = _manToggleListaCorretiva;
+  window._manToggleListaProgramada = _manToggleListaProgramada;
   window.abrirModalFechamento = MAN.abrirModalFechamento;
   window.abrirModalFinalizar = MAN.abrirModalFinalizar;
   window.abrirModalInicio = MAN.abrirModalInicio;
@@ -2648,7 +2766,8 @@
   window.calcularTempoExecucao = MAN.calcularTempoExecucao;
   window.calcularTempoGasto = MAN.calcularTempoGasto;
   window.calcularTempoSupervisao = MAN.calcularTempoSupervisao;
-  window.changePageProgramada = MAN.changePageProgramada;
+  window.changePageProgramadaPendentes = MAN.changePageProgramadaPendentes;
+  window.changePageProgramadaConcluidos = MAN.changePageProgramadaConcluidos;
   window.confirmarAprovacao = MAN.confirmarAprovacao;
   window.confirmarFechamento = MAN.confirmarFechamento;
   window.confirmarInicio = MAN.confirmarInicio;
