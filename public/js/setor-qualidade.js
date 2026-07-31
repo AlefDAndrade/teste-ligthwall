@@ -2877,6 +2877,15 @@
     // quem conscientemente não deu pra avaliar). Destaca as que faltam
     // (mesmo visual de placa com tipo incompatível, ver validateAllSlabs)
     // e recusa registrar enquanto sobrar alguma.
+    // Tempo de Pega inválido (Desmoldagem <= Enchimento) — ver
+    // _tempoPegaInvalido, acima. Checado ANTES dos painéis não marcados
+    // (mesma ordem em que os campos aparecem no formulário: datas primeiro,
+    // grade de painéis depois), pra guiar o avaliador na correção de cima
+    // pra baixo.
+    if (_tempoPegaInvalido()) {
+      showAlert('Tempo de Pega inválido', 'A Data/Hora de Desmoldagem precisa ser posterior à Data/Hora de Enchimento — corrija antes de registrar.');
+      return;
+    }
     document.querySelectorAll('.sq-slab.invalid').forEach(el => el.classList.remove('invalid'));
     const faltando = _paineisNaoMarcados();
     if (faltando.length) {
@@ -4325,6 +4334,24 @@
     const diff = new Date(e) - new Date(s);
     if (diff > 0) { const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000); out.value = `${h}h ${m}min`; }
     else out.value = diff === 0 ? '0h 0min' : 'Data inválida';
+  }
+
+  // Tempo de Pega inválido: Desmoldagem <= Enchimento (diff zero também
+  // conta como inválido — desmoldar no mesmo instante do enchimento não é
+  // fisicamente possível, então não faz sentido aceitar). Só considera
+  // inválido quando as DUAS datas estão preenchidas; se alguma estiver
+  // vazia, não bloqueia (nem toda avaliação necessariamente tem as duas
+  // datas preenchidas). Usada por registerEvaluation logo abaixo, como 1ª
+  // camada de prevenção — a rota POST /registrar-avaliacao-qualidade
+  // (server.js) repete a mesma checagem como 2ª camada, pra quem manda
+  // direto pra rota sem passar pela tela não conseguir burlar (mesmo
+  // padrão do bloqueio de avaliação avulsa, ver comentário em
+  // registerEvaluation).
+  function _tempoPegaInvalido() {
+    const s = document.getElementById('sq-dtEnchimento').value;
+    const e = document.getElementById('sq-dtDesmoldagem').value;
+    if (!s || !e) return false;
+    return (new Date(e) - new Date(s)) <= 0;
   }
 
   // Espessura real da operação sendo avaliada — vem de op.dimensao (a
