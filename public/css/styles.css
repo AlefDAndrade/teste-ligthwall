@@ -2881,6 +2881,16 @@ td.mono {
   padding: 10px 12px;
 }
 
+.dbf-bateria-card-clicavel {
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.dbf-bateria-card-clicavel:hover {
+  background: var(--bg-hover, var(--bg-3));
+  border-color: var(--accent);
+}
+
 .dbf-bateria-head {
   display: flex;
   align-items: baseline;

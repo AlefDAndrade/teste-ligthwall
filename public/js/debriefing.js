@@ -219,7 +219,13 @@
 
     html += `<div class="dbf-baterias">`;
     estrutura.forEach(({ bateria, tracos }) => {
-      html += `<div class="dbf-bateria-card">`;
+      // Clicável → Análise Focada da operação (LWFocada.abrir usa
+      // bateria.id = id_operacao, não id_bateria — mesmo dado usado logo
+      // acima pra casar traço×bateria, ver montarEstrutura). Só clicável
+      // quando bateria.id existe (sempre deveria, mas por segurança —
+      // registros muito antigos/corrompidos sem id não abririam nada).
+      const clicavel = !!bateria.id;
+      html += `<div class="dbf-bateria-card${clicavel ? ' dbf-bateria-card-clicavel' : ''}"${clicavel ? ` onclick="LWDebriefing.abrirAnaliseFocada('${escapeHtml(String(bateria.id))}')" title="Ver Análise Focada desta operação"` : ''}>`;
       const corMont = LW.corMontagemPorLabel(bateria.tipo_montagem);
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
       html += `<div class="dbf-bateria-head">
@@ -544,6 +550,17 @@
       if (btnAv) btnAv.classList.toggle('active', aba === 'avaliacao');
       if (!_dataSelecionada) _dataSelecionada = todayBrasiliaLocal();
       atualizarConteudo(_dataSelecionada);
+    },
+    // Clique num card de operação (aba "Operação" do Debriefing) → Análise
+    // Focada daquela operação (mesmo destino de LWDash.onClickLinhaRegistro
+    // no modo de foco, dashboard.js — LWFocada.abrir troca de página
+    // sozinho, ver showPage lá dentro). Fecha o popover primeiro (mesma
+    // varredura de .ao-popover usada em toggle(), acima) — sem isso, ele
+    // ficaria aberto por cima da tela de Análise Focada.
+    abrirAnaliseFocada(idOperacao) {
+      if (!idOperacao) return;
+      document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
+      if (window.LWFocada) LWFocada.abrir(idOperacao);
     }
   };
 
