@@ -345,6 +345,11 @@ db.exec(`
     dados         TEXT NOT NULL  -- JSON: avaliação inteira, incluindo a lista de painéis
   );
   CREATE INDEX IF NOT EXISTS idx_avaliacoes_qualidade_operacao ON avaliacoes_qualidade(id_operacao);
+  -- Usado por _totalAvaliacoesNoDia (lib/db/operacoes-qualidade.js) pra
+  -- calcular a Sequência do Dia automática (conta quantas avaliações já
+  -- foram registradas no dia, via range de registrado_em) sem varrer a
+  -- tabela inteira a cada registro novo.
+  CREATE INDEX IF NOT EXISTS idx_avaliacoes_qualidade_registrado_em ON avaliacoes_qualidade(registrado_em);
 
   -- ============================================================
   --  Painéis da Avaliação de Qualidade — MESMOS dados que já vivem

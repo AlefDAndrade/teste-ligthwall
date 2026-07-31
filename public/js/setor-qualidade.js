@@ -131,6 +131,12 @@
   let _editandoRegistradoEm     = null;
   let _editandoLinkedOperacaoId = null;
   let _editandoAvaliadorNome    = null;
+  // Mesmo raciocínio das 3 acima, mas pra Sequência do Dia (ver comentário
+  // em _calcularProximaSequenciaHoje/_atualizarSequenciaDoDiaPrevia, mais
+  // abaixo): corrigir uma avaliação antiga preserva o número ORIGINAL dela
+  // (não recalcula pro "próximo de hoje" — a avaliação corrigida nem
+  // sempre foi registrada hoje).
+  let _editandoDailySeq         = null;
 
   // ── Tipos de montagem — vem de config.json (tipos_montagem.opcoes),
   // NUNCA mais fixo/hardcoded aqui (ver _carregarOpcoesMontagem). Cache
@@ -1973,6 +1979,7 @@
       _editandoRegistradoEm = null;
       _editandoLinkedOperacaoId = null;
       _editandoAvaliadorNome = null;
+      _editandoDailySeq = null;
     }
     document.querySelectorAll('.sq-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sq-nav-btn').forEach(el => el.classList.remove('active'));
@@ -2054,6 +2061,12 @@
     setEditable(true);
     _bloquearCamposAutoPreenchidos(true); // sempre travado — ver comentário na função, acima
     _aplicarModoBotoesForm(); // reflete no botão "Registrar" se ficou sem operação vinculada (ver comentário lá)
+    // Sequência do Dia — clearForm() (chamado acima) já mostrou uma prévia
+    // com o cache que já estava em memória; isto busca o cache mais
+    // recente do servidor bem na hora de abrir a avaliação, pra prévia
+    // não ficar desatualizada se outro operador tiver registrado algo há
+    // pouco (ver _calcularProximaSequenciaHoje).
+    carregarAvaliacoesQualidade().then(_atualizarSequenciaDoDiaPrevia);
   }
 
   // Seleciona no <select> de ID da Bateria (sq-batteryId) um valor que pode
@@ -2658,6 +2671,47 @@
       });
   }
 
+  // ── Sequência do Dia (automática) ───────────────────────────────────
+  // Antes era um <select> manual (1 a 13) que o avaliador escolhia à mão
+  // — gerava erros reais (número repetido, fora de ordem, esquecido).
+  // Agora é calculada: conta quantas avaliações já foram registradas HOJE
+  // (Brasília) e soma 1. A contagem é só do dia — recomeça em 1 a cada
+  // dia novo, sozinha, sem ninguém precisar zerar nada.
+  //
+  // _dataBrasiliaDeISO/_hojeBrasilia são cópias locais de
+  // dataBrasiliaDeISO()/todayBrasilia() (data.js) — duplicadas de
+  // propósito, não importadas: setor-qualidade.js já evita depender de
+  // globais de data.js fora do stub mínimo de LW (ver
+  // test/helpers/setor-qualidade-dom.js, que carrega este arquivo
+  // isolado, sem data.js, pra testar "de fora" como um navegador faria).
+  function _dataBrasiliaDeISO(iso) {
+    if (!iso) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(iso));
+  }
+  function _hojeBrasilia() {
+    return _dataBrasiliaDeISO(new Date().toISOString());
+  }
+
+  // O valor mostrado aqui é uma PRÉVIA, a partir do avaliacoesCache já
+  // carregado (pode ficar um passo atrás se outro operador registrar uma
+  // avaliação bem no meio-tempo) — o número que realmente vale é
+  // recalculado no SERVIDOR, na hora de registrar (ver
+  // db.salvarAvaliacaoQualidade, lib/db/operacoes-qualidade.js), pra não
+  // sair número repetido em duas avaliações registradas quase juntas.
+  function _calcularProximaSequenciaHoje() {
+    const hoje = _hojeBrasilia();
+    const totalHoje = (avaliacoesCache.avaliacoes || [])
+      .filter(a => _dataBrasiliaDeISO(a.registeredAt) === hoje).length;
+    return totalHoje + 1;
+  }
+  function _atualizarSequenciaDoDiaPrevia() {
+    const el = document.getElementById('sq-dailySeq');
+    if (el) el.value = _calcularProximaSequenciaHoje();
+  }
+
   function getData() {
     return avaliacoesCache;
   }
@@ -2713,7 +2767,11 @@
       linkedOperacaoId,
       palletTypes, slabConfig,
       extraStacks: [...extraStacks], stackCounts: { ...stackCounts },
-      dailySeq:     document.getElementById('sq-dailySeq').value,
+      // Sequência do Dia NÃO é mais salva no rascunho — é sempre
+      // recalculada na hora de reabrir (ver applyFormData), porque o
+      // "próximo número de hoje" muda com o tempo (outras avaliações
+      // registradas nesse meio-tempo, ou o rascunho atravessando a
+      // virada do dia).
       turno:        document.getElementById('sq-turno').value,
       tempInput:    document.getElementById('sq-temp').value,
       dtMontagem:   document.getElementById('sq-dtMontagem').value,
@@ -2873,6 +2931,15 @@
         // corrigiu um detalhe depois (mesmo raciocínio de Paradas,
         // paradas.js).
         avaliadorNome: editando ? (_editandoAvaliadorNome || null) : LW.nomeDeQuemEstaLogado(),
+        // Sequência do Dia — numa CORREÇÃO, manda de volta o número
+        // ORIGINAL (_editandoDailySeq, carregado junto com o resto da
+        // avaliação em edição — ver editarAvaliacaoDoEspelho), pra
+        // preservá-lo. Numa avaliação NOVA, não manda nada — quem calcula
+        // e atribui o número definitivo é o servidor, na hora de salvar
+        // (ver db.salvarAvaliacaoQualidade), pra não sair repetido se duas
+        // avaliações forem registradas quase ao mesmo tempo; o valor
+        // mostrado até aqui na tela era só uma prévia.
+        ...(editando ? { dailySeq: _editandoDailySeq || null } : {}),
         ...(editando ? { editadoEm: new Date().toISOString() } : {}),
       };
       // Painéis embutidos na própria avaliação — 1 linha no banco pra
@@ -2991,6 +3058,12 @@
     // que falta antes de selecionar (mesma correção já usada em
     // _prefillFromOperacao, acima).
     _selecionarBateriaNoForm(item.batteryId || 'B1');
+    // Mostra a Sequência do Dia REAL desta avaliação (a que foi calculada
+    // no servidor quando ela foi registrada) — não recalcula pra "próximo
+    // de hoje" aqui, porque a avaliação sendo reaberta pode ser de
+    // qualquer dia, não necessariamente hoje. Avaliação legada (anterior
+    // a esta mudança) não tem esse campo — mostra "—".
+    document.getElementById('sq-dailySeq').value     = item.dailySeq || '—';
     document.getElementById('sq-turno').value        = item.turno    || '';
     document.getElementById('sq-temp').value         = item.tempInput || '';
     document.getElementById('sq-dtMontagem').value   = fmtDTL(item.dtMontagem);
@@ -3072,6 +3145,7 @@
         _editandoRegistradoEm     = item.registeredAt || null;
         _editandoLinkedOperacaoId = item.linkedOperacaoId || null;
         _editandoAvaliadorNome    = item.avaliadorNome || null;
+        _editandoDailySeq         = item.dailySeq || null;
         setEditable(true);
         // Mesma trava do lançamento novo: os dados vieram da operação
         // real na hora do registro original, corrigir aqui não deveria
@@ -4089,7 +4163,11 @@
     paineisNaoEnchidosAtual = [];
     palletTypes = d.palletTypes  || ['','','',''];
     updateMountTypeDropdown();
-    document.getElementById('sq-dailySeq').value     = d.dailySeq  || '1';
+    // Sequência do Dia — recalcula do zero em vez de restaurar o valor
+    // salvo no rascunho: um rascunho pode ter ficado "Em Andamento" de um
+    // dia pra outro, e o número de ontem não vale mais hoje (ver
+    // _calcularProximaSequenciaHoje — a contagem é sempre do dia atual).
+    _atualizarSequenciaDoDiaPrevia();
     document.getElementById('sq-turno').value        = d.turno     || '1° TURNO';
     document.getElementById('sq-temp').value         = d.tempInput || '';
     document.getElementById('sq-dtMontagem').value   = fmtDTL(d.dtMontagem);
@@ -4205,10 +4283,18 @@
     _editandoRegistradoEm = null;
     _editandoLinkedOperacaoId = null;
     _editandoAvaliadorNome = null;
+    _editandoDailySeq = null;
     _aplicarModoBotoesForm();
     document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
     document.getElementById('sq-batteryId').value    = 'B1';
-    document.getElementById('sq-dailySeq').value     = '1';
+    // Sequência do Dia — não é mais escolhida à mão (era um <select> 1-13
+    // que o avaliador preenchia manualmente e errava — número repetido,
+    // fora de ordem, esquecido). Agora é só uma PRÉVIA calculada a partir
+    // do que já está no cache local (ver _atualizarSequenciaDoDiaPrevia) —
+    // o número final e definitivo é recalculado no servidor na hora de
+    // registrar (ver db.salvarAvaliacaoQualidade), pra não dar número
+    // repetido se duas avaliações forem registradas quase ao mesmo tempo.
+    _atualizarSequenciaDoDiaPrevia();
     document.getElementById('sq-turno').value        = '1° TURNO';
     document.getElementById('sq-temp').value         = '';
     document.getElementById('sq-dtMontagem').value   = '';
