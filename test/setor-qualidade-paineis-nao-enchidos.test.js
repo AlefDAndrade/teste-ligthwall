@@ -134,31 +134,27 @@ test('sem berços marcados "não enchido" (bercos_visuais ausente ou vazio), gra
   });
 });
 
-test('o berço que falta é PULADO na numeração (não é só um índice deslocado) — quem vinha depois mantém o número verdadeiro', async () => {
+test('numeração do painel é um índice simples 1..N, sempre recomeçando do 1 em cada palete (não mostra mais o berço de origem)', async () => {
   const { window } = dom;
   await iniciarAvaliacaoComTipoFixo(window, OPERACAO_COM_NAO_ENCHIDOS.id);
 
   const rotulo = (sid, posicao) => window.document.querySelector(`[data-id="${sid}-${posicao}"] .sq-slab-number`)?.textContent;
 
-  // stack3 = 1ª metade, esquerdo (berços 1-10) — berço 3 removido (esquerda).
-  // Antes da correção, a posição 3 (que agora guarda os dados do berço 4,
-  // deslocados pra preencher o buraco) ficava rotulada "B3" por engano —
-  // devia mostrar o berço 4 de verdade.
-  assert.equal(rotulo('stack3', 1), 'B1');
-  assert.equal(rotulo('stack3', 2), 'B2');
-  assert.equal(rotulo('stack3', 3), 'B4', 'berço 3 sumiu — a posição 3 agora é o berço 4, não pode continuar rotulada B3');
-  assert.equal(rotulo('stack3', 9), 'B10', 'último painel deveria ser o berço 10 (o maior berço desta metade), não B9');
+  // stack3 = 1ª metade, esquerdo — berço 3 removido (esquerda), sobrando 9
+  // placas. O painel que falta simplesmente não aparece; o resto mantém
+  // posição relativa — a numeração é só 1..9, sem nenhuma referência ao
+  // berço físico (não pula pro "4", nem pra qualquer outro número).
+  for (let i = 1; i <= 9; i++) assert.equal(rotulo('stack3', i), String(i));
 
-  // stack1 = 2ª metade, esquerdo (berços 11-20) — berço 15 removido (esquerda e direita).
-  assert.equal(rotulo('stack1', 4), 'B14');
-  assert.equal(rotulo('stack1', 5), 'B16', 'berço 15 sumiu — a posição 5 agora é o berço 16');
-  assert.equal(rotulo('stack1', 9), 'B20', 'último painel deveria ser o berço 20, não B19');
+  // stack1 = 2ª metade, esquerdo — berço 15 removido (esquerda e direita),
+  // sobrando 9 placas: mesmo raciocínio, cada palete recomeça do 1.
+  for (let i = 1; i <= 9; i++) assert.equal(rotulo('stack1', i), String(i));
 
-  // stack2 = 2ª metade, direito (berços 11-20) — berço 15 também removido aqui.
-  assert.equal(rotulo('stack2', 5), 'B16', 'mesmo raciocínio do lado direito');
+  // stack2 = 2ª metade, direito — berço 15 também removido aqui.
+  for (let i = 1; i <= 9; i++) assert.equal(rotulo('stack2', i), String(i));
 
-  // stack4 = 1ª metade, direito (berços 1-10) — nada removido deste lado
-  // (berço 3 só foi marcado do lado esquerdo) — numeração direta, sem pulos.
-  for (let i = 1; i <= 10; i++) assert.equal(rotulo('stack4', i), 'B' + i);
+  // stack4 = 1ª metade, direito — nada removido deste lado (berço 3 só foi
+  // marcado do lado esquerdo) — 10 placas, numeração 1..10.
+  for (let i = 1; i <= 10; i++) assert.equal(rotulo('stack4', i), String(i));
 });
 

@@ -1234,14 +1234,12 @@
   /* ── Render das pilhas de placas ──────────────────────── */
   function renderStacks() {
     _sincronizarColunasExtras(); // garante que as colunas dos pallets extras existem no DOM antes de preenchê-las
-    _atualizarSubtitulosPallets(); // faixa de berços de cada palete-base (ver função) — nunca muda a marcação em si, só o rótulo
     _stackIds().forEach((sid) => {
       const stack = document.getElementById(sid);
       if (!stack) return;
       _ativarDropZone(stack, sid); // liga o "soltar" — idempotente, ver função
       stack.innerHTML = '';
       const total = stackCounts[sid] || 0;
-      const palleteBase = parseInt(sid.replace('stack', '')); // 1-4 nos originais; extras (5+) nunca têm berço de origem
       for (let i = 1; i <= total; i++) {
         const slab = document.createElement('div');
         slab.className = 'sq-slab';
@@ -1250,13 +1248,14 @@
 
         const num = document.createElement('span');
         num.className = 'sq-slab-number';
-        // Mostra o berço de ORIGEM (ver _bercoDoSlot) em vez de um índice
-        // solto 1..N, sempre que a capacidade da operação for conhecida
-        // — cai de volta pro índice simples de sempre quando não for
-        // (avaliação avulsa legada, palete extra, ou rascunho reaberto
-        // sem a operação recarregada — ver capacidadeOperacaoAtual).
-        const berco = palleteBase <= 4 ? _bercoDoSlot(palleteBase, i, capacidadeOperacaoAtual, paineisNaoEnchidosAtual) : null;
-        num.textContent = berco ? ('B' + berco) : i;
+        // Índice simples, sempre 1..N dentro do próprio palete — cada
+        // palete recomeça do 1 (antes mostrava o berço de ORIGEM, que
+        // no palete da 2ª metade ia de metade+1 até a capacidade, ex.
+        // B11..B22; ver histórico de _bercoDoSlot). Um painel removido
+        // (🚫 Não Enchido, ver paineisNaoEnchidosAtual) já reduz "total"
+        // antes deste loop — não deixa buraco na numeração, o resto
+        // simplesmente ocupa as posições seguintes.
+        num.textContent = i;
         slab.appendChild(num);
 
         const tp = document.createElement('span');
@@ -2238,35 +2237,6 @@
     return { pallet, posicao };
   }
 
-  // Dado um dos 4 paletes BASE, devolve de qual LADO ele é (esquerdo ou
-  // direito) — usado por _bercoDoSlot pra saber quais berços "não
-  // enchido" (que são marcados por lado, não pelo palete em si) valem
-  // pra ele.
-  function _ladoDoPallet(pallet) {
-    const mapa = _paletePorMetadeELado();
-    if (pallet === mapa.esquerdo.primeira || pallet === mapa.esquerdo.segunda) return 'esquerdo';
-    if (pallet === mapa.direito.primeira || pallet === mapa.direito.segunda) return 'direito';
-    return null;
-  }
-
-  // Conjunto (Set) dos números de berço marcados como "não enchido" NO
-  // LADO indicado, a partir de uma lista bruta no formato de
-  // paineisNaoEnchidosAtual (ver _definirPaineisNaoEnchidos). Recebe a
-  // lista como parâmetro em vez de ler paineisNaoEnchidosAtual direto —
-  // assim _bercoDoSlot também funciona pro espelho de uma avaliação já
-  // salva (item.capacidadeOperacao), sem misturar com o estado da
-  // avaliação que está sendo editada agora.
-  function _bercosNaoEnchidosPorLado(lado, listaBruta) {
-    const campo = lado === 'esquerdo' ? 'esquerda' : 'direita';
-    const set = new Set();
-    (Array.isArray(listaBruta) ? listaBruta : []).forEach(b => {
-      if (b[`estado_${campo}`] !== 'nao_enchido') return;
-      const bercoNum = parseInt(b.ordem) || parseInt(String(b.berco || '').replace(/^B/i, ''));
-      if (bercoNum) set.add(bercoNum);
-    });
-    return set;
-  }
-
   // "🚫 Marcar Não Enchido" (Bateria Atual, ver bateria-atual.js) — grava
   // o snapshot cru de op.bercos_visuais (ver bercosVisuaisPorOperacoes,
   // db.js, e GET /operacoes-nao-avaliadas) em paineisNaoEnchidosAtual, pra
@@ -2338,71 +2308,6 @@
     });
     remocoes.sort((a, b) => b.bercoNum - a.bercoNum);
     remocoes.forEach(r => _removerPosicaoDoPallet(`stack${r.pallet}`, r.posicao));
-  }
-
-  // Caminho inverso: dado um dos 4 paletes BASE (1-4) e uma posição
-  // dentro dele, devolve o nº do berço de origem — usado por
-  // renderStacks() pra rotular cada painel da grade com o berço real,
-  // em vez de um índice solto 1..N sem relação com o berço físico.
-  // Paletes extras (5+, ver adicionarPalletExtra) não têm berço de
-  // origem definido — devolve null, a chamada volta a numerar 1..N.
-  // Generalizado pra qualquer permutação configurada em "Definir
-  // Paletes" (ver _paletePorMetadeELado, acima) — não assume mais que
-  // paletes 3/4 são sempre a 1ª metade.
-  //
-  // bercosNaoEnchidos (opcional, mesmo formato de paineisNaoEnchidosAtual)
-  // — ver conversa que motivou isso: encher só um lado do berço (ou
-  // marcar "🚫 Não Enchido" em Bateria Atual) tira 1 painel da grade
-  // (ver _removerPaineisNaoEnchidosDaGrade), mas o berço que falta
-  // precisa DESAPARECER da numeração, não só empurrar todo mundo pra
-  // trás uma casa — B6 continua sendo B6 mesmo se B5 não existir aqui,
-  // nunca vira "B5" por engano. Por isso este cálculo agora PULA os
-  // berços não enchidos ao contar posições, em vez de somar direto
-  // (posição + deslocamento fixo).
-  function _bercoDoSlot(pallet, posicao, capacidade, bercosNaoEnchidos) {
-    if (!capacidade || capacidade <= 0) return null;
-    const metade = Math.ceil(capacidade / 2);
-    const mapa = _paletePorMetadeELado();
-    let inicio, fim;
-    if (pallet === mapa.esquerdo.primeira || pallet === mapa.direito.primeira) { inicio = 1; fim = metade; }
-    else if (pallet === mapa.esquerdo.segunda || pallet === mapa.direito.segunda) { inicio = metade + 1; fim = capacidade; }
-    else return null;
-
-    if (!bercosNaoEnchidos || !bercosNaoEnchidos.length) return inicio + posicao - 1; // atalho de sempre, sem remoções
-
-    const removidos = _bercosNaoEnchidosPorLado(_ladoDoPallet(pallet), bercosNaoEnchidos);
-    if (!removidos.size) return inicio + posicao - 1;
-
-    let contagem = 0;
-    for (let b = inicio; b <= fim; b++) {
-      if (removidos.has(b)) continue;
-      contagem++;
-      if (contagem === posicao) return b;
-    }
-    return null; // não deveria acontecer se posicao <= stackCounts[sid]
-  }
-
-  // Atualiza o subtítulo de cada palete-base (ex.: "Berços 1–10 · Esq.")
-  // com a faixa de berços que ele recebe — só aparece quando a
-  // capacidade da operação já é conhecida (ver capacidadeOperacaoAtual);
-  // fica em branco (mesmo texto de sempre, sem subtítulo) enquanto não
-  // for, pra não mostrar uma faixa errada antes da operação carregar.
-  // Generalizado pra qualquer permutação configurada em "Definir
-  // Paletes" (ver _paletePorMetadeELado, acima).
-  function _atualizarSubtitulosPallets() {
-    const cap = capacidadeOperacaoAtual;
-    const metade = cap ? Math.ceil(cap / 2) : null;
-    const mapa = _paletePorMetadeELado();
-    const faixas = cap ? {
-      [mapa.esquerdo.primeira]: `Berços 1–${metade} · Esq.`,
-      [mapa.direito.primeira]:  `Berços 1–${metade} · Dir.`,
-      [mapa.esquerdo.segunda]:  `Berços ${metade + 1}–${cap} · Esq.`,
-      [mapa.direito.segunda]:   `Berços ${metade + 1}–${cap} · Dir.`,
-    } : { 1: '', 2: '', 3: '', 4: '' };
-    Object.entries(faixas).forEach(([n, texto]) => {
-      const el = document.getElementById('sq-pallet-sub-' + n);
-      if (el) el.textContent = texto;
-    });
   }
 
   // Monta o slabConfig (mesmo formato usado pelo modal de Configuração
@@ -3367,13 +3272,9 @@
         const motivoHtml = panel?.motivo
           ? `<span class="sq-mini-slab-motivo${_linhaDoPainel(panel) === '2ª' ? ' sq-mini-slab-motivo-2linha' : ''}" title="${_escaparHtml(tituloMotivo)}">${_escaparHtml(panel.motivo)}</span>`
           : '';
-        // Mesmo raciocínio de renderStacks (grade principal) — mostra o
-        // berço de origem quando a avaliação salva tem
-        // capacidadeOperacao gravado (ver registerEvaluation);
-        // avaliação legada, sem esse campo, cai de volta no índice
-        // simples de sempre.
-        const berco = _bercoDoSlot(p, i, item.capacidadeOperacao);
-        const rotulo = berco ? ('B' + berco) : i;
+        // Mesmo raciocínio de renderStacks (grade principal) — índice
+        // simples 1..N, cada palete recomeçando do 1.
+        const rotulo = i;
         // Motivo + tipo agrupados num wrapper só (.sq-mini-slab-canto-info,
         // mesma ideia da grade principal — ver .sq-slab-canto-info,
         // renderStacks) — sem isso, o motivo entrava como mais um item

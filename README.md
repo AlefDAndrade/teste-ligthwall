@@ -441,7 +441,7 @@ Cada berço da bateria enche 2 painéis — um do lado **Direito**, um do lado *
 - Uma **prévia visual** (mesma grade de berços do card "Bateria Atual") mostra o resultado ao vivo, com abas pra cada dimensão de bateria cadastrada (18/20/22 berços etc.) — o rótulo `P{n}` no topo de cada célula é o lado Direito, embaixo é o Esquerdo.
 - Validado como uma **permutação**: os 4 paletes (01–04) precisam ser usados exatamente 1 vez cada — não dá para dois quadrantes apontarem pro mesmo palete, nem deixar um de fora. Um erro inline aparece e bloqueia o salvamento até corrigir.
 - Persistido em `config.json` (chave `paletes`) junto com o resto desta aba, mesmo botão "✓ Salvar Configurações" — sem essa chave (instalação anterior a esta funcionalidade), o sistema usa um valor padrão de fábrica.
-- `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — direcionamento de painéis (`_paleteDoBerco`), rótulo de origem no drag-and-drop (`_bercoDoSlot`) e os subtítulos "Berços X–Y · Esq./Dir." de cada palete se ajustam automaticamente a qualquer configuração escolhida.
+- `_paletePorMetadeELado()` (`setor-qualidade.js`) lê esse mapeamento em tempo real — o direcionamento de painéis (`_paleteDoBerco`) se ajusta automaticamente a qualquer configuração escolhida. (Cada painel exibido na grade é rotulado com um índice simples 1..N, sempre recomeçando do 1 em cada palete — não mostra mais o nº do berço de origem; ver `renderStacks`/`renderMirror`, `setor-qualidade.js`.)
 
 ### Layout 2x2 dos pallets e arrastar-pra-trocar (Setor de Qualidade → Avaliação)
 
