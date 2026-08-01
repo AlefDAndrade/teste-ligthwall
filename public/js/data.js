@@ -568,11 +568,20 @@ function nomeDeQuemEstaLogado() {
 const DB_KEY_DEVICE_ID = 'lw_device_id';
 
 /**
- * ID estável deste navegador/computador — gerado uma única vez e
- * persistido em localStorage (sobrevive a reabrir o navegador; some se os
- * dados do navegador forem limpos).
+ * ID estável deste navegador/computador. Guardado em localStorage como
+ * antes (sobrevive a reabrir o navegador; some se os dados do navegador
+ * forem limpos) — MAS agora, assim que possível, é substituído pelo ID do
+ * cookie HttpOnly que o servidor emite (ver GET /meu-device-id,
+ * lib/dispositivo-cookie.js, server.js), que é a fonte que realmente
+ * decide autorização. HttpOnly não pode ser lido por JS, então
+ * buscamos o valor uma vez via fetch (_bootstrapDeviceId, chamado no
+ * carregamento deste arquivo) e guardamos aqui pra uso síncrono depois —
+ * até essa busca terminar (ou se falhar, ex: sem conexão), getDeviceId()
+ * cai no valor antigo gerado localmente, sem travar nada.
  */
-function getDeviceId() {
+let _deviceIdDoServidor = null;
+
+function _gerarOuLerDeviceIdLocal() {
   try {
     let id = localStorage.getItem(DB_KEY_DEVICE_ID);
     if (!id) {
@@ -583,6 +592,26 @@ function getDeviceId() {
   } catch (_) {
     return 'dev_sem_localstorage'; // navegador sem localStorage disponível
   }
+}
+
+/** Melhor esforço, chamado uma vez no carregamento da página — busca o ID
+ *  real (cookie) no servidor e alinha o localStorage a ele, pra a tela de
+ *  Configurações mostrar/autorizar o MESMO valor que o servidor de fato
+ *  usa pra checar autorização (ver dispositivoAutorizado(), server.js). */
+async function _bootstrapDeviceId() {
+  try {
+    const resp = await fetch('/meu-device-id');
+    const dados = await resp.json();
+    if (dados && dados.ok && dados.deviceId) {
+      _deviceIdDoServidor = dados.deviceId;
+      try { localStorage.setItem(DB_KEY_DEVICE_ID, dados.deviceId); } catch (_) {}
+    }
+  } catch (_) { /* sem conexão — segue usando o valor local antigo */ }
+}
+_bootstrapDeviceId();
+
+function getDeviceId() {
+  return _deviceIdDoServidor || _gerarOuLerDeviceIdLocal();
 }
 
 /**

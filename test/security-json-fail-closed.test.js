@@ -86,8 +86,15 @@ test('security.json corrompido (JSON inválido): /verificar-senha falha FECHADA 
 
     // Confirma que NENHUM cookie de sessão foi emitido — a falha fechada
     // vale tanto pro corpo da resposta quanto pra ausência de sessão.
-    const setCookie = resp.headers.get('set-cookie');
-    assert.ok(!setCookie, 'não deveria emitir cookie de sessão quando security.json está corrompido');
+    // (Checa especificamente por lw_admin_sessao, não por "nenhum cookie":
+    // o cookie de identidade de dispositivo — lw_device_id, ver
+    // lib/dispositivo-cookie.js — é emitido na 1ª visita do navegador
+    // independente de login/sessão, então pode legitimamente vir junto.)
+    const cookies = typeof resp.headers.getSetCookie === 'function'
+      ? resp.headers.getSetCookie()
+      : [resp.headers.get('set-cookie') || ''];
+    const cookieDeSessao = cookies.find(c => c.startsWith('lw_admin_sessao='));
+    assert.ok(!cookieDeSessao, 'não deveria emitir cookie de sessão quando security.json está corrompido');
   } finally {
     await servidor.parar();
   }

@@ -10,6 +10,7 @@ const WebSocket = require('ws');
 // public/db/ exatamente como antes, até cada fase ser migrada de verdade.
 const db = require('./db.js');
 const logger = require('./lib/logger');
+const dispositivoCookie = require('./lib/dispositivo-cookie');
 
 // Converte pra número, ou null se vazio/nulo/indefinido — usado ao montar
 // parâmetros de colunas SQL a partir de valores de formulário (que chegam
@@ -688,9 +689,35 @@ function lerDispositivosAutorizados() {
   }
 }
 
-function dispositivoAutorizado(deviceId) {
+const CONFIG_PATH_DISPOSITIVOS = path.join(DB_DIR, 'config.json');
+
+function salvarDispositivosAutorizados(lista) {
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(CONFIG_PATH_DISPOSITIVOS, 'utf8')); } catch (_) {}
+  cfg.dispositivosAutorizados = lista;
+  fs.writeFileSync(CONFIG_PATH_DISPOSITIVOS, JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+// deviceId bate direto com algum autorizado -> autorizado, sem mais nada.
+// Senão, e só se um IP foi informado: procura um cadastro autorizado cujo
+// `ip` guardado bate com o IP deste request — cobre o caso de o navegador
+// ter perdido o cookie/localStorage (limpou dados, trocou de navegador no
+// mesmo PC) mas continuar sendo fisicamente o MESMO computador (mesmo IP
+// de rede interna, tipicamente fixo em chão de fábrica). Quando isso
+// acontece, RELIGA o cadastro ao novo deviceId (autocura) em vez de negar
+// e obrigar o Administrador a reautorizar manualmente — mas só nesse caso
+// específico (IP já era de um dispositivo JÁ autorizado antes), nunca pra
+// um IP desconhecido. Fica registrado (religadoEm) pra auditoria.
+function dispositivoAutorizado(deviceId, ip) {
   if (!deviceId) return false;
-  return lerDispositivosAutorizados().some(d => d && d.deviceId === deviceId);
+  const lista = lerDispositivosAutorizados();
+  if (lista.some(d => d && d.deviceId === deviceId)) return true;
+  if (!ip) return false;
+  const idx = lista.findIndex(d => d && d.ip === ip);
+  if (idx === -1) return false;
+  lista[idx] = { ...lista[idx], deviceId, religadoEm: new Date().toISOString() };
+  salvarDispositivosAutorizados(lista);
+  return true;
 }
 
 // ─── QUEM PODE CONTROLAR A OPERAÇÃO (iniciar/encerrar/registrar) ──────────
@@ -704,7 +731,8 @@ function dispositivoAutorizado(deviceId) {
 //      cadastro (Configurações → Usuários — ver lib/rotas/usuarios.js,
 //      lib/perfis.js).
 function podeControlarOperacao(req, deviceId) {
-  if (!dispositivoAutorizado(deviceId)) return false;
+  const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  if (!dispositivoAutorizado(deviceId, ip)) return false;
   if (sessao.requestTemSessaoValida(req)) return true; // Admin Master: irrestrito (mas ainda precisa do device acima)
   const dados = sessaoUsuario.dadosDaSessao(req);
   if (!dados) return false; // sem sessão de usuário válida, sem acesso
@@ -757,6 +785,37 @@ const server = http.createServer((req, res) => {
   const deviceId = queryParams.get('deviceId') || '';
   const modoTeste = queryParams.get('modoTeste') === 'true';
 
+  // ─── Cookie de identidade do dispositivo (ver lib/dispositivo-cookie.js) ─
+  // Resolve (ou cria) o deviceId "seguro" deste navegador. Quando o cookie
+  // já existe, ele passa a valer como a identidade real do dispositivo pra
+  // TODAS as rotas abaixo (sobrescrevendo aqui mesmo o valor de
+  // queryParams.get('deviceId') — cada rota extraída continua lendo
+  // normalmente de queryParams, sem precisar saber que isso existe), porque
+  // é uma fonte que o JavaScript do navegador não controla (diferente do
+  // deviceId antigo, mandado pelo próprio cliente via query string a
+  // partir do localStorage). Quando o cookie AINDA não existe (primeira
+  // visita deste navegador, ou um cliente que não guarda cookies — ex: os
+  // testes automatizados, de propósito), cai no valor antigo (query
+  // string) sem quebrar nada — e um Set-Cookie é enfileirado pra essa
+  // resposta, pra da próxima vez em diante já valer o cookie.
+  const deviceIdCookieExistente = dispositivoCookie.deviceIdDoCookie(req);
+  const deviceIdGeradoAgora = deviceIdCookieExistente ? null : dispositivoCookie.gerarDeviceId();
+  const novoCookieDispositivo = deviceIdGeradoAgora ? dispositivoCookie.criarCookieDeviceId(deviceIdGeradoAgora) : null;
+  if (deviceIdCookieExistente) {
+    queryParams.set('deviceId', deviceIdCookieExistente);
+  }
+  if (novoCookieDispositivo) {
+    const writeHeadOriginal = res.writeHead.bind(res);
+    res.writeHead = (statusCode, headers) => {
+      headers = headers || {};
+      const existenteHeader = headers['Set-Cookie'];
+      headers['Set-Cookie'] = existenteHeader
+        ? [].concat(existenteHeader, novoCookieDispositivo)
+        : novoCookieDispositivo;
+      return writeHeadOriginal(statusCode, headers);
+    };
+  }
+
   // ─── Limite de tamanho de corpo (POST) ─────────────────────────────────
   // Nenhuma rota abaixo tinha limite nenhum — cada uma só acumula
   // `req.on('data', chunk => body += chunk)` até o 'end', sem nenhum teto.
@@ -781,6 +840,22 @@ const server = http.createServer((req, res) => {
         req.destroy();
       }
     });
+  }
+
+  // GET /meu-device-id — devolve o deviceId "seguro" (cookie HttpOnly)
+  // deste navegador em JSON. Necessário porque HttpOnly, por definição,
+  // não pode ser lido pelo JavaScript do navegador — esta rota existe só
+  // pra a tela Configurações → Dispositivos Autorizados conseguir MOSTRAR
+  // o ID pro Administrador copiar/autorizar (ver getDeviceId() em
+  // public/js/data.js). Não abre brecha nenhuma: quem decide se um
+  // dispositivo está autorizado continua sendo sempre o valor real do
+  // cookie no request (ver dispositivoAutorizado()/podeControlarOperacao,
+  // acima) — o que o cliente FAZ com o valor devolvido aqui não afeta essa
+  // checagem.
+  if (req.method === 'GET' && urlPath === '/meu-device-id') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, deviceId: deviceIdCookieExistente || deviceIdGeradoAgora }));
+    return;
   }
 
   // ─── Rotas extraídas pra lib/rotas/ (ver ROTAS_EXTRAIDAS, acima) ───────

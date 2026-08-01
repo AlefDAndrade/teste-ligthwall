@@ -42,9 +42,19 @@ after(async () => {
   await servidor.parar();
 });
 
+// Procura especificamente o cookie de SESSÃO de admin (lw_admin_sessao) —
+// não "o primeiro cookie que aparecer". Desde a introdução do cookie de
+// identidade de dispositivo (lw_device_id, ver lib/dispositivo-cookie.js),
+// uma resposta pode legitimamente vir com MAIS de um Set-Cookie ao mesmo
+// tempo (ex: numa tentativa de login com senha errada, o dispositivo ainda
+// recebe seu cookie de identidade normalmente — isso não significa que uma
+// sessão foi aberta).
 function extrairCookie(resposta) {
-  const setCookie = resposta.headers.get('set-cookie') || '';
-  return setCookie.split(';')[0] || null;
+  const cookies = typeof resposta.headers.getSetCookie === 'function'
+    ? resposta.headers.getSetCookie()
+    : [resposta.headers.get('set-cookie') || ''];
+  const sessao = cookies.find(c => c.startsWith('lw_admin_sessao='));
+  return sessao ? sessao.split(';')[0] : null;
 }
 
 async function logarComoAdmin() {
