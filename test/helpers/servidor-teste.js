@@ -89,7 +89,19 @@ async function iniciarServidorDeTeste(opcoes = {}) {
   };
 }
 
-async function esperarServidorSubir(baseUrl, processo, obterErro, tentativas = 100) {
+async function esperarServidorSubir(baseUrl, processo, obterErro, tentativas = 300) {
+  // 300 tentativas * 100ms = até 30s de espera (era 10s/100 tentativas).
+  // Por padrão, `node --test` sobe vários arquivos de teste em paralelo, e
+  // CADA UM desses spawna seu próprio `node server.js` (ver
+  // iniciarServidorDeTeste, acima). Numa máquina/CI com poucos núcleos, um
+  // punhado de servidores de teste subindo ao mesmo tempo — cada um
+  // carregando Express + better-sqlite3 (módulo nativo) do zero — pode
+  // legitimamente levar bem mais que 10s pra responder, sem que nada
+  // esteja de fato quebrado (só fila de CPU). 10s tornava esse cenário
+  // (comum, não uma exceção) indistinguível de um servidor travado de
+  // verdade. Se ainda assim isso for insuficiente em algum CI, rodar
+  // com `--test-concurrency=1` (ver "test:serial" no package.json)
+  // remove a causa raiz (contenção), em troca de uma suíte mais lenta.
   for (let i = 0; i < tentativas; i++) {
     if (processo.exitCode !== null) {
       throw new Error(`server.js de teste encerrou sozinho antes de subir.\n${obterErro()}`);

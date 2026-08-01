@@ -10,6 +10,7 @@
     "predev": "node build-index.js",
     "dev": "node server.js",
     "test": "node --test",
+    "test:serial": "node --test --test-concurrency=1",
     "lint": "eslint .",
     "vendorizar:sheetjs": "node scripts/vendorizar-sheetjs.js"
   },
