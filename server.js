@@ -33,16 +33,14 @@ const ROOT_DIR = __dirname; // raiz do projeto — usado pelo backup geral
 const DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(DIR, 'db'); // arquivos-de-dados (JSON usados como "banco")
 
-// ─── security.json mora FORA de public/ ────────────────────────────────────
-// Antes, security.json vivia em public/db/ — e por isso era servido como
-// arquivo estático comum (GET /db/security.json acessível por qualquer um,
-// sem senha nenhuma; ver README, "Limitações conhecidas"). Agora mora em
-// private/ (irmã de public/, nunca servida como estático — mesmo padrão já
-// usado por backups-seguranca/ e logs/). O acesso por HTTP passa a exigir
-// uma sessão de admin válida (ver GET /db/security.json e lib/sessao.js,
-// mais abaixo) — a URL que o navegador usa não muda, só fica protegida.
-const PRIVATE_DIR = path.join(ROOT_DIR, 'private');
-const SECURITY_PATH = path.join(PRIVATE_DIR, 'security.json');
+// ─── security.json mora FORA de public/ — Fase 17 do fatiamento, ver README ──
+// PRIVATE_DIR/SECURITY_PATH, a garantia de que private/ existe, e a migração
+// automática de public/db/security.json (instalação antiga) agora vivem em
+// lib/security-json.js. Precisa vir ANTES de tudo que usa PRIVATE_DIR ou
+// SECURITY_PATH logo abaixo (auth.js, USUARIOS_PATH, PERFIS_CUSTOMIZADOS_PATH,
+// as factories de perfis customizados/overrides/notificações, e a rota de
+// autenticação lá embaixo).
+const { PRIVATE_DIR, SECURITY_PATH } = require('./lib/security-json.js')({ fs, path, ROOT_DIR, DB_DIR });
 // Cadastro de usuários com login+senha+perfil (ver lib/rotas/usuarios.js,
 // lib/perfis.js) — mesmo motivo de segurança: contém senhaHash por
 // usuário, e um arquivo dentro de public/db/ seria servido cru pela rota
@@ -59,20 +57,6 @@ const USUARIOS_PATH = path.join(PRIVATE_DIR, 'usuarios.json');
 // qualquer tentativa de cadastrar/remover OUTRO usuário depois (ver
 // POST /salvar-usuarios, lib/rotas/usuarios.js).
 const PERFIS_CUSTOMIZADOS_PATH = path.join(PRIVATE_DIR, 'perfis-customizados.json');
-fs.mkdirSync(PRIVATE_DIR, { recursive: true });
-
-// Migração automática, só na 1ª vez que sobe depois desta mudança: se o
-// arquivo antigo (public/db/security.json) ainda existir e o novo ainda
-// não, copia o conteúdo pro novo lugar e RENOMEIA o antigo (nunca apaga —
-// mesmo padrão das migrações de db.js, que preferem deixar um rastro
-// "<nome>.migrado-<timestamp>" a apagar dados).
-(function migrarSecurityJsonSeNecessario() {
-  const caminhoAntigo = path.join(DB_DIR, 'security.json');
-  if (fs.existsSync(SECURITY_PATH)) return; // já migrado
-  if (!fs.existsSync(caminhoAntigo)) return; // instalação nova — nada pra migrar
-  fs.copyFileSync(caminhoAntigo, SECURITY_PATH);
-  fs.renameSync(caminhoAntigo, caminhoAntigo + `.migrado-${Date.now()}`);
-})();
 
 // Autenticação do Administrador (hash de senha + rate limiting de
 // tentativas) — extraído pra lib/auth.js (ver esse arquivo pros detalhes
