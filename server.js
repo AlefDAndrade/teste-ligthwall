@@ -316,6 +316,23 @@ const {
   negarControleDeOperacao,
 } = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea });
 
+// ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
+// _enviarWsParaTodos/broadcastOperacaoAndamento/broadcastOperacaoFinalizada/
+// broadcastLeituraAutomatica/broadcastDadosSqlExcluidos agora vivem em
+// lib/websocket-broadcast.js. Precisa vir ANTES das factories logo abaixo,
+// que já usam essas funções. A conexão WebSocket em si (`wss`) só é criada
+// mais adiante (depende do `server` HTTP) — por isso o wiring de
+// clientesOperacaoAndamento fica encapsulado no módulo (adicionarCliente/
+// removerCliente/getRevisaoAtual), chamado de dentro de wss.on('connection',
+// ...) lá embaixo.
+const wsBroadcast = require('./lib/websocket-broadcast.js')({ WebSocket });
+const {
+  broadcastOperacaoAndamento,
+  broadcastOperacaoFinalizada,
+  broadcastLeituraAutomatica,
+  broadcastDadosSqlExcluidos,
+} = wsBroadcast;
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
@@ -835,31 +852,13 @@ const server = http.createServer((req, res) => {
 // ── WEBSOCKET: transmite em tempo real qualquer mudança da operação em
 // andamento (tela "Registrar Operação") pra quem mais estiver com a tela
 // aberta. Quem dispara o broadcast é a rota POST /salvar-operacao-andamento,
-// acima; aqui só ficam a conexão e a lista de clientes conectados.
+// acima; aqui só ficam a conexão e o encaminhamento pra
+// lib/websocket-broadcast.js (ver Fase 13, acima) — a lista de clientes
+// conectados e o número de revisão vivem lá agora.
 const wss = new WebSocket.Server({ server, path: '/ws/operacao-andamento' });
-const clientesOperacaoAndamento = new Set();
-
-// Número de revisão da operação em andamento — só em memória (reseta com
-// o servidor, junto de clientesOperacaoAndamento; não precisa sobreviver
-// a um restart, já que todo cliente reconecta e recebe um snapshot novo
-// de qualquer forma). Incrementado a cada broadcastOperacaoAndamento(),
-// nunca decrementado — é o jeito do CLIENTE (ver _aplicarEstadoExterno,
-// operacao.js) saber "essa atualização que chegou é mais nova que a que
-// eu já tenho, ou é uma atualização atrasada/velha que devo ignorar".
-//
-// Motivação (ver conversa que motivou): antes, qualquer atualização
-// recebida por WebSocket SUBSTITUÍA o estado local inteiro, sem checar
-// se era mais recente — duas ABAS (não só dois computadores; abas do
-// MESMO navegador compartilham deviceId via localStorage, então o
-// mecanismo de "dono" já existente, baseado em deviceId, não protege
-// contra isso) editando a mesma operação podiam se sobrescrever uma à
-// outra silenciosamente, apagando dados recém-preenchidos sem aviso
-// nenhum — um traço "cheio" podia voltar a aparecer como pendente do
-// nada, se uma aba mais atrasada mandasse a própria versão por cima.
-let _revisaoOperacaoAndamento = 0;
 
 wss.on('connection', (ws) => {
-  clientesOperacaoAndamento.add(ws);
+  wsBroadcast.adicionarCliente(ws);
 
   // Ao conectar, manda na hora o snapshot atual — é assim que a tela
   // carrega já mostrando uma operação que outra pessoa tenha deixado
@@ -867,63 +866,12 @@ wss.on('connection', (ws) => {
   // (não 0) — pra esta aba já nascer sabendo a partir de qual ponto
   // futuras atualizações contam como "mais novas".
   try {
-    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento(), revisao: _revisaoOperacaoAndamento }));
+    ws.send(JSON.stringify({ tipo: 'estado', dados: lerOperacaoAndamento(), revisao: wsBroadcast.getRevisaoAtual() }));
   } catch (_) { /* conexão pode ter caído nesse exato instante — ignora */ }
 
-  ws.on('close', () => clientesOperacaoAndamento.delete(ws));
-  ws.on('error', () => clientesOperacaoAndamento.delete(ws));
+  ws.on('close', () => wsBroadcast.removerCliente(ws));
+  ws.on('error', () => wsBroadcast.removerCliente(ws));
 });
-
-function _enviarWsParaTodos(msg) {
-  const texto = JSON.stringify(msg);
-  for (const ws of clientesOperacaoAndamento) {
-    if (ws.readyState === WebSocket.OPEN) {
-      try { ws.send(texto); } catch (_) { /* cliente pode ter caído nesse exato instante */ }
-    }
-  }
-}
-
-// Devolve o novo número de revisão pra quem chamou (ver POST
-// /salvar-operacao-andamento, lib/rotas/operacao-andamento.js) poder
-// incluir na RESPOSTA HTTP também — o próprio autor da mudança nunca vê
-// o eco do seu WebSocket (filtrado por origemClientId, ver data.js),
-// então é só pela resposta HTTP que ele fica sabendo sua própria
-// revisão mais recente.
-function broadcastOperacaoAndamento(dados, origemClientId) {
-  _revisaoOperacaoAndamento++;
-  _enviarWsParaTodos({ tipo: 'estado', dados, origemClientId, revisao: _revisaoOperacaoAndamento });
-  return _revisaoOperacaoAndamento;
-}
-
-// Avisa todo mundo "ligado" no sistema (exceto quem registrou — esse já
-// vê o resumo localmente) que uma operação foi finalizada/registrada —
-// fim da dinâmica de dono. Disparado por POST /registrar-operacao, nunca
-// em modo de teste. `resumo` é o mesmo formato que showSuccessModal()
-// (operacao.js) já usa pra exibir o modal de sucesso.
-function broadcastOperacaoFinalizada(resumo, origemClientId) {
-  _enviarWsParaTodos({ tipo: 'operacao_finalizada', resumo, origemClientId });
-}
-
-// Avisa quem estiver com "Modo Automático" ativo (ver operacao.js,
-// _aplicarLeituraAutomatica) que uma leitura chegou de fora — hoje
-// disparado só por POST /leitura-automatica (ver mais acima), que por
-// enquanto é chamado manualmente/por teste; a fonte real (coletor Modbus
-// TCP lendo o CLP WAGO) ainda não existe — ver README, "Modo Automático".
-function broadcastLeituraAutomatica(leitura) {
-  _enviarWsParaTodos({ tipo: 'leitura_automatica', leitura });
-}
-
-// Avisa TODO MUNDO conectado (qualquer página, não só quem tem "Registrar
-// Operação" aberta — ver conectarOperacaoAndamento() em data.js, chamada
-// uma vez só no boot do app, independente da tela visível) que uma linha
-// foi excluída em Configurações → Dados SQL. Quem originou a exclusão já
-// recarrega a própria página sozinho (ver cfgSqlExcluirLinha, app-core.js)
-// — por isso `origemClientId` (mesmo padrão de broadcastOperacaoFinalizada,
-// via wsClientId na query string) evita mandar essa mesma pessoa recarregar
-// 2 vezes.
-function broadcastDadosSqlExcluidos(info, origemClientId) {
-  _enviarWsParaTodos({ tipo: 'dados_sql_excluidos', ...info, origemClientId });
-}
 
 server.listen(PORT, HOST, () => {
   logger.info('server', `Lightwall rodando em http://${HOST}:${PORT}`);
