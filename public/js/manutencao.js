@@ -2003,7 +2003,15 @@
         status: 'Pendente',
         justificativa: '',
         autorNome: LW.nomeDeQuemEstaLogado(),
-        dataCriacao: new Date().toISOString().split('T')[0]
+        // Sem dataCriacao aqui de propósito — quem atribui é o backend
+        // (lib/db/manutencao-programada.js), sempre com timestamp
+        // completo e fresco por registro. Antes este campo vinha fixado
+        // aqui só com a DATA (sem hora) e igual pra todas as ocorrências
+        // de uma recorrência criada de uma vez (até 10, ver
+        // gerarOcorrenciasRecorrentes acima) — isso empatava o critério
+        // "mais recente primeiro" (ORDER BY data_criacao DESC) entre
+        // agendamentos do mesmo dia, e a ordem entre eles ficava por
+        // conta do SQLite em vez de refletir a ordem real de criação.
     }));
 
     try {
