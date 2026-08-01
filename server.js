@@ -12,12 +12,14 @@ const db = require('./db.js');
 const logger = require('./lib/logger');
 const dispositivoCookie = require('./lib/dispositivo-cookie');
 
-// Converte pra número, ou null se vazio/nulo/indefinido — usado ao montar
-// parâmetros de colunas SQL a partir de valores de formulário (que chegam
-// como string vazia '' quando o campo não foi preenchido).
-function numOuNulo(v) {
-  return (v === '' || v === null || v === undefined) ? null : Number(v);
-}
+// ─── HORÁRIO DE BRASÍLIA + UTILITÁRIO GENÉRICO — Fase 19 do fatiamento ────
+// todayBrasiliaServer/horaMinutoBrasiliaServer/numOuNulo agora vivem em
+// lib/tempo.js (última fase do plano, ver README, "Fatiamento de server.js"
+// → "Plano de continuidade"). Precisa vir bem no topo — numOuNulo é usado
+// logo abaixo pelas próprias rotas ainda não extraídas deste arquivo, e
+// todayBrasiliaServer/horaMinutoBrasiliaServer são injetadas em
+// notificacoesPush poucas linhas depois.
+const { todayBrasiliaServer, horaMinutoBrasiliaServer, numOuNulo } = require('./lib/tempo.js');
 
 const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
 // HOST: por padrão só escuta em localhost (127.0.0.1) — quando há um
@@ -107,8 +109,7 @@ const notificacoesPush = require('./lib/notificacoes-push.js')({
   // Injetados também pro job do lembrete diário de manutenção programada
   // (ver executarLembreteManutencaoProgramadaSeNecessario,
   // lib/notificacoes-push.js) — mesmas funções de relógio já usadas pelo
-  // backup automático, function declarations então já estão hoisted
-  // neste ponto do arquivo mesmo definidas mais abaixo.
+  // backup automático, importadas de lib/tempo.js lá no topo deste arquivo.
   todayBrasiliaServer, horaMinutoBrasiliaServer,
 });
 
@@ -206,8 +207,9 @@ const {
 // vivem em lib/contador-tracos-estado.js. Precisa vir ANTES das factories
 // logo abaixo, que já usam essas funções (rotasSobra, rotasContadorTracos,
 // rotasLeituraEAjustes, rotasRegistroOperacao, rotasBackup). Depende de
-// todayBrasiliaServer — definida mais abaixo neste arquivo como function
-// declaration, então já está hoisted (disponível) neste ponto.
+// todayBrasiliaServer, importada de lib/tempo.js lá no topo deste arquivo
+// (Fase 19, ver README) — não depende mais de hoisting de function
+// declaration, é um valor de verdade já disponível neste ponto.
 const {
   dirParaModoTeste,
   lerContadorTracosHoje,
@@ -300,44 +302,11 @@ const MIME = {
   '.ico':  'image/x-icon',
 };
 
-// "Agora" usado pelas duas funções de relógio abaixo — SEMPRE `new Date()`
-// de verdade em produção. Só existe esta indireção pra permitir que a
-// suíte de testes (ver test/manutencao-programada-lembrete.test.js)
-// congele o relógio do servidor e teste deterministicamente o job do
-// lembrete das 09h (ver executarLembreteManutencaoProgramadaSeNecessario,
-// lib/notificacoes-push.js), sem precisar esperar a hora real do dia
-// bater 09h. LW_TEST_RELOGIO_ISO só é lido se alguém setar a variável de
-// ambiente explicitamente (nunca acontece numa instalação normal/`npm
-// start`) — mesmo espírito do "Modo de Teste" já existente pra Registrar
-// Operação (ver DB_TESTE_DIR, lib/contador-tracos-estado.js): nunca
-// interfere com uso real.
-function _agoraServer() {
-  if (process.env.LW_TEST_RELOGIO_ISO) return new Date(process.env.LW_TEST_RELOGIO_ISO);
-  return new Date();
-}
-
-// Retorna a data de hoje em Brasília no formato YYYY-MM-DD (consistente com
-// todayBrasilia() do frontend), independente do fuso horário do servidor.
-function todayBrasiliaServer() {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  });
-  return fmt.format(_agoraServer()); // en-CA já formata como YYYY-MM-DD
-}
-
-// Retorna { hora, minuto } de agora em Brasília — usado pelo backup
-// automático diário, pra saber se já passou do horário de "fim de dia".
-function horaMinutoBrasiliaServer() {
-  const fmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Sao_Paulo',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
-  const partes = fmt.formatToParts(_agoraServer());
-  const hora = parseInt(partes.find(p => p.type === 'hour').value, 10);
-  const minuto = parseInt(partes.find(p => p.type === 'minute').value, 10);
-  return { hora, minuto };
-}
+// ─── HORÁRIO DE BRASÍLIA — ver lib/tempo.js (Fase 19) ─────────────────────
+// _agoraServer/todayBrasiliaServer/horaMinutoBrasiliaServer agora vivem lá
+// (require no topo deste arquivo, logo após numOuNulo). LW_TEST_RELOGIO_ISO
+// continua sendo a mesma variável de ambiente de sempre — só a definição de
+// _agoraServer() que a lê mudou de lugar, não o comportamento.
 
 // ─── MODO DE TESTE + CONTADOR DE TRAÇOS DO DIA (estado) — Fase 18, ver README ──
 // dirParaModoTeste/lerContadorTracosHoje/incrementarContadorTracosHoje agora
@@ -495,7 +464,7 @@ const server = http.createServer((req, res) => {
   // ou no boot, ver server.listen abaixo), pra não precisar esperar até
   // 1 minuto de verdade em cada teste. SÓ existe (registrada) quando
   // LW_TEST_RELOGIO_ISO está setada (mesma variável que já congela o
-  // relógio do servidor, ver _agoraServer() acima) — nunca ativa numa
+  // relógio do servidor, ver _agoraServer() em lib/tempo.js) — nunca ativa numa
   // instalação normal (`npm start`), então nunca é uma rota alcançável
   // em produção.
   if (process.env.LW_TEST_RELOGIO_ISO && req.method === 'POST' && urlPath === '/__test__/executar-lembrete-programada') {
