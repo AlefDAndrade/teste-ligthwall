@@ -347,6 +347,25 @@ const {
   salvarBercosAndamentoNoDisco,
 } = require('./lib/operacao-andamento-estado.js')({ fs, path, DB_DIR });
 
+// ─── FILA DE AVALIAÇÃO (não avaliadas) — Fase 15 do fatiamento ───────────
+// lerOperacoesNaoAvaliadas/salvarOperacoesNaoAvaliadasNoDisco/
+// adicionarNaFilaNaoAvaliadas/removerDaFilaNaoAvaliadas/
+// recalcularFilaNaoAvaliadasApartirDoSql/migrarFilaNaoAvaliadasSeNecessario
+// agora vivem em lib/fila-avaliacao.js — compartilhado entre qualidade.js e
+// registro-operacao.js (mais sql-admin.js e backup.js). Precisa vir ANTES
+// das factories logo abaixo, que já usam essas funções. A chamada de
+// migrarFilaNaoAvaliadasSeNecessario() continua lá embaixo, depois das
+// migrações do db.js (ver comentário perto dessa chamada) — só a definição
+// da função mudou de lugar, não quando ela roda.
+const {
+  lerOperacoesNaoAvaliadas,
+  salvarOperacoesNaoAvaliadasNoDisco,
+  adicionarNaFilaNaoAvaliadas,
+  removerDaFilaNaoAvaliadas,
+  recalcularFilaNaoAvaliadasApartirDoSql,
+  migrarFilaNaoAvaliadasSeNecessario,
+} = require('./lib/fila-avaliacao.js')({ fs, path, DB_DIR, db, logger });
+
 // ── Fatias de rotas extraídas pra lib/rotas/ (ver esse arquivo pro padrão
 // seguido) — cada uma é uma factory que recebe só as dependências que
 // aquele domínio usa, e devolve uma função tentar(req,res,urlPath) que
@@ -410,6 +429,11 @@ db.migrarContadorTracosSeNecessario(DB_DIR);
 // (a mais complexa; depende da Fase 2 já ter rodado, pra "operacoes" já
 // existir quando os usos forem conferidos — por isso vem por último).
 db.migrarRelatorioInjecaoSeNecessario(DB_DIR);
+
+// Migração da fila de avaliação (ver lib/fila-avaliacao.js) — precisa vir
+// DEPOIS das migrações do db.js acima: recalcula a partir de "operacoes"/
+// "operacoes_avaliadas", que só existem depois delas.
+migrarFilaNaoAvaliadasSeNecessario();
 
 const MIME = {
   '.html': 'text/html',
@@ -535,97 +559,16 @@ function incrementarContadorTracosHoje(quantidade, modoTesteFlag = false) {
 // const operacaoAndamentoEstado = require(...), perto do topo).
 
 // ─── FILA DE AVALIAÇÃO (Setor de Qualidade): "não avaliadas" ──────────────
-// Antes, GET /operacoes-nao-avaliadas CALCULAVA a fila toda vez (SELECT ...
-// WHERE id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)) — nunca
-// existia como lista própria, só como diferença entre duas outras coisas.
-// Agora é o CONTRÁRIO: um arquivo próprio (JSON simples — cresce a cada
-// operação registrada, encolhe a cada avaliação, e nunca chega perto do
-// tamanho de "operacoes"/"operacoes_avaliadas", que só crescem) é a fonte
-// de verdade — guarda só os IDs pendentes, na ordem em que entraram. GET
-// /operacoes-nao-avaliadas lê esta lista e busca os detalhes de cada
-// operação no SQL só pra exibir (não pra decidir QUEM está na fila).
-//
-// Mantido em sincronia em 2 pontos (nunca em mais nenhum outro lugar):
-//   - adicionarNaFilaNaoAvaliadas(id) — POST /registrar-operacao, depois do
-//     INSERT em "operacoes" (nunca em Modo de Teste — mesma regra de
-//     sempre, essas operações nunca entram na fila do Setor de Qualidade).
-//   - removerDaFilaNaoAvaliadas(id) — sempre que uma operação é marcada
-//     avaliada (POST /marcar-operacao-avaliada, e dentro de
-//     db.marcarOperacaoMaisAntigaNaoAvaliadaComoAvaliada, pro caso de
-//     avaliação avulsa — ver os 2 call sites, mais abaixo).
-const OPERACOES_NAO_AVALIADAS_PATH = path.join(DB_DIR, 'operacoes_nao_avaliadas.json');
-
-function lerOperacoesNaoAvaliadas() {
-  try {
-    const texto = fs.readFileSync(OPERACOES_NAO_AVALIADAS_PATH, 'utf8').trim();
-    return texto ? JSON.parse(texto) : [];
-  } catch (_) {
-    return []; // arquivo ainda não existe/corrompido — ver migrarFilaNaoAvaliadasSeNecessario, que cobre a 1ª vez
-  }
-}
-
-function salvarOperacoesNaoAvaliadasNoDisco(lista) {
-  const tmp = OPERACOES_NAO_AVALIADAS_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(lista, null, 2), 'utf8');
-  fs.renameSync(tmp, OPERACOES_NAO_AVALIADAS_PATH);
-}
-
-function adicionarNaFilaNaoAvaliadas(idOperacao) {
-  const lista = lerOperacoesNaoAvaliadas();
-  if (!lista.includes(idOperacao)) {
-    lista.push(idOperacao);
-    salvarOperacoesNaoAvaliadasNoDisco(lista);
-  }
-}
-
-function removerDaFilaNaoAvaliadas(idOperacao) {
-  const lista = lerOperacoesNaoAvaliadas();
-  const idx = lista.indexOf(idOperacao);
-  if (idx !== -1) {
-    lista.splice(idx, 1);
-    salvarOperacoesNaoAvaliadasNoDisco(lista);
-  }
-}
-
-// Recalcula a fila do ZERO a partir do SQL (mesmo critério de sempre: toda
-// operação real, fora de Modo de Teste, que ainda não tem linha em
-// "operacoes_avaliadas") — usada só em 2 situações, nunca no dia a dia:
-//   1) 1ª vez que o servidor sobe com este arquivo ainda inexistente (ver
-//      migrarFilaNaoAvaliadasSeNecessario, chamada no boot, abaixo) —
-//      instalação já em uso antes desta mudança existir.
-//   2) Depois de restaurar um backup que trouxe historico.json e/ou
-//      operacoes_avaliadas.json mas NÃO trouxe operacoes_nao_avaliadas.json
-//      (backup mais antigo, de antes deste arquivo existir) — sem isso, o
-//      arquivo antigo (se já existisse aqui) ficaria fora de sincronia com
-//      as tabelas SQL recém-substituídas (ver POST /restaurar-backup-dados).
-function recalcularFilaNaoAvaliadasApartirDoSql() {
-  const rows = db.prepare(`
-    SELECT id FROM operacoes
-    WHERE modo_teste = 0
-      AND id NOT IN (SELECT id_operacao FROM operacoes_avaliadas)
-    ORDER BY data ASC, fim ASC
-  `).all();
-  salvarOperacoesNaoAvaliadasNoDisco(rows.map(r => r.id));
-  return rows.length;
-}
-
-function migrarFilaNaoAvaliadasSeNecessario() {
-  if (fs.existsSync(OPERACOES_NAO_AVALIADAS_PATH)) return; // já existe — não é a 1ª vez, nada a fazer
-  try {
-    const qtd = recalcularFilaNaoAvaliadasApartirDoSql();
-    logger.info('migracao', `operacoes_nao_avaliadas.json criado com ${qtd} operação(ões) pendente(s) (calculado a partir do estado atual do banco)`);
-  } catch (e) {
-    logger.error('migracao', 'Falha ao criar operacoes_nao_avaliadas.json — seguindo com fila vazia', { erro: e.message });
-    try { salvarOperacoesNaoAvaliadasNoDisco([]); } catch (_) { /* pior caso: arquivo continua ausente, lerOperacoesNaoAvaliadas() já trata isso como fila vazia */ }
-  }
-}
-// Chamada AQUI mesmo (logo depois das funções/consts acima, não lá em cima
-// junto das outras "Fase N" — ver caminhoArquivoDb, no topo do arquivo):
-// depende de OPERACOES_NAO_AVALIADAS_PATH (const, sem hoisting de valor) e
-// de "db" já com "operacoes"/"operacoes_avaliadas" prontas (migração de
-// histórico já rodou lá em cima) — chamar antes desta linha do arquivo ser
-// executada lançaria ReferenceError (TDZ) na const.
-migrarFilaNaoAvaliadasSeNecessario();
+// lerOperacoesNaoAvaliadas/salvarOperacoesNaoAvaliadasNoDisco/
+// adicionarNaFilaNaoAvaliadas/removerDaFilaNaoAvaliadas/
+// recalcularFilaNaoAvaliadasApartirDoSql/migrarFilaNaoAvaliadasSeNecessario
+// agora vivem em lib/fila-avaliacao.js — Fase 15 do fatiamento, ver README →
+// "Fatiamento de server.js" → "Plano de continuidade". Import logo após
+// DB_DIR/db/logger já definidos, no topo do arquivo (ver
+// const filaAvaliacao = require(...), perto do topo). A CHAMADA de
+// migrarFilaNaoAvaliadasSeNecessario() continua aqui embaixo, logo depois
+// das migrações do db.js (ver comentário junto a essa chamada) — só a
+// função mudou de lugar, não quando ela roda.
 
 // ─── BERÇOS DA OPERAÇÃO EM ANDAMENTO: "baixou/vazou" marcado ao vivo ──────
 // lerBercosAndamento/salvarBercosAndamentoNoDisco agora vivem em
