@@ -984,6 +984,9 @@
     document.getElementById('man-filtroTipo').value = '';
     document.getElementById('man-filtroPrioridade').value = '';
     document.getElementById('man-filtroStatus').value = '';
+    document.getElementById('man-filtroData').value = '';
+    document.getElementById('man-filtroObservador').value = '';
+    document.getElementById('man-filtroResponsavel').value = '';
     pageCorretiva = 0;
     renderCorretiva();
   }
@@ -1491,6 +1494,14 @@
       const filtroPrioridade = document.getElementById('man-filtroPrioridade')?.value || '';
       const filtroStatus = document.getElementById('man-filtroStatus')?.value || '';
       const filtroEtiqueta = document.getElementById('man-filtroEtiqueta')?.value || '';
+      // Data comparada exata (mesmo formato ISO do <input type="date">);
+      // Observador é quem abriu o chamado (m.observador), Responsável é
+      // quem executou/resolveu (m.responsavel, só preenchido depois do
+      // aceite — ver linha ~1745) — mesma ideia dos filtros equivalentes
+      // do Painel de Aprovação & Execução (renderProgramada()).
+      const filtroData = document.getElementById('man-filtroData')?.value || '';
+      const filtroObservador = document.getElementById('man-filtroObservador')?.value?.toLowerCase()?.trim() || '';
+      const filtroResponsavel = document.getElementById('man-filtroResponsavel')?.value?.toLowerCase()?.trim() || '';
 
       let dados = manutencoes;
       if (filtroID) dados = dados.filter(m => (m.id || '').toLowerCase().includes(filtroID));
@@ -1500,6 +1511,9 @@
       if (filtroPrioridade) dados = dados.filter(m => (m.prioridade || '') === filtroPrioridade);
       if (filtroStatus) dados = dados.filter(m => (m.situacao || '') === filtroStatus);
       if (filtroEtiqueta) dados = dados.filter(m => (m.tipoEtiqueta || '') === filtroEtiqueta);
+      if (filtroData) dados = dados.filter(m => (m.data || '') === filtroData);
+      if (filtroObservador) dados = dados.filter(m => (m.observador || '').toLowerCase().includes(filtroObservador));
+      if (filtroResponsavel) dados = dados.filter(m => (m.responsavel || '').toLowerCase().includes(filtroResponsavel));
 
       // ── ACORDEÃO (topo) ──────────────────────────────────────────
       const acc = document.getElementById('man-corretivaAccordion');
@@ -2395,19 +2409,53 @@
     `;
   }
 
+  // Reseta a paginação e re-renderiza — mesma ideia de
+  // aplicarFiltrosCorretiva() acima, a filtragem em si acontece dentro
+  // de renderProgramada() lendo os inputs diretamente.
+  function aplicarFiltrosProgramada() {
+    pageProgramadaPendentes = 0;
+    pageProgramadaConcluidos = 0;
+    renderProgramada();
+  }
+
+  function limparFiltrosProgramada() {
+    const data = document.getElementById('man-filtroProgData');
+    const solicitante = document.getElementById('man-filtroProgSolicitante');
+    const executor = document.getElementById('man-filtroProgExecutor');
+    if (data) data.value = '';
+    if (solicitante) solicitante.value = '';
+    if (executor) executor.value = '';
+    aplicarFiltrosProgramada();
+  }
+
   function renderProgramada() {
     document.getElementById('man-progTotal').textContent = agendamentos.length;
     document.getElementById('man-progPendentes').textContent = agendamentos.filter(a => a.status === 'Pendente').length;
     document.getElementById('man-progAprovados').textContent = agendamentos.filter(a => a.status === 'Aprovado').length;
     document.getElementById('man-progReprovados').textContent = agendamentos.filter(a => a.status === 'Reprovado').length;
 
+    // Filtros do Painel de Aprovação & Execução (ver .man-filters no
+    // partial) — Data é comparada exata (mesmo formato ISO do <input
+    // type="date">); Solicitante e Executor são "contém", sem
+    // diferenciar maiúsculas/minúsculas. Executor mora dentro de
+    // a.execucao (só existe depois que salvarExecucao() roda), por isso
+    // o encadeamento com ?. antes de acessar tecnicoResponsavel.
+    const filtroData = document.getElementById('man-filtroProgData')?.value || '';
+    const filtroSolicitante = document.getElementById('man-filtroProgSolicitante')?.value?.toLowerCase()?.trim() || '';
+    const filtroExecutor = document.getElementById('man-filtroProgExecutor')?.value?.toLowerCase()?.trim() || '';
+
+    let dadosFiltrados = agendamentos;
+    if (filtroData) dadosFiltrados = dadosFiltrados.filter(a => a.data === filtroData);
+    if (filtroSolicitante) dadosFiltrados = dadosFiltrados.filter(a => (a.solicitante || '').toLowerCase().includes(filtroSolicitante));
+    if (filtroExecutor) dadosFiltrados = dadosFiltrados.filter(a => (a.execucao?.tecnicoResponsavel || '').toLowerCase().includes(filtroExecutor));
+
     // Duas listas — critério é SEMPRE o status atual do agendamento
     // (nunca um campo salvo à parte), via _agendamentoConcluido() acima:
     // ainda pendente de alguma ação (Pendente/Aprovado/Em Execução) →
     // Painel de Aprovação & Execução; já chegou ao fim do fluxo
     // (Concluído/Reprovado/Não Executado) → lista de Concluídos.
-    const pendentes = agendamentos.filter(a => !_agendamentoConcluido(a));
-    const concluidos = agendamentos.filter(_agendamentoConcluido);
+    const pendentes = dadosFiltrados.filter(a => !_agendamentoConcluido(a));
+    const concluidos = dadosFiltrados.filter(_agendamentoConcluido);
 
     _preencherListaProgramada(
       pendentes, pageProgramadaPendentes, (p) => { pageProgramadaPendentes = p; },
@@ -2695,6 +2743,8 @@
     renotificarPedidoPeca,
     aoMudarSituacao,
     aplicarFiltrosCorretiva,
+    aplicarFiltrosProgramada,
+    limparFiltrosProgramada,
     aprovarAgendamento,
     calcularTempoEstimado,
     calcularTempoExecucao,
@@ -2761,6 +2811,8 @@
   window.renotificarPedidoPeca = MAN.renotificarPedidoPeca;
   window.aoMudarSituacao = MAN.aoMudarSituacao;
   window.aplicarFiltrosCorretiva = MAN.aplicarFiltrosCorretiva;
+  window.aplicarFiltrosProgramada = MAN.aplicarFiltrosProgramada;
+  window.limparFiltrosProgramada = MAN.limparFiltrosProgramada;
   window.aprovarAgendamento = MAN.aprovarAgendamento;
   window.calcularTempoEstimado = MAN.calcularTempoEstimado;
   window.calcularTempoExecucao = MAN.calcularTempoExecucao;

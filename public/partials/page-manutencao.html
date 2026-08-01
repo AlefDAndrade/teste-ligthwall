@@ -31,7 +31,20 @@
 
   <!-- PÁGINA: MANUTENÇÃO CORRETIVA -->
   <div id="man-manutencao" class="man-page active">
-    
+
+    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
+         cima" + "cada card vira tipo um select"). Fica ANTES do
+         formulário de propósito — é a primeira coisa que a pessoa vê ao
+         entrar na aba, pra bater o olho no que está pendente antes de
+         abrir qualquer chamado específico. Clicar num cartão dentro de
+         uma fase aberta ainda abre o mesmo formulário/assistente de
+         sempre (editarManutencao) — a área de ação continua sendo aqui;
+         a tabela lá embaixo é só consulta. -->
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
+      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
+    </div>
+
     <!-- FILTROS -->
     <div class="man-filters man-no-print">
       <div class="man-filter-group"><label><i class="fas fa-search"></i> ID</label><input type="text" id="man-filtroID" placeholder="Buscar ID..." oninput="aplicarFiltrosCorretiva()"></div>
@@ -60,20 +73,10 @@
           <option value="Concluido">Concluído</option>
         </select>
       </div>
+      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroData" onchange="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user"></i> Observador</label><input type="text" id="man-filtroObservador" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Responsável</label><input type="text" id="man-filtroResponsavel" placeholder="Quem executou..." oninput="aplicarFiltrosCorretiva()"></div>
       <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
-    </div>
-
-    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
-         cima" + "cada card vira tipo um select"). Fica ANTES do
-         formulário de propósito — é a primeira coisa que a pessoa vê ao
-         entrar na aba, pra bater o olho no que está pendente antes de
-         abrir qualquer chamado específico. Clicar num cartão dentro de
-         uma fase aberta ainda abre o mesmo formulário/assistente de
-         sempre (editarManutencao) — a área de ação continua sendo aqui;
-         a tabela lá embaixo é só consulta. -->
-    <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
-      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
     </div>
 
     <!-- FORMULÁRIO -->
@@ -405,6 +408,20 @@
          existindo (pageProgramadaPendentes/pageProgramadaConcluidos); só
          a visibilidade das duas listas alterna, os dois <tbody> continuam
          sempre preenchidos por renderProgramada(). -->
+    <!-- Filtros do Painel de Aprovação & Execução — mesmo padrão visual dos
+         filtros da Corretiva (.man-filters/.man-filter-group) lá em cima.
+         Filtra por Data (a.data), Solicitante (a.solicitante, quem abriu o
+         chamado) e Executor (a.execucao.tecnicoResponsavel, quem executou —
+         só existe depois que a execução é finalizada; itens ainda sem
+         execução simplesmente não batem com esse filtro). Ver
+         aplicarFiltrosProgramada()/renderProgramada() em manutencao.js. -->
+    <div class="man-filters man-no-print">
+      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroProgData" onchange="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user"></i> Solicitante</label><input type="text" id="man-filtroProgSolicitante" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Executor</label><input type="text" id="man-filtroProgExecutor" placeholder="Quem executou..." oninput="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label>&nbsp;</label><button type="button" class="man-btn man-btn-outline" onclick="limparFiltrosProgramada()"><i class="fas fa-eraser"></i> Limpar</button></div>
+    </div>
+
     <div class="man-card">
       <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
         <span><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</span>
