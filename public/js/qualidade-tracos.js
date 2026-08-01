@@ -1279,7 +1279,11 @@
           selTipo.appendChild(o);
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Preenchimento dos selects de filtro (bateria/tipo) é cosmético —
+      // se algo aqui falhar (ex.: elemento ainda não existe no DOM), não
+      // vale travar a tela por causa disso.
+    }
   }
 
   // ── LEITURA DOS FILTROS ───────────────────────────────────

@@ -961,6 +961,8 @@ function migrarHistoricoSeNecessario(dbDir) {
   if (!Array.isArray(historico) || !historico.length) {
     // Arquivo existe mas está vazio — nada pra migrar, mas ainda renomeia
     // (evita ficar checando um arquivo vazio em todo boot futuro).
+    // Se o rename falhar (ex.: sem permissão de escrita), não é crítico —
+    // não havia nada a migrar mesmo; só volta a tentar no próximo boot.
     try { fs.renameSync(historicoPath, historicoPath + '.migrado-' + Date.now()); } catch (_) {}
     return;
   }

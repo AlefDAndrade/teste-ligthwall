@@ -39,6 +39,8 @@
   }
 
   function limpar() {
+    // Mesmo caso de _salvarAtual: sem sessionStorage (modo privado, etc.)
+    // não há nada pra limpar mesmo, então ignora e segue pra atualizar o badge.
     try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (_) {}
     _atualizarBadge();
   }
