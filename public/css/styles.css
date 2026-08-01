@@ -1915,10 +1915,16 @@ td.mono {
   text-decoration: none;
 }
 
-.menu-card:hover {
+.menu-card:hover,
+.menu-card:focus-visible {
   border-color: var(--accent);
   transform: translateY(-3px);
   box-shadow: 0 8px 30px rgba(245, 158, 11, .1);
+}
+
+.menu-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .menu-card-icon {

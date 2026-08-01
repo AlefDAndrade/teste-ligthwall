@@ -835,6 +835,13 @@
       const toggleSidebar = () => {
         const isExpanded = sidebar.classList.toggle('expanded');
         backdrop.classList.toggle('active', isExpanded);
+        // Sidebar fica fora da tela via transform (translateX), não via
+        // display/visibility — sem "inert" ela continua alcançável pelo
+        // Tab (e pelo leitor de tela) mesmo escondida visualmente. Por
+        // isso sincroniza o inert com o estado de expansão sempre que ele
+        // muda, em vez de só no carregamento inicial.
+        sidebar.inert = !isExpanded;
+        if (isExpanded) sidebar.querySelector('.nav-item')?.focus();
       };
 
       toggleBtn.addEventListener('click', (e) => {
@@ -845,6 +852,7 @@
       backdrop.addEventListener('click', () => {
         sidebar.classList.remove('expanded');
         backdrop.classList.remove('active');
+        sidebar.inert = true;
       });
 
       // Fechar sidebar ao clicar em um item de navegação (melhor UX em mobile/overlay)
@@ -852,6 +860,7 @@
         item.addEventListener('click', () => {
           sidebar.classList.remove('expanded');
           backdrop.classList.remove('active');
+          sidebar.inert = true;
         });
       });
 
