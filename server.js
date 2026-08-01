@@ -76,7 +76,7 @@ fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 // Autenticação do Administrador (hash de senha + rate limiting de
 // tentativas) — extraído pra lib/auth.js (ver esse arquivo pros detalhes
 // e comentários originais; aqui só instanciamos e usamos).
-const auth = require('./lib/auth.js')(SECURITY_PATH);
+const auth = require('./lib/auth.js')(SECURITY_PATH, db);
 
 // Sessão de Administrador (token em cookie HttpOnly) — extraído pra
 // lib/sessao.js. Cobre as 2 rotas que não tinham proteção própria nenhuma

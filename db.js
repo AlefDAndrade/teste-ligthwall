@@ -679,6 +679,26 @@ db.exec(`
     expira_em  INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_sessoes_usuario_expira ON sessoes_usuario(expira_em);
+
+  -- Rate limit de tentativas de senha/chave de recuperação por IP (ver
+  -- lib/auth.js) — protege /verificar-senha, /verificar-recovery e as 3
+  -- rotas mais destrutivas do sistema (/mesclar-backup-dados,
+  -- /restaurar-backup-dados, /restaurar-backup-geral), todas usando a
+  -- MESMA senha compartilhada do Administrador. Antes vivia só num Map em
+  -- memória — um restart do processo (deploy, reboot, crash) zerava o
+  -- contador de qualquer IP, dando a quem estivesse tentando força bruta
+  -- uma folga completa de novo a cada restart. Persistir aqui (mesmo banco
+  -- que já existe, sem dependência nova) fecha essa brecha: só expira pelo
+  -- tempo normal (RATE_LIMIT_JANELA_MS/RATE_LIMIT_BLOQUEIO_MS), nunca por
+  -- reiniciar o servidor — mesmo raciocínio de sessoes_admin/
+  -- sessoes_usuario, acima. "ip" como chave (não por usuário — não há
+  -- login de usuário nessas rotas, só a senha compartilhada).
+  CREATE TABLE IF NOT EXISTS tentativas_senha_ip (
+    ip            TEXT PRIMARY KEY,
+    tentativas    INTEGER NOT NULL,
+    primeira_em   INTEGER NOT NULL, -- epoch ms — início da janela atual
+    bloqueado_ate INTEGER           -- epoch ms, ou NULL se ainda não bloqueado
+  );
 `);
 
 

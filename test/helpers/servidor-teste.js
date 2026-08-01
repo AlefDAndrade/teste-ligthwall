@@ -41,6 +41,29 @@ const ARQUIVOS_NECESSARIOS = ['server.js', 'db.js', 'lib', 'public', 'package.js
  *   _agoraServer() — congela o relógio do servidor pra testar jobs
  *   baseados em hora/data deterministicamente).
  */
+async function _subirProcesso(pastaTemp, envExtra, obterHistorico) {
+  const porta = 4000 + Math.floor(Math.random() * 5000);
+  const processo = spawn('node', ['server.js'], {
+    cwd: pastaTemp,
+    env: { ...process.env, PORT: String(porta), ...(envExtra || {}) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let saidaDesteProcesso = '';
+  processo.stdout.on('data', chunk => { saidaDesteProcesso += chunk.toString(); });
+  processo.stderr.on('data', chunk => { saidaDesteProcesso += chunk.toString(); });
+
+  const baseUrl = `http://localhost:${porta}`;
+  // obterHistorico() opcional — soma o log de processos ANTERIORES (ver
+  // reiniciar(), abaixo), pra um log emitido antes de um restart continuar
+  // valendo como evidência depois (ex: "IP foi bloqueado" aconteceu no
+  // processo de antes, mas o teste só confere depois de reiniciar).
+  const obterSaida = () => (obterHistorico ? obterHistorico() : '') + saidaDesteProcesso;
+  await esperarServidorSubir(baseUrl, processo, obterSaida);
+
+  return { processo, baseUrl, obterSaida };
+}
+
 async function iniciarServidorDeTeste(opcoes = {}) {
   fs.mkdirSync(PASTA_TMP_BASE, { recursive: true });
   const pastaTemp = fs.mkdtempSync(path.join(PASTA_TMP_BASE, 'srv-'));
@@ -66,27 +89,35 @@ async function iniciarServidorDeTeste(opcoes = {}) {
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
   }
 
-  const porta = 4000 + Math.floor(Math.random() * 5000);
-  const processo = spawn('node', ['server.js'], {
-    cwd: pastaTemp,
-    env: { ...process.env, PORT: String(porta), ...(opcoes.env || {}) },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  let { processo, baseUrl, obterSaida } = await _subirProcesso(pastaTemp, opcoes.env);
 
-  let saidaErro = '';
-  processo.stderr.on('data', chunk => { saidaErro += chunk.toString(); });
-
-  const baseUrl = `http://localhost:${porta}`;
-  await esperarServidorSubir(baseUrl, processo, () => saidaErro);
-
-  return {
-    baseUrl,
+  const servidor = {
+    get baseUrl() { return baseUrl; },
     pastaTemp,
+    get obterSaida() { return obterSaida; },
     async parar() {
       processo.kill();
       fs.rmSync(pastaTemp, { recursive: true, force: true });
     },
+    // Mata o processo atual e sobe um NOVO processo, do zero, apontando pra
+    // MESMA pastaTemp (mesmo data/lightwall.sqlite, mesmo private/,
+    // mesmo public/db/) — simula um restart de verdade (deploy, reboot,
+    // crash) sem apagar nenhum dado. Usado por testes de "isso sobrevive a
+    // um restart do processo?" (ex: rate limit persistido em SQLite —
+    // ver lib/auth.js — em vez de num Map em memória, que zerava sozinho).
+    async reiniciar(opcoesExtra = {}) {
+      processo.kill();
+      await new Promise(resolve => {
+        if (processo.exitCode !== null) return resolve();
+        processo.once('exit', resolve);
+      });
+      const subido = await _subirProcesso(pastaTemp, { ...(opcoes.env || {}), ...(opcoesExtra.env || {}) }, obterSaida);
+      processo = subido.processo;
+      baseUrl = subido.baseUrl;
+      obterSaida = subido.obterSaida;
+    },
   };
+  return servidor;
 }
 
 async function esperarServidorSubir(baseUrl, processo, obterErro, tentativas = 300) {
