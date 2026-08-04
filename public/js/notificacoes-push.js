@@ -68,7 +68,7 @@ window.LWPush = (function () {
 
     if (Notification.permission === 'denied') {
       btn.textContent = '🔕 Notificações bloqueadas';
-      btn.title = 'Você bloqueou notificações pro navegador — para reativar, mude nas configurações de site do próprio navegador.';
+      btn.title = 'Você bloqueou notificações para o navegador — para reativar, mude nas configurações de site do próprio navegador.';
       btn.disabled = true;
       return;
     }

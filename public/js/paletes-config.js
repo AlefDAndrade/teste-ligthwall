@@ -152,7 +152,7 @@ function pcAoMudarSelect() {
   });
 
   if (!LW.paletesConfigValida(novo)) {
-    erroEl.textContent = 'Cada palete (01 a 04) precisa ser usado em exatamente 1 quadrante — dois quadrantes não podem apontar pro mesmo palete.';
+    erroEl.textContent = 'Cada palete (01 a 04) precisa ser usado em exatamente 1 quadrante — dois quadrantes não podem apontar para o mesmo palete.';
     erroEl.style.display = 'block';
     return;
   }

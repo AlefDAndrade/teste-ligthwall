@@ -322,7 +322,7 @@ async function salvarPerfilCustomizado() {
 
   const nome = document.getElementById('cp-nome').value.trim();
   if (!nome) {
-    erroEl.textContent = 'Digite um nome pro perfil.';
+    erroEl.textContent = 'Digite um nome para o perfil.';
     erroEl.style.display = 'block';
     return;
   }
