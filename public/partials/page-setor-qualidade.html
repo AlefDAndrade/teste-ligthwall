@@ -264,16 +264,16 @@
               <button class="sq-btn-shape circle active"   onclick="SQ.selectShape(this,'circle')"><span class="sq-shape-circle"></span></button>
               <button class="sq-btn-shape dash"            onclick="SQ.selectShape(this,'dash')"><span class="sq-shape-dash"></span></button>
               <button class="sq-btn-shape x"                onclick="SQ.selectShape(this,'x')" title="Painel não preenchido — sempre sozinha, cor vermelha fixa"><span class="sq-shape-x">×</span></button>
-              <button class="sq-btn-shape eraser"           onclick="SQ.selectShape(this,'eraser')" title="Borracha — selecione e clique numa placa pra apagar TODAS as marcas dela de uma vez"><i class="fas fa-eraser"></i></button>
+              <button class="sq-btn-shape eraser"           onclick="SQ.selectShape(this,'eraser')" title="Borracha — selecione e clique numa placa para apagar TODAS as marcas dela de uma vez"><i class="fas fa-eraser"></i></button>
               <div class="sq-tools-sep"></div>
-              <button class="sq-btn-indicador active" onclick="SQ.toggleIndicadorAtivo(this)" title="Indicador de qualidade — ATIVADO (padrão): a próxima marca clicada é a marca de STATUS de verdade (aprovado/2ª linha/reprovado). Desative só pra corrigir/adicionar manualmente uma marca de identidade (tipo de montagem), sem que ela conte como avaliação.">I</button>
+              <button class="sq-btn-indicador active" onclick="SQ.toggleIndicadorAtivo(this)" title="Indicador de qualidade — ATIVADO (padrão): a próxima marca clicada é a marca de STATUS de verdade (aprovado/2ª linha/reprovado). Desative só para corrigir/adicionar manualmente uma marca de identidade (tipo de montagem), sem que ela conte como avaliação.">I</button>
               <div class="sq-tools-sep"></div>
               <button class="btn btn-ghost btn-sm"         onclick="SQ.undoLastAction()"><i class="fas fa-undo-alt"></i> Desfazer</button>
               <button class="btn btn-danger btn-sm"        onclick="SQ.clearAllMarks()"><i class="fas fa-trash-alt"></i> Limpar</button>
               <div class="sq-tools-sep"></div>
               <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
               <div class="sq-tools-sep"></div>
-              <span class="sq-tools-hint" title="Selecione a Borracha (na Forma, acima) e clique numa placa pra apagar TODAS as marcas dela de uma vez. No computador, clique com o botão direito ainda apaga só a marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: selecione a Borracha e clique na placa</span>
+              <span class="sq-tools-hint" title="Selecione a Borracha (na Forma, acima) e clique numa placa para apagar TODAS as marcas dela de uma vez. No computador, clique com o botão direito ainda apaga só a marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: selecione a Borracha e clique na placa</span>
               <div class="sq-tools-sep"></div>
 
               <!-- Referência visual dos marcadores — mesmo padrão do botão
@@ -309,8 +309,8 @@
                     <div style="display:flex;align-items:center;gap:9px"><span class="sq-shape-x" style="display:inline-flex;flex-shrink:0">×</span>X sozinho → <strong>Painel não preenchido</strong> (categoria própria — não conta como aprovado nem reprovado)</div>
                   </div>
                   <p style="font-size:.72rem;color:var(--text-3);margin:-6px 0 14px;line-height:1.4">
-                    A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só pra identificar o tipo — quem dita
-                    aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma pra um tipo
+                    A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só para identificar o tipo — quem dita
+                    aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma para um tipo
                     novo (ver "Tipos sem marcação definida", mais abaixo), mesmo as que já têm outro significado quando a
                     marca vem <strong>sozinha</strong> (ex: um traço verde isolado continua sendo SP aprovado).
                   </p>

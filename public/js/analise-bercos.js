@@ -349,7 +349,7 @@
     if (!el) return;
 
     if (!comp.nBaterias || comp.taxaPrimeiro === null || comp.taxaUltimo === null) {
-      el.innerHTML = `<div style="color:${C.text3};font-size:.84rem;text-align:center;padding:20px 0">Sem baterias suficientes no período com 2 ou mais traços pra comparar (precisa de pelo menos 1º e último traço distintos).</div>`;
+      el.innerHTML = `<div style="color:${C.text3};font-size:.84rem;text-align:center;padding:20px 0">Sem baterias suficientes no período com 2 ou mais traços para comparar (precisa de pelo menos 1º e último traço distintos).</div>`;
       return;
     }
 

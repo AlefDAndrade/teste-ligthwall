@@ -694,7 +694,7 @@
       <h4>🛑 De onde vem o tempo sem produção</h4>
       <div id="oee-paradas-bar" style="display:flex;height:18px;border-radius:6px;overflow:hidden;background:var(--border);margin-bottom:14px"></div>
       <div id="oee-paradas-legenda" style="display:flex;flex-wrap:wrap;gap:12px 22px"></div>
-      <div id="oee-paradas-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0">Sem tempo planejado no período pra detalhar.</div>
+      <div id="oee-paradas-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0">Sem tempo planejado no período para detalhar.</div>
     </div>
 
     <div class="chart-box" style="margin-bottom:14px">

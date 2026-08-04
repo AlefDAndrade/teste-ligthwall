@@ -35,12 +35,12 @@
       {
         selector: 'label[for="op-toggle-teste"]',
         titulo: '🧪 Modo de Teste',
-        texto: 'Ative pra treinar ou testar o sistema sem afetar dados reais — nada registrado em modo de teste entra no histórico de produção.',
+        texto: 'Ative para treinar ou testar o sistema sem afetar dados reais — nada registrado em modo de teste entra no histórico de produção.',
       },
       {
         selector: '#op-montagem',
         titulo: 'Tipo de Montagem',
-        texto: 'Escolha o tipo de montagem da bateria. Se escolher "Personalizada", aparece um botão 🔧 ao lado pra configurar o tipo de cada berço individualmente.',
+        texto: 'Escolha o tipo de montagem da bateria. Se escolher "Personalizada", aparece um botão 🔧 ao lado para configurar o tipo de cada berço individualmente.',
       },
       {
         selector: '#op-id-bateria',
@@ -50,7 +50,7 @@
       {
         selector: '#btn-iniciar',
         titulo: 'Iniciar Injeção',
-        texto: 'Com os campos acima preenchidos, clique aqui pra iniciar o cronômetro da operação.',
+        texto: 'Com os campos acima preenchidos, clique aqui para iniciar o cronômetro da operação.',
       },
       {
         selector: '#tracos-container',
@@ -65,7 +65,7 @@
       {
         selector: '#btn-registrar',
         titulo: 'Registrar Operação',
-        texto: 'Por fim, registre a operação aqui — ela é arquivada no histórico (e some da tela pra todo mundo), liberando pra uma próxima. Todo mundo online recebe um aviso com o resumo, com som.',
+        texto: 'Por fim, registre a operação aqui — ela é arquivada no histórico (e some da tela para todo mundo), liberando para uma próxima. Todo mundo online recebe um aviso com o resumo, com som.',
       },
     ],
 
@@ -106,7 +106,7 @@
       {
         selector: '#registro-table',
         titulo: 'Tabela de operações',
-        texto: 'Clique em qualquer linha pra ver os traços vinculados àquela bateria no Relatório de Injeção.',
+        texto: 'Clique em qualquer linha para ver os traços vinculados àquela bateria no Relatório de Injeção.',
       },
       {
         selector: '#btn-editar-registro',

@@ -1004,7 +1004,7 @@
     if (qtd === 0) { excluir(); return; }
     showConfirm(
       'Excluir Pallet',
-      `O Pallet ${n} ainda tem ${qtd} placa${qtd > 1 ? 's' : ''} nele. Excluir o pallet descarta ${qtd > 1 ? 'essas placas' : 'essa placa'} — dá pra desfazer com "Desfazer" logo em seguida, se precisar. Continuar?`,
+      `O Pallet ${n} ainda tem ${qtd} placa${qtd > 1 ? 's' : ''} nele. Excluir o pallet descarta ${qtd > 1 ? 'essas placas' : 'essa placa'} — dá para desfazer com "Desfazer" logo em seguida, se precisar. Continuar?`,
       excluir
     );
   }
@@ -1530,7 +1530,7 @@
     const marcas = slabState[id] || [];
     const idx = marcas.findIndex(m => m.color === color && m.shape === shape);
     if (idx === -1) {
-      toast('Essa placa não tem uma marca dessa cor/forma pra apagar.', 'error');
+      toast('Essa placa não tem uma marca dessa cor/forma para apagar.', 'error');
       return;
     }
     pushState();
@@ -1601,7 +1601,7 @@
       <div class="sq-motivo-popover-titulo">
         ${id ? 'Motivo do defeito' : 'Motivo do defeito — pallet inteiro'}
       </div>
-      <div class="sq-motivo-popover-obrigatorio">Escolha um motivo pra continuar.</div>
+      <div class="sq-motivo-popover-obrigatorio">Escolha um motivo para continuar.</div>
       <div class="sq-motivo-popover-grid">
         ${MOTIVOS_DEFEITO.map(m => `
           <button type="button" class="sq-motivo-popover-item" data-codigo="${m.codigo}" title="${_escaparHtml(m.nome)}">
@@ -3673,7 +3673,7 @@
     document.getElementById('sq-kpi-grid').innerHTML = `
       <div class="kpi-card"><div class="kpi-label">Total Registros</div><div class="kpi-value" style="font-size:1.8rem;">${fe.length}</div></div>
       <div class="kpi-card green"><div class="kpi-label">Painéis Avaliados</div><div class="kpi-value green" style="font-size:1.8rem;">${fp.length}</div></div>
-      <div class="kpi-card" data-tooltip="Aprovados de 2ª linha (marcados em azul) — já contam dentro da Taxa de Aprovação; aqui é só pra saber quantos desses aprovados são 2ª linha."><div class="kpi-label">Painéis 2ª Linha</div><div class="kpi-value" style="font-size:1.8rem;color:var(--sq-cor-azul)">${seg}</div></div>
+      <div class="kpi-card" data-tooltip="Aprovados de 2ª linha (marcados em azul) — já contam dentro da Taxa de Aprovação; aqui é só para saber quantos desses aprovados são 2ª linha."><div class="kpi-label">Painéis 2ª Linha</div><div class="kpi-value" style="font-size:1.8rem;color:var(--sq-cor-azul)">${seg}</div></div>
       <div class="kpi-card green"><div class="kpi-label">Painéis Aprovados</div><div class="kpi-value green" style="font-size:1.8rem;">${apr}</div></div>
       <div class="kpi-card red"><div class="kpi-label">Painéis Reprovados</div><div class="kpi-value red" style="font-size:1.8rem;">${rep}</div></div>
       <div class="kpi-card"><div class="kpi-label">Taxa de Aprovação</div><div class="kpi-value accent" style="font-size:1.8rem;">${ar}%</div></div>

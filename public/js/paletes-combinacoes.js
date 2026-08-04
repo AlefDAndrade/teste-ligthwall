@@ -268,7 +268,7 @@ function _pcaRenderEditor() {
       return `<button type="button" onclick="pcaSelecionarForma('${forma}')" style="padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;border:1px solid ${ativo ? 'var(--accent)' : 'var(--border)'};background:${ativo ? 'var(--accent)' : 'var(--bg-3)'};color:${ativo ? '#fff' : 'var(--text)'}">${texto}</button>`;
     };
     formasEl.innerHTML = btnForma('circle', '● Círculo') + btnForma('dash', '▬ Traço') +
-      `<button type="button" onclick="pcaAtivarModoIndicador()" title="Clique aqui e depois numa marca do painel abaixo pra marcar ela como o indicador de qualidade" style="width:32px;height:32px;border-radius:50%;cursor:pointer;font-weight:800;font-size:.9rem;border:1px solid ${_pcaModoIndicador ? 'var(--accent)' : 'var(--border)'};background:${_pcaModoIndicador ? 'var(--accent)' : 'var(--bg-3)'};color:${_pcaModoIndicador ? '#fff' : 'var(--text)'}">i</button>`;
+      `<button type="button" onclick="pcaAtivarModoIndicador()" title="Clique aqui e depois numa marca do painel abaixo para marcar ela como o indicador de qualidade" style="width:32px;height:32px;border-radius:50%;cursor:pointer;font-weight:800;font-size:.9rem;border:1px solid ${_pcaModoIndicador ? 'var(--accent)' : 'var(--border)'};background:${_pcaModoIndicador ? 'var(--accent)' : 'var(--bg-3)'};color:${_pcaModoIndicador ? '#fff' : 'var(--text)'}">i</button>`;
   }
 
   const painelEl = document.getElementById('pca-painel');
@@ -279,20 +279,20 @@ function _pcaRenderEditor() {
           const classe = mk.shape === 'dash' ? 'sq-shape-dash' : 'sq-shape-circle';
           const cor = isIndicador ? 'identificacao-auto' : mk.color;
           const titulo = isIndicador
-            ? 'Indicador de qualidade — clique pra remover'
-            : `${PCA_LABEL_COR[mk.color] || mk.color} — clique pra remover; use o botão "i" pra marcar como indicador`;
+            ? 'Indicador de qualidade — clique para remover'
+            : `${PCA_LABEL_COR[mk.color] || mk.color} — clique para remover; use o botão "i" para marcar como indicador`;
           return `<span onclick="event.stopPropagation(); pcaCliqueNaMarca(${i})" title="${titulo}" style="position:relative;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:6px">
             <span class="${classe}" style="background:var(--sq-cor-${cor});display:inline-block"></span>
             ${isIndicador ? '<span style="position:absolute;top:0;right:0;background:var(--accent);color:#fff;font-size:9px;font-weight:800;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;line-height:1">i</span>' : ''}
           </span>`;
         }).join('')
-      : '<span style="font-size:.78rem;color:var(--text-3);pointer-events:none">Escolha cor + forma acima e clique aqui pra adicionar uma marca</span>';
+      : '<span style="font-size:.78rem;color:var(--text-3);pointer-events:none">Escolha cor + forma acima e clique aqui para adicionar uma marca</span>';
   }
 
   const dica = document.getElementById('pca-editor-dica');
   if (dica) {
     dica.textContent = _pcaModoIndicador
-      ? 'Clique em cima de uma das marcas do painel pra marcar ela como o indicador de qualidade.'
-      : 'Escolha uma cor e uma forma acima, depois clique no painel pra adicionar a marca. Clique numa marca já colocada pra removê-la.';
+      ? 'Clique em cima de uma das marcas do painel para marcar ela como o indicador de qualidade.'
+      : 'Escolha uma cor e uma forma acima, depois clique no painel para adicionar a marca. Clique numa marca já colocada para removê-la.';
   }
 }

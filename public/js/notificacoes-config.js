@@ -184,7 +184,7 @@ async function _ncToggleNotificacao(perfilId, ehCustomizado, itemId, rotuloItem,
 
       checkboxEl.checked = novoValor;
       LW.mostrarAlerta(
-        `Notificação de "${rotuloItem}" ${novoValor ? 'ativada' : 'desativada'} pra este perfil.`,
+        `Notificação de "${rotuloItem}" ${novoValor ? 'ativada' : 'desativada'} para este perfil.`,
         { tipo: 'sucesso' }
       );
     } catch (_) {

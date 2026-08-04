@@ -2547,7 +2547,7 @@
           if (!res.ok || !json?.ok) throw new Error(json?.erro || 'Não foi possível excluir. Tente novamente.');
 
           const mensagemSucesso = (ehDesfazerAvaliacao && json.cascata)
-            ? `Avaliação desfeita: ${json.cascata.avaliacoes_qualidade} avaliação(ões), ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. A operação volta pra fila de avaliação pendente. A página será recarregada.`
+            ? `Avaliação desfeita: ${json.cascata.avaliacoes_qualidade} avaliação(ões), ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. A operação volta para fila de avaliação pendente. A página será recarregada.`
             : 'Linha excluída com sucesso. A página será recarregada para atualizar todas as telas.';
 
           // Recarrega a página inteira depois de excluir — mesmo motivo de
@@ -2609,7 +2609,7 @@
           // json.cascata com o total de cada tabela afetada, e todas essas
           // operações voltam pra fila de avaliação pendente.
           const mensagemSucesso = json.cascata
-            ? `Limpeza desfez ${json.cascata.avaliacoes_qualidade} avaliação(ões): ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. Todas essas operações voltam pra fila de avaliação pendente. A página será recarregada.`
+            ? `Limpeza desfez ${json.cascata.avaliacoes_qualidade} avaliação(ões): ${json.cascata.avaliacao_paineis} registro(s) de painéis e ${json.cascata.operacoes_avaliadas} marcação(ões) removidos. Todas essas operações voltam para fila de avaliação pendente. A página será recarregada.`
             : `${json.excluidas} linha(s) excluída(s) de "${labelTabela}". A página será recarregada para atualizar todas as telas.`;
 
           await LW.mostrarAlerta(mensagemSucesso, { tipo: 'sucesso' });
@@ -3992,7 +3992,7 @@
     function _etRenderAjustes() {
       const cont = document.getElementById('et-lista-ajustes');
       if (!_etAjustesAtuais.length) {
-        cont.innerHTML = '<div style="color:var(--text-3);font-size:.82rem;padding:8px 0">Nenhum ajuste registrado pra este traço.</div>';
+        cont.innerHTML = '<div style="color:var(--text-3);font-size:.82rem;padding:8px 0">Nenhum ajuste registrado para este traço.</div>';
         return;
       }
       const CAMPOS = [

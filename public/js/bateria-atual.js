@@ -276,7 +276,7 @@
         ${_modoDetalhesBerco ? '📋 Detalhes — clique num berço' : '📋 Detalhes do Berço'}
       </button>`;
     const dica = _modoDetalhesBerco
-      ? `<div class="ba-dica ba-dica-detalhes">📋 Clique em um berço (ex: B11) pra ver e editar os detalhes dele.</div>`
+      ? `<div class="ba-dica ba-dica-detalhes">📋 Clique em um berço (ex: B11) para ver e editar os detalhes dele.</div>`
       : !podeMarcar
         ? `<div class="ba-dica">🔒 Só o computador que está no controle desta operação pode marcar os vazamentos.</div>`
         : _modoMarcarNaoEnchido

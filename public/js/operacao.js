@@ -399,7 +399,7 @@
     // uma escolha manual — some a distinção assim que volta a ser
     // automático de novo (valor em branco, acima).
     input.classList.toggle('auto-filled', !state.dimensaoManual);
-    if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica pra esta operação'; }
+    if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica para esta operação'; }
 
     if (!state.dimensaoManual) updateCapacidade(); // reaplica o automático na hora
     persist();
@@ -488,21 +488,21 @@
     const motivo = LW.motivoBloqueioOperacao();
     if (motivo === 'perfil') {
       LW.mostrarAlerta(
-        'Você não está autorizado a controlar operações. Peça ao Administrador pra habilitar isso no seu cadastro (Configurações → Usuários).',
+        'Você não está autorizado a controlar operações. Peça ao Administrador para habilitar isso no seu cadastro (Configurações → Usuários).',
         { tipo: 'erro' }
       );
       return true;
     }
     if (motivo === 'dispositivo') {
       LW.mostrarAlerta(
-        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador pra autorizá-lo`,
+        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador para autorizá-lo`,
         { tipo: 'erro' }
       );
       return true;
     }
     if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
       LW.mostrarAlerta(
-        'Esta operação já está sendo controlada por outra pessoa. Espere ela terminar, ou use "🗑️ Limpar Tudo" pra assumir o controle.',
+        'Esta operação já está sendo controlada por outra pessoa. Espere ela terminar, ou use "🗑️ Limpar Tudo" para assumir o controle.',
         { tipo: 'erro' }
       );
       return true;
@@ -565,7 +565,7 @@
       aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar.</span>';
       aviso.style.display = 'flex';
     } else if (motivo === 'dispositivo') {
-      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador pra autorizá-lo</span>`;
+      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador para autorizá-lo</span>`;
       aviso.style.display = 'flex';
     } else {
       aviso.innerHTML = '<span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar.</span>';
@@ -1513,7 +1513,7 @@
             <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
               ${somenteRevisao
           ? 'Clique nos berços que ficaram vazios (não foram usados nesta operação).'
-          : 'Selecione um tipo abaixo (ou use os números/Ctrl+número de atalho) e clique nos berços — ou use "De/Até" ou "Completar Vazios" pra aplicar de uma vez.'}
+          : 'Selecione um tipo abaixo (ou use os números/Ctrl+número de atalho) e clique nos berços — ou use "De/Até" ou "Completar Vazios" para aplicar de uma vez.'}
             </p>
           </div>
 
@@ -1949,7 +1949,7 @@
         persist();
       }, {
         titulo: 'Remover este traço?',
-        corpoHtml: `<p>Todos os dados já preenchidos pra este traço (insumos, ajustes, resultados) serão perdidos.</p><p>Deseja realmente remover?</p>`,
+        corpoHtml: `<p>Todos os dados já preenchidos para este traço (insumos, ajustes, resultados) serão perdidos.</p><p>Deseja realmente remover?</p>`,
       });
     }
   }
@@ -2655,7 +2655,7 @@
     $('op-dimensao').classList.toggle('auto-filled', !state.dimensaoManual);
     if ($('btn-editar-dimensao')) {
       $('btn-editar-dimensao').textContent = '✏️';
-      $('btn-editar-dimensao').title = 'Definir uma dimensão específica pra esta operação';
+      $('btn-editar-dimensao').title = 'Definir uma dimensão específica para esta operação';
     }
 
     $('op-montagem').value = state.tipo_montagem || '';

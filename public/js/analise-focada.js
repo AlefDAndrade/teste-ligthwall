@@ -135,7 +135,7 @@
     }
     if (!candidatos.length) {
       if (resultadosEl) {
-        resultadosEl.innerHTML = `<div style="color:var(--text-3);font-size:.85rem">Nenhuma operação encontrada pra "${LW.escaparHtml(q)}".</div>`;
+        resultadosEl.innerHTML = `<div style="color:var(--text-3);font-size:.85rem">Nenhuma operação encontrada para "${LW.escaparHtml(q)}".</div>`;
       }
       return;
     }

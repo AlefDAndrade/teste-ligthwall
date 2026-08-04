@@ -411,7 +411,7 @@
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.erro || 'Erro ao renotificar.');
-      toast('Notificação reenviada pra quem pode aceitar o chamado.');
+      toast('Notificação reenviada para quem pode aceitar o chamado.');
     } catch (e) {
       toast('Erro ao renotificar: ' + e.message, 'error');
     } finally {
@@ -433,7 +433,7 @@
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.erro || 'Erro ao renotificar.');
-      toast('Notificação reenviada pra quem pode aceitar o pedido de peça.');
+      toast('Notificação reenviada para quem pode aceitar o pedido de peça.');
     } catch (e) {
       toast('Erro ao renotificar: ' + e.message, 'error');
     } finally {
@@ -495,7 +495,7 @@
       await carregarManutencoesDoServidor();
       toast(aceitaRecusa
         ? 'Recusa aceita — chamado encerrado.'
-        : 'Recusa negada — chamado devolvido pra Manutenção dar prosseguimento.');
+        : 'Recusa negada — chamado devolvido para Manutenção dar prosseguimento.');
       renderCorretiva();
       if (!aceitaRecusa) editarManutencao(id); // se encerrou, o form nem reabre (etiqueta fechada)
       else fecharFormulario();
@@ -1371,7 +1371,7 @@
     const miniTrajetoria = _renderizarTrajetoria(_construirPassosTrajetoria(m));
     return `<div class="man-kanban-card" onclick="editarManutencao('${m.id}')"
         onmouseenter="_mostrarPreviewTrajetoria(event,'${m.id}')" onmousemove="_mostrarPreviewTrajetoria(event,'${m.id}')" onmouseleave="_esconderPreviewTrajetoria()"
-        title="Segure Ctrl + passe o mouse pra pré-visualizar a trajetória">
+        title="Segure Ctrl + passe o mouse para pré-visualizar a trajetória">
       <div class="man-kanban-card-head">
         <span><i class="fas fa-hashtag"></i> ${esc(m.id)}</span>
         <span class="dot" style="background:${_corPrioridade(m.prioridade || 'BAIXA')}" title="Prioridade ${esc(m.prioridade || '-')}"></span>
@@ -1710,7 +1710,7 @@
     const _podeFecharChamado = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('manutencao') : true;
     alvo.innerHTML = `
       <div class="man-fechamento-resumo">
-        <p style="color:var(--text-2); font-size:13px; margin-bottom:12px;"><i class="fas fa-check-circle" style="color:var(--green);"></i> Situação Concluído — pronto pra fechar a etiqueta. Confira o resumo antes de confirmar.</p>
+        <p style="color:var(--text-2); font-size:13px; margin-bottom:12px;"><i class="fas fa-check-circle" style="color:var(--green);"></i> Situação Concluído — pronto para fechar a etiqueta. Confira o resumo antes de confirmar.</p>
         ${_podeFecharChamado
           ? `<button type="button" class="man-btn man-btn-warning" onclick="abrirModalFechamento()"><i class="fas fa-lock"></i> Fechar Chamado</button>`
           : `<div class="man-fechamento-aviso"><i class="fas fa-lock"></i> Seu perfil não pode fechar chamados de manutenção.</div>`}

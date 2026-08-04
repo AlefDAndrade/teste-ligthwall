@@ -68,7 +68,7 @@ window.LWPush = (function () {
 
     if (Notification.permission === 'denied') {
       btn.textContent = '🔕 Notificações bloqueadas';
-      btn.title = 'Você bloqueou notificações pro navegador — pra reativar, mude nas configurações de site do próprio navegador.';
+      btn.title = 'Você bloqueou notificações pro navegador — para reativar, mude nas configurações de site do próprio navegador.';
       btn.disabled = true;
       return;
     }
@@ -77,7 +77,7 @@ window.LWPush = (function () {
     const inscrito = !!(await _inscricaoAtual());
     if (inscrito) {
       btn.textContent = '🔔 Notificações ativadas';
-      btn.title = 'Clique pra desativar notificações de novo chamado de manutenção neste dispositivo.';
+      btn.title = 'Clique para desativar notificações de novo chamado de manutenção neste dispositivo.';
       btn.classList.add('btn-push-ativo');
     } else {
       btn.textContent = '🔔 Ativar notificações';

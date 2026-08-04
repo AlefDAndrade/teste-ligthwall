@@ -116,7 +116,7 @@ function _pcRenderPreviewAtual() {
   if (!el) return;
   const cap = _pcAbaDimensaoAtiva;
   if (!cap || !_pcRascunho) {
-    el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Cadastre ao menos uma bateria (com nº de berços) pra ver a prévia.</span>';
+    el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Cadastre ao menos uma bateria (com nº de berços) para ver a prévia.</span>';
     return;
   }
 
