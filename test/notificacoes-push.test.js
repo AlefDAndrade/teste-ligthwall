@@ -1,12 +1,13 @@
 // ─── test/notificacoes-push.test.js ─────────────────────────────────────────
 // Testa o sistema de notificação push de chamados de manutenção — abertura
-// de chamado, pedido de peça e peça recebida (ver conversa que motivou
-// isso: "toda vez que um chamado for aberto/tiver um pedido de peça/tiver
-// a peça recebida, quem tem a permissão de notificação marcada no perfil é
-// notificado", PC e celular via Web Push/PWA).
+// de chamado, aceite de chamado, pedido de peça e peça recebida (ver
+// conversa que motivou isso: "toda vez que um chamado for aberto/aceito/
+// tiver um pedido de peça/tiver a peça recebida, quem tem a permissão de
+// notificação marcada no perfil é notificado", PC e celular via Web
+// Push/PWA).
 //
 // Cobre: os itens de catálogo 'manutencao-notificacao-abertura',
-// 'manutencao-notificacao-pedido-peca' e
+// 'manutencao-notificacao-aceite', 'manutencao-notificacao-pedido-peca' e
 // 'manutencao-notificacao-peca-recebida' (ver lib/itens-permissao.js), os
 // padrões calculados pros 6 perfis fixos (ver lib/perfis.js,
 // permissoesPadraoDoPerfilFixo), a cascata override/perfil-customizado (ver
@@ -397,9 +398,129 @@ test('quem abre o chamado NÃO recebe a própria notificação, mas outros com a
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// Notificação de ACEITE DE CHAMADO (POST /manutencao/aceitar-corretiva)
+// ═══════════════════════════════════════════════════════════════════════
+// Ver conversa que motivou isso: "hoje a notificação só existe quando a
+// manutenção é solicitada, mas não existe uma notificação de quando a
+// manutenção é aceita" — mesma infraestrutura da notificação de abertura,
+// item de catálogo e grupo de destinatários próprios (padrão: Supervisão,
+// Encarregado ou Administrador — ver lib/notificacoes-push.js,
+// lib/itens-permissao.js, lib/perfis.js, lib/rotas/manutencao.js).
+
+test('catálogo de permissões inclui o item de notificação de aceite de chamado', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/catalogo-permissoes`);
+  const data = await resp.json();
+  assert.equal(data.ok, true);
+  const item = data.catalogo.find(i => i.id === 'manutencao-notificacao-aceite');
+  assert.ok(item, 'item de notificação de aceite deveria estar no catálogo');
+  assert.equal(item.pai, 'manutencao-corretiva');
+  assert.equal(item.area, undefined, 'não deve conceder nenhuma área de edição');
+});
+
+test('Supervisão, Encarregado e Administrador recebem "total" por padrão; Manutenção e demais, "ocultar"', async () => {
+  const respSupervisao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Supervisao`);
+  assert.equal((await respSupervisao.json()).permissoes['manutencao-notificacao-aceite'], 'total');
+
+  const respEncarregado = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Encarregado`);
+  assert.equal((await respEncarregado.json()).permissoes['manutencao-notificacao-aceite'], 'total');
+
+  const respAdmin = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Administrativo`);
+  assert.equal((await respAdmin.json()).permissoes['manutencao-notificacao-aceite'], 'total');
+
+  const respManutencao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Manutencao`);
+  assert.equal((await respManutencao.json()).permissoes['manutencao-notificacao-aceite'], 'ocultar');
+
+  const respOperador = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=OperadorInjetora`);
+  assert.equal((await respOperador.json()).permissoes['manutencao-notificacao-aceite'], 'ocultar');
+});
+
+test('chamado aceito notifica quem tem a permissão, exceto quem aceitou', async () => {
+  const cookieAbre = await cadastrarELogar('aceite.abre.chamado', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('aceite.tecnico.aceita', 'Manutencao');
+  const cookieSupervisorRecebe = await cadastrarELogar('aceite.supervisor.recebe', 'Supervisao');
+  const cookieEncarregadoRecebe = await cadastrarELogar('aceite.encarregado.recebe', 'Encarregado');
+
+  const id = 'MAN-push-aceite-1-' + Date.now();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAbre },
+    body: JSON.stringify(payloadChamado(id)),
+  });
+
+  // Inscrições feitas ANTES do aceite (é o evento sob teste aqui) — o
+  // técnico que vai aceitar também se inscreve, pra provar que ele
+  // mesmo é excluído da própria notificação.
+  const subTecnico = subscriptionReal('aceite-tecnico-aceita');
+  const subSupervisor = subscriptionReal('aceite-supervisor-recebe');
+  const subEncarregado = subscriptionReal('aceite-encarregado-recebe');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ subscription: subTecnico }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisorRecebe },
+    body: JSON.stringify({ subscription: subSupervisor }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregadoRecebe },
+    body: JSON.stringify({ subscription: subEncarregado }),
+  });
+
+  const respAceitar = await fetch(`${servidor.baseUrl}/manutencao/aceitar-corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ id }),
+  });
+  assert.equal(respAceitar.status, 200);
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/aceite-supervisor-recebe'), 'Supervisão deveria ter recebido a notificação de aceite');
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/aceite-encarregado-recebe'), 'Encarregado deveria ter recebido a notificação de aceite');
+  assert.ok(!pushesRecebidos.some(p => p.caminho === '/aceite-tecnico-aceita'), 'quem aceitou o chamado não deveria receber a própria notificação');
+});
+
+test('aceitar de novo um chamado já aceito não notifica de novo (só na transição)', async () => {
+  const cookieAbre = await cadastrarELogar('aceite.repeticao.abre', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('aceite.repeticao.tecnico', 'Manutencao');
+  const cookieSupervisor = await cadastrarELogar('aceite.repeticao.supervisor', 'Supervisao');
+
+  const id = 'MAN-push-aceite-2-' + Date.now();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAbre },
+    body: JSON.stringify(payloadChamado(id)),
+  });
+
+  const subSupervisor = subscriptionReal('aceite-repeticao-supervisor');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisor },
+    body: JSON.stringify({ subscription: subSupervisor }),
+  });
+
+  await fetch(`${servidor.baseUrl}/manutencao/aceitar-corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ id }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const totalAposPrimeiroAceite = pushesRecebidos.filter(p => p.caminho === '/aceite-repeticao-supervisor').length;
+  assert.equal(totalAposPrimeiroAceite, 1, 'deveria ter notificado uma vez no aceite');
+
+  // "Aceita" de novo o mesmo chamado (já aceito — a rota é idempotente,
+  // ver /manutencao/aceitar-corretiva) — não deveria notificar de novo.
+  await fetch(`${servidor.baseUrl}/manutencao/aceitar-corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ id }),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const totalDepois = pushesRecebidos.filter(p => p.caminho === '/aceite-repeticao-supervisor').length;
+  assert.equal(totalDepois, 1, 'não deveria notificar de novo pro mesmo chamado já aceito');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // Notificação de PEDIDO DE PEÇA (chamado em execução + aguardandoPecas=Sim)
 // ═══════════════════════════════════════════════════════════════════════
 // Ver conversa que motivou isso: avisar quando um chamado JÁ EM EXECUÇÃO
+
 // (situacao='Em Manutencao') for salvo com "Aguardando peças? = Sim" —
 // mesma infraestrutura da notificação de abertura, item de catálogo e
 // grupo de destinatários próprios (ver lib/notificacoes-push.js,

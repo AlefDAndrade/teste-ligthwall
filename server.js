@@ -233,6 +233,7 @@ const rotasManutencao = require('./lib/rotas/manutencao.js')({
   notificarPedidoPeca: notificacoesPush.notificarPedidoPeca,
   notificarPecaRecebida: notificacoesPush.notificarPecaRecebida,
   notificarManutencaoProgramada: notificacoesPush.notificarManutencaoProgramada,
+  notificarAceiteChamado: notificacoesPush.notificarAceiteChamado,
 });
 const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemAceita });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
