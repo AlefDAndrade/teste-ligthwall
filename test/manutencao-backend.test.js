@@ -241,3 +241,50 @@ test('restaurar Backup de Dados restaura manutencao corretamente', async () => {
     await servidorLocal.parar();
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Fechamento de etiqueta — Data Fim obrigatória
+// ═══════════════════════════════════════════════════════════════════════
+// Fechar (etiquetaFechada = true) sem a Data Fim da Execução preenchida
+// deixava o chamado bloqueado mas com o campo de término vazio (ver
+// conversa que motivou isso). Marcar só situacao='Concluido', sem fechar
+// de fato, continua permitido sem Data Fim — a trava é só no fechamento.
+test('fechar etiqueta (etiquetaFechada=true) sem Data Fim é rejeitado com 400', async () => {
+  const id = 'MAN-fechar-semdata-' + Date.now();
+  const base = {
+    id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 3',
+    observador: 'Marcos', prioridade: 'Media', anomalia: 'Barulho estranho',
+    tipoManutencao: 'Mecanica',
+  };
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify(base),
+  });
+
+  // Só situacao='Concluido', sem fechar e sem dataFim — continua ok.
+  const respConcluido = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ ...base, situacao: 'Concluido' }),
+  });
+  assert.equal(respConcluido.status, 200);
+
+  // Fechar de fato (etiquetaFechada=true) sem dataFim — deveria ser rejeitado.
+  const respFecharSemData = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ ...base, situacao: 'Concluido', etiquetaFechada: true }),
+  });
+  assert.equal(respFecharSemData.status, 400);
+  assert.match((await respFecharSemData.json()).erro, /Data Fim \(Execução\)/i);
+
+  const respListarAntes = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
+  const chamadoAntes = (await respListarAntes.json()).chamados.find(c => c.id === id);
+  assert.equal(chamadoAntes.etiquetaFechada, false, 'não deveria ter fechado sem a Data Fim');
+
+  // Com dataFim preenchida, o fechamento funciona normalmente.
+  const respFecharComData = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ ...base, situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12' }),
+  });
+  assert.equal(respFecharComData.status, 200);
+  assert.equal((await respFecharComData.json()).chamado.etiquetaFechada, true);
+});

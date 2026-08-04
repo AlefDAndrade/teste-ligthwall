@@ -204,3 +204,62 @@ test('botão "Salvar Chamado" só aparece na etapa onde há algo editável — s
     window.close();
   }
 });
+
+// ─── Data Fim obrigatória pra fechar a etiqueta ──────────────────────────────
+// Regressão de um bug real: era possível fechar um chamado (etiquetaFechada
+// = true) sem a Data Fim da Execução preenchida — confirmarFechamento()
+// preenchia sozinha a data/hora atual quando estava vazia, escondendo o
+// problema em vez de evitá-lo. Isso deixava chamados fechados com o campo
+// de término vazio (ver conversa que motivou isso). Agora
+// abrirModalFechamento() bloqueia (nem abre o modal) e confirmarFechamento()
+// reforça a mesma trava — cobertas aqui as duas camadas, mais o servidor.
+test('fechar etiqueta sem Data Fim (Execução) é bloqueado no front — nem abre o modal; preenchendo a data, funciona', async () => {
+  // Simula o cenário real do bug: um chamado já fica salvo com
+  // situacao='Concluido' e SEM dataFim (ex: salvo assim por outra sessão,
+  // ou direto via API) — ao reabrir, _manDefinirStepInicial() pula DIRETO
+  // pra etapa "Fechamento" sem passar pelo dropdown de Situação, então
+  // aoMudarSituacao() (que auto-preenche a Data Fim quando ela muda pra
+  // "Concluído") nunca chega a rodar. É exatamente esse caminho que
+  // abrirModalFechamento()/confirmarFechamento() agora bloqueiam.
+  const id = await criarChamado('semdata');
+  const cookieAdmin = await logarComoAdminMaster();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({
+      id, data: '2026-07-18', setor: 'Injetora Teste', maquina: 'M-fechar-semdata', turno: '1º TURNO',
+      observador: 'Teste Automatizado', prioridade: 'ALTA', anomalia: 'Anomalia de teste', tipoManutencao: 'Mecânica',
+      situacao: 'Concluido',
+    }),
+  });
+
+  const dom = await carregarSpaComo('manutencao.semdata.teste', 'Manutencao');
+  const { window } = dom;
+
+  try {
+    window.showPage('manutencao');
+    await new Promise(r => setTimeout(r, 200));
+    window.editarManutencao(id); // já cai direto na etapa "Fechamento" (situacao já é Concluido)
+    await new Promise(r => setTimeout(r, 100));
+
+    // Data Fim continua vazia — abrirModalFechamento() não deveria abrir o modal.
+    assert.equal(window.document.getElementById('man-manDataFim').value, '', 'pré-condição: Data Fim vazia');
+    window.abrirModalFechamento();
+    assert.equal(window.document.getElementById('man-modalFechamento').style.display, 'none', 'modal não deveria abrir sem a Data Fim preenchida');
+
+    // Preenche a Data Fim — agora o modal abre normalmente.
+    window.document.getElementById('man-manDataFim').value = '2026-07-20';
+    window.abrirModalFechamento();
+    assert.equal(window.document.getElementById('man-modalFechamento').style.display, 'flex', 'modal deveria abrir com a Data Fim preenchida');
+
+    await window.confirmarFechamento();
+    await new Promise(r => setTimeout(r, 200));
+
+    const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`);
+    const { chamados } = await resp.json();
+    const chamado = chamados.find(c => c.id === id);
+    assert.equal(chamado.etiquetaFechada, true, 'deveria ter fechado, já que a Data Fim foi informada');
+    assert.equal(chamado.dataFim, '2026-07-20');
+  } finally {
+    window.close();
+  }
+});

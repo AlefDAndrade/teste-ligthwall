@@ -634,7 +634,7 @@ test('chamado salvo com statusCompra="Peça recebida" notifica quem tem a permis
   // prova de verdade a exclusão de quem salvou, não só a permissão).
   const respRecebida = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnicoMarca },
-    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', aguardandoPecas: 'Sim', statusCompra: 'Peça recebida' })),
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', aguardandoPecas: 'Sim', statusCompra: 'Peça recebida', supDataFim: '2026-07-23' })),
   });
   assert.equal(respRecebida.status, 200);
 
@@ -661,7 +661,7 @@ test('salvar de novo um chamado que já estava com statusCompra="Peça recebida"
 
   await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
-    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida' })),
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida', supDataFim: '2026-07-23' })),
   });
 
   await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -672,7 +672,7 @@ test('salvar de novo um chamado que já estava com statusCompra="Peça recebida"
   // nova) — não deveria notificar de novo.
   await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisor },
-    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida', fornecedor: 'Fornecedor Teste' })),
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', statusCompra: 'Peça recebida', supDataFim: '2026-07-23', fornecedor: 'Fornecedor Teste' })),
   });
 
   await new Promise((resolve) => setTimeout(resolve, 1500));

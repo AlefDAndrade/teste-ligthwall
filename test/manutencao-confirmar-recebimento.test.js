@@ -111,6 +111,7 @@ async function prepararChamadoComPecaRecebida(sufixo) {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisao },
     body: JSON.stringify(payloadBase(id, {
       aguardandoPecas: 'Sim', pecasComprar: 'Rolamento X', statusCompra: 'Peça recebida',
+      supDataFim: '2026-07-26',
     })),
   });
   assert.equal(respStatus.status, 200, 'setup: marcar "Peça recebida" deveria funcionar');
@@ -120,6 +121,52 @@ async function prepararChamadoComPecaRecebida(sufixo) {
 
   return { id, cookieTecnico, cookieSupervisao };
 }
+
+test('marcar "Peça recebida" sem Data Fim do Acompanhamento (Supervisão) é rejeitado com 400', async () => {
+  const cookieEncarregado = await cadastrarELogar('abre.confirma.semdata', 'Encarregado');
+  const id = 'MAN-confirma-semdata-' + Date.now();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregado },
+    body: JSON.stringify(payloadBase(id)),
+  });
+
+  const cookieTecnico = await cadastrarELogar('tecnico.confirma.semdata', 'Manutencao');
+  await fetch(`${servidor.baseUrl}/manutencao/aceitar-corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ id }),
+  });
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify(payloadBase(id, { aguardandoPecas: 'Sim', pecasComprar: 'Rolamento X' })),
+  });
+
+  const cookieSupervisao = await cadastrarELogar('supervisor.confirma.semdata', 'Supervisao');
+  await fetch(`${servidor.baseUrl}/manutencao/aceitar-pedido-peca`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisao },
+    body: JSON.stringify({ id }),
+  });
+
+  // Marca "Peça recebida" SEM informar supDataFim — deveria ser rejeitado.
+  const respSemData = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisao },
+    body: JSON.stringify(payloadBase(id, {
+      aguardandoPecas: 'Sim', pecasComprar: 'Rolamento X', statusCompra: 'Peça recebida',
+    })),
+  });
+  assert.equal(respSemData.status, 400);
+  assert.match((await respSemData.json()).erro, /Data Fim do Acompanhamento/i);
+
+  // Com supDataFim preenchida, deveria funcionar normalmente.
+  const respComData = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisao },
+    body: JSON.stringify(payloadBase(id, {
+      aguardandoPecas: 'Sim', pecasComprar: 'Rolamento X', statusCompra: 'Peça recebida',
+      supDataFim: '2026-07-26',
+    })),
+  });
+  assert.equal(respComData.status, 200);
+  assert.equal((await respComData.json()).chamado.statusCompra, 'Peça recebida');
+});
 
 test('confirmar recebimento: Manutenção consegue confirmar, e o estado reflete quem/quando', async () => {
   const { id, cookieTecnico } = await prepararChamadoComPecaRecebida('1');

@@ -820,6 +820,15 @@
         tempoSupervisaoNumerico = Math.floor(diffMs / 1000 / 60);
       }
 
+      // "Peça recebida" sem Data Fim do Acompanhamento preenchida deixava
+      // o registro incompleto (ver conversa que motivou isso — mesma
+      // trava reforçada no servidor, em lib/rotas/manutencao.js).
+      const statusCompraAtual = document.getElementById('man-manStatusCompra')?.value || '';
+      if (statusCompraAtual === 'Peça recebida' && !supDtF) {
+        toast('Informe a Data Fim do Acompanhamento (Supervisão) antes de marcar "Peça recebida".', 'error');
+        return;
+      }
+
       const fotoOperadorPreview = document.getElementById('man-fotoOperadorPreview');
       let fotoOperador = '';
       if (fotoOperadorPreview.style.display !== 'none') {
@@ -915,11 +924,24 @@
     if(!id) { toast('Salve o chamado antes de fechá-lo.', 'error'); return; }
     const chamado = manutencoes.find(m => m.id === id);
     if(!chamado) { toast('Erro ao carregar dados.', 'error'); return; }
-    
+
     const dtI = document.getElementById('man-manDataInicio')?.value;
     const hrI = document.getElementById('man-manHoraInicio')?.value;
     const dtF = document.getElementById('man-manDataFim')?.value;
     const hrF = document.getElementById('man-manHoraFim')?.value;
+
+    // Data Fim (Execução) obrigatória pra fechar — antes, se estivesse
+    // vazia, era preenchida sozinha com a data/hora atual no momento da
+    // confirmação (ver confirmarFechamento()), o que deixava passar
+    // etiquetas fechadas sem ninguém realmente ter informado o término
+    // (ver conversa que motivou isso). Checado aqui, ANTES de abrir o
+    // modal de resumo, pra dar feedback imediato — reforçado de novo em
+    // confirmarFechamento() (2ª camada) e no servidor (validação real).
+    if (!dtF) {
+      toast('Informe a Data Fim (Execução) antes de fechar a etiqueta.', 'error');
+      return;
+    }
+
     let tempoExibido = chamado.tempoGasto;
     if (dtI && hrI && dtF && hrF) {
         let diffMin = Math.floor((new Date(`${dtF}T${hrF}`) - new Date(`${dtI}T${hrI}`)) / 1000 / 60);
@@ -950,13 +972,23 @@
     const id = document.getElementById('man-manId')?.value;
     const chamado = manutencoes.find(m => m.id === id);
     if(!chamado) return;
+
+    // Mesma checagem de abrirModalFechamento() (2ª camada — o modal só
+    // deveria abrir com a Data Fim já preenchida, mas confere de novo
+    // aqui, igual ao resto do app faz). Lê do FORMULÁRIO, não do
+    // `chamado` em cache, pra pegar o valor mais recente digitado.
+    const dtF = document.getElementById('man-manDataFim')?.value || '';
+    const hrF = document.getElementById('man-manHoraFim')?.value || '';
+    if (!dtF) {
+      toast('Informe a Data Fim (Execução) antes de fechar a etiqueta.', 'error');
+      fecharModal();
+      return;
+    }
+
     chamado.etiquetaFechada = true;
     chamado.situacao = 'Concluido';
-    if(!chamado.dataFim) {
-      const agora = new Date();
-      chamado.dataFim = agora.toISOString().split('T')[0];
-      chamado.horaFim = agora.toLocaleTimeString('pt-BR', { hour12: false });
-    }
+    chamado.dataFim = dtF;
+    chamado.horaFim = hrF;
     try {
       const res = await fetch('/manutencao/corretiva', {
         method: 'POST',

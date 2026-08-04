@@ -264,7 +264,7 @@ test('Encarregado TEM acesso completo à manutenção hoje (consegue fechar cham
     body: JSON.stringify({
       id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 8',
       observador: 'Encarregado', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true,
+      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
     }),
   });
   assert.equal(respFechar.status, 200, 'Encarregado tem manutencao completa hoje — deveria conseguir fechar');
@@ -295,7 +295,7 @@ test('Manutencao consegue fechar um chamado corretivo (área manutencao completa
     body: JSON.stringify({
       id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 6',
       observador: 'Helena', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true,
+      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
     }),
   });
   assert.equal(respFechar.status, 200);
@@ -328,7 +328,7 @@ test('Administrativo tem acesso completo à manutenção, igual ao master', asyn
     body: JSON.stringify({
       id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 4',
       observador: 'Julia', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true,
+      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
     }),
   });
   assert.equal(respFechar.status, 200);
