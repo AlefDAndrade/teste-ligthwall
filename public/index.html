@@ -123,7 +123,7 @@
       </div>
     </header>
 <!-- ============ SIDEBAR ============ -->
-    <nav class="sidebar">
+    <nav class="sidebar" inert>
       <div class="sidebar-label">Principal</div>
       <button class="nav-item active" data-page="menu" onclick="showPage('menu',this)">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -252,74 +252,74 @@
     <main class="main active" id="page-menu">
       <div class="menu-page-wrap">
         <div class="menu-grid">
-          <div class="menu-card" data-hide-analista data-page="operacao" onclick="showPage('operacao')">
+          <div class="menu-card" tabindex="0" role="button" data-hide-analista data-page="operacao" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('operacao')">
             <div class="menu-card-icon">⏱</div>
             <div class="menu-card-title">Registrar Operação</div>
             <div class="menu-card-desc">Iniciar e finalizar uma operação de injeção de bateria com registro de traços e
               controle de tempo.</div>
           </div>
-          <div class="menu-card" data-page="turnos" onclick="showPage('turnos')">
+          <div class="menu-card" tabindex="0" role="button" data-page="turnos" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('turnos')">
             <div class="menu-card-icon">🏭</div>
             <div class="menu-card-title">Desempenho Turnos</div>
             <div class="menu-card-desc">Comparativo de produtividade, atrasos e eficiência operacional por turno de
               trabalho.</div>
           </div>
-          <div class="menu-card" data-page="registro" onclick="showPage('registro')">
+          <div class="menu-card" tabindex="0" role="button" data-page="registro" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('registro')">
             <div class="menu-card-icon">📋</div>
             <div class="menu-card-title">Operação</div>
             <div class="menu-card-desc">Histórico completo de todas as injeções registradas, com filtros, exportação em
               CSV e acesso à Análise Operacional.</div>
           </div>
-          <div class="menu-card" data-page="relatorio" onclick="showPage('relatorio')">
+          <div class="menu-card" tabindex="0" role="button" data-page="relatorio" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('relatorio')">
             <div class="menu-card-icon">🧾</div>
             <div class="menu-card-title">Traços</div>
             <div class="menu-card-desc">Detalhamento por traço de cada injeção: berços, densidade, flow e observações —
               com acesso à Qualidade dos Traços.</div>
           </div>
-          <div class="menu-card" data-page="relatorio-bercos" onclick="showPage('relatorio-bercos')">
+          <div class="menu-card" tabindex="0" role="button" data-page="relatorio-bercos" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('relatorio-bercos')">
             <div class="menu-card-icon">📑</div>
             <div class="menu-card-title">Berços</div>
             <div class="menu-card-desc">Resultado visual (Okay/Vazou) de cada berço por bateria registrada — com acesso
               à Análise de Berços.</div>
           </div>
-          <div class="menu-card" data-page="oee" onclick="showPage('oee')">
+          <div class="menu-card" tabindex="0" role="button" data-page="oee" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('oee')">
             <div class="menu-card-icon">🎯</div>
             <div class="menu-card-title">OEE</div>
             <div class="menu-card-desc">Disponibilidade × Performance × Qualidade — eficiência geral do maquinário.
             </div>
           </div>
-          <div class="menu-card" data-page="metas" onclick="showPage('metas')">
+          <div class="menu-card" tabindex="0" role="button" data-page="metas" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('metas')">
             <div class="menu-card-icon">🏁</div>
             <div class="menu-card-title">Metas</div>
             <div class="menu-card-desc">Progresso do mês contra as metas de traços, m² e OEE definidas pelo Administrador.</div>
           </div>
-          <div class="menu-card" data-page="paradas" onclick="showPage('paradas')">
+          <div class="menu-card" tabindex="0" role="button" data-page="paradas" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('paradas')">
             <div class="menu-card-icon">🛑</div>
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
-          <div class="menu-card" data-page="setor-qualidade" onclick="showPage('setor-qualidade')">
+          <div class="menu-card" tabindex="0" role="button" data-page="setor-qualidade" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('setor-qualidade')">
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
             <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
           </div>
-          <div class="menu-card" data-page="manutencao" onclick="showPage('manutencao')">
+          <div class="menu-card" tabindex="0" role="button" data-page="manutencao" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('manutencao')">
             <div class="menu-card-icon">🔧</div>
             <div class="menu-card-title">Manutenção</div>
             <div class="menu-card-desc">Chamados corretivos, manutenção programada, compra de peças e almoxarifado — com visão executiva de custos e MTTR.</div>
           </div>
-          <div class="menu-card" data-page="tv" onclick="window.open('tv.html', '_blank')">
+          <div class="menu-card" tabindex="0" role="button" data-page="tv" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="window.open('tv.html', '_blank')">
             <div class="menu-card-icon">📺</div>
             <div class="menu-card-title">Modo TV</div>
             <div class="menu-card-desc">Painel para telão da fábrica: operação ao vivo, traços do dia, OEE e últimas paradas — atualiza sozinho, sem precisar de login.</div>
           </div>
-          <div class="menu-card" data-admin-only onclick="abrirImportacao()">
+          <div class="menu-card" tabindex="0" role="button" data-admin-only onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="abrirImportacao()">
             <div class="menu-card-icon">📥</div>
             <div class="menu-card-title">Importar Documento</div>
             <div class="menu-card-desc">Importa dados de uma planilha Excel (.xlsx / .xls) para o histórico ou relatório
               de injeção.</div>
           </div>
-          <div class="menu-card" data-admin-only onclick="abrirBackupHub()">
+          <div class="menu-card" tabindex="0" role="button" data-admin-only onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="abrirBackupHub()">
             <div class="menu-card-icon">💾</div>
             <div class="menu-card-title">Backup e Restauração</div>
             <div class="menu-card-desc">Fazer ou restaurar um backup — só dados de produção, ou dados + configurações
@@ -427,12 +427,12 @@
     <div id="op-aviso-modo-teste"
       style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.5);color:#c4b5fd;font-size:.85rem;align-items:center;gap:10px;font-weight:600">
       🧪 <span>MODO DE TESTE ATIVO — nada nesta operação afeta os dados reais. Tudo é salvo separado, em arquivos de
-        teste, pra você descartar ou conferir depois.</span>
+        teste, para você descartar ou conferir depois.</span>
     </div>
     <div id="op-aviso-nao-autorizado"
       style="display:none;margin-bottom:16px;padding:12px 18px;border-radius:var(--radius);background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--accent);font-size:.85rem;align-items:center;gap:10px">
       🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar,
-        encerrar ou registrar. Peça ao Administrador pra habilitar isso no seu cadastro em <strong>Configurações →
+        encerrar ou registrar. Peça ao Administrador para habilitar isso no seu cadastro em <strong>Configurações →
           Usuários</strong>.</span>
     </div>
     <fieldset id="op-fieldset-trava" style="border:none;margin:0;padding:0">
@@ -519,7 +519,7 @@
                   <button type="button" id="btn-editar-dimensao"
                     onmousedown="event.preventDefault()"
                     style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
-                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica pra esta operação"
+                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica para esta operação"
                     onclick="LWOp.editarDimensao()">✏️</button>
                 </div>
               </div>
@@ -939,7 +939,8 @@
 
       <div class="page-body">
 
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('registro')" title="Voltar para a tabela de Registro de Baterias">← Voltar para Registro de Baterias</button>
           <button class="btn btn-ghost btn-sm" onclick="showPage('qualidade-tracos')" title="Ver estabilidade de receitas, frequência de ajuste e alertas de qualidade">
             📐 Ver em Dashboard</button>
         </div>
@@ -1253,7 +1254,7 @@
             </div>
             <div class="card">
               <div class="card-title" style="margin-bottom:4px;color:var(--green)">🟢 Referência — Sem Vazamento</div>
-              <div style="font-size:.72rem;color:var(--text-3);margin-bottom:10px">Traços mais estáveis (menos ajustes) sem nenhum vazamento — pra comparar a receita</div>
+              <div style="font-size:.72rem;color:var(--text-3);margin-bottom:10px">Traços mais estáveis (menos ajustes) sem nenhum vazamento — para comparar a receita</div>
               <div class="table-wrap" style="max-height:340px">
                 <table>
                   <thead>
@@ -1319,7 +1320,7 @@
         <div id="af-loading" style="display:none;text-align:center;padding:60px;color:var(--text-3)">Carregando...</div>
         <div id="af-erro" style="display:none;text-align:center;padding:60px;color:var(--red)"></div>
         <div id="af-vazio" style="display:none;text-align:center;padding:60px;color:var(--text-3)">
-          Digite acima o ID de uma Bateria, Operação ou Traço pra ver os detalhes completos dela.
+          Digite acima o ID de uma Bateria, Operação ou Traço para ver os detalhes completos dela.
         </div>
 
         <div id="af-content">
@@ -1732,7 +1733,7 @@
             <div id="oee-paradas-bar" style="display:flex;height:18px;border-radius:6px;overflow:hidden;background:var(--bg-3);margin-bottom:14px"></div>
             <div id="oee-paradas-legenda" style="display:flex;flex-wrap:wrap;gap:12px 22px"></div>
             <div id="oee-paradas-vazio" style="display:none;color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0">
-              Sem tempo planejado no período pra detalhar.</div>
+              Sem tempo planejado no período para detalhar.</div>
           </div>
 
           <!-- OEE por turno (tendência) -->
@@ -2252,6 +2253,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;" id="sq-dash-topbar">
             <span style="font-size:.82rem;color:var(--text-3);"><i class="fas fa-chart-pie"></i> Visão Executiva</span>
             <div id="sq-dash-acoes" style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" id="sq-btn-xlsx" onclick="SQ.abrirExportModal('dashboard')" title="Exporta as avaliações do período/bateria filtrados acima para uma planilha Excel"><i class="fas fa-file-excel"></i> Exportar Excel (.xlsx)</button>
               <button class="btn btn-outline-accent btn-sm" id="sq-btn-html" onclick="SQ.exportDashboardHTML()"><i class="fas fa-file-code"></i> Exportar Interativo</button>
               <button class="btn btn-danger btn-sm" id="sq-btn-pdf" onclick="SQ.exportDashboardPDF()"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
             </div>
@@ -2487,16 +2489,16 @@
               <button class="sq-btn-shape circle active"   onclick="SQ.selectShape(this,'circle')"><span class="sq-shape-circle"></span></button>
               <button class="sq-btn-shape dash"            onclick="SQ.selectShape(this,'dash')"><span class="sq-shape-dash"></span></button>
               <button class="sq-btn-shape x"                onclick="SQ.selectShape(this,'x')" title="Painel não preenchido — sempre sozinha, cor vermelha fixa"><span class="sq-shape-x">×</span></button>
-              <button class="sq-btn-shape eraser"           onclick="SQ.selectShape(this,'eraser')" title="Borracha — selecione e clique numa placa pra apagar TODAS as marcas dela de uma vez"><i class="fas fa-eraser"></i></button>
+              <button class="sq-btn-shape eraser"           onclick="SQ.selectShape(this,'eraser')" title="Borracha — selecione e clique numa placa para apagar TODAS as marcas dela de uma vez"><i class="fas fa-eraser"></i></button>
               <div class="sq-tools-sep"></div>
-              <button class="sq-btn-indicador active" onclick="SQ.toggleIndicadorAtivo(this)" title="Indicador de qualidade — ATIVADO (padrão): a próxima marca clicada é a marca de STATUS de verdade (aprovado/2ª linha/reprovado). Desative só pra corrigir/adicionar manualmente uma marca de identidade (tipo de montagem), sem que ela conte como avaliação.">I</button>
+              <button class="sq-btn-indicador active" onclick="SQ.toggleIndicadorAtivo(this)" title="Indicador de qualidade — ATIVADO (padrão): a próxima marca clicada é a marca de STATUS de verdade (aprovado/2ª linha/reprovado). Desative só para corrigir/adicionar manualmente uma marca de identidade (tipo de montagem), sem que ela conte como avaliação.">I</button>
               <div class="sq-tools-sep"></div>
               <button class="btn btn-ghost btn-sm"         onclick="SQ.undoLastAction()"><i class="fas fa-undo-alt"></i> Desfazer</button>
               <button class="btn btn-danger btn-sm"        onclick="SQ.clearAllMarks()"><i class="fas fa-trash-alt"></i> Limpar</button>
               <div class="sq-tools-sep"></div>
               <span class="sq-tools-hint" title="Funciona em qualquer lugar da tela de Avaliação, menos com o foco num campo de texto."><i class="fas fa-keyboard"></i> Atalhos: nº = cor · Ctrl+nº = forma</span>
               <div class="sq-tools-sep"></div>
-              <span class="sq-tools-hint" title="Selecione a Borracha (na Forma, acima) e clique numa placa pra apagar TODAS as marcas dela de uma vez. No computador, clique com o botão direito ainda apaga só a marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: selecione a Borracha e clique na placa</span>
+              <span class="sq-tools-hint" title="Selecione a Borracha (na Forma, acima) e clique numa placa para apagar TODAS as marcas dela de uma vez. No computador, clique com o botão direito ainda apaga só a marca da cor/forma selecionada ali em cima."><i class="fas fa-eraser"></i> Apagar: selecione a Borracha e clique na placa</span>
               <div class="sq-tools-sep"></div>
 
               <!-- Referência visual dos marcadores — mesmo padrão do botão
@@ -2532,8 +2534,8 @@
                     <div style="display:flex;align-items:center;gap:9px"><span class="sq-shape-x" style="display:inline-flex;flex-shrink:0">×</span>X sozinho → <strong>Painel não preenchido</strong> (categoria própria — não conta como aprovado nem reprovado)</div>
                   </div>
                   <p style="font-size:.72rem;color:var(--text-3);margin:-6px 0 14px;line-height:1.4">
-                    A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só pra identificar o tipo — quem dita
-                    aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma pra um tipo
+                    A cor do traço, quando vem <strong>junto de um círculo</strong>, serve só para identificar o tipo — quem dita
+                    aprovado/reprovado nesse caso é o círculo. Por isso qualquer cor pode ser usada dessa forma para um tipo
                     novo (ver "Tipos sem marcação definida", mais abaixo), mesmo as que já têm outro significado quando a
                     marca vem <strong>sozinha</strong> (ex: um traço verde isolado continua sendo SP aprovado).
                   </p>
@@ -2685,7 +2687,10 @@
         <div class="sq-section" id="sq-history">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <span style="font-size:.82rem;color:var(--text-3);"><i class="fas fa-database"></i> Base de Registros</span>
-            <span style="font-size:.75rem;color:var(--text-3);" id="sq-hist-count">0 registros</span>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <span style="font-size:.75rem;color:var(--text-3);" id="sq-hist-count">0 registros</span>
+              <button class="btn btn-ghost btn-sm" id="sq-btn-exportar-xlsx" onclick="SQ.abrirExportModal('history')" title="Exporta os registros filtrados abaixo para uma planilha Excel"><i class="fas fa-file-excel"></i> Exportar Excel (.xlsx)</button>
+            </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);">
             <div class="form-group">
@@ -2734,6 +2739,50 @@
                 <tbody id="sq-hist-tbody"></tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════
+             MODAL EXPORTAR EXCEL (.XLSX) — REGISTROS E DASHBOARD
+             Mesmo padrão visual do modal de export do Registro de
+             Baterias (ver public/partials/modal-export.html) — só que
+             sem a parte de "período" (a aba Registros/Dashboard já tem
+             os próprios filtros de data na tela, ver _sqListaParaExport).
+        ══════════════════════════════════════════════════════════ -->
+        <div id="sq-export-modal"
+          style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;align-items:center;justify-content:center">
+          <div
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+              <h2 id="sq-exp-titulo" style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);letter-spacing:.06em">⬇ EXPORTAR EXCEL (.XLSX)</h2>
+              <button onclick="SQ.fecharExportModal()"
+                style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+            </div>
+
+            <!-- Seleção de colunas -->
+            <div style="margin-bottom:20px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em">Colunas</div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn btn-ghost btn-sm" onclick="SQ.selecionarTodasColunasSQ(true)">Marcar todas</button>
+                  <button class="btn btn-ghost btn-sm" onclick="SQ.selecionarTodasColunasSQ(false)">Desmarcar todas</button>
+                </div>
+              </div>
+              <div id="sq-exp-colunas-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+            </div>
+
+            <div style="height:1px;background:var(--border);margin-bottom:20px"></div>
+
+            <!-- Rodapé -->
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span id="sq-exp-preview-count" style="font-size:.82rem;color:var(--text-3)"></span>
+              <div style="display:flex;gap:10px">
+                <button class="btn btn-ghost" onclick="SQ.fecharExportModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="SQ.confirmarExportSQ()">⬇ Baixar Excel (.xlsx)</button>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -2819,7 +2868,20 @@
 
   <!-- PÁGINA: MANUTENÇÃO CORRETIVA -->
   <div id="man-manutencao" class="man-page active">
-    
+
+    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
+         cima" + "cada card vira tipo um select"). Fica ANTES do
+         formulário de propósito — é a primeira coisa que a pessoa vê ao
+         entrar na aba, pra bater o olho no que está pendente antes de
+         abrir qualquer chamado específico. Clicar num cartão dentro de
+         uma fase aberta ainda abre o mesmo formulário/assistente de
+         sempre (editarManutencao) — a área de ação continua sendo aqui;
+         a tabela lá embaixo é só consulta. -->
+    <div class="man-card">
+      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
+      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
+    </div>
+
     <!-- FILTROS -->
     <div class="man-filters man-no-print">
       <div class="man-filter-group"><label><i class="fas fa-search"></i> ID</label><input type="text" id="man-filtroID" placeholder="Buscar ID..." oninput="aplicarFiltrosCorretiva()"></div>
@@ -2848,20 +2910,10 @@
           <option value="Concluido">Concluído</option>
         </select>
       </div>
+      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroData" onchange="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user"></i> Observador</label><input type="text" id="man-filtroObservador" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosCorretiva()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Responsável</label><input type="text" id="man-filtroResponsavel" placeholder="Quem executou..." oninput="aplicarFiltrosCorretiva()"></div>
       <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
-    </div>
-
-    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
-         cima" + "cada card vira tipo um select"). Fica ANTES do
-         formulário de propósito — é a primeira coisa que a pessoa vê ao
-         entrar na aba, pra bater o olho no que está pendente antes de
-         abrir qualquer chamado específico. Clicar num cartão dentro de
-         uma fase aberta ainda abre o mesmo formulário/assistente de
-         sempre (editarManutencao) — a área de ação continua sendo aqui;
-         a tabela lá embaixo é só consulta. -->
-    <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
-      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
     </div>
 
     <!-- FORMULÁRIO -->
@@ -2971,7 +3023,7 @@
                 <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-exclamation-triangle" style="color:var(--red);"></i> Recusa solicitada por <strong id="man-recusaInfoSolicitante"></strong>: <em id="man-recusaInfoMotivo"></em></p>
                 <div id="man-recusaBotoesRevisor" style="display:none; gap:10px; flex-wrap:wrap;">
                   <button type="button" class="man-btn man-btn-danger" onclick="responderRecusaChamado(true)"><i class="fas fa-lock"></i> Aceitar Recusa (encerra o chamado)</button>
-                  <button type="button" class="man-btn man-btn-outline" onclick="responderRecusaChamado(false)"><i class="fas fa-undo-alt"></i> Negar Recusa (volta pra Manutenção)</button>
+                  <button type="button" class="man-btn man-btn-outline" onclick="responderRecusaChamado(false)"><i class="fas fa-undo-alt"></i> Negar Recusa (volta para Manutenção)</button>
                 </div>
               </div>
             </div>
@@ -3071,24 +3123,54 @@
          quem quer agir usa o acordeão lá em cima. Mesmos filtros da
          página se aplicam aqui também (mesmo conjunto de dados
          filtrados de renderCorretiva()). -->
+    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
+         por uma topbar de abas — critério é SEMPRE etiquetaFechada (ver
+         _preencherTabelaCorretiva()/_manToggleListaCorretiva(),
+         manutencao.js): etiquetaFechada=false → Pendentes;
+         etiquetaFechada=true → Concluídos. Os dois <tbody> são sempre
+         preenchidos por renderCorretiva(); só a visibilidade alterna. -->
     <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-list"></i> Todos os Chamados (consulta)</div>
-      <div class="man-table-wrap man-table-wrap--linha-unica">
+      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
+        <span><i class="fas fa-list"></i> Chamados (consulta)</span>
+        <div class="man-subtabs" id="man-corretivaSubtabs">
+          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaCorretiva('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-corretivaCountPendentes">0</span></button>
+          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaCorretiva('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-corretivaCountConcluidos">0</span></button>
+        </div>
+      </div>
+      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaPendentes">
         <table>
           <thead><tr>
             <th style="width: 9%;">Nº</th>
-            <th style="width: 12%;">Máquina</th>
-            <th style="width: 9%;">Setor</th>
+            <th style="width: 11%;">Máquina</th>
+            <th style="width: 8%;">Setor</th>
             <th style="width: 9%;">Turno</th>
-            <th style="width: 11%;">Observador</th>
-            <th style="width: 9%;">Tipo</th>
+            <th style="width: 10%;">Observador</th>
+            <th style="width: 8%;">Tipo</th>
             <th style="width: 8%;">Prioridade</th>
             <th style="width: 8%;">Etiqueta</th>
-            <th style="width: 12%;">Status</th>
-            <th style="width: 13%;">Supervisão</th>
+            <th style="width: 11%;">Status</th>
+            <th style="width: 12%;">Supervisão</th>
             <th style="width: 6%;">Ações</th>
           </tr></thead>
-          <tbody id="man-corretivaTableBody"></tbody>
+          <tbody id="man-corretivaTableBodyPendentes"></tbody>
+        </table>
+      </div>
+      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaConcluidos" style="display:none;">
+        <table>
+          <thead><tr>
+            <th style="width: 9%;">Nº</th>
+            <th style="width: 11%;">Máquina</th>
+            <th style="width: 8%;">Setor</th>
+            <th style="width: 9%;">Turno</th>
+            <th style="width: 10%;">Observador</th>
+            <th style="width: 8%;">Tipo</th>
+            <th style="width: 8%;">Prioridade</th>
+            <th style="width: 8%;">Etiqueta</th>
+            <th style="width: 11%;">Status</th>
+            <th style="width: 12%;">Supervisão</th>
+            <th style="width: 6%;">Ações</th>
+          </tr></thead>
+          <tbody id="man-corretivaTableBodyConcluidos"></tbody>
         </table>
       </div>
     </div>
@@ -3147,10 +3229,52 @@
       </form>
     </div>
 
+    <!-- Duas listas em vez de uma tabela única — mesma lógica visual/
+         colunas de sempre, só separadas por status (ver
+         _agendamentoConcluido(), manutencao.js): Pendente/Aprovado/Em
+         Execução → Painel de Aprovação & Execução (ainda precisa de
+         ação); Concluído/Reprovado/Não Executado → lista de Concluídos
+         (só consulta, fim do fluxo). Paginação independente pra cada
+         uma (pageProgramadaPendentes/pageProgramadaConcluidos). -->
+    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
+         por uma topbar de abas — critério é SEMPRE o status atual (ver
+         _agendamentoConcluido()/_manToggleListaProgramada(), manutencao.js):
+         Pendente/Aprovado/Em Execução → Pendentes (ainda precisa de ação);
+         Concluído/Reprovado/Não Executado → Concluídos (só consulta, fim
+         do fluxo). Paginação independente pra cada lista continua
+         existindo (pageProgramadaPendentes/pageProgramadaConcluidos); só
+         a visibilidade das duas listas alterna, os dois <tbody> continuam
+         sempre preenchidos por renderProgramada(). -->
+    <!-- Filtros do Painel de Aprovação & Execução — mesmo padrão visual dos
+         filtros da Corretiva (.man-filters/.man-filter-group) lá em cima.
+         Filtra por Data (a.data), Solicitante (a.solicitante, quem abriu o
+         chamado) e Executor (a.execucao.tecnicoResponsavel, quem executou —
+         só existe depois que a execução é finalizada; itens ainda sem
+         execução simplesmente não batem com esse filtro). Ver
+         aplicarFiltrosProgramada()/renderProgramada() em manutencao.js. -->
+    <div class="man-filters man-no-print">
+      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroProgData" onchange="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user"></i> Solicitante</label><input type="text" id="man-filtroProgSolicitante" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Executor</label><input type="text" id="man-filtroProgExecutor" placeholder="Quem executou..." oninput="aplicarFiltrosProgramada()"></div>
+      <div class="man-filter-group"><label>&nbsp;</label><button type="button" class="man-btn man-btn-outline" onclick="limparFiltrosProgramada()"><i class="fas fa-eraser"></i> Limpar</button></div>
+    </div>
+
     <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</div>
-      <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
-      <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
+        <span><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</span>
+        <div class="man-subtabs" id="man-programadaSubtabs">
+          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaProgramada('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-programadaCountPendentes">0</span></button>
+          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaProgramada('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-programadaCountConcluidos">0</span></button>
+        </div>
+      </div>
+      <div id="man-programadaListaPendentes">
+        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
+        <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
+      </div>
+      <div id="man-programadaListaConcluidos" style="display:none;">
+        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBodyConcluidos"></tbody></table></div>
+        <div id="man-pagProgramadaConcluidos" class="man-pagination man-no-print"></div>
+      </div>
     </div>
   </div>
 
@@ -3176,7 +3300,7 @@
   <div id="man-modalRecusaChamado" class="man-modal-overlay" style="display: none;">
     <div class="man-modal-content">
       <h2><i class="fas fa-times-circle"></i> Recusar Chamado</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Explique por que este chamado deveria ser recusado. Isso vira uma solicitação pra Supervisão, Encarregado ou Administrador revisarem.</p>
+      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Explique por que este chamado deveria ser recusado. Isso vira uma solicitação para Supervisão, Encarregado ou Administrador revisarem.</p>
       <form class="man-form-paper" onsubmit="return false;">
         <div class="man-form-row"><div class="man-form-label"><i class="fas fa-comment-alt"></i> Motivo</div><div class="man-form-field"><textarea id="man-recusaMotivoInput" placeholder="Ex: Chamado duplicado, fora do escopo da Manutenção, etc."></textarea></div></div>
         <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
@@ -3499,7 +3623,7 @@
                   <input type="color" id="cfg-mont-simples-cor"
                     style="width:42px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);cursor:pointer">
                   <button type="button" class="btn btn-ghost btn-sm" onclick="_cfgSugerirCorMontagem()"
-                    title="O programa já sugere uma cor automaticamente — clique aqui pra sortear outra sugestão, ou escolha à mão no quadradinho">🎲</button>
+                    title="O programa já sugere uma cor automaticamente — clique aqui para sortear outra sugestão, ou escolha à mão no quadradinho">🎲</button>
                 </div>
               </div>
             </div>
@@ -3577,7 +3701,7 @@
               <div class="card-title">Definir Paletes</div>
               <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
                 Cada berço enche 2 painéis — um do lado <strong>Direito</strong>, um do lado <strong>Esquerdo</strong>.
-                Escolha, pra cada metade da bateria e cada lado, qual dos 4 paletes recebe esses painéis.
+                Escolha, para cada metade da bateria e cada lado, qual dos 4 paletes recebe esses painéis.
                 A prévia abaixo mostra o resultado antes de salvar.
               </p>
               <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
@@ -3622,7 +3746,7 @@
               <div class="card-title">Ordem dos Paletes</div>
               <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
                 Escolha em qual posição cada palete aparece na tela do Setor de Qualidade. Segure o rótulo
-                de um palete e arraste sobre outro pra trocar os dois de lugar. A posição salva aqui é a
+                de um palete e arraste sobre outro para trocar os dois de lugar. A posição salva aqui é a
                 que aparece na avaliação.
               </p>
               <div id="po-grid"
@@ -3706,7 +3830,7 @@
               <button class="btn btn-ghost btn-sm" onclick="cfgResetarAtalhos()">↺ Restaurar Padrões</button>
             </div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px">
-              Escolha a combinação mais confortável pra você em cada atalho. Clique em "Alterar" e pressione a nova
+              Escolha a combinação mais confortável para você em cada atalho. Clique em "Alterar" e pressione a nova
               combinação — precisa ter ao menos uma tecla modificadora (Ctrl, Alt ou Shift), exceto teclas F1–F12.
               <span id="cfg-atalhos-onde-salva">Fica salvo só neste navegador.</span>
             </p>
@@ -3722,7 +3846,7 @@
             <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:8px;margin-top:22px">
               Outros atalhos do sistema (referência)</div>
             <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">
-              Estes já existem em telas específicas e não são remapeáveis por aqui — listados só como guia, pra
+              Estes já existem em telas específicas e não são remapeáveis por aqui — listados só como guia, para
               não ter que decorar nem procurar espalhado pelo sistema.
             </p>
             <div id="cfg-atalhos-referencia" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -3835,7 +3959,7 @@
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong> é definido
               por pessoa (aba <strong>Usuários</strong> — permissão "Pode iniciar/encerrar operações"), não mais
-              por computador. Aqui dá pra ver se há uma operação em andamento agora e cancelá-la, se precisar.
+              por computador. Aqui dá para ver se há uma operação em andamento agora e cancelá-la, se precisar.
             </p>
 
             <div id="cfg-autorizados-status" style="margin-bottom:18px"></div>
@@ -3855,7 +3979,7 @@
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Além da permissão por pessoa (aba <strong>Usuários</strong>), controlar operações em
               <strong>Registrar Operação</strong> agora também exige que ESTE COMPUTADOR esteja autorizado — vale
-              pra qualquer perfil, inclusive o Administrador. Autorize aqui cada computador que vai operar a
+              para qualquer perfil, inclusive o Administrador. Autorize aqui cada computador que vai operar a
               injetora.
             </p>
 
@@ -3874,8 +3998,8 @@
               <div style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
                 Autorizar outro dispositivo pelo código</div>
               <p style="font-size:.75rem;color:var(--text-3);margin-bottom:10px;line-height:1.5">
-                Peça pra pessoa no outro computador abrir <strong>Registrar Operação</strong> — o código dele
-                aparece no aviso de bloqueio. Cole aqui pra autorizar.
+                Peça para pessoa no outro computador abrir <strong>Registrar Operação</strong> — o código dele
+                aparece no aviso de bloqueio. Cole aqui para autorizar.
               </p>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <input type="text" id="cfg-dispositivos-novo-id" placeholder="Código do dispositivo"
@@ -3897,13 +4021,13 @@
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Quando ativado, os campos de insumo dos traços em <strong>Registrar Operação</strong> passam a ser
               preenchidos automaticamente conforme leituras chegam de fora (balança/CLP, via Modbus TCP) — em vez
-              de digitados à mão. Ainda dá pra digitar manualmente enquanto nenhuma leitura chega.
+              de digitados à mão. Ainda dá para digitar manualmente enquanto nenhuma leitura chega.
             </p>
 
             <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
               <div>
                 <div style="font-size:.85rem;color:var(--text);font-weight:600;margin-bottom:2px">Modo Automático</div>
-                <div style="font-size:.74rem;color:var(--text-3)">Exige a senha de Administrador pra ligar ou desligar.</div>
+                <div style="font-size:.74rem;color:var(--text-3)">Exige a senha de Administrador para ligar ou desligar.</div>
               </div>
               <span class="switch">
                 <input type="checkbox" id="cfg-toggle-automatico" onchange="cfgToggleModoAutomatico(this)">
@@ -3913,7 +4037,7 @@
 
             <p style="font-size:.74rem;color:var(--text-3);margin-top:14px;margin-bottom:0">
               💡 A coleta automática (leitura do CLP) ainda não está conectada — ver README, "Modo Automático",
-              pra status e o que falta.
+              para status e o que falta.
             </p>
           </div>
           <!-- ========== /SEÇÃO: Automação ========== -->
@@ -3922,11 +4046,11 @@
           <div id="cfg-secao-sql" style="display:none">
             <div class="card-title">🗄️ Dados SQL</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Consulta direta às tabelas do banco (SQLite), pra apagar uma linha específica ou a tabela
+              Consulta direta às tabelas do banco (SQLite), para apagar uma linha específica ou a tabela
               <strong>inteira</strong> manualmente — use com cuidado: a exclusão é <strong>permanente</strong> e
               não passa pelo fluxo normal de edição do sistema. Prefira sempre as telas normais (Editar
-              Operação, Editar Traço etc.) quando possível; use isto só pra corrigir um registro de teste,
-              duplicado ou corrompido que não dá pra remover de outro jeito.
+              Operação, Editar Traço etc.) quando possível; use isto só para corrigir um registro de teste,
+              duplicado ou corrompido que não dá para remover de outro jeito.
             </p>
 
             <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
@@ -3938,7 +4062,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;flex:2;min-width:220px">
                 <label class="form-label">Buscar nas linhas carregadas</label>
-                <input class="form-input" id="cfg-sql-busca" placeholder="Digite pra filtrar…" oninput="cfgSqlRenderLinhas()">
+                <input class="form-input" id="cfg-sql-busca" placeholder="Digite para filtrar…" oninput="cfgSqlRenderLinhas()">
               </div>
               <button class="btn btn-ghost btn-sm" onclick="cfgSqlCarregarLinhas()" title="Recarregar">↺ Atualizar</button>
               <button class="btn btn-danger btn-sm" id="cfg-sql-btn-limpar" onclick="cfgSqlLimparTabela()" title="Excluir TODAS as linhas desta tabela" disabled>🧹 Limpar Todas</button>
@@ -3962,11 +4086,11 @@
               Escolha, perfil a perfil, quem recebe as notificações push de Manutenção — <strong>Abertura de
               Chamado</strong> (novo chamado corretivo aberto) e <strong>Pedido de Peça</strong> (chamado já em
               execução ficou aguardando peça). Cada pessoa também precisa ter clicado em "Ativar notificações"
-              (🔔 na barra superior) no próprio dispositivo pra receber de verdade.
+              (🔔 na barra superior) no próprio dispositivo para receber de verdade.
             </p>
             <p style="font-size:.74rem;color:var(--text-3);margin-bottom:18px;line-height:1.5;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
               ℹ️ O <strong>Administrador Master</strong> (senha mestra da tela de login) não aparece nesta lista —
-              ele nunca é um usuário cadastrado, então não tem como se inscrever pra receber push. Se quiser que
+              ele nunca é um usuário cadastrado, então não tem como se inscrever para receber push. Se quiser que
               quem usa a senha mestra também seja avisado, crie um usuário cadastrado com perfil "Administrador"
               (aba Usuários) e ative as notificações logado com ele.
             </p>
@@ -4005,7 +4129,7 @@
       <p style="font-size:.8rem;color:var(--text-3);margin-bottom:16px;line-height:1.5">
         Marque, item por item, o que este perfil pode fazer: <strong>Acesso Total</strong> (vê e edita/registra),
         <strong>Apenas Visualizar</strong> (vê a tela, sem poder editar/registrar) ou <strong>Ocultar</strong>
-        (nem aparece pra esse perfil). Item não marcado fica <strong>Oculto</strong> por padrão.
+        (nem aparece para esse perfil). Item não marcado fica <strong>Oculto</strong> por padrão.
       </p>
 
       <div class="form-group" id="cp-nome-grupo">
@@ -4285,7 +4409,7 @@
       <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px">Cada ajuste é uma ação só (tempo de batida
         sempre obrigatório; insumos só se de fato foram adicionados nessa ação) — mesma regra do "+ Ajuste de
         Receita" ao vivo, em Registrar Operação. Esta lista também regrava <code
-          style="color:var(--blue)">ajustes_tracos.json</code> pra este traço.</p>
+          style="color:var(--blue)">ajustes_tracos.json</code> para este traço.</p>
       <div id="et-lista-ajustes" style="margin-bottom:18px"></div>
 
       <!-- Resultados Medidos (Densidade, Flow) — remedições simples -->

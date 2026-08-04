@@ -3206,13 +3206,18 @@
     return item.dtDesmoldagem || item.registeredAt;
   }
 
-  function renderHistory() {
+  // Aplica os mesmos filtros da aba "Registros" (busca por bateria, turno,
+  // período por data de desmoldagem) e devolve a lista já ordenada, mais
+  // recente primeiro — usada tanto por renderHistory() (tabela na tela)
+  // quanto por confirmarExportSQ() (Excel, origem 'history'), pra
+  // exatamente com o que está sendo mostrado/filtrado na tela no momento.
+  function _historicoFiltrado() {
     const d       = getData();
     const search  = (document.getElementById('sq-hist-search').value || '').toLowerCase();
     const turno   = document.getElementById('sq-hist-turno').value;
     const sd      = document.getElementById('sq-hist-start')?.value || '';
     const ed      = document.getElementById('sq-hist-end')?.value || '';
-    const filtered = d.avaliacoes.filter(item => {
+    return d.avaliacoes.filter(item => {
       if (item.excluidaDaFila) return false;
       if (!(item.batteryId||'').toLowerCase().includes(search)) return false;
       if (turno && item.turno !== turno) return false;
@@ -3221,6 +3226,23 @@
       if (ed && dt > new Date(ed + 'T23:59:59')) return false;
       return true;
     }).sort((a, b) => new Date(_dataReferenciaAvaliacao(b)) - new Date(_dataReferenciaAvaliacao(a)));
+  }
+
+  // Resumo textual das classificações dos painéis de uma avaliação (ex:
+  // "2/P Aprovado: 20, S/P Reprovado (2ª linha): 3") — usado tanto na
+  // coluna "Classificações" da tabela (renderHistory) quanto na mesma
+  // coluna do Excel exportado (confirmarExportSQ/_sqLinhaExport), pra manter os dois
+  // sempre idênticos.
+  function _resumoClassificacoes(item) {
+    const panels = getData().paineis.filter(p => p.avaliacaoId === item.id);
+    const counts = {};
+    panels.forEach(p => { const k = `${p.tipoObtido} ${p.resultado}${_linhaDoPainel(p) === '2ª' ? ' (2ª linha)' : ''}`; counts[k] = (counts[k]||0) + 1; });
+    return Object.entries(counts).map(([k,n]) => `${k}: ${n}`).join(', ') || '—';
+  }
+
+  function renderHistory() {
+    const d        = getData();
+    const filtered = _historicoFiltrado();
 
     document.getElementById('sq-hist-count').textContent = `${filtered.length} registros`;
     const wrap  = document.getElementById('sq-hist-table-wrap');
@@ -3230,10 +3252,7 @@
     wrap.style.display='block'; empty.style.display='none'; body.innerHTML='';
 
     filtered.forEach(item => {
-      const panels = d.paineis.filter(p => p.avaliacaoId === item.id);
-      const counts = {};
-      panels.forEach(p => { const k = `${p.tipoObtido} ${p.resultado}${_linhaDoPainel(p) === '2ª' ? ' (2ª linha)' : ''}`; counts[k] = (counts[k]||0) + 1; });
-      const summary = Object.entries(counts).map(([k,n]) => `${k}: ${n}`).join(', ') || '—';
+      const summary = _resumoClassificacoes(item);
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${new Date(_dataReferenciaAvaliacao(item)).toLocaleString('pt-BR')}</td>
@@ -3251,6 +3270,142 @@
         </td>`;
       body.appendChild(tr);
     });
+  }
+
+  /* ── Exportar Avaliações (Excel, com seletor de colunas) ──
+     Mesmo padrão usado no Registro de Baterias/Relatório de Injeção (ver
+     abrirExportModal/gerarDownloadXLSX, js/dashboard.js): modal com
+     seleção de colunas, planilha com largura de coluna automática e
+     cabeçalho congelado, gerada com o SheetJS (window.XLSX, já carregado
+     globalmente — ver index.template.html). Usado a partir de DOIS
+     lugares (ver botões "Exportar Excel" na aba Registros e no
+     Dashboard) — `_sqExportOrigem` guarda qual deles abriu o modal, pra
+     `confirmarExportSQ()` saber de onde tirar a lista (filtro da aba
+     Registros vs. filtro do Dashboard), sem duplicar o modal em dois. */
+  const SQ_EXPORT_COLUNAS = [
+    { campo: 'desmoldagem',    header: 'Desmoldagem',       padrao: true },
+    { campo: 'bateria',        header: 'Bateria',           padrao: true },
+    { campo: 'seq',            header: 'Seq. do Dia',       padrao: false },
+    { campo: 'turno',          header: 'Turno',             padrao: true },
+    { campo: 'temperatura',    header: 'Temperatura (°C)',  padrao: true },
+    { campo: 'placas',         header: 'Placas',            padrao: true },
+    { campo: 'pallet1',        header: 'Pallet 1',          padrao: true },
+    { campo: 'pallet2',        header: 'Pallet 2',          padrao: true },
+    { campo: 'pallet3',        header: 'Pallet 3',          padrao: true },
+    { campo: 'pallet4',        header: 'Pallet 4',          padrao: true },
+    { campo: 'classificacoes', header: 'Classificações',    padrao: true },
+    { campo: 'avaliador',      header: 'Avaliado por',      padrao: true },
+    { campo: 'observacoes',    header: 'Observações',       padrao: false },
+  ];
+
+  let _sqExportOrigem = 'history'; // 'history' (aba Registros) | 'dashboard'
+
+  // Lista de avaliações que o modal vai exportar, de acordo com quem o
+  // abriu — mesmos filtros já aplicados na tela de origem no momento.
+  function _sqListaParaExport() {
+    return _sqExportOrigem === 'dashboard' ? _dashboardFiltrado() : _historicoFiltrado();
+  }
+
+  // "Achata" uma avaliação num objeto { campo: valor }, pronto pra virar
+  // 1 linha da planilha — mesmos campos mostrados na tabela de Registros
+  // (ver renderHistory), só que todos, não só os visíveis na tela.
+  function _sqLinhaExport(item) {
+    return {
+      desmoldagem:    new Date(_dataReferenciaAvaliacao(item)).toLocaleString('pt-BR'),
+      bateria:        item.batteryId || 'N/I',
+      seq:            item.dailySeq || '',
+      turno:          item.turno || '',
+      temperatura:    item.tempInput != null && item.tempInput !== '' ? item.tempInput : '',
+      placas:         item.totalSlabs || '',
+      pallet1:        item.montagem?.pallet1 || '—',
+      pallet2:        item.montagem?.pallet2 || '—',
+      pallet3:        item.montagem?.pallet3 || '—',
+      pallet4:        item.montagem?.pallet4 || '—',
+      classificacoes: _resumoClassificacoes(item),
+      avaliador:      item.avaliadorNome || '',
+      observacoes:    item.observations || '',
+    };
+  }
+
+  function abrirExportModal(origem) {
+    if (typeof XLSX === 'undefined') {
+      showAlert('Erro', 'Biblioteca de exportação (XLSX) não carregou. Recarregue a página e tente de novo.');
+      return;
+    }
+    _sqExportOrigem = origem === 'dashboard' ? 'dashboard' : 'history';
+
+    const grid = document.getElementById('sq-exp-colunas-grid');
+    grid.innerHTML = SQ_EXPORT_COLUNAS.map((c, i) =>
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 10px;' +
+      'border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2)">' +
+      '<input type="checkbox" id="sq-exp-col-' + i + '" ' + (c.padrao ? 'checked' : '') +
+      ' style="accent-color:var(--accent);width:15px;height:15px" onchange="SQ.atualizarPreviewCountSQ()">' +
+      '<span style="font-size:.85rem">' + c.header + '</span></label>'
+    ).join('');
+    document.getElementById('sq-exp-titulo').textContent =
+      _sqExportOrigem === 'dashboard' ? '⬇ EXPORTAR EXCEL (.XLSX) — DASHBOARD' : '⬇ EXPORTAR EXCEL (.XLSX) — REGISTROS';
+    atualizarPreviewCountSQ();
+    document.getElementById('sq-export-modal').style.display = 'flex';
+  }
+
+  function fecharExportModal() {
+    document.getElementById('sq-export-modal').style.display = 'none';
+  }
+
+  function selecionarTodasColunasSQ(marcar) {
+    SQ_EXPORT_COLUNAS.forEach((_, i) => {
+      const el = document.getElementById('sq-exp-col-' + i);
+      if (el) el.checked = marcar;
+    });
+    atualizarPreviewCountSQ();
+  }
+
+  function atualizarPreviewCountSQ() {
+    const total = _sqListaParaExport().length;
+    const qtdCols = SQ_EXPORT_COLUNAS.filter((_, i) => {
+      const el = document.getElementById('sq-exp-col-' + i);
+      return el && el.checked;
+    }).length;
+    const el = document.getElementById('sq-exp-preview-count');
+    if (el) el.textContent = total + ' registros · ' + qtdCols + ' colunas selecionadas';
+  }
+
+  function confirmarExportSQ() {
+    const lista = _sqListaParaExport();
+    if (!lista.length) {
+      showAlert('Nada para exportar', 'Nenhum registro encontrado com os filtros atuais.');
+      return;
+    }
+    const colsSel = SQ_EXPORT_COLUNAS.filter((_, i) => {
+      const el = document.getElementById('sq-exp-col-' + i);
+      return el && el.checked;
+    });
+    if (!colsSel.length) { showAlert('Nada para exportar', 'Selecione ao menos uma coluna.'); return; }
+
+    const linhas = lista.map(item => {
+      const achatada = _sqLinhaExport(item);
+      const linha = {};
+      colsSel.forEach(col => { linha[col.header] = achatada[col.campo]; });
+      return linha;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(linhas);
+
+    // Largura automática das colunas, a partir do maior conteúdo de cada uma
+    ws['!cols'] = colsSel.map(col => {
+      const maxLen = linhas.reduce((max, row) => Math.max(max, String(row[col.header] ?? '').length), col.header.length);
+      return { wch: maxLen + 4 };
+    });
+
+    // Congela a linha de cabeçalho
+    ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft' }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Avaliações');
+
+    const prefixo = _sqExportOrigem === 'dashboard' ? 'lightwall_avaliacoes_dashboard_' : 'lightwall_avaliacoes_qualidade_';
+    XLSX.writeFile(wb, `${prefixo}${_hojeBrasilia()}.xlsx`);
+    fecharExportModal();
   }
 
   /* ── Espelho visual ───────────────────────────────────── */
@@ -3631,34 +3786,42 @@
   }
 
   /* ── Dashboard ────────────────────────────────────────── */
-  function renderDashboard() {
-    const d    = getData();
-    const sd   = document.getElementById('sq-dash-start').value;
-    const ed   = document.getElementById('sq-dash-end').value;
-    const bf   = document.getElementById('sq-dash-bat').value;
-
-    // "Excluída da fila" (ver _excluirOperacaoDaFila) grava uma avaliação
-    // de verdade só pra deixar rastro auditável no banco — TODOS os
-    // painéis dela vêm com resultado 'nao_avaliado_no_sistema', nunca
-    // aprovado/reprovado. O Dashboard é sobre o que FOI avaliado (KPIs,
-    // produção, classificações) — por isso essas entram fora daqui desde
-    // o filtro inicial (marcador `excluidaDaFila`, gravado só nesse
-    // evento), como se não existissem no período: sem isso, "Painéis
-    // Avaliados"/"Total Registros" ficavam inflados com painéis que a
-    // própria avaliação diz que NUNCA foram avaliados, "Evolução Diária"
-    // contava produção que não existiu, e "Distribuição das
-    // Classificações" ganhava uma fatia solta "null nao_avaliado_no_
-    // sistema" (tipoObtido é sempre null nesses painéis). Registros (aba
-    // separada) usa o MESMO filtro (ver renderHistory) — esses itens não
-    // são avaliações de verdade (não têm nem "montagem"), só um marcador
-    // interno de que a bateria saiu da fila sem ser avaliada.
-    const fe = d.avaliacoes.filter(item => {
+  // Aplica os filtros da tela Dashboard (período + bateria) e devolve a
+  // lista de avaliações filtrada — usada por renderDashboard() (KPIs/
+  // gráficos), exportDashboardHTML() e exportarAvaliacoesXLSX(origem:
+  // 'dashboard'), pra todas baterem com o que está selecionado na tela
+  // no momento. "Excluída da fila" (ver _excluirOperacaoDaFila) grava uma
+  // avaliação de verdade só pra deixar rastro auditável no banco — TODOS
+  // os painéis dela vêm com resultado 'nao_avaliado_no_sistema', nunca
+  // aprovado/reprovado. O Dashboard é sobre o que FOI avaliado (KPIs,
+  // produção, classificações) — por isso essas entram fora daqui desde
+  // o filtro inicial (marcador `excluidaDaFila`, gravado só nesse
+  // evento), como se não existissem no período: sem isso, "Painéis
+  // Avaliados"/"Total Registros" ficavam inflados com painéis que a
+  // própria avaliação diz que NUNCA foram avaliados, "Evolução Diária"
+  // contava produção que não existiu, e "Distribuição das
+  // Classificações" ganhava uma fatia solta "null nao_avaliado_no_
+  // sistema" (tipoObtido é sempre null nesses painéis). Registros (aba
+  // separada) usa o MESMO filtro (ver renderHistory) — esses itens não
+  // são avaliações de verdade (não têm nem "montagem"), só um marcador
+  // interno de que a bateria saiu da fila sem ser avaliada.
+  function _dashboardFiltrado() {
+    const d  = getData();
+    const sd = document.getElementById('sq-dash-start').value;
+    const ed = document.getElementById('sq-dash-end').value;
+    const bf = document.getElementById('sq-dash-bat').value;
+    return d.avaliacoes.filter(item => {
       if (item.excluidaDaFila) return false;
       const dt = new Date(_dataReferenciaAvaliacao(item));
       return (!sd || dt >= new Date(sd)) &&
              (!ed || dt <= new Date(ed + 'T23:59:59')) &&
              (!bf || item.batteryId === bf);
     });
+  }
+
+  function renderDashboard() {
+    const d  = getData();
+    const fe = _dashboardFiltrado();
     dashboardEvals = fe; mirrorIndex = 0; renderMirror(0);
 
     const ids = fe.map(e => e.id);
@@ -3851,20 +4014,10 @@
     try {
       await carregarAvaliacoesQualidade(); // garante dataset atualizado antes de embutir
       // MESMO filtro que está valendo no dashboard na tela agora (ver
-      // renderDashboard, acima) — período (sq-dash-start/end) e bateria
-      // (sq-dash-bat) — não mais TODAS as avaliações. Exclui
-      // "excluídaDaFila" pelo mesmo motivo de sempre (não são avaliações
-      // de verdade).
-      const sd = document.getElementById('sq-dash-start').value;
-      const ed = document.getElementById('sq-dash-end').value;
-      const bf = document.getElementById('sq-dash-bat').value;
-      const avaliacoes = getData().avaliacoes.filter(item => {
-        if (item.excluidaDaFila) return false;
-        const dt = new Date(_dataReferenciaAvaliacao(item));
-        return (!sd || dt >= new Date(sd)) &&
-               (!ed || dt <= new Date(ed + 'T23:59:59')) &&
-               (!bf || item.batteryId === bf);
-      });
+      // renderDashboard/_dashboardFiltrado, acima) — período
+      // (sq-dash-start/end) e bateria (sq-dash-bat) — não mais TODAS as
+      // avaliações.
+      const avaliacoes = _dashboardFiltrado();
       const html = _gerarHtmlDashboardStandalone(avaliacoes, _descricaoPeriodoAtual());
 
       const blob = new Blob([html], { type: 'text/html' });
@@ -4559,6 +4712,10 @@
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
     renderDashboard, renderHistory,
+    abrirExportModal, fecharExportModal,
+    selecionarTodasColunasSQ,
+    atualizarPreviewCountSQ,
+    confirmarExportSQ,
     prevMirror, nextMirror,
     exportDashboardPDF,
     exportDashboardHTML,
