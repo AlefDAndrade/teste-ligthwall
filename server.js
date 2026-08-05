@@ -405,6 +405,36 @@ const server = http.createServer((req, res) => {
     };
   }
 
+  // ─── /db/*.json NUNCA pode ser servido do cache do navegador ───────────
+  // Mesmo raciocínio do bloco de Cache-Control lá embaixo (fallback de
+  // arquivo estático) — mas aplicado ANTES das rotas extraídas
+  // (ROTAS_EXTRAIDAS, abaixo). A maioria dos arquivos sob /db/ hoje não é
+  // mais servida daquele fallback: foi migrada pra rotas dinâmicas que
+  // reconstroem o conteúdo do SQLite a cada chamada (ver lib/rotas/
+  // qualidade.js, consultas.js etc.) e respondem sozinhas com
+  // `res.writeHead(200, {'Content-Type': 'application/json'})`, sem
+  // Cache-Control nenhum — perdendo, sem querer, a mesma proteção que
+  // tinha sido criada pra isso (ver comentário do fallback, abaixo: "sem
+  // cabeçalho de cache nenhum... mudanças salvas não aparecem nem com
+  // F5"). Sintoma real que motivou esta correção: corrigir a data de
+  // desmoldagem de uma avaliação atualizava Relatório/Dashboard na hora,
+  // mas o Debriefing (public/js/debriefing.js, fetch direto de
+  // 'db/avaliacoes_qualidade.json', sem cache:'no-store') continuava
+  // mostrando a data antiga mesmo fechando/reabrindo — o navegador
+  // reaproveitava a resposta em cache em vez de ir à rede de novo.
+  // Um único monkey-patch aqui (mesmo padrão do Set-Cookie, acima) cobre
+  // TODA rota de /db/ de uma vez, sem precisar editar cada módulo de rota
+  // individualmente nem torcer pra ninguém esquecer o header numa rota
+  // nova.
+  if (urlPath.startsWith('/db/')) {
+    const writeHeadOriginalDb = res.writeHead.bind(res);
+    res.writeHead = (statusCode, headers) => {
+      headers = headers || {};
+      headers['Cache-Control'] = 'no-store';
+      return writeHeadOriginalDb(statusCode, headers);
+    };
+  }
+
   // ─── Limite de tamanho de corpo (POST) ─────────────────────────────────
   // Nenhuma rota abaixo tinha limite nenhum — cada uma só acumula
   // `req.on('data', chunk => body += chunk)` até o 'end', sem nenhum teto.

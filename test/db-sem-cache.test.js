@@ -39,6 +39,38 @@ test('outro arquivo qualquer sob /db/ (ex: historico.json) também vem com no-st
   assert.ok(resp.status === 200 || resp.status === 404);
 });
 
+// ─── Regressão: rotas DINÂMICAS sob /db/ também precisam do header ────────
+// historico.json, relatorio_injecao.json e avaliacoes_qualidade.json não
+// são mais arquivo estático (ver Fases 2/5 do fatiamento, lib/rotas/
+// consultas.js e lib/rotas/qualidade.js) — são reconstruídos do SQLite a
+// cada chamada e respondem sozinhos, ANTES de chegar no fallback de
+// arquivo estático que seta o header (mais abaixo em server.js). O teste
+// acima ("outro arquivo qualquer...") não pegava isso porque só conferia
+// o status, nunca o header — essas rotas ficaram sem Cache-Control por
+// um bom tempo sem que nenhum teste acusasse. Sintoma real que motivou
+// isso: corrigir a data de desmoldagem de uma avaliação já registrada
+// atualizava Relatório/Dashboard na hora, mas o Debriefing continuava
+// mostrando a data antiga mesmo fechando/reabrindo — o navegador
+// reaproveitava a resposta em cache de /db/avaliacoes_qualidade.json em
+// vez de ir à rede de novo.
+test('rota DINÂMICA /db/historico.json (reconstruída do banco) vem com Cache-Control: no-store', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/db/historico.json`);
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('cache-control'), 'no-store');
+});
+
+test('rota DINÂMICA /db/avaliacoes_qualidade.json vem com Cache-Control: no-store', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/db/avaliacoes_qualidade.json`);
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('cache-control'), 'no-store');
+});
+
+test('rota DINÂMICA /db/relatorio_injecao.json vem com Cache-Control: no-store', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/db/relatorio_injecao.json`);
+  assert.equal(resp.status, 200);
+  assert.equal(resp.headers.get('cache-control'), 'no-store');
+});
+
 test('um arquivo estático FORA de /db/ (ex: css/styles.css) não leva Cache-Control: no-store', async () => {
   const resp = await fetch(`${servidor.baseUrl}/css/styles.css`);
   assert.equal(resp.status, 200);
