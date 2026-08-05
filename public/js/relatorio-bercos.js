@@ -20,7 +20,7 @@
   // "✕" em bateria-atual.js) — de propósito diferente do vermelho de
   // "baixou": são conceitos diferentes (vazamento observado vs painel
   // que nunca existiu pra avaliar).
-  const ESTADO_LABEL = { okay: 'Okay', baixou: 'Vazou', nao_enchido: 'Não enchido' };
+  const ESTADO_LABEL = { okay: 'Ok', baixou: 'Vazou', nao_enchido: 'Não enchido' };
   const ESTADO_COR   = { okay: 'var(--green)', baixou: 'var(--red)', nao_enchido: 'var(--sq-cor-azul, var(--blue))' };
 
   // Total de VAZAMENTOS de UMA bateria/linha — soma os 2 lados (esquerdo +
