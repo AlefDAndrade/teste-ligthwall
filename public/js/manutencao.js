@@ -2393,8 +2393,22 @@
     if (!_podeEditarManutProg) {
       // Visualização — sem ações de aprovar/reprovar/iniciar/finalizar,
       // que exigem a área 'manutencao' completa (ver lib/perfis.js).
-    } else if(a.status === 'Aprovado' || a.status === 'Pendente') {
+    } else if(a.status === 'Pendente') {
+      // Botão "Aceitar" (✓) só aparece ENQUANTO ainda está Pendente — uma
+      // vez Aprovado, não faz sentido "aceitar de novo": abrirModalAprovacao()
+      // pré-preenche o modal com a.data/a.hora (a sugestão ORIGINAL, não o
+      // período já aprovado em a.dataInicioEstimado/a.horaInicioEstimado),
+      // então confirmar de novo sobrescrevia silenciosamente quem aprovou e
+      // quando, sem nenhum aviso de que aquele agendamento já tinha sido
+      // aceito (ver conversa que motivou isso: "hoje é possível aceitar
+      // novamente uma sugestão"). Reprovar continua disponível também em
+      // Aprovado — é a única forma, hoje, de recuar uma aprovação antes de
+      // iniciar a execução (excluirAgendamento só permite excluir
+      // Pendente, e o outro jeito de "desfazer" seria ter que iniciar e
+      // finalizar como Não Executado).
       acoes += `<button class="man-btn man-btn-success" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="aprovarAgendamento('${a.id}')"><i class="fas fa-check"></i></button><button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
+    } else if(a.status === 'Aprovado') {
+      acoes += `<button class="man-btn man-btn-danger" style="padding:2px 8px; font-size:11px;" onclick="abrirModalReprovacao('${a.id}')"><i class="fas fa-times"></i></button>`;
     } else if(a.status === 'Em Execucao') {
       acoes += `<button class="man-btn man-btn-warning" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="abrirModalFinalizar('${a.id}')"><i class="fas fa-flag-checkered"></i></button>`;
     } else {
