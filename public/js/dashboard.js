@@ -444,6 +444,19 @@
     )].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { numeric: true }));
   }
 
+  // ---- Opções válidas do filtro de Atraso ----
+  // houve_atraso só é gravado como 'SIM' ou 'NÃO' (ver operacao.js e a
+  // normalização na importação em app-core.js) — qualquer outro valor no
+  // campo é lixo de origem externa (registro editado direto no banco,
+  // restauração de backup antigo com encoding diferente, etc.) e não deve
+  // virar uma 3ª opção no filtro. Diferente de _unicos() (que lista TODO
+  // valor distinto encontrado nos dados), aqui a lista é fixa e só inclui
+  // 'SIM'/'NÃO' — e só se algum registro de fato tiver aquele valor.
+  function _opcoesAtraso(dados) {
+    const presentes = new Set(dados.map(d => d.houve_atraso));
+    return ['SIM', 'NÃO'].filter(v => presentes.has(v));
+  }
+
   // ---- Gera categorias de filtro para Registro de Baterias ----
   function gerarCategoriasRegistro(dados) {
     return [
@@ -451,7 +464,7 @@
       { key: 'dimensao', label: 'Dimensão', opcoes: _unicos(dados, 'dimensao') },
       { key: 'turno', label: 'Turno', opcoes: _unicos(dados, 'turno') },
       { key: 'tipo_montagem', label: 'Tipo de Montagem', opcoes: _unicos(dados, 'tipo_montagem') },
-      { key: 'atraso', label: 'Atraso', opcoes: _unicos(dados, 'houve_atraso') },
+      { key: 'atraso', label: 'Atraso', opcoes: _opcoesAtraso(dados) },
     ].filter(c => c.opcoes.length > 0);
   }
 
