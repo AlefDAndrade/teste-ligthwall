@@ -20,7 +20,7 @@
     <style>
         /* Esconde a tela de login enquanto _tentarAutoLogin() confere, no
            servidor, se já existe uma sessão de usuário cadastrado válida
-           (cookie lw_usuario_sessao, 12h — ver lib/sessao-usuario.js) —
+           (cookie lw_usuario_sessao, dura ~10 anos na prática — ver lib/sessao-usuario.js) —
            evita o "flash" do formulário de login antes de redirecionar
            direto pro sistema. Removida assim que a checagem termina, se
            der negativo (ver script no fim do body). */
@@ -95,7 +95,8 @@
     <script src="js/admin-auth.js"></script>
     <script>
         // ─── Auto-login: se já existe uma sessão de USUÁRIO CADASTRADO
-        // válida no servidor (cookie lw_usuario_sessao, dura 12h — ver
+        // válida no servidor (cookie lw_usuario_sessao, dura ~10 anos na
+        // prática — ver
         // lib/sessao-usuario.js), entra direto no sistema sem mostrar o
         // formulário — a pessoa só volta a ver esta tela se clicar em
         // "Sair" (destrói o cookie, ver AdminAuth.logout()) ou se a

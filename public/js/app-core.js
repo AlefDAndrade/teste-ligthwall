@@ -684,8 +684,8 @@
       // reaberto direto no index.html, sem passar pelo auto-login do
       // login.html) — antes de desistir e mandar pro login, tenta
       // restaurar a partir da sessão de USUÁRIO CADASTRADO que ainda
-      // pode estar válida no servidor (cookie lw_usuario_sessao, 12h —
-      // ver lib/sessao-usuario.js e GET /minha-sessao, logo abaixo).
+      // pode estar válida no servidor (cookie lw_usuario_sessao, dura ~10
+      // anos na prática — ver lib/sessao-usuario.js e GET /minha-sessao, logo abaixo).
       // Propositalmente não cobre o Administrador Master aqui: aquela
       // sessão é outro cookie (lib/sessao.js) e continua sempre pedindo
       // a senha de novo (ver AdminAuth/login.html) — nada muda pra ele.
@@ -931,7 +931,8 @@
     // GET /backups-automaticos exige sessão de Administrador (ver
     // lib/sessao.js), mas essa sessão já foi criada no login como
     // Administrador (mesma senha, ver login.html) — não pedimos de novo
-    // aqui. Se a sessão tiver expirado (30 min, ver lib/sessao.js), o
+    // aqui. Se a sessão tiver expirado (dura ~10 anos na prática, mas o
+    // próprio navegador limita cookies a ~400 dias — ver lib/sessao.js), o
     // servidor responde 403 e mostramos um aviso pedindo pra relogar, em
     // vez de reabrir o modal de senha (ficava redundante com o login).
     function _carregarBackupsAutomaticos() {
