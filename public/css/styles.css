@@ -1039,6 +1039,42 @@ h4 {
   /* Para Chrome, Safari e Opera */
 }
 
+/* Indicador de rolagem lateral — como a scrollbar fica escondida (regra
+   acima), sem isso não dá pra perceber que a tabela continua pra direita.
+   .table-wrap.js aplica/remove essas classes conforme a posição do scroll
+   (ver public/js/table-scroll-indicador.js): some sozinho ao chegar nas
+   pontas, então nunca fica um "fade" enganando quem já rolou até o fim. */
+.table-wrap::before,
+.table-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  z-index: 15;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.table-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-card), transparent);
+}
+
+.table-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-card), transparent);
+}
+
+.table-wrap.tem-scroll-esquerda::before {
+  opacity: 1;
+}
+
+.table-wrap.tem-scroll-direita::after {
+  opacity: 1;
+}
+
 /* Fixar o cabeçalho da tabela ao rolar */
 .table-wrap thead th {
   position: sticky;

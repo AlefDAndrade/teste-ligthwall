@@ -208,6 +208,40 @@
 
 .man-table-wrap { overflow-x: auto; max-height: 600px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); position: relative; }
 .man-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+/* Indicador de rolagem lateral (mesma lógica de .table-wrap em styles.css —
+   classes aplicadas via public/js/table-scroll-indicador.js). z-index acima
+   do th sticky (20) logo abaixo. */
+.man-table-wrap::before,
+.man-table-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  z-index: 25;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.man-table-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-card), transparent);
+}
+
+.man-table-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-card), transparent);
+}
+
+.man-table-wrap.tem-scroll-esquerda::before {
+  opacity: 1;
+}
+
+.man-table-wrap.tem-scroll-direita::after {
+  opacity: 1;
+}
 .man-table-wrap th { text-align: left; padding: 14px 12px; color: var(--text-2); border-bottom: 2px solid var(--border); position: sticky; top: 0; background: var(--bg-card); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; z-index: 20; }
 .man-table-wrap td { padding: 14px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
 .man-table-wrap tr:hover td { background: rgba(255,255,255,0.03); }
