@@ -1380,16 +1380,36 @@
   // entradaAjustes (opcional) é a entrada de ajustes_tracos.json pra este
   // id_traco, se existir — buscada uma única vez em renderRelatorio().
   function _construirDetalheRelatorio(l, entradaAjustes) {
+    const partes = [];
+
     if (entradaAjustes) {
       const tabela = _construirTabelaAjustesPorEvento(entradaAjustes);
-      if (tabela) return tabela;
+      if (tabela) partes.push(tabela);
     }
 
-    // Fallback: traços sem entrada em ajustes_tracos.json (anteriores à
-    // migração/Editar Traço) — não dá pra saber quais ajustes de campos
-    // diferentes aconteceram juntos, então mostra do jeito antigo, por
-    // insumo (total acumulado), em vez de por ação.
+    // Densidade/Flow são remedições (leituras), guardadas à parte dos
+    // ajustes de receita (ver comentário na rota /editar-traco-relatorio) —
+    // por isso NUNCA aparecem em ajustes_tracos.json/_construirTabelaAjustesPorEvento,
+    // e precisam ser montadas aqui à parte, sempre que existirem, independente
+    // de o traço ter ou não uma tabela de ajustes por evento acima.
+    const itensDensidadeFlow = _CAMPOS_DETALHE_RELATORIO
+      .filter(def => def.resultado)
+      .map(def => _linhaDetalheCampo(def, l[def.campo]))
+      .filter(Boolean);
+    if (itensDensidadeFlow.length) {
+      partes.push(`
+        ${partes.length ? '<div class="relatorio-ajuste-vazio" style="margin:10px 0 8px">Densidade / Flow (remedições):</div>' : ''}
+        <div class="relatorio-ajuste-grid">${itensDensidadeFlow.join('')}</div>`);
+    }
+
+    if (partes.length) return partes.join('');
+
+    // Fallback: traços sem entrada em ajustes_tracos.json e sem leituras de
+    // densidade/flow (anteriores à migração/Editar Traço) — não dá pra saber
+    // quais ajustes de campos diferentes aconteceram juntos, então mostra do
+    // jeito antigo, por insumo (total acumulado), em vez de por ação.
     const itens = _CAMPOS_DETALHE_RELATORIO
+      .filter(def => !def.resultado)
       .map(def => _linhaDetalheCampo(def, l[def.campo]))
       .filter(Boolean);
 
