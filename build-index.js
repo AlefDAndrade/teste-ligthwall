@@ -3,8 +3,8 @@
 // fatia do server.js (que usa módulos Node de verdade), aqui quem "junta as
 // partes" é este script, rodado ANTES de subir o servidor.
 //
-// Fonte: public/index.template.html (a "casca" — head, topbar, sidebar,
-// scripts — com um marcador `<!-- INCLUDE:nome.html -->` em cada lugar
+// Fonte: public/index.template.html (a "casca" — head, topbar, tabbar de
+// navegação, scripts — com um marcador `<!-- INCLUDE:nome.html -->` em cada lugar
 // onde um pedaço de public/partials/ entra).
 // Saída: public/index.html (o arquivo de verdade, servido pelo server.js).
 //

@@ -241,6 +241,18 @@
       }, 8000);
     }
 
+    // Garante que a aba clicada/ativada fique visível dentro da faixa de
+    // navegação horizontal (.tabbar-scroll) — necessário porque a barra
+    // rola lateralmente em telas estreitas ou quando há mais abas do que
+    // cabem (ver .tabbar-scroll, styles.css). scrollIntoView com
+    // block:'nearest' evita rolar a página inteira (só desloca o próprio
+    // contêiner com overflow-x), e inline:'nearest' só move o necessário
+    // pra aba aparecer, sem sempre centralizar/colar na borda.
+    function _rolarAbaAtivaParaVisivel(navEl) {
+      if (!navEl || typeof navEl.scrollIntoView !== 'function') return;
+      navEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
     function showPage(pageId, navEl) {
       if (!_paginaPermitida(pageId)) return;
 
@@ -268,9 +280,13 @@
 
       if (navEl) {
         navEl.classList.add('active');
+        _rolarAbaAtivaParaVisivel(navEl);
       } else {
         const btn = document.querySelector(`[data-page="${pageId}"]`);
-        if (btn) btn.classList.add('active');
+        if (btn) {
+          btn.classList.add('active');
+          _rolarAbaAtivaParaVisivel(btn);
+        }
       }
 
       // Init page if needed
@@ -755,7 +771,7 @@
         // lib/perfis.js) e esconde do menu tudo que não está nela.
         // "data-admin-only" continua exclusivo do Administrador Master de
         // verdade (ações sensíveis dentro de uma página, ex: editar um
-        // registro — ver comentário em nav-sidebar.html/page-menu.html),
+        // registro — ver comentário em nav-tabbar.html/page-menu.html),
         // mesmo perfis com bastante acesso como Administrativo não
         // ganham esses botões.
         document.querySelectorAll('[data-admin-only]').forEach(el => el.style.display = 'none');
@@ -827,42 +843,15 @@
       // acontece no clique explícito do usuário no botão).
       if (window.LWPush) LWPush.iniciar();
 
-      // Lógica do botão Sidebar
-      const sidebar = document.querySelector('.sidebar');
-      const backdrop = document.getElementById('sidebar-backdrop');
-      const toggleBtn = document.getElementById('sidebar-toggle');
-
-      const toggleSidebar = () => {
-        const isExpanded = sidebar.classList.toggle('expanded');
-        backdrop.classList.toggle('active', isExpanded);
-        // Sidebar fica fora da tela via transform (translateX), não via
-        // display/visibility — sem "inert" ela continua alcançável pelo
-        // Tab (e pelo leitor de tela) mesmo escondida visualmente. Por
-        // isso sincroniza o inert com o estado de expansão sempre que ele
-        // muda, em vez de só no carregamento inicial.
-        sidebar.inert = !isExpanded;
-        if (isExpanded) sidebar.querySelector('.nav-item')?.focus();
-      };
-
-      toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleSidebar();
-      });
-
-      backdrop.addEventListener('click', () => {
-        sidebar.classList.remove('expanded');
-        backdrop.classList.remove('active');
-        sidebar.inert = true;
-      });
-
-      // Fechar sidebar ao clicar em um item de navegação (melhor UX em mobile/overlay)
-      document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-          sidebar.classList.remove('expanded');
-          backdrop.classList.remove('active');
-          sidebar.inert = true;
-        });
-      });
+      // A navegação agora é uma tabbar horizontal sempre visível (ver
+      // nav-tabbar.html) — não é mais um painel off-canvas que precisa
+      // ser aberto/fechado, então não existe mais toggle/backdrop aqui.
+      // O único cuidado que sobra é garantir que a aba ativa esteja
+      // sempre visível dentro da faixa: em telas estreitas (ou com muitas
+      // abas) a barra rola na horizontal (.tabbar-scroll), e trocar de
+      // página com o teclado (atalhos Alt+1..0, ver keyboard-shortcuts.js)
+      // ou por um deep-link não dá nenhum feedback de scroll sozinho —
+      // ver showPage(), que chama _rolarAbaAtivaParaVisivel() no final.
 
       // Navegação (menu, com permissões já aplicadas e página restaurada
       // acima) e informações da topbar (nome, perfil, logo acima) estão

@@ -192,9 +192,13 @@ test('o formulário do chamado (título, seções e botões Salvar/Cancelar) fic
   assert.ok(formCard.contains(btnCancelar), 'botão Cancelar deveria estar DENTRO de #man-formCard');
 });
 
-test('o menu lateral e o menu principal têm um item/card pra Manutenção', () => {
-  const navItem = window.document.querySelector('.sidebar [data-page="manutencao"]');
-  assert.ok(navItem, 'deveria existir um botão de navegação pra "manutencao" no sidebar');
+test('a tabbar de navegação e o menu principal têm um item/card pra Manutenção', () => {
+  // Era ".sidebar [data-page=...]" (sidebar off-canvas antiga) — a
+  // navegação agora é uma tabbar horizontal sempre visível (ver
+  // nav-tabbar.html), sem mudar a lógica de showPage nem o restante do
+  // seletor.
+  const navItem = window.document.querySelector('.tabbar [data-page="manutencao"]');
+  assert.ok(navItem, 'deveria existir um botão de navegação pra "manutencao" na tabbar');
 
   const menuCard = window.document.querySelector('#page-menu .menu-card[onclick*="manutencao"]');
   assert.ok(menuCard, 'deveria existir um card de atalho pra Manutenção no Menu Principal');

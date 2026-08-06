@@ -36,8 +36,7 @@
   --font-body: 'Barlow', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --sidebar-w-collapsed: 64px;
-  --sidebar-w-expanded: 240px;
+  --tabbar-h: 44px;
 }
 
 /* ============================================================
@@ -251,8 +250,11 @@ h4 {
      precisar quebrar em 2 linhas (ver @media abaixo); com altura fixa,
      esse conteúdo extra ficava cortado/sobreposto ao invés de empurrar
      o resto da página pra baixo. min-height na .topbar (abaixo) garante
-     os mesmos 56px de sempre quando cabe tudo numa linha só. */
-  grid-template-rows: auto 1fr;
+     os mesmos 56px de sempre quando cabe tudo numa linha só.
+     3ª linha (auto) é a .tabbar — sub-topbar com as páginas, logo abaixo
+     da topbar principal (antes era uma sidebar vertical à esquerda, sem
+     linha própria no grid; ver histórico do arquivo). */
+  grid-template-rows: auto auto 1fr;
   min-height: 100vh;
 }
 
@@ -302,94 +304,71 @@ h4 {
   font-weight: 500;
 }
 
-/* ---- Sidebar ---- */
-.sidebar {
+/* ---- Tabbar (sub-topbar de navegação) ----
+   Antes era uma sidebar vertical, off-canvas, aberta por cima do
+   conteúdo via botão ☰ na topbar (ver git log pra o layout antigo). Virou
+   uma faixa horizontal fixa logo abaixo da topbar, sempre visível, com
+   cada página como uma aba — igual às abas de um navegador: a aba ativa
+   "gruda" no conteúdo abaixo dela (mesmo fundo, sem borda inferior),
+   as inativas ficam soltas, com o fundo da própria barra por trás. */
+.tabbar {
+  grid-column: 1 / -1;
   background: var(--bg-2);
-  border-right: 1px solid var(--border);
-  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  min-height: var(--tabbar-h);
+  z-index: 90; /* abaixo da topbar (100) e de popovers/modais */
+}
+
+/* Scroller interno: em telas estreitas ou com muitas abas, rola na
+   horizontal (arrasto/touch) em vez de quebrar linha ou espremer tudo —
+   mesma lógica de uma barra de abas de navegador real. Scrollbar
+   escondida de propósito (a rolagem continua funcionando por
+   touch/trackpad/shift+scroll, só não fica uma barra feia ocupando
+   espaço numa faixa tão baixa). */
+.tabbar-scroll {
   display: flex;
-  flex-direction: column;
+  align-items: flex-end;
   gap: 2px;
-  width: var(--sidebar-w-expanded);
-  position: fixed;
-  top: 56px;
-  bottom: 0;
-  left: 0;
-  transform: translateX(-100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 1000;
-  overflow-x: hidden;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.sidebar.expanded {
-  transform: translateX(0);
-  box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+.tabbar-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-.sidebar-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-}
-
-.sidebar-backdrop.active {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sidebar-toggle-wrapper {
-  display: flex;
-  align-items: center;
-  margin-right: 8px;
-}
-
-.btn-sidebar-toggle {
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  width: 30px;
-  height: 30px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+/* Divisor sutil entre grupos de páginas (Principal / Operação /
+   Relatórios) — a versão em sidebar tinha um rótulo de texto
+   (.sidebar-label) pra cada grupo; numa faixa horizontal não sobra
+   espaço vertical pra isso, então vira só uma linha fina separando os
+   grupos, sem precisar de legenda. */
+.tabbar-divider {
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
   flex-shrink: 0;
-}
-
-.sidebar-label {
-  font-family: var(--font-display);
-  font-size: .65rem;
-  font-weight: 600;
-  letter-spacing: .12em;
-  color: var(--text-3);
-  text-transform: uppercase;
-  padding: 12px 20px 6px;
-  white-space: nowrap;
-  opacity: 1;
+  margin: 0 4px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 24px;
+  gap: 8px;
+  padding: 10px 16px;
   cursor: pointer;
   border: none;
+  border-bottom: 2px solid transparent;
   background: none;
-  width: 100%;
-  text-align: left;
   color: var(--text-2);
   font-family: var(--font-body);
-  font-size: .88rem;
+  font-size: .85rem;
   font-weight: 500;
-  transition: background .15s, color .15s;
-  border-left: 2px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .15s, color .15s, border-color .15s;
+  border-radius: var(--radius) var(--radius) 0 0;
   text-decoration: none;
 }
 
@@ -398,15 +377,20 @@ h4 {
   color: var(--text);
 }
 
+/* Aba ativa: mesmo fundo do conteúdo abaixo dela (.main/--bg) e sem
+   borda-fundo — dá a impressão de a aba "grudar" na página aberta,
+   como numa aba de navegador de verdade. O sublinhado embaixo some
+   justamente na ativa (border-bottom: transparent), reforçando a fusão
+   visual com o conteúdo logo abaixo. */
 .nav-item.active {
-  background: rgba(245, 158, 11, .07);
+  background: var(--bg);
   color: var(--accent);
-  border-left-color: var(--accent);
+  border-color: var(--bg);
 }
 
 .nav-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   opacity: .7;
   flex-shrink: 0;
 }
@@ -1994,6 +1978,21 @@ td.mono {
     margin-left: 0;
     flex-wrap: wrap;
     row-gap: 6px;
+  }
+
+  /* Tabbar: cada aba perde o texto e fica só com o ícone — com 12
+     páginas, o texto completo ("Registro de Paradas", "Setor de
+     Qualidade" etc.) não cabe mais numa faixa só, mesmo rolando. Ícone
+     sozinho já é reconhecível (mesmo padrão usado no botão de
+     Debriefing, ver breakpoint de 600px abaixo) e mantém todas as abas
+     visíveis sem precisar rolar na maioria das telas de tablet. */
+  .nav-item {
+    padding: 10px 12px;
+    gap: 0;
+  }
+
+  .nav-item .nav-text {
+    display: none;
   }
 
   .grid-2,
