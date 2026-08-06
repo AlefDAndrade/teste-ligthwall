@@ -607,6 +607,50 @@
       </div>`;
   }
 
+  // Monta um card no estilo "relatorio-ajuste-item" (mesmas classes usadas
+  // no painel de detalhamento do Relatório de Injeção — ver
+  // _linhaDetalheCampo, dashboard.js) pra UM campo de remedição (densidade
+  // ou flow): original → cada leitura → final, com a última em destaque.
+  // Devolve null se nunca houve remedição pra este campo (lista vazia) —
+  // aí ele não some do resumo "Densidade/Flow" no topo do card, só não
+  // ganha esse detalhamento extra.
+  function _cardRemedicao(label, original, leituras, unidade) {
+    if (!leituras || !leituras.length) return null;
+    const fmt = v => v === null || v === undefined || v === '' || isNaN(Number(v))
+      ? '—' : Number(v).toFixed(unidade === 'kg/m³' ? 0 : 1) + (unidade ? ' ' + unidade : '');
+    const chips = leituras.map((v, i) => {
+      const ehFinal = i === leituras.length - 1;
+      return `<span class="badge ${ehFinal ? 'badge-blue' : 'badge-gray'}" data-tooltip="${ehFinal ? 'Leitura final' : 'Leitura intermediária'}">${fmt(v)}</span>`;
+    }).join('<span class="relatorio-ajuste-seta">→</span>');
+    return `
+      <div class="relatorio-ajuste-item">
+        <div class="relatorio-ajuste-label">${label}</div>
+        <div class="relatorio-ajuste-valores">
+          <span class="relatorio-ajuste-original" data-tooltip="Valor planejado (receita original)">${fmt(original)}</span>
+          <span class="relatorio-ajuste-seta">→</span>
+          ${chips}
+        </div>
+      </div>`;
+  }
+
+  // Bloco de remedições de Densidade/Flow de um traço — mesma ideia do
+  // painel de detalhamento do Relatório de Injeção (ver
+  // _construirDetalheRelatorio, dashboard.js), reaproveitado aqui pra
+  // Análise Focada mostrar as MESMAS leituras individuais, não só o valor
+  // final já embutido no resumo da receita (camposReceita, abaixo).
+  function _renderRemedicoesDensidadeFlow(t) {
+    const cards = [
+      _cardRemedicao('Densidade', t.original?.densidade, t.densidade_leituras, 'kg/m³'),
+      _cardRemedicao('Flow', t.original?.flow, t.flow_leituras, ''),
+    ].filter(Boolean);
+    if (!cards.length) return '';
+    return `
+      <div class="af-ajustes-wrap">
+        <div class="af-ajustes-titulo">Remedições de Densidade/Flow</div>
+        <div class="relatorio-ajuste-grid">${cards.join('')}</div>
+      </div>`;
+  }
+
   // ── Receita utilizada (traços + ajustes) ─────────────────────
   function _renderReceita(tracos, bercosVisuais) {
     const el = document.getElementById('af-receita');
@@ -650,6 +694,8 @@
                </div>`).join('')}
            </div>`;
 
+      const remedicoesHtml = _renderRemedicoesDensidadeFlow(t);
+
       const origemHtml = t._origem
         ? `<div class="af-traco-origem-linha">🔗 Origem: ${_badgeOperacao(t._origem)}</div>`
         : '';
@@ -666,6 +712,7 @@
           <div class="af-receita-grid">${receitaHtml}</div>
           ${t.obs ? `<div class="af-traco-obs">📝 ${LW.escaparHtml(t.obs)}</div>` : ''}
           ${ajustesHtml}
+          ${remedicoesHtml}
           ${origemHtml}
           ${reaproveitadoHtml}
         </div>`;
@@ -895,6 +942,15 @@
   .af-ajustes-wrap { margin-top:12px; }
   .af-ajustes-titulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:6px; }
   .af-ajuste-linha { display:flex; flex-wrap:wrap; gap:12px; font-size:.8rem; padding:6px 10px; background:var(--bg-card); border-radius:var(--radius); margin-bottom:4px; }
+  .relatorio-ajuste-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+  .relatorio-ajuste-item { background:var(--bg-2,var(--bg-card)); border:1px solid var(--border); border-radius:var(--radius); padding:9px 13px; }
+  .relatorio-ajuste-label { font-size:.68rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-2); margin-bottom:6px; }
+  .relatorio-ajuste-valores { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:.8rem; }
+  .relatorio-ajuste-original { color:var(--text-2); }
+  .relatorio-ajuste-seta { color:var(--text-2); opacity:.5; font-size:.72rem; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.72rem; font-weight:600; }
+  .badge-blue { background:rgba(59,130,246,.15); color:#60a5fa; }
+  .badge-gray { background:rgba(148,163,184,.15); color:#94a3b8; }
   .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
@@ -951,6 +1007,8 @@
   ${_bercosEnchidosDoTraco}
   ${_calcularResumoTracos}
   ${_renderResumoTracos}
+  ${_cardRemedicao}
+  ${_renderRemedicoesDensidadeFlow}
   ${_renderReceita}
   ${_renderParadas}
   ${_labelPainel}
