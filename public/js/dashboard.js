@@ -1315,12 +1315,21 @@
       </div>`;
   }
 
-  // ── Mini tabela por AJUSTE (ação) — fonte: ajustes_tracos.json ──────────
+  // ── Mini tabela por AJUSTE (ação) — fontes: ajustes_tracos.json (insumos,
+  // por evento) + leituras_resultado (densidade/flow, remedições soltas) ──
   // Cada ajuste_N já é uma ação só (tempo de batida + insumos que vieram
   // junto naquele momento) — diferente dos arrays soltos de cada campo em
   // relatorio_injecao.json, que não garantem dizer quais aconteceram juntos
   // (ver README, seção "Editar Traço"). Por isso essa é a fonte preferida
   // pra exibir "1º ajuste: cimento -5 / 2º ajuste: cimento -10" etc.
+  //
+  // Densidade/Flow (leiturasExtras) NÃO têm evento/timestamp associado (são
+  // só uma lista solta de remedições — ver leituras_resultado, db.js) e por
+  // isso não têm garantia de corresponder 1:1 aos eventos de ajuste de
+  // insumo: a linha N da tabela mostra o N-ésimo evento de insumo (se
+  // houver) ao lado da N-ésima leitura de densidade/flow (se houver) só por
+  // ordem — é uma aproximação posicional, não uma correlação real de
+  // "isso aconteceu junto com aquilo".
   const _CAMPOS_AJUSTE_EVENTO = [
     { nome: 'tempo_batida', label: '⏱ Batida', formatador: v => LW.formatDuration(v) }, // já em MINUTOS em ajustes_tracos.json
     { nome: 'cimento', label: 'Cimento', unidade: 'kg' },
@@ -1330,38 +1339,57 @@
     { nome: 'incorporador', label: 'Incorp. de Ar', unidade: 'kg' },
   ];
 
-  // Monta a mini tabela. Retorna null se a entrada não tiver nenhum
-  // "ajuste_N" (ex: traço legado, nunca migrado pra ajustes_tracos.json).
-  function _construirTabelaAjustesPorEvento(entradaAjustes) {
-    const chaves = Object.keys(entradaAjustes)
-      .filter(k => /^ajuste_\d+$/.test(k))
-      .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10));
-    if (!chaves.length) return null;
+  // Monta a mini tabela unificada (insumos por evento + densidade/flow por
+  // leitura). `leiturasExtras` é { densidade: [...], flow: [...] } — listas
+  // já em ORDEM (ver l.densidade.ajustes/l.flow.ajustes, ambos no formato
+  // "resultado", ver _CAMPOS_DETALHE_RELATORIO). Retorna null se não houver
+  // NADA pra mostrar (nem evento de insumo, nem leitura de densidade/flow).
+  function _construirTabelaAjustesPorEvento(entradaAjustes, leiturasExtras) {
+    const eventos = (() => {
+      if (!entradaAjustes) return [];
+      const chaves = Object.keys(entradaAjustes)
+        .filter(k => /^ajuste_\d+$/.test(k))
+        .sort((a, b) => parseInt(a.split('_')[1], 10) - parseInt(b.split('_')[1], 10));
+      return chaves.map(k => entradaAjustes[k]);
+    })();
 
-    const ajustesOrdenados = chaves.map(k => entradaAjustes[k]);
+    const densidadeLeituras = (leiturasExtras && leiturasExtras.densidade) || [];
+    const flowLeituras = (leiturasExtras && leiturasExtras.flow) || [];
+    const maxLinhas = Math.max(eventos.length, densidadeLeituras.length, flowLeituras.length);
+    if (!maxLinhas) return null;
 
     // Só mostra coluna pra insumo que teve valor em PELO MENOS um ajuste
     // deste traço — evita colunas vazias pra insumos nunca tocados.
-    const colunas = _CAMPOS_AJUSTE_EVENTO.filter(def =>
-      ajustesOrdenados.some(aj => aj && aj[def.nome] !== undefined && aj[def.nome] !== null && aj[def.nome] !== ''));
+    const colunasInsumo = _CAMPOS_AJUSTE_EVENTO.filter(def =>
+      eventos.some(aj => aj && aj[def.nome] !== undefined && aj[def.nome] !== null && aj[def.nome] !== ''));
 
-    const linhas = ajustesOrdenados.map((aj, i) => {
-      const celulas = colunas.map(def => {
+    const linhas = [];
+    for (let i = 0; i < maxLinhas; i++) {
+      const aj = eventos[i];
+      const celulasInsumo = colunasInsumo.map(def => {
         const v = aj?.[def.nome];
-        if (v === undefined || v === null || v === '') {
-          return `<td class="relatorio-ajusteN-vazio">—</td>`;
-        }
+        if (v === undefined || v === null || v === '') return `<td class="relatorio-ajusteN-vazio">—</td>`;
         const num = parseFloat(v);
         const texto = def.formatador ? def.formatador(num) : `${_fmtNumDetalhe(num)}${def.unidade || ''}`;
         return `<td class="mono">${texto}</td>`;
       }).join('');
-      return `
+
+      const celulaDensidade = densidadeLeituras.length
+        ? `<td class="mono">${densidadeLeituras[i] !== undefined ? _fmtNumDetalhe(densidadeLeituras[i]) : '—'}</td>`
+        : '';
+      const celulaFlow = flowLeituras.length
+        ? `<td class="mono">${flowLeituras[i] !== undefined ? _fmtNumDetalhe(flowLeituras[i]) : '—'}</td>`
+        : '';
+
+      linhas.push(`
         <tr>
           <td class="relatorio-ajusteN-num">${i + 1}º ajuste</td>
           <td class="relatorio-ajusteN-quando">${aj?.registrado_em ? LW.formatDateTime(aj.registrado_em) : '—'}</td>
-          ${celulas}
-        </tr>`;
-    }).join('');
+          ${celulasInsumo}
+          ${celulaDensidade}
+          ${celulaFlow}
+        </tr>`);
+    }
 
     return `
       <table class="relatorio-ajusteN-tabela">
@@ -1369,45 +1397,48 @@
           <tr>
             <th>Ajuste</th>
             <th>Quando</th>
-            ${colunas.map(def => `<th>${def.label}</th>`).join('')}
+            ${colunasInsumo.map(def => `<th>${def.label}</th>`).join('')}
+            ${densidadeLeituras.length ? '<th>Densidade</th>' : ''}
+            ${flowLeituras.length ? '<th>Flow</th>' : ''}
           </tr>
         </thead>
-        <tbody>${linhas}</tbody>
+        <tbody>${linhas.join('')}</tbody>
       </table>`;
+  }
+
+  // Extrai a lista de leituras (já em ordem) de um campo "resultado" tipo
+  // { original, ajustes: [...] } — usado pra alimentar a coluna
+  // Densidade/Flow da tabela de ajustes por evento, abaixo.
+  function _leiturasDoCampo(valorBruto) {
+    return (valorBruto && typeof valorBruto === 'object' && Array.isArray(valorBruto.ajustes))
+      ? valorBruto.ajustes.map(Number)
+      : [];
   }
 
   // Monta o painel completo de detalhamento de reajustes pra um traço `l`.
   // entradaAjustes (opcional) é a entrada de ajustes_tracos.json pra este
   // id_traco, se existir — buscada uma única vez em renderRelatorio().
   function _construirDetalheRelatorio(l, entradaAjustes) {
-    const partes = [];
+    // Densidade/Flow são remedições (leituras) guardadas à parte dos
+    // ajustes de receita (ver comentário na rota /editar-traco-relatorio),
+    // mas entram como colunas extras na MESMA tabela de ajustes por evento
+    // (posicionalmente: leitura N ao lado do ajuste N) — ver comentário em
+    // _construirTabelaAjustesPorEvento sobre essa correspondência ser só
+    // por ordem, não por evento real em comum.
+    const leiturasExtras = {
+      densidade: _leiturasDoCampo(l.densidade),
+      flow: _leiturasDoCampo(l.flow),
+    };
 
-    if (entradaAjustes) {
-      const tabela = _construirTabelaAjustesPorEvento(entradaAjustes);
-      if (tabela) partes.push(tabela);
-    }
+    const tabela = _construirTabelaAjustesPorEvento(entradaAjustes, leiturasExtras);
+    if (tabela) return tabela;
 
-    // Densidade/Flow são remedições (leituras), guardadas à parte dos
-    // ajustes de receita (ver comentário na rota /editar-traco-relatorio) —
-    // por isso NUNCA aparecem em ajustes_tracos.json/_construirTabelaAjustesPorEvento,
-    // e precisam ser montadas aqui à parte, sempre que existirem, independente
-    // de o traço ter ou não uma tabela de ajustes por evento acima.
-    const itensDensidadeFlow = _CAMPOS_DETALHE_RELATORIO
-      .filter(def => def.resultado)
-      .map(def => _linhaDetalheCampo(def, l[def.campo]))
-      .filter(Boolean);
-    if (itensDensidadeFlow.length) {
-      partes.push(`
-        ${partes.length ? '<div class="relatorio-ajuste-vazio" style="margin:10px 0 8px">Densidade / Flow (remedições):</div>' : ''}
-        <div class="relatorio-ajuste-grid">${itensDensidadeFlow.join('')}</div>`);
-    }
-
-    if (partes.length) return partes.join('');
-
-    // Fallback: traços sem entrada em ajustes_tracos.json e sem leituras de
-    // densidade/flow (anteriores à migração/Editar Traço) — não dá pra saber
-    // quais ajustes de campos diferentes aconteceram juntos, então mostra do
-    // jeito antigo, por insumo (total acumulado), em vez de por ação.
+    // Fallback: traço sem NENHUM evento de ajuste de insumo (nem em
+    // ajustes_tracos.json, nem no formato antigo por-campo) e sem nenhuma
+    // leitura de densidade/flow. Ainda assim pode ter ajustes no formato
+    // antigo por-campo (relatorio_injecao.json pré-migração, sem eventos
+    // correlacionados) — mostra do jeito antigo, por insumo (total
+    // acumulado), em vez de por ação.
     const itens = _CAMPOS_DETALHE_RELATORIO
       .filter(def => !def.resultado)
       .map(def => _linhaDetalheCampo(def, l[def.campo]))
