@@ -33,7 +33,6 @@ const OPERACAO_COM_NAO_ENCHIDOS = {
   data: '2026-07-01',
   fim: '2026-07-01T14:30:00.000Z',
   dimensao: 9,
-  bercos_reais: 20,
   capacidade: 20,
   bercos_visuais: [
     { berco: 'B3', ordem: 3, estado_esquerda: 'nao_enchido', estado_direita: 'okay' },

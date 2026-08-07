@@ -26,7 +26,6 @@ const OPERACAO_FILA = {
   data: '2026-07-01',
   fim: '2026-07-01T14:30:00.000Z',
   dimensao: 9,
-  bercos_reais: 20,
   capacidade: 20,
 };
 

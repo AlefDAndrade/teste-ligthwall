@@ -19,7 +19,6 @@
     dimensaoManual: false,
     tipo_montagem: '',
     id_bateria: '',
-    bercos_reais: '',
     inicio: null,
     fim: null,
     status: 'idle',      // idle | running | finished
@@ -245,11 +244,6 @@
       persist();
       updatePendencias();
     });
-    $('op-bercos-reais').addEventListener('input', e => {
-      state.bercos_reais = e.target.value;
-      recalcPaineis();
-      persist();
-    });
     // Sair do campo (clicar fora) confirma a edição igual ao botão ✓ —
     // Enter também confirma e já tira o foco (evita quebrar linha ou
     // disparar o submit de algum form ancestral).
@@ -420,7 +414,7 @@
 
   function recalcPaineis() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
+    const bercos = bateria?.bercos || 0;
 
     const elPaineisTipo = $('op-cards-paineis-tipo');
     const elM2Tipo = $('op-cards-m2-tipo');
@@ -1768,12 +1762,17 @@
 
   /**
    * Confere se a quantidade de berços com tipo definido na grade bate com
-   * "berços reais". Se bater, segue o registro normalmente. Se não:
-   * - Preenchidos > berços reais: pergunta se houve berço não usado — se
-   *   sim, reabre a grade só pra marcar quais (modo de revisão); se não,
-   *   berços reais SOBE pra bater com o que está preenchido.
-   * - Preenchidos < berços reais: faltam berços sem tipo — reabre a grade
-   *   completa (com abas) pra terminar de preencher.
+   * a capacidade cadastrada da bateria. Se faltar berço sem tipo definido,
+   * reabre a grade completa (com abas) pra terminar de preencher.
+   *
+   * Berço que não vai ser usado nesta operação (fisicamente vazio) NÃO
+   * entra mais aqui — isso agora se marca em "Bateria Atual" com 🚫 Não
+   * Enchido (ver bateria-atual.js), depois do registro, berço a berço.
+   * Antes existia um 3º ramo ("preenchidos > berços reais" → pergunta se
+   * houve berço não usado) porque a pessoa podia declarar uma capacidade
+   * REDUZIDA ("Berços Injetados (Real)") na hora de registrar; esse campo
+   * foi removido — a grade sempre precisa cobrir a capacidade cheia da
+   * bateria, e a marcação fina de "não enchido" cuida do resto depois.
    * @returns {Promise<boolean>} true = pode prosseguir com o registro agora
    */
   async function _reconciliarMontagemPersonalizada() {
@@ -1781,39 +1780,15 @@
     const capacidade = bateria?.bercos || 0;
     const grade = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
     const preenchidos = grade.filter(t => !!t).length;
-    const bercosDeclarados = parseInt(state.bercos_reais) || capacidade;
 
-    if (preenchidos === bercosDeclarados) return true;
+    if (preenchidos >= capacidade) return true;
 
-    if (preenchidos < bercosDeclarados) {
-      LW.mostrarAlerta(
-        `Faltam ${bercosDeclarados - preenchidos} berço(s) sem tipo de montagem definido na grade. Complete antes de registrar.`,
-        { tipo: 'aviso' }
-      );
-      await abrirGradeMontagemPersonalizada();
-      return false; // sempre pede pra clicar Registrar de novo, depois de completar
-    }
-
-    // preenchidos > bercosDeclarados
-    const houveVazios = await LW.mostrarConfirmacao(
-      `Você definiu o tipo de ${preenchidos} berços, mas "Berços Reais" está em ${bercosDeclarados}. Houve berço que não foi usado nesta operação?`,
-      {
-        titulo: 'Berços reais não coincidem com a grade', icon: '🔢',
-        textoConfirmar: 'Sim, houve berços não usados', textoCancelar: 'Não, todos foram usados',
-      }
+    LW.mostrarAlerta(
+      `Faltam ${capacidade - preenchidos} berço(s) sem tipo de montagem definido na grade. Complete antes de registrar.`,
+      { tipo: 'aviso' }
     );
-
-    if (houveVazios) {
-      await abrirGradeMontagemPersonalizada({ somenteRevisao: true });
-      return false; // pede pra clicar Registrar de novo, depois de revisar
-    }
-
-    // "Não" -> berços reais sobe pra bater com o que está preenchido na grade
-    state.bercos_reais = String(preenchidos);
-    if ($('op-bercos-reais')) $('op-bercos-reais').value = state.bercos_reais;
-    recalcPaineis();
-    persist();
-    return true;
+    await abrirGradeMontagemPersonalizada();
+    return false; // sempre pede pra clicar Registrar de novo, depois de completar
   }
 
   /**
@@ -2290,9 +2265,9 @@
     // (antiga Identidade Leve de Operador, removida — ver conversa que
     // motivou isso).
     state.operador_nome = LW.nomeDeQuemEstaLogado();
-    // Montagem Personalizada precisa que "berços reais" bata com a
-    // quantidade de berços com tipo definido na grade — confere (e resolve
-    // com a pessoa, se precisar) ANTES de seguir com o registro de verdade.
+    // Montagem Personalizada precisa que TODOS os berços da capacidade da
+    // bateria tenham tipo definido na grade — confere (e resolve com a
+    // pessoa, se precisar) ANTES de seguir com o registro de verdade.
     if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
       _reconciliarMontagemPersonalizada().then(podeSeguir => {
         if (podeSeguir) _registrarOperacaoInterna();
@@ -2304,7 +2279,7 @@
 
   function _registrarOperacaoInterna() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const bercos = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
+    const bercos = bateria?.bercos || 0;
 
     const calc = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
       ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
@@ -2328,7 +2303,6 @@
       houve_atraso: state.houve_atraso,
       motivo_atraso: state.motivo_atraso || '',
       tipo_montagem: state.tipo_montagem,
-      bercos_reais: bercos,
       // Ver "Identidade Leve de Operador" — puramente informativo, nunca
       // obrigatório (ver registrarOperacao(), acima).
       operador_nome: state.operador_nome || null,
@@ -2567,8 +2541,8 @@
    *
    * leitura = {tipo:'berco', berco} — chega, mas AINDA SEM AÇÃO definida
    *   nesta tela (só loga) — falta decidir o que uma leitura de berço da
-   *   injetora deve mudar aqui (marcar em bercos_visuais? avançar
-   *   bercos_reais? outra coisa?) — próxima etapa.
+   *   injetora deve mudar aqui (marcar em bercos_visuais? outra coisa?) —
+   *   próxima etapa.
    */
   function _aplicarLeituraAutomatica(leitura) {
     if (!LW.MODO_AUTOMATICO_ATIVO || !leitura) return;
@@ -2614,7 +2588,6 @@
       dimensaoManual: false,
       tipo_montagem: '',
       id_bateria: '',
-      bercos_reais: '',
       inicio: null,
       fim: null,
       desemplaque: null,
@@ -2661,7 +2634,6 @@
     $('op-montagem').value = state.tipo_montagem || '';
     _atualizarBtnConfigurarBercos();
     $('op-id-bateria').value = state.id_bateria || '';
-    $('op-bercos-reais').value = state.bercos_reais || '';
     $('op-motivo').value = state.motivo_atraso || '';
 
     updateCapacidade();
@@ -2778,7 +2750,7 @@
   function aplicarDetalhesBerco(numeroBerco, novoTipo, novaDimensao) {
     let mudouAlgo = false;
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const capacidade = parseInt(state.bercos_reais) || (bateria?.bercos || 0);
+    const capacidade = bateria?.bercos || 0;
 
     if (typeof novaDimensao === 'string' && novaDimensao.trim() !== '') {
       const valorFormatado = _formatarDimensaoLive(novaDimensao.trim(), true);

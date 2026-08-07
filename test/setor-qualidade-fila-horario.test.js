@@ -36,7 +36,6 @@ beforeEach(() => {
       // do sistema — ver comentário de topo.
       fim: '2026-07-01T14:30:00.000Z',
       dimensao: 9,
-      bercos_reais: 20,
       capacidade: 20,
     }],
   });

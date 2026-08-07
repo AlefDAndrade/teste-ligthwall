@@ -868,7 +868,6 @@
         ${tdsExtrasM2}
         <td data-col="paineis_2psp">${b.total_paineis || 0}</td>
         <td data-col="m2_2psp">${(b.m2_total || 0).toFixed(2)}</td>
-        <td data-col="bercos_reais">${b.bercos_reais || '—'}</td>
         <td data-col="placas_cimenticia">${b.placas_cimenticia || 0}</td>
         <td data-col="operador_nome">${b.operador_nome ? LW.escaparHtml(b.operador_nome) : '—'}</td>
       </tr>`;
@@ -907,7 +906,6 @@
     { key: 'm2_sp', label: 'm² S/P', tipoPlaca: true },
     { key: 'paineis_2psp', label: 'Painéis (Total)' },
     { key: 'm2_2psp', label: 'm² (Total)' },
-    { key: 'bercos_reais', label: 'Berços Reais' },
     { key: 'placas_cimenticia', label: 'Placas Cimenticia' },
     { key: 'operador_nome', label: 'Registrado por' },
   ];
@@ -941,7 +939,6 @@
       case 'm2_sp':            return Number(b.m2_sp) || 0;
       case 'paineis_2psp':     return Number(b.total_paineis) || 0;
       case 'm2_2psp':          return Number(b.m2_total) || 0;
-      case 'bercos_reais':     return Number(b.bercos_reais) || 0;
       case 'placas_cimenticia':return Number(b.placas_cimenticia) || 0;
       case 'operador_nome':    return b.operador_nome || '';
       default:
@@ -1634,7 +1631,6 @@
     { campo: 'qtd_tracos', header: 'Qtd Traços', padrao: true },
     { campo: 'houve_atraso', header: 'Houve Atraso', padrao: true },
     { campo: 'motivo_atraso', header: 'Motivo Atraso', padrao: true },
-    { campo: 'bercos_reais', header: 'Berços Reais', padrao: true },
     { campo: 'placas_cimenticia', header: 'Placas Cimenticia', padrao: true, fmt: v => v || '—' },
     { campo: 'total_paineis', header: 'Total Painéis', padrao: true },
     { campo: 'paineis_2p', header: 'Painéis 2/P', padrao: true },

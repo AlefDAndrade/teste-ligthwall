@@ -49,6 +49,16 @@ db.exec(`
     houve_atraso          TEXT,
     motivo_atraso         TEXT,
     tipo_montagem         TEXT,
+    -- Legado — não gravado nem lido por nenhum código a partir desta
+    -- versão (era "Berços Injetados (Real)": permitia declarar uma
+    -- capacidade REDUZIDA na hora de registrar, pra injeção parcial).
+    -- Substituído pela marcação individual "🚫 Não Enchido" por berço em
+    -- Bateria Atual (ver bateria-atual.js/setor-qualidade.js,
+    -- _definirPaineisNaoEnchidos) — mais granular (marca QUAL berço, não
+    -- só um total) e feita DEPOIS do registro, não na hora. Coluna mantida
+    -- (não removida) só por segurança de dados: apagar uma coluna via
+    -- migração é destrutivo e sem volta; linhas antigas continuam com o
+    -- valor histórico aqui, mas nada no sistema mais lê isso.
     bercos_reais          INTEGER,
     -- Só não-nulo quando tipo_montagem = 'PERSONALIZADA' (ver Montagem
     -- Personalizada no README) — 1 array JSON, 1 item por berço. Não vale

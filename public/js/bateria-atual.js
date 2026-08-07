@@ -116,20 +116,14 @@
     return ehPersonalizada ? LW.corPorTipoSimples(tipo) : LW.corMontagemPorLabel(tipo);
   }
 
-  // Capacidade real da bateria: berços reais informados na operação, ou
-  // (se não informado ainda) o número de berços cadastrado pra essa
-  // bateria em Configurações — mesma lógica de operacao.js.
-  function _baCapacidade(dados) {
-    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === dados.id_bateria);
-    return parseInt(dados.bercos_reais) || (bateria?.bercos || 0);
-  }
-
   // ── Posição no Palete ───────────────────────────────────────────────
-  // SEMPRE o nº de berços CADASTRADO pra bateria (nunca bercos_reais,
-  // diferente de _baCapacidade acima) — o direcionamento é sobre ONDE
-  // FISICAMENTE cada berço empilha (a grade do molde), que não muda
-  // numa operação parcial, só a quantidade de painéis muda. Mesma
-  // distinção já documentada em _paleteDoBerco (setor-qualidade.js).
+  // SEMPRE o nº de berços CADASTRADO pra bateria — não existe mais uma
+  // capacidade "declarada" separada (bercos_reais foi removido; um berço
+  // que não vai ser usado agora se marca individualmente como 🚫 Não
+  // Enchido, logo abaixo, não muda o total da bateria). O direcionamento
+  // é sobre ONDE FISICAMENTE cada berço empilha (a grade do molde), que
+  // não muda numa operação parcial, só a quantidade de painéis muda.
+  // Mesma distinção já documentada em _paleteDoBerco (setor-qualidade.js).
   function _baCapacidadeConfigurada(dados) {
     const bateria = (LW.BATERIA_IDS || []).find(b => b.id === dados.id_bateria);
     return bateria?.bercos || 0;
@@ -249,7 +243,7 @@
       return;
     }
 
-    const capacidade = _baCapacidade(dados);
+    const capacidade = _baCapacidadeConfigurada(dados);
     const tipos = _baTiposPorBerco(dados, capacidade);
     const ehPersonalizada = dados.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
     const podeMarcar = _podeMarcarVazamento(dados);
@@ -257,7 +251,7 @@
     const resumo = `
       <div class="ba-resumo">
         <strong>Bateria ${LW.escaparHtml(dados.id_bateria || '—')}</strong> — ${LW.escaparHtml(dados.tipo_montagem || '—')}
-        ${dados.bercos_reais ? ` — ${dados.bercos_reais} berços` : ''}
+        ${capacidade ? ` — ${capacidade} berços` : ''}
       </div>`;
     // Botão "🚫 Marcar Não Enchido" — só aparece pra quem já pode marcar
     // (mesma trava dos indicadores, ver podeMarcar); alternar o modo é só
@@ -498,7 +492,7 @@
     document.getElementById('ba-modal-detalhes-berco')?.remove();
 
     const numeroBerco = parseInt(berco.replace(/\D/g, ''), 10);
-    const capacidade = _baCapacidade(dados);
+    const capacidade = _baCapacidadeConfigurada(dados);
     const tipos = _baTiposPorBerco(dados, capacidade);
     const ehPersonalizada = dados.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
     const podeEditar = _podeMarcarVazamento(dados); // mesma trava de "quem controla a operação"

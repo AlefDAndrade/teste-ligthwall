@@ -884,7 +884,6 @@
       { key: 'm2_total', label: 'm² Total', required: false },
       { key: 'm2_2p', label: 'm² 2/P', required: false },
       { key: 'm2_sp', label: 'm² S/P', required: false },
-      { key: 'bercos_reais', label: 'Berços Reais', required: false },
       { key: 'tempo_min', label: 'Tempo (min)', required: false },
       { key: 'placas_cimenticia', label: 'Placas Cimentícia', required: false },
     ];
@@ -1976,7 +1975,6 @@
             paineis_sp: paineis_por_tipo['sp'] || 0,
             m2_2p: m2_por_tipo['2p'] || 0,
             m2_sp: m2_por_tipo['sp'] || 0,
-            bercos_reais: mapa['bercos_reais'] ? parseInt(row[mapa['bercos_reais']]) || capacidade : capacidade,
             tempo_min: tempoMin,
             // Cimentícia: usa a coluna explícita se mapeada; senão, deriva
             // pela MESMA regra configurável usada em calcPaineis() (data.js) —
@@ -3582,17 +3580,16 @@
 
     // ---- Editar Operação (admin) — Registro de Baterias ----
     // Só os campos preenchidos manualmente podem ser corrigidos aqui (ID
-    // Bateria, Berços Reais, Tipo de Montagem, Turno, Motivo do Atraso).
-    // Data, início, fim, duração, houve_atraso (calculado a partir do tempo)
-    // e tudo que é calculado (painéis, m², cimentícia) NUNCA são editados
-    // diretamente — recalculados automaticamente quando bateria/berços/tipo
-    // de montagem mudam (ver _eoAtualizarPreview).
+    // Bateria, Tipo de Montagem, Turno, Motivo do Atraso). Data, início,
+    // fim, duração, houve_atraso (calculado a partir do tempo) e tudo que é
+    // calculado (painéis, m², cimentícia) NUNCA são editados diretamente —
+    // recalculados automaticamente quando bateria/tipo de montagem mudam
+    // (ver _eoAtualizarPreview). "Berços Reais" existiu aqui (e em
+    // Registrar Operação) pra declarar uma capacidade reduzida numa
+    // injeção parcial — removido: isso agora se resolve marcando os
+    // berços específicos como "🚫 Não Enchido" em Bateria Atual, DEPOIS do
+    // registro (ver bateria-atual.js), sem precisar reduzir um total aqui.
     let _eoRegistroOriginal = null;
-    // true assim que o admin digitar manualmente em Berços Reais — a partir
-    // daí, trocar de bateria não sobrescreve mais o valor (ver
-    // _eoAoMudarBateria). Evita o bug de "troquei a bateria, voltei pra
-    // original, mas o berço ficou com o valor da bateria errada".
-    let _eoBercosTocadoManualmente = false;
     // Cópia de trabalho da grade berço-a-berço (Montagem Personalizada) —
     // igual à _gradeTrabalho de operacao.js, mas separada dela de
     // propósito: aqui é a edição de uma operação JÁ SALVA, não o rascunho
@@ -3604,7 +3601,6 @@
     function abrirEdicaoOperacao(bateria) {
       if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
       _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
-      _eoBercosTocadoManualmente = false;
       _eoBercosPersonalizados = Array.isArray(bateria.bercos_personalizados)
         ? [...bateria.bercos_personalizados]
         : [];
@@ -3638,7 +3634,6 @@
         `<option value="${LW.TIPO_MONTAGEM_PERSONALIZADA}">Personalizada</option>`;
       selTipo.value = bateria.tipo_montagem;
 
-      document.getElementById('eo-bercos-reais').value = bateria.bercos_reais || bateria.capacidade || '';
       document.getElementById('eo-turno').value = bateria.turno || '1º TURNO';
       document.getElementById('eo-motivo-atraso').value = bateria.motivo_atraso || '';
       // Motivo do atraso só faz sentido editar se ESTA operação teve atraso
@@ -3654,25 +3649,10 @@
       _eoRegistroOriginal = null;
     }
 
-    // Disparado ao DIGITAR manualmente em Berços Reais — marca que o admin
-    // assumiu o controle desse campo, então trocar de bateria depois não
-    // deve mais sobrescrever o que ele digitou.
-    function _eoAoEditarBercosManualmente() {
-      _eoBercosTocadoManualmente = true;
-      _eoAtualizarPreview();
-    }
-
-    // Ao trocar a bateria, sugere os berços da bateria nova selecionada —
-    // cobre o caso "registrei B1 mas era B6": berços e dimensão seguem a
-    // bateria certa automaticamente. Sempre que a bateria muda (inclusive
-    // voltando pra original), os berços acompanham — a não ser que o admin
-    // já tenha digitado um valor manual nessa mesma edição.
+    // Ao trocar a bateria, o preview (painéis/m²/cimentícia) recalcula com
+    // a capacidade da bateria nova selecionada — cobre o caso "registrei B1
+    // mas era B6".
     function _eoAoMudarBateria() {
-      const idBateria = document.getElementById('eo-id-bateria').value;
-      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
-      if (bateriaObj && !_eoBercosTocadoManualmente) {
-        document.getElementById('eo-bercos-reais').value = bateriaObj.bercos;
-      }
       _eoAtualizarPreview();
     }
 
@@ -3734,8 +3714,8 @@
     function _eoAtualizarPreview() {
       const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
-      const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      const bercos = bateriaObj?.bercos || 0;
 
       _eoAtualizarBotaoBercos();
 
@@ -3754,7 +3734,6 @@
 
       const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
-      const bercos = parseInt(document.getElementById('eo-bercos-reais').value) || 0;
       const turno = document.getElementById('eo-turno').value;
       // houve_atraso NÃO é editável (calculado a partir do tempo da
       // operação) — o motivo só é salvo se a operação JÁ tinha atraso.
@@ -3764,20 +3743,19 @@
 
       if (!idBateria) { LW.mostrarAlerta('Selecione a bateria.', { tipo: 'aviso' }); return; }
       if (!tipoMontagem) { LW.mostrarAlerta('Selecione o tipo de montagem.', { tipo: 'aviso' }); return; }
-      if (!bercos || bercos < 1) { LW.mostrarAlerta('Informe a quantidade de berços reais.', { tipo: 'aviso' }); return; }
       if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA && (!_eoBercosPersonalizados.length || _eoBercosPersonalizados.every(t => !t))) {
         LW.mostrarAlerta('Configure os berços da Montagem Personalizada antes de salvar (botão 🔧 Configurar Berços).', { tipo: 'aviso' });
         return;
       }
 
       const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
+      const bercos = bateriaObj?.bercos || 0;
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
 
       const novosValores = {
         id_bateria: idBateria,
         dimensao: bateriaObj?.label || _eoRegistroOriginal.dimensao,
         capacidade: bateriaObj?.bercos || _eoRegistroOriginal.capacidade,
-        bercos_reais: bercos,
         tipo_montagem: tipoMontagem,
         turno,
         motivo_atraso: motivoAtraso,

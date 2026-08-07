@@ -168,7 +168,7 @@ test('ciclo completo: gerar dados de verdade -> baixar Backup Geral -> mudar o s
 test('GET /backup-geral inclui berços visuais e a fila de avaliação — não só o histórico bruto', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   const idOp = 'op-bercos-no-backup-' + Date.now();
-  await registrarOperacao(idOp, { capacidade: 20, bercos_reais: 6 }, cookieAdmin);
+  await registrarOperacao(idOp, { capacidade: 20 }, cookieAdmin);
 
   const resp = await fetch(`${servidor.baseUrl}/backup-geral`, { headers: { Cookie: cookieAdmin } });
   const buffer = Buffer.from(await resp.arrayBuffer());
@@ -177,7 +177,7 @@ test('GET /backup-geral inclui berços visuais e a fila de avaliação — não 
   const bercos = JSON.parse(await zip.file('bercos_visuais.json').async('string'));
   const doOperacao = bercos.find(b => b.id_operacao === idOp);
   assert.ok(doOperacao, 'o Backup Geral deveria incluir os berços visuais da operação recém-criada');
-  assert.equal(doOperacao.bercos.length, 6);
+  assert.equal(doOperacao.bercos.length, 20);
 
   // operacoes_nao_avaliadas.json guarda só a lista de IDs pendentes (fonte
   // de verdade da fila) — ver OPERACOES_NAO_AVALIADAS_PATH, server.js.

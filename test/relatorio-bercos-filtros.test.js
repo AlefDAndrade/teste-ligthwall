@@ -44,7 +44,7 @@ async function registrarOperacao(cookie, { id, idBateria, tipoMontagem, comVazam
     body: JSON.stringify({
       id, data: '2026-07-10', turno: '1° TURNO', dimensao: 9, capacidade: 20,
       id_bateria: idBateria, tipo_montagem: tipoMontagem,
-      inicio: '2026-07-10T10:00:00.000Z', fim: '2026-07-10T14:00:00.000Z', bercos_reais: 20,
+      inicio: '2026-07-10T10:00:00.000Z', fim: '2026-07-10T14:00:00.000Z',
     }),
   });
   assert.equal(resp.status, 200, await resp.text());

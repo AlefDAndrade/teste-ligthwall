@@ -2149,20 +2149,21 @@
     // reais mas o palpite fixo assume 8/pallet = 32 painéis, não 36).
     // _definirThicknessReal (abaixo) corrige com o valor REAL depois.
     autoSetThickness();
-    const capacidadeReal = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
+    // Espessura corrigida com a capacidade CADASTRADA da bateria — não
+    // existe mais uma "capacidade real" separada (bercos_reais foi
+    // removido; berço que não vai enchimento se marca individualmente
+    // como 🚫 Não Enchido, ver _definirPaineisNaoEnchidos logo abaixo, o
+    // que já reduz os painéis certos do pallet sem precisar mexer aqui).
+    const capacidadeReal = parseInt(op.capacidade) || 0;
     if (capacidadeReal > 0) _definirThicknessReal(capacidadeReal);
 
     // ── Direcionamento de painéis por palete (ver _paleteDoBerco/
-    // _bercoDoSlot, abaixo): SEMPRE a capacidade configurada da bateria,
-    // NUNCA bercos_reais — diferente de capacidadeReal (acima), que
-    // prioriza bercos_reais de propósito pra "nº de placas por pallet"
-    // (uma operação parcial tem menos painéis de verdade pra avaliar).
-    // O direcionamento é sobre ONDE FISICAMENTE cada berço empilha (a
-    // grade do molde), que não muda numa operação parcial — só a
-    // quantidade de painéis muda, não o layout. Sem capacidade
-    // conhecida, fica null e a grade volta a numerar 1..N sem
-    // referência a berço nenhum (mesmo comportamento de antes desta
-    // mudança).
+    // _bercoDoSlot, abaixo): SEMPRE a capacidade configurada da bateria —
+    // é sobre ONDE FISICAMENTE cada berço empilha (a grade do molde), que
+    // não muda numa operação parcial — só a quantidade de painéis muda
+    // (via 🚫 Não Enchido), não o layout. Sem capacidade conhecida, fica
+    // null e a grade volta a numerar 1..N sem referência a berço nenhum
+    // (mesmo comportamento de antes desta mudança).
     capacidadeOperacaoAtual = parseInt(op.capacidade) || null;
 
     // ── Espessura: corrige o palpite por bateria (autoSetThickness →
@@ -2220,7 +2221,7 @@
   // "Direito"/"Esquerdo" já usado nos pontinhos de Bateria Atual e
   // Análise Focada (ver data-lado="direita"/"esquerda", ba-dot-topo/
   // ba-dot-base, bateria-atual.js). A capacidade (nº de berços
-  // configurado, nunca bercos_reais — ver capacidadeOperacaoAtual) é
+  // configurado — ver capacidadeOperacaoAtual) é
   // dividida em duas metades; qual metade + qual lado determina o
   // palete de destino. CONFIGURÁVEL desde Configurações → Bateria e
   // Montagem → "Definir Paletes" (ver public/js/paletes-config.js,
@@ -2541,11 +2542,11 @@
   // Nº de painéis da operação — mesma conta usada em qualquer lugar do
   // sistema pra berços->painéis (1 berço = 2 painéis, ver
   // _definirThicknessReal/README/db.js): total_paineis se já veio pronto
-  // da operação, senão bercos_reais/capacidade * 2 como aproximação.
+  // da operação, senão capacidade * 2 como aproximação.
   function _filaTotalPaineis(op) {
     const direto = parseInt(op.total_paineis);
     if (direto > 0) return direto;
-    const bercos = parseInt(op.bercos_reais) || parseInt(op.capacidade) || 0;
+    const bercos = parseInt(op.capacidade) || 0;
     return bercos * 2;
   }
 
@@ -4520,7 +4521,7 @@
   // placas por pallet — ver _definirThicknessReal/_prefillFromOperacao).
   let dimensaoOperacaoAtual = null;
 
-  // Capacidade (nº de berços CONFIGURADO da bateria, nunca bercos_reais)
+  // Capacidade (nº de berços CONFIGURADO da bateria)
   // usada só pra determinar em qual palete cada painel cai — ver
   // _paleteDoBerco/_bercoDoSlot, mais abaixo. Segue o MESMO padrão de
   // dimensaoOperacaoAtual, acima: null até uma operação real ser

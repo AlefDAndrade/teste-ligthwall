@@ -543,11 +543,6 @@
                     onclick="LWOp.abrirGradeMontagem()">🔧</button>
                 </div>
               </div>
-              <div class="form-group berco-parcial">
-                <label class="form-label">Berços Injetados (Real)</label>
-                <input class="form-input" type="number" id="op-bercos-reais"
-                  placeholder="Preencher em caso de injeção parcial" min="1" max="22">
-              </div>
             </div>
           </div>
 
@@ -915,7 +910,6 @@
                 <th data-col="m2_sp">m² S/P</th> <!-- Coluna m² S/P -->
                 <th data-col="paineis_2psp">Painéis (Total)</th> <!-- Atualizada -->
                 <th data-col="m2_2psp">m² (Total)</th> <!-- Atualizada -->
-                <th data-col="bercos_reais">Berços Reais</th> <!-- Nova -->
                 <th data-col="placas_cimenticia">Placas Cimenticia</th>
                 <th data-col="operador_nome">Registrado por</th> <!-- Nova -->
               </tr>
@@ -4228,12 +4222,16 @@
           <select class="form-select" id="eo-id-bateria" onchange="_eoAoMudarBateria()"></select>
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Berços Reais</label>
-          <input class="form-input" type="number" id="eo-bercos-reais" oninput="_eoAoEditarBercosManualmente()">
+          <label class="form-label">Turno</label>
+          <select class="form-select" id="eo-turno">
+            <option>1º TURNO</option>
+            <option>2º TURNO</option>
+            <option>3º TURNO</option>
+          </select>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Tipo de Montagem</label>
           <div style="display:flex;gap:6px;align-items:stretch">
@@ -4243,14 +4241,6 @@
               class="btn btn-outline-accent btn-sm" title="Ver/editar os berços da Montagem Personalizada"
               onclick="_eoAbrirGradeMontagem()">🔧</button>
           </div>
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label class="form-label">Turno</label>
-          <select class="form-select" id="eo-turno">
-            <option>1º TURNO</option>
-            <option>2º TURNO</option>
-            <option>3º TURNO</option>
-          </select>
         </div>
       </div>
 

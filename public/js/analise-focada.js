@@ -211,7 +211,6 @@
       <div class="af-campo"><div class="af-label">Início — Fim</div><div class="af-valor mono">${_fmtHora(op.inicio)} — ${_fmtHora(op.fim)}</div></div>
       <div class="af-campo"><div class="af-label">Turno</div><div class="af-valor">${LW.escaparHtml(op.turno || '—')}</div></div>
       <div class="af-campo"><div class="af-label">Dimensão</div><div class="af-valor">${LW.escaparHtml(op.dimensao || '—')}</div></div>
-      <div class="af-campo"><div class="af-label">Berços Reais</div><div class="af-valor">${op.bercos_reais ?? '—'}</div></div>
       <div class="af-campo"><div class="af-label">Atraso</div><div class="af-valor">${atrasoHtml}</div></div>
     `;
   }
@@ -235,20 +234,17 @@
   //  (.ba-detalhes-*, styles.css), mas SEM o campo de Dimensão editável
   //  nem o botão Salvar: esta é uma operação já REGISTRADA, não faz
   //  sentido editar berço a berço por aqui (quem precisa corrigir usa
-  //  "Editar Operação"). Os helpers abaixo (_afCapacidade.../
-  //  _afPaleteDoBerco/_afDesenhoPaleteMini/AF_CORES_PALETE) são cópias
-  //  das equivalentes em bateria-atual.js — duplicadas de propósito,
+  //  "Editar Operação"). O helper abaixo (_afCapacidadeConfigurada/
+  //  _afPaleteDoBerco/_afDesenhoPaleteMini/AF_CORES_PALETE) é cópia
+  //  das equivalentes em bateria-atual.js — duplicada de propósito,
   //  mesmo padrão já usado no resto deste arquivo (_corPorTipoBerco,
   //  acima), pra não acoplar esta tela à de Registro.
   // ============================================================
 
-  function _afCapacidade(op) {
-    const bateria = (LW.BATERIA_IDS || []).find(b => b.id === op.id_bateria);
-    return parseInt(op.bercos_reais) || (bateria?.bercos || 0);
-  }
-
-  // SEMPRE o nº de berços CADASTRADO pra bateria (nunca bercos_reais) —
-  // mesma distinção de _baCapacidadeConfigurada (bateria-atual.js).
+  // SEMPRE o nº de berços CADASTRADO pra bateria — não existe mais uma
+  // capacidade "declarada" separada (bercos_reais foi removido; um berço
+  // que não vai ser usado agora se marca individualmente como 🚫 Não
+  // Enchido, não muda o total da bateria).
   function _afCapacidadeConfigurada(op) {
     const bateria = (LW.BATERIA_IDS || []).find(b => b.id === op.id_bateria);
     return bateria?.bercos || 0;
@@ -342,7 +338,7 @@
         : op.bercos_dimensoes;
     }
 
-    const capacidade = _afCapacidade(op);
+    const capacidade = _afCapacidadeConfigurada(op);
     const tipos = _afTiposPorBerco(op, capacidade, gradePersonalizada, ehPersonalizada);
     const tipoAtualCodigo = tipos[numeroBerco - 1] || null;
     const cor = _corPorTipoBerco(ehPersonalizada, tipoAtualCodigo);
@@ -364,7 +360,7 @@
     const traco = _afTracoDoBerco(tracos, numeroBerco);
     const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num_traco ?? traco.id_traco))}` : 'Não identificado';
 
-    const capacidadePalete = _afCapacidadeConfigurada(op);
+    const capacidadePalete = capacidade;
     const posicaoDireito = _afPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
     const posicaoEsquerdo = _afPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
 

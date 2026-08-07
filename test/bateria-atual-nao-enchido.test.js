@@ -174,7 +174,6 @@ test('registrar a operação persiste "nao_enchido" em bercos_visuais, e GET /op
       inicio: '2026-07-01T10:00:00.000Z',
       fim: '2026-07-01T14:00:00.000Z',
       tipo_montagem: 'SP',
-      bercos_reais: 20,
     }),
   });
   assert.equal(respRegistrar.status, 200, await respRegistrar.text());

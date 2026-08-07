@@ -10,8 +10,11 @@
 //     iniciais, entra na fila de avaliação do Setor de Qualidade.
 //   - avaliado é sempre forçado a false na criação, mesmo que o payload
 //     tente mandar true (ver comentário em lib/rotas/registro-operacao.js).
-//   - Berços reais (parciais) têm prioridade sobre a capacidade nominal na
-//     hora de decidir quantos berços visuais criar.
+//   - Berços visuais iniciais sempre usam a capacidade nominal da bateria
+//     (bercos_reais era um campo legado que declarava uma capacidade
+//     reduzida pra injeção parcial — removido; hoje isso se resolve
+//     marcando berços específicos como "🚫 Não Enchido" em Bateria Atual,
+//     depois do registro).
 //   - Caminho de Modo de Teste: grava em public/db/teste/historico.json
 //     isolado, nunca toca na tabela SQL nem no histórico real.
 //   - JSON malformado no corpo do request retorna 400 (sem derrubar o
@@ -109,30 +112,36 @@ test('avaliado é sempre forçado a false na criação, mesmo que o payload tent
   assert.equal(salva.avaliado, false, 'quem decide "avaliada" é a tabela operacoes_avaliadas, não o payload de criação');
 });
 
-test('cria berços visuais iniciais — usa bercos_reais (operação parcial) quando informado, não a capacidade nominal', async () => {
+test('cria berços visuais iniciais usando a capacidade nominal da bateria', async () => {
   const cookie = await logarComoAdminMaster();
-  const idOp = 'op-bercos-parciais-' + Date.now();
+  const idOp = 'op-bercos-capacidade-' + Date.now();
 
-  await registrar(idOp, { capacidade: 20, bercos_reais: 12 }, { cookie });
+  await registrar(idOp, { capacidade: 16 }, { cookie });
 
   const resp = await fetch(`${servidor.baseUrl}/db/bercos_visuais.json`);
   const todos = await resp.json();
   const doOperacao = todos.find(b => b.id_operacao === idOp);
   assert.ok(doOperacao, 'deveria existir 1 linha de bercos_visuais pra essa operação');
-  assert.equal(doOperacao.bercos.length, 12, 'deveria usar bercos_reais (12), não a capacidade nominal (20)');
+  assert.equal(doOperacao.bercos.length, 16);
   assert.ok(doOperacao.bercos.every(b => b.estado_esquerda === 'okay' && b.estado_direita === 'okay'));
 });
 
-test('cai pra capacidade nominal quando bercos_reais não é informado', async () => {
+// "Berços Reais" existiu no payload pra declarar uma capacidade REDUZIDA
+// (injeção parcial) — removido: um campo desconhecido no payload nunca deve
+// quebrar o registro nem influenciar quantos berços visuais nascem (isso
+// agora se resolve marcando berços específicos como "🚫 Não Enchido" em
+// Bateria Atual, DEPOIS do registro — ver bateria-atual.js).
+test('bercos_reais no payload (campo legado) é ignorado — sempre usa a capacidade nominal', async () => {
   const cookie = await logarComoAdminMaster();
-  const idOp = 'op-bercos-capacidade-' + Date.now();
+  const idOp = 'op-bercos-reais-ignorado-' + Date.now();
 
-  await registrar(idOp, { capacidade: 16, bercos_reais: undefined }, { cookie });
+  const resp = await registrar(idOp, { capacidade: 20, bercos_reais: 12 }, { cookie });
+  assert.equal(resp.status, 200);
 
-  const resp = await fetch(`${servidor.baseUrl}/db/bercos_visuais.json`);
-  const todos = await resp.json();
+  const respBercos = await fetch(`${servidor.baseUrl}/db/bercos_visuais.json`);
+  const todos = await respBercos.json();
   const doOperacao = todos.find(b => b.id_operacao === idOp);
-  assert.equal(doOperacao.bercos.length, 16);
+  assert.equal(doOperacao.bercos.length, 20, 'bercos_reais não deve mais influenciar a quantidade de berços visuais');
 });
 
 test('a nova operação entra na fila de avaliação do Setor de Qualidade (GET /operacoes-nao-avaliadas)', async () => {
