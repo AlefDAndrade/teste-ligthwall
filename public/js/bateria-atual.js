@@ -378,6 +378,19 @@
   // (baixou OU nao_enchido), o clique sempre desmarca (volta a 'okay'),
   // nunca troca uma marcação por outra — mesma regra do servidor (ver
   // POST /marcar-berco-andamento).
+  // Cada lado marcado "🚫 Não Enchido" é 1 painel a menos nos totais
+  // mostrados em Registrar Operação (Painéis Total/por tipo, m² Total/por
+  // tipo — ver recalcPaineis, operacao.js, e aplicarNaoEnchidosNoCalc,
+  // data.js). Chamada toda vez que _bercosMarcados muda (clique local
+  // otimista, desfazer de clique com falha, ou sincronização periódica
+  // com outro dispositivo) — sem isso os cards de total só atualizariam
+  // na próxima mudança de OUTRO campo do formulário.
+  function _notificarMudancaMarcacoes() {
+    if (window.LWOp && typeof window.LWOp.recalcPaineis === 'function') {
+      window.LWOp.recalcPaineis();
+    }
+  }
+
   async function _baCliqueDot(berco, lado, dotEl, estadoDesejado) {
     if (!berco || !lado) return;
     const marcadoBerco = _bercosMarcados[berco] || {};
@@ -390,6 +403,7 @@
     if (novoEstado) novoBerco[lado] = novoEstado; else delete novoBerco[lado];
     if (Object.keys(novoBerco).length) _bercosMarcados[berco] = novoBerco;
     else delete _bercosMarcados[berco];
+    _notificarMudancaMarcacoes();
 
     const ehNaoEnchido = novoEstado === 'nao_enchido';
     dotEl.classList.toggle('ba-dot-marcado', !!novoEstado);
@@ -419,6 +433,7 @@
         delete _bercosMarcados[berco][lado];
         if (!Object.keys(_bercosMarcados[berco]).length) delete _bercosMarcados[berco];
       }
+      _notificarMudancaMarcacoes();
       _ultimaAssinatura = null; // força o redesenho mesmo se a assinatura "bater" por acaso
       _renderSeMudou(); // reconstrói a grade inteira já no estado real (desfeito o otimismo)
       if (typeof LW !== 'undefined' && LW.mostrarAlerta) {
@@ -659,6 +674,7 @@
     try {
       const bercosMarcados = await fetch('/bercos-andamento').then(r => r.ok ? r.json() : {});
       _bercosMarcados = bercosMarcados || {};
+      _notificarMudancaMarcacoes();
       _renderSeMudou();
     } catch (_) {
       // sem conexão agora — tenta de novo na próxima rodada, mantém o que já tem na tela
@@ -674,6 +690,16 @@
     atualizarComEstado(dados) {
       _dadosAtuais = dados || null;
       _renderSeMudou();
+    },
+    // Cópia atual das marcações "baixou"/"nao_enchido" (mesmo formato de
+    // GET /bercos-andamento) — usada por operacao.js (recalcPaineis) pra
+    // descontar painéis "🚫 Não Enchido" do preview ao vivo. É só o cache
+    // LOCAL (sincronizado a cada INTERVALO_SYNC_MARCACOES_MS, acima) —
+    // suficiente pro preview; os totais que de fato são REGISTRADOS
+    // buscam uma cópia fresca do servidor na hora (ver
+    // _registrarOperacaoInterna, operacao.js).
+    obterMarcacoes() {
+      return _bercosMarcados;
     },
   };
 

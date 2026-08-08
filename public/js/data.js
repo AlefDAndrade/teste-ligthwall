@@ -1059,6 +1059,102 @@ function calcPaineisPersonalizado(bercosPersonalizados) {
 }
 
 /**
+ * Determina o TIPO de placa (chave de paineis_por_tipo — '2p', 'sp', '3t'...)
+ * de UM LADO específico de UM berço — usado por aplicarNaoEnchidosNoCalc()
+ * (abaixo) pra saber de qual tipo descontar quando aquele lado é marcado
+ * "🚫 Não Enchido" em Bateria Atual.
+ *
+ *  - Montagem Personalizada: o tipo já pertence ao berço inteiro
+ *    (bercosPersonalizados[bercoNum-1]) — os 2 lados do mesmo berço são
+ *    sempre do MESMO tipo.
+ *  - Montagem simples (um tipo só, ex: "2/P"): sem ambiguidade, é o único
+ *    tipo que essa montagem produz.
+ *  - Montagem híbrida (dois tipos, 1 painel de cada por berço — um em
+ *    cada lado, ex: "HÍBRIDA 2p/sp"): NÃO existe hoje nenhum registro de
+ *    qual lado é FISICAMENTE qual tipo (ver conversa que motivou isso).
+ *    Convenção fixa adotada: 1º tipo da lista "tipos" da híbrida (definida
+ *    em Configurações → Bateria e Montagem) = lado DIREITO, 2º tipo =
+ *    lado ESQUERDO. Se a realidade física for o contrário, basta inverter
+ *    a ordem dos tipos naquela tela — não precisa mexer em código.
+ * @returns {string|null}
+ */
+function _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado) {
+  if (tipoMontagem === TIPO_MONTAGEM_PERSONALIZADA) {
+    const grade = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
+    return grade[bercoNum - 1] || null;
+  }
+  const opcao = (MONTAGEM_OPCOES || []).find(o => o.label === tipoMontagem);
+  if (!opcao) return null;
+  if (opcao.modo === 'simples') return opcao.tipo || null;
+  if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos)) {
+    return lado === 'direita' ? (opcao.tipos[0] || null) : (opcao.tipos[1] || null);
+  }
+  return null;
+}
+
+/**
+ * Aplica os descontos de "🚫 Não Enchido" (Bateria Atual) em cima de um
+ * resultado de calcPaineis()/calcPaineisPersonalizado() — cada lado
+ * marcado 'nao_enchido' é 1 painel que nunca chegou a existir de
+ * verdade, então sai do total, do total POR TIPO, do m² total, do m²
+ * POR TIPO e da conta de placas cimentícia (nunca só do total geral —
+ * ver conversa que motivou isso: "cada pontinho é um painel").
+ *
+ * Recalcula tudo do zero a partir de paineis_por_tipo já descontado (em
+ * vez de decrementar total/m²/cimentícia incrementalmente) — mesma
+ * fórmula de calcPaineis()/calcPaineisPersonalizado(), sem duplicar a
+ * lógica de cimentícia (que já é condicional por tipo) em dois lugares.
+ *
+ * @param {object} calc - resultado de calcPaineis() ou calcPaineisPersonalizado()
+ * @param {string} tipoMontagem
+ * @param {Array<string|null>} bercosPersonalizados - só relevante se tipoMontagem === PERSONALIZADA
+ * @param {object} marcacoes - { 'B1': {esquerda:'nao_enchido'|'baixou', direita:...}, ... } (ver GET /bercos-andamento)
+ */
+function aplicarNaoEnchidosNoCalc(calc, tipoMontagem, bercosPersonalizados, marcacoes) {
+  if (!marcacoes || !Object.keys(marcacoes).length) return calc;
+
+  const paineis_por_tipo = { ...(calc.paineis_por_tipo || {}) };
+
+  Object.keys(marcacoes).forEach(berco => {
+    const bercoNum = parseInt(String(berco).replace(/^B/i, ''), 10);
+    if (!bercoNum) return;
+    const doBerco = marcacoes[berco] || {};
+    ['direita', 'esquerda'].forEach(lado => {
+      if (doBerco[lado] !== 'nao_enchido') return;
+      const tipo = _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado);
+      if (tipo && paineis_por_tipo[tipo] > 0) paineis_por_tipo[tipo] -= 1;
+    });
+  });
+
+  let paineis_total = 0;
+  Object.keys(paineis_por_tipo).forEach(tipo => { paineis_total += paineis_por_tipo[tipo]; });
+
+  const m2_por_tipo = {};
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    m2_por_tipo[tipo] = paineis_por_tipo[tipo] * M2_POR_PAINEL;
+  });
+  const m2_total = paineis_total * M2_POR_PAINEL;
+
+  let placas_cimenticia = 0;
+  Object.keys(paineis_por_tipo).forEach(tipo => {
+    const c = CIMENTICIA_POR_TIPO[tipo];
+    if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
+  });
+
+  return {
+    total_paineis: paineis_total,
+    m2_total,
+    placas_cimenticia,
+    paineis_por_tipo,
+    m2_por_tipo,
+    paineis_2p: paineis_por_tipo['2p'] || 0,
+    paineis_sp: paineis_por_tipo['sp'] || 0,
+    m2_2p: m2_por_tipo['2p'] || 0,
+    m2_sp: m2_por_tipo['sp'] || 0,
+  };
+}
+
+/**
  * Soma um campo do tipo { '2p': N, 'sp': N, ... } através de uma lista de registros.
  * Ex: somarPorTipo(baterias, 'paineis_por_tipo') -> { '2p': 120, 'sp': 40, '3p': 10 }
  */
@@ -2093,6 +2189,7 @@ window.LW = {
   // Cálculos
   calcPaineis,
   calcPaineisPersonalizado,
+  aplicarNaoEnchidosNoCalc,
   TIPO_MONTAGEM_PERSONALIZADA,
   normalizarPaineisRegistro,
   somarPorTipo,

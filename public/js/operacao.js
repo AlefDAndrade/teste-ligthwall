@@ -427,9 +427,17 @@
       if (elM2Tipo) elM2Tipo.innerHTML = '';
       return;
     }
-    const r = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+    const base = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
       ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
       : LW.calcPaineis(state.tipo_montagem, bercos);
+    // "🚫 Não Enchido" (Bateria Atual) — cada lado marcado é 1 painel a
+    // menos aqui também (preview ao vivo, ver aplicarNaoEnchidosNoCalc,
+    // data.js). Usa o cache local de marcações de bateria-atual.js
+    // (sincronizado a cada alguns segundos) — suficiente pro preview; o
+    // valor que de fato é REGISTRADO busca uma cópia fresca do servidor
+    // na hora (ver _registrarOperacaoInterna).
+    const marcacoes = (window.LWBateriaAtual && window.LWBateriaAtual.obterMarcacoes) ? window.LWBateriaAtual.obterMarcacoes() : {};
+    const r = LW.aplicarNaoEnchidosNoCalc(base, state.tipo_montagem, state.bercos_personalizados, marcacoes);
     $('op-paineis-total').textContent = r.total_paineis;
     $('op-m2-total').textContent = r.m2_total.toFixed(2) + ' m²';
     $('op-placas-cimenticia').textContent = r.placas_cimenticia;
@@ -2277,13 +2285,30 @@
     _registrarOperacaoInterna();
   }
 
-  function _registrarOperacaoInterna() {
+  async function _registrarOperacaoInterna() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     const bercos = bateria?.bercos || 0;
 
-    const calc = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+    // Marcações de "🚫 Não Enchido" (Bateria Atual) — busca uma cópia
+    // FRESCA do servidor (em vez do cache local de bateria-atual.js, que
+    // só atualiza a cada alguns segundos) pra garantir que os totais
+    // gravados aqui batem exatamente com o que o servidor vai transformar
+    // em bercos_visuais na hora do registro (ver POST /registrar-operacao,
+    // lib/rotas/registro-operacao.js, que lê o mesmo snapshot no
+    // servidor). Sem conexão, cai pro cache local — melhor esforço, mesma
+    // tolerância já usada pelo resto desta tela quando a rede falha.
+    let marcacoes = {};
+    try {
+      const resp = await fetch('/bercos-andamento');
+      marcacoes = resp.ok ? await resp.json() : {};
+    } catch (_) {
+      marcacoes = (window.LWBateriaAtual && window.LWBateriaAtual.obterMarcacoes) ? window.LWBateriaAtual.obterMarcacoes() : {};
+    }
+
+    const calcBase = state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
       ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
       : LW.calcPaineis(state.tipo_montagem, bercos);
+    const calc = LW.aplicarNaoEnchidosNoCalc(calcBase, state.tipo_montagem, state.bercos_personalizados, marcacoes);
 
     const dataLocal = state.inicio.split('T')[0];
 
@@ -2814,6 +2839,11 @@
   window.LWOp = {
     init,
     aplicarDetalhesBerco,
+    // Chamada por bateria-atual.js toda vez que uma marcação "🚫 Não
+    // Enchido"/"baixou" muda (clique local, desfazer, sincronização com
+    // outro dispositivo) — reflete na hora nos cards de Painéis/m² Total
+    // e por tipo (ver recalcPaineis, aplicarNaoEnchidosNoCalc em data.js).
+    recalcPaineis,
     // Usado por app-core.js (ver _aoReceberDadosSqlExcluidosDeOutroDispositivo)
     // pra saber se é seguro recarregar a página agora ou se precisa
     // esperar — true só quando o cronômetro está de fato rodando (uma
