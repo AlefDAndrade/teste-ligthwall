@@ -400,7 +400,30 @@
   }
 
 
-  const _CORES_TIPO = ['var(--blue)', 'var(--green)', 'var(--accent)', 'var(--purple)', 'var(--yellow)'];
+  // Cor de fallback pra tipos sem cor cadastrada em Configurações (ver
+  // _corTipoCard, abaixo) — só usada quando LW.corPorTipoSimples não
+  // encontra hex/hue configurado pro tipo.
+  const _CORES_TIPO_FALLBACK = ['var(--blue)', 'var(--green)', 'var(--accent)', 'var(--purple)', 'var(--yellow)'];
+
+  // Cor de UM tipo de placa pros cards "Painéis por tipo"/"m² por tipo" —
+  // usa a MESMA cor cadastrada em Configurações → Bateria e Montagem pra
+  // aquele tipo (ver LW.corPorTipoSimples, data.js), a mesma já usada nas
+  // células da grade de Montagem Personalizada e em Bateria Atual. Antes
+  // os cards cicavam por uma paleta genérica de 5 cores (var(--blue),
+  // var(--green)...) na ORDEM em que os tipos apareciam no objeto — sem
+  // nenhuma relação com a cor de verdade do tipo, então com 3+ tipos as
+  // cores dos cards não batiam com as cores da grade, dando a impressão
+  // de "trocado" mesmo com os números corretos (ver conversa que motivou
+  // esta mudança). Cai no fallback cíclico antigo só se o tipo não tiver
+  // cor cadastrada (config antiga, cor nunca definida).
+  function _corTipoCard(tipo, i) {
+    const cor = LW.corPorTipoSimples(tipo);
+    // corPorTipoSimples nunca devolve null (cai no cinza neutro quando não
+    // acha cor) — só usamos o fallback cíclico quando o cinza neutro
+    // aparece, pra não pintar todo mundo de cinza silenciosamente.
+    const ehNeutra = !cor || cor.cor === '#5c6475';
+    return ehNeutra ? _CORES_TIPO_FALLBACK[i % _CORES_TIPO_FALLBACK.length] : cor.cor;
+  }
 
   // Labels amigáveis para tipos conhecidos; tipos novos caem no fallback (maiúsculas + "/").
   function _labelTipo(tipo) {
@@ -449,7 +472,7 @@
         <div>
           <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
             Painéis ${_labelTipo(tipo)}</div>
-          <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:${_CORES_TIPO[i % _CORES_TIPO.length]}">
+          <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:${_corTipoCard(tipo, i)}">
             ${r.paineis_por_tipo[tipo]}</div>
         </div>
       `).join('');
@@ -459,7 +482,7 @@
         <div>
           <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
             m² ${_labelTipo(tipo)}</div>
-          <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:${_CORES_TIPO[i % _CORES_TIPO.length]}">
+          <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:${_corTipoCard(tipo, i)}">
             ${r.m2_por_tipo[tipo].toFixed(2)} m²</div>
         </div>
       `).join('');

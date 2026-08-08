@@ -1108,7 +1108,11 @@ function _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado)
  * @param {object} calc - resultado de calcPaineis() ou calcPaineisPersonalizado()
  * @param {string} tipoMontagem
  * @param {Array<string|null>} bercosPersonalizados - só relevante se tipoMontagem === PERSONALIZADA
- * @param {object} marcacoes - { 'B1': {esquerda:'nao_enchido'|'baixou', direita:...}, ... } (ver GET /bercos-andamento)
+ * @param {object} marcacoes - { 'B1': {esquerda:'nao_enchido'|'baixou', direita:..., tipos:{esquerda:'sp',direita:'2p'}}, ... }
+ *   (ver GET /bercos-andamento) — `tipos` é opcional: quando presente, é o
+ *   tipo FIXADO no instante em que aquele lado foi marcado (ver
+ *   POST /marcar-berco-andamento) e tem prioridade sobre resolver de novo
+ *   pela montagem/grade ATUAIS (ver comentário logo abaixo, no forEach).
  */
 function aplicarNaoEnchidosNoCalc(calc, tipoMontagem, bercosPersonalizados, marcacoes) {
   if (!marcacoes || !Object.keys(marcacoes).length) return calc;
@@ -1121,7 +1125,15 @@ function aplicarNaoEnchidosNoCalc(calc, tipoMontagem, bercosPersonalizados, marc
     const doBerco = marcacoes[berco] || {};
     ['direita', 'esquerda'].forEach(lado => {
       if (doBerco[lado] !== 'nao_enchido') return;
-      const tipo = _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado);
+      // Prioriza o tipo FIXADO na hora da marcação (doBerco.tipos[lado]) —
+      // reconfigurar a montagem/grade DEPOIS de marcar um lado (trocar o
+      // tipo do berço na Personalizada, reordenar os tipos da Híbrida em
+      // Configurações, trocar de bateria) não pode mudar retroativamente
+      // de qual tipo aquele painel já marcado desconta. Só cai pra resolver
+      // ao vivo (comportamento antigo) quando a marcação não tem tipo
+      // fixado — registros antigos, de antes desta mudança.
+      const tipoFixado = (doBerco.tipos && doBerco.tipos[lado]) || null;
+      const tipo = tipoFixado || _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado);
       if (tipo && paineis_por_tipo[tipo] > 0) paineis_por_tipo[tipo] -= 1;
     });
   });
@@ -2190,6 +2202,13 @@ window.LW = {
   calcPaineis,
   calcPaineisPersonalizado,
   aplicarNaoEnchidosNoCalc,
+  // Resolve o tipo de placa ('2p'/'sp'/...) de UM LADO de UM berço, dada a
+  // montagem atual — usado por aplicarNaoEnchidosNoCalc (acima) e agora
+  // também por bateria-atual.js, pra: (1) mostrar o tipo no tooltip de
+  // cada indicador (elimina a ambiguidade visual entre os 2 lados) e (2)
+  // FIXAR esse tipo no instante da marcação, mandado pro servidor (ver
+  // POST /marcar-berco-andamento) — ver comentário em aplicarNaoEnchidosNoCalc.
+  tipoDoLadoMontagem: _tipoDoLadoMontagem,
   TIPO_MONTAGEM_PERSONALIZADA,
   normalizarPaineisRegistro,
   somarPorTipo,

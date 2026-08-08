@@ -208,11 +208,21 @@
   // ou "não enchido" (✕, ver _modoMarcarNaoEnchido) — os dois têm
   // aparência bem diferente, mas o tooltip deixa explícito de qualquer
   // jeito, sem depender só da forma do indicador.
-  function _tituloDot(estado, lado) {
+  //
+  // `tipo` (opcional): o código de placa ('2p'/'sp'/...) que ESTE lado
+  // representa na montagem atual (ver LW.tipoDoLadoMontagem) — mostrado
+  // sempre que resolvido, pra deixar explícito qual tipo cada indicador
+  // desconta ao marcar "🚫 Não Enchido". Antes disso os 2 indicadores eram
+  // visualmente idênticos (• em cima / ● embaixo) em montagens Híbrida/
+  // Personalizada, sem nenhuma pista de qual lado era qual tipo — motivo
+  // do desconto "trocado" que o operador via nos cards de Registrar
+  // Operação (ver conversa que motivou esta mudança).
+  function _tituloDot(estado, lado, tipo) {
     const ladoTxt = lado === 'direita' ? 'Direito' : 'Esquerdo';
-    if (estado === 'nao_enchido') return `${ladoTxt} — Não enchido`;
-    if (estado === 'baixou') return `${ladoTxt} — Baixou/Vazou`;
-    return ladoTxt;
+    const tipoTxt = tipo ? ` (${LW.escaparHtml(String(tipo).toUpperCase())})` : '';
+    if (estado === 'nao_enchido') return `${ladoTxt}${tipoTxt} — Não enchido`;
+    if (estado === 'baixou') return `${ladoTxt}${tipoTxt} — Baixou/Vazou`;
+    return `${ladoTxt}${tipoTxt}`;
   }
 
   // Indica se ESTE dispositivo pode marcar os vazamentos agora — mesmo
@@ -285,9 +295,15 @@
       const cor = _baCorPorTipo(ehPersonalizada, tipo);
       const numero = String(i + 1).padStart(2, '0');
       const berco = 'B' + (i + 1);
+      const bercoNum = i + 1;
       const marcadoBerco = _bercosMarcados[berco] || {};
       const estadoDir = marcadoBerco.direita || null; // 'baixou' | 'nao_enchido' | null
       const estadoEsq = marcadoBerco.esquerda || null;
+      // Tipo que CADA LADO representa nesta montagem — mesma resolução
+      // usada pra descontar dos totais (ver LW.tipoDoLadoMontagem,
+      // data.js), só pra exibir no tooltip (ver _tituloDot acima).
+      const tipoDir = LW.tipoDoLadoMontagem(dados.tipo_montagem, dados.bercos_personalizados, bercoNum, 'direita');
+      const tipoEsq = LW.tipoDoLadoMontagem(dados.tipo_montagem, dados.bercos_personalizados, bercoNum, 'esquerda');
       // "✕" (não enchido) tem prioridade visual sobre "●" (baixou) — na
       // prática nunca deveriam coexistir no mesmo lado (POST
       // /marcar-berco-andamento sempre limpa um antes de aplicar o
@@ -302,10 +318,10 @@
         <div class="ba-celula" data-berco="${berco}"
           style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
           <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="direita"
-            data-tooltip="${_tituloDot(estadoDir, 'direita')}">${dirNaoEnchido ? '✕' : '•'}</span>
+            data-tooltip="${_tituloDot(estadoDir, 'direita', tipoDir)}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
           <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="esquerda"
-            data-tooltip="${_tituloDot(estadoEsq, 'esquerda')}">${esqNaoEnchido ? '✕' : '•'}</span>
+            data-tooltip="${_tituloDot(estadoEsq, 'esquerda', tipoEsq)}">${esqNaoEnchido ? '✕' : '•'}</span>
         </div>`;
     }).join('')}</div>`;
 
@@ -398,9 +414,30 @@
     const estavaMarcado = estadoAtual === 'baixou' || estadoAtual === 'nao_enchido';
     const novoEstado = estavaMarcado ? null : estadoDesejado;
 
+    // Resolve e FIXA o tipo deste lado ('2p'/'sp'/...) na montagem/grade
+    // de AGORA, no instante do clique — mandado junto pro servidor (só ao
+    // marcar, nunca ao desmarcar) pra ficar gravado com a marcação. Sem
+    // isso, reconfigurar a montagem/grade DEPOIS (trocar o tipo do berço
+    // na Personalizada, reordenar os tipos da Híbrida em Configurações)
+    // mudava retroativamente de qual tipo o desconto saía — ver
+    // aplicarNaoEnchidosNoCalc, data.js, e conversa que motivou isto.
+    const bercoNum = parseInt(String(berco).replace(/^B/i, ''), 10);
+    const tipoFixado = (novoEstado === 'nao_enchido' && _dadosAtuais && bercoNum)
+      ? LW.tipoDoLadoMontagem(_dadosAtuais.tipo_montagem, _dadosAtuais.bercos_personalizados, bercoNum, lado)
+      : null;
+
     // Otimista: já atualiza o indicador antes da resposta do servidor.
     const novoBerco = { ...marcadoBerco };
-    if (novoEstado) novoBerco[lado] = novoEstado; else delete novoBerco[lado];
+    if (novoEstado) {
+      novoBerco[lado] = novoEstado;
+      if (tipoFixado) novoBerco.tipos = { ...(novoBerco.tipos || {}), [lado]: tipoFixado };
+    } else {
+      delete novoBerco[lado];
+      if (novoBerco.tipos) {
+        const { [lado]: _descartado, ...restoTipos } = novoBerco.tipos;
+        if (Object.keys(restoTipos).length) novoBerco.tipos = restoTipos; else delete novoBerco.tipos;
+      }
+    }
     if (Object.keys(novoBerco).length) _bercosMarcados[berco] = novoBerco;
     else delete _bercosMarcados[berco];
     _notificarMudancaMarcacoes();
@@ -409,7 +446,7 @@
     dotEl.classList.toggle('ba-dot-marcado', !!novoEstado);
     dotEl.classList.toggle('ba-dot-nao-enchido', ehNaoEnchido);
     dotEl.textContent = ehNaoEnchido ? '✕' : '•';
-    dotEl.setAttribute('data-tooltip', _tituloDot(novoEstado, lado));
+    dotEl.setAttribute('data-tooltip', _tituloDot(novoEstado, lado, tipoFixado));
 
     try {
       // A rota exige sessão de usuário logado com permissão de controlar
@@ -417,22 +454,21 @@
       // server.js) — deviceId continua sendo mandado só pra identificar o
       // "dono" da operação em andamento (ver donoDeviceId,
       // lib/rotas/operacao-andamento.js), não é mais usado pra autorização.
+      // `tipo` (opcional) é o tipo fixado acima — o servidor só grava
+      // quando o lado está sendo MARCADO (nunca ao desmarcar).
       const res = await fetch('/marcar-berco-andamento?deviceId=' + encodeURIComponent(LW.getDeviceId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ berco, lado, estado: estadoDesejado }),
+        body: JSON.stringify({ berco, lado, estado: estadoDesejado, tipo: tipoFixado }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.erro || 'Falha ao marcar berço.');
     } catch (e) {
-      // Desfaz o otimismo — volta pro estado de antes do clique.
-      if (estavaMarcado) {
-        const b = { ..._bercosMarcados[berco] };
-        b[lado] = estadoAtual;
-        _bercosMarcados[berco] = b;
-      } else if (_bercosMarcados[berco]) {
-        delete _bercosMarcados[berco][lado];
-        if (!Object.keys(_bercosMarcados[berco]).length) delete _bercosMarcados[berco];
-      }
+      // Desfaz o otimismo — volta pro estado (e tipo fixado) de antes do
+      // clique, a partir do snapshot original (marcadoBerco), em vez de
+      // reconstruir campo a campo — evita deixar `tipos` dessincronizado
+      // do `estado` depois de desfazer.
+      if (Object.keys(marcadoBerco).length) _bercosMarcados[berco] = marcadoBerco;
+      else delete _bercosMarcados[berco];
       _notificarMudancaMarcacoes();
       _ultimaAssinatura = null; // força o redesenho mesmo se a assinatura "bater" por acaso
       _renderSeMudou(); // reconstrói a grade inteira já no estado real (desfeito o otimismo)
