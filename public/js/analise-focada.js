@@ -870,7 +870,7 @@
         icon: '🌐',
         itens: [
           { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação, do jeito que já era.' },
-          { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela, uma abaixo da outra, num arquivo só.' },
+          { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela.' },
         ],
         textoCancelar: 'Cancelar',
       }
