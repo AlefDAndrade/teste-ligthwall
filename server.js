@@ -422,6 +422,10 @@ const server = http.createServer((req, res) => {
   // 'db/avaliacoes_qualidade.json', sem cache:'no-store') continuava
   // mostrando a data antiga mesmo fechando/reabrindo — o navegador
   // reaproveitava a resposta em cache em vez de ir à rede de novo.
+  // (Debriefing depois passou a usar a MESMA rota do Dashboard —
+  // /avaliacoes-qualidade, ver debriefing.js — mas o /db/*.json
+  // continua usado por historico.json/relatorio_injecao.json e pelo
+  // Backup de Dados, então este patch continua necessário.)
   // Um único monkey-patch aqui (mesmo padrão do Set-Cookie, acima) cobre
   // TODA rota de /db/ de uma vez, sem precisar editar cada módulo de rota
   // individualmente nem torcer pra ninguém esquecer o header numa rota

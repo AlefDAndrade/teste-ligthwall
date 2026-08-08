@@ -116,7 +116,16 @@
     const [historico, relatorio, avaliacoes] = await Promise.all([
       fetch('db/historico.json').then(r => r.ok ? r.json() : []).catch(() => []),
       fetch('db/relatorio_injecao.json').then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('db/avaliacoes_qualidade.json').then(r => r.ok ? r.json() : []).catch(() => []),
+      // Mesma URL que o Dashboard de Avaliação usa pra carregar (ver
+      // carregarAvaliacoesQualidade(), setor-qualidade.js) — antes este
+      // fetch ia direto em 'db/avaliacoes_qualidade.json' (rota irmã,
+      // mesma função no servidor por trás: db.listarAvaliacoesQualidade),
+      // só que pensada pro Backup de Dados, não pra consumo direto de
+      // tela. Unificar na MESMA rota que o Dashboard já usa (e que já se
+      // comprovou atualizar certinho após uma edição) elimina de vez
+      // qualquer diferença de comportamento entre as duas telas — mesma
+      // fonte, sem meio-termo (ver conversa que motivou esta mudança).
+      fetch('/avaliacoes-qualidade').then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
     return {
       historico: Array.isArray(historico) ? historico : [],
