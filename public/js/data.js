@@ -1949,6 +1949,82 @@ function mostrarConfirmacao(mensagem, opcoes = {}) {
   });
 }
 
+/**
+ * Exibe um modal pro usuário escolher entre 2+ opções nomeadas — mesmo
+ * padrão visual de mostrarConfirmacao (acima), generalizado pra mais de
+ * 2 botões com rótulo/descrição próprios em vez de só Confirmar/Cancelar
+ * (usado, por exemplo, pelo "🌐 Exportar Interativo" da Análise Focada,
+ * pra escolher entre exportar só a operação atual ou todas as operações
+ * do mesmo dia).
+ * @param {string} mensagem
+ * @param {object} [opcoes]
+ * @param {string} [opcoes.titulo='Escolha uma opção']
+ * @param {string} [opcoes.icon='❓']
+ * @param {Array<{valor:string, texto:string, desc?:string}>} opcoes.itens - uma opção por botão, na ordem em que aparecem.
+ * @param {string} [opcoes.textoCancelar='Cancelar']
+ * @returns {Promise<string|null>} o `valor` da opção escolhida, ou null se cancelado (botão Cancelar, Esc ou clique fora).
+ */
+function mostrarEscolha(mensagem, opcoes = {}) {
+  const titulo = opcoes.titulo || 'Escolha uma opção';
+  const icon = opcoes.icon || '❓';
+  const itens = Array.isArray(opcoes.itens) ? opcoes.itens : [];
+  const textoCancelar = opcoes.textoCancelar || 'Cancelar';
+
+  return new Promise(resolve => {
+    const anterior = document.getElementById('modal-escolha-global');
+    if (anterior) anterior.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-escolha-global';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:32px;width:440px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2.2rem;margin-bottom:8px">${icon}</div>
+          <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--text);margin:0">
+            ${_escaparHtml(titulo)}
+          </h2>
+        </div>
+        <p style="color:var(--text-2);text-align:center;margin-bottom:20px;line-height:1.5;white-space:pre-line">${_escaparHtml(mensagem)}</p>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+          ${itens.map((item, i) => `
+            <button class="btn-escolha-item" data-valor="${_escaparHtml(item.valor)}"
+              style="text-align:left;padding:12px 14px;background:var(--bg-2);color:var(--text);border:1px solid var(--border);
+                     border-radius:var(--radius);cursor:pointer;font:inherit">
+              <div style="font-weight:700;font-size:.9rem">${_escaparHtml(item.texto)}</div>
+              ${item.desc ? `<div style="font-size:.78rem;color:var(--text-3);margin-top:2px;font-weight:400">${_escaparHtml(item.desc)}</div>` : ''}
+            </button>
+          `).join('')}
+        </div>
+        <button id="btn-escolha-cancelar"
+          style="width:100%;padding:10px;background:transparent;color:var(--text-2);border:1px solid var(--border);
+                 border-radius:var(--radius);font-size:.85rem;cursor:pointer">
+          ${_escaparHtml(textoCancelar)}
+        </button>
+      </div>`;
+
+    document.body.appendChild(modal);
+
+    const fechar = (resultado) => {
+      modal.remove();
+      document.removeEventListener('keydown', onKeydown);
+      resolve(resultado);
+    };
+    const onKeydown = (e) => { if (e.key === 'Escape') fechar(null); };
+
+    modal.querySelectorAll('.btn-escolha-item').forEach(btn => {
+      btn.addEventListener('click', () => fechar(btn.getAttribute('data-valor')));
+      btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'var(--accent)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.borderColor = 'var(--border)'; });
+    });
+    document.getElementById('btn-escolha-cancelar').addEventListener('click', () => fechar(null));
+    modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
+    document.addEventListener('keydown', onKeydown);
+  });
+}
+
 // ---- Export ----
 
 /**
@@ -2248,6 +2324,9 @@ window.LW = {
 
   // Confirmação customizada (substitui confirm() nativo)
   mostrarConfirmacao,
+
+  // Escolha entre 2+ opções nomeadas (generalização de mostrarConfirmacao)
+  mostrarEscolha,
 
   // Escape de HTML — usar sempre que texto livre (digitado pelo usuário)
   // for inserido via innerHTML, pra evitar XSS armazenado.

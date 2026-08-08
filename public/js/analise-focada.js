@@ -850,13 +850,47 @@
 
   // ── Exportar Dashboard Interativo (HTML standalone) ───────────────────────
   // Diferente dos outros dashboards (sem período/filtro aqui — é sobre UMA
-  // operação só): embute o detalhe já carregado (LW.getDetalheOperacao) e
-  // as mesmas funções de render via toString(), virando um retrato
-  // autossuficiente dessa operação específica — sem filtro pra aplicar,
-  // "interativo" aqui significa só "abre em qualquer navegador, offline,
+  // ou VÁRIAS operações específicas, nunca um período arbitrário): embute
+  // o(s) detalhe(s) já carregado(s) (LW.getDetalheOperacao) e as mesmas
+  // funções de render via toString(), virando um retrato autossuficiente
+  // — "interativo" aqui significa só "abre em qualquer navegador, offline,
   // com a mesma formatação".
+  //
+  // Ponto de entrada público (botão "🌐 Exportar Interativo" e atalho de
+  // teclado, ver keyboard-shortcuts.js) — pergunta ao usuário qual das 2
+  // exportações ele quer e delega pra _exportarSimples/_exportarDoDia,
+  // abaixo. Mantido com este mesmo nome pra não quebrar quem já chama
+  // LWFocada.exportarInterativo() de fora.
   async function exportarInterativo() {
     if (!_idAtual) return;
+    const escolha = await LW.mostrarEscolha(
+      'Como você quer exportar esta Análise Focada?',
+      {
+        titulo: '🌐 Exportar Interativo',
+        icon: '🌐',
+        itens: [
+          { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação, do jeito que já era.' },
+          { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela, uma abaixo da outra, num arquivo só.' },
+        ],
+        textoCancelar: 'Cancelar',
+      }
+    );
+    if (!escolha) return;
+    if (escolha === 'simples') {
+      await _exportarSimples();
+      return;
+    }
+    // "Do Dia" pede a data ANTES de exportar — sugere a data da operação
+    // atualmente aberta (_ultimoDetalhe, preenchido por render()), mas o
+    // usuário pode trocar livremente pelo calendário do <input type="date">.
+    const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
+    const dataEscolhida = await _escolherDataDoDia(dataSugerida);
+    if (!dataEscolhida) return;
+    await _exportarDoDia(dataEscolhida);
+  }
+
+  // ── Exportação Simples — comportamento original: só a operação atual. ──
+  async function _exportarSimples() {
     const btn = document.getElementById('btn-af-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
@@ -871,6 +905,123 @@
       );
     } catch (err) {
       console.error('Falha ao exportar Análise Focada:', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Modal de escolha de data pra Exportação "Do Dia" — um <input
+  // type="date"> nativo (mesmo padrão de campo de data já usado no resto
+  // do app — ver page-registro.html, page-oee.html etc.), que abre o
+  // calendário do próprio navegador/SO. Pré-preenchido com `dataSugerida`
+  // (a data da operação que estava aberta), mas 100% editável.
+  // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
+  // @returns {Promise<string|null>} 'YYYY-MM-DD' escolhida, ou null se cancelado (Cancelar, Esc ou clique fora).
+  function _escolherDataDoDia(dataSugerida) {
+    return new Promise(resolve => {
+      const anterior = document.getElementById('modal-af-data-dia');
+      if (anterior) anterior.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-af-data-dia';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+      modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                    padding:32px;width:380px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:2.2rem;margin-bottom:8px">📅</div>
+            <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--text);margin:0">Exportar do Dia</h2>
+          </div>
+          <p style="color:var(--text-2);text-align:center;margin-bottom:16px;line-height:1.5">Escolha a data — todas as operações feitas nela entram no arquivo.</p>
+          <input type="date" id="af-data-dia-input" class="form-input" value="${LW.escaparHtml(dataSugerida)}"
+            style="width:100%;margin-bottom:24px;text-align:center;font-size:1rem;padding:10px">
+          <div style="display:flex;gap:12px">
+            <button id="af-data-dia-confirmar"
+              style="flex:1;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
+                     font-weight:700;font-size:.9rem;cursor:pointer">
+              Exportar
+            </button>
+            <button id="af-data-dia-cancelar"
+              style="flex:1;padding:12px;background:var(--bg-2);color:var(--text);border:1px solid var(--border);
+                     border-radius:var(--radius);font-size:.9rem;cursor:pointer">
+              Cancelar
+            </button>
+          </div>
+        </div>`;
+
+      document.body.appendChild(modal);
+      const input = document.getElementById('af-data-dia-input');
+
+      const fechar = (resultado) => {
+        modal.remove();
+        document.removeEventListener('keydown', onKeydown);
+        resolve(resultado);
+      };
+      const onKeydown = (e) => {
+        if (e.key === 'Escape') fechar(null);
+        if (e.key === 'Enter') fechar(input.value || null);
+      };
+
+      document.getElementById('af-data-dia-confirmar').addEventListener('click', () => fechar(input.value || null));
+      document.getElementById('af-data-dia-cancelar').addEventListener('click', () => fechar(null));
+      modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
+      document.addEventListener('keydown', onKeydown);
+      input.focus();
+    });
+  }
+
+  // ── Exportação "Do Dia" — uma Análise Focada completa para CADA
+  // operação feita na `dataAlvo` escolhida (ver _escolherDataDoDia,
+  // acima), empilhadas numa página só. Reaproveita _gerarHtmlAfStandalone
+  // (a mesma peça usada pela Exportação Simples) pra montar cada bloco
+  // individual — cada operação vira um <iframe srcdoc="..."> com o MESMO
+  // documento autossuficiente que sairia se fosse exportada sozinha, só
+  // embutido dentro de uma página "casca" que os empilha um embaixo do
+  // outro. srcdoc é tratado como MESMA ORIGEM da página que o criou (spec
+  // do HTML), então dá pra ler contentWindow.document de dentro pra fora
+  // sem CORS, mesmo abrindo o arquivo exportado localmente (file://) —
+  // é assim que cada iframe se auto-ajusta de altura (ver _gerarHtmlAfDoDia).
+  // @param {string} dataAlvo - 'YYYY-MM-DD' escolhida no calendário.
+  async function _exportarDoDia(dataAlvo) {
+    const btn = document.getElementById('btn-af-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      await _carregarCaches();
+
+      const opsDoDia = _cacheHistorico
+        .filter(op => op.data === dataAlvo)
+        .sort((a, b) => (a.inicio || '').localeCompare(b.inicio || ''));
+
+      if (!opsDoDia.length) { if (LW.mostrarAlerta) LW.mostrarAlerta(`Não encontrei nenhuma operação em ${_fmtData(dataAlvo)}.`, { tipo: 'erro' }); return; }
+
+      const detalhesDetalhados = await Promise.all(opsDoDia.map(async op => {
+        const detalhe = await LW.getDetalheOperacao(op.id);
+        return { op, detalhe };
+      }));
+
+      const itens = detalhesDetalhados
+        .filter(({ detalhe }) => !!detalhe)
+        .map(({ op, detalhe }) => {
+          _anotarOrigemEReaproveitamento(detalhe.tracos, op.id);
+          const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
+          return {
+            id: detalhe.operacao?.id || op.id,
+            label: `${detalhe.operacao?.id_bateria || '—'} · ${_fmtHora(detalhe.operacao?.inicio)} — ${_fmtHora(detalhe.operacao?.fim)} · ${detalhe.operacao?.turno || '—'}`,
+            html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela),
+          };
+        });
+
+      if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste dia.', { tipo: 'erro' }); return; }
+
+      const html = _gerarHtmlAfDoDia(dataAlvo, itens);
+      LW.baixarArquivoTexto(
+        `analise_focada_dia_${String(dataAlvo || 'data').replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar Análise Focada do Dia:', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
@@ -983,6 +1134,79 @@
   _renderReceita(DETALHE.tracos, DETALHE.bercosVisuais);
   _renderParadas(PARADAS);
   _renderAvaliacao(DETALHE.avaliacao);
+})();
+</script>
+</body>
+</html>`;
+  }
+
+  // ── Página "casca" da exportação "Do Dia" — empilha um <iframe> por
+  // operação (cada um recebendo, via .srcdoc, o MESMO HTML autossuficiente
+  // que _gerarHtmlAfStandalone gera pra Exportação Simples), com um
+  // índice no topo pra pular direto pra qualquer operação. Cada iframe se
+  // auto-ajusta de altura no load (mede o scrollHeight do documento de
+  // dentro) — sem isso ficaria com scroll interno, quebrando a ideia de
+  // "uma embaixo da outra" numa página só.
+  function _gerarHtmlAfDoDia(dataISO, itens) {
+    // As strings de cada operação já têm <script> internos (ver
+    // _gerarHtmlAfStandalone) — mesma proteção contra fechar o <script>
+    // externo cedo demais já usada lá pros blobs de dados.
+    const itensJson = JSON.stringify(itens.map(it => it.html)).replace(/<\/script/gi, '<\\/script');
+    const dataFmt = _fmtData(dataISO);
+
+    const indice = itens.map((it, i) => `
+      <a href="#op-${i}" style="display:block;padding:8px 12px;border-radius:var(--radius);color:var(--text-2);text-decoration:none;font-size:.82rem;border:1px solid var(--border);margin-bottom:6px">
+        <strong style="color:var(--text)">${String(i + 1).padStart(2, '0')}.</strong>
+        ${LW.escaparHtml(it.label)}
+      </a>`).join('');
+
+    const secoes = itens.map((it, i) => `
+      <div class="af-op-section" id="op-${i}" style="margin-bottom:32px;scroll-margin-top:16px">
+        <div style="font-size:.78rem;color:var(--text-3);margin-bottom:8px">Operação ${i + 1} de ${itens.length} · ${LW.escaparHtml(it.label)}</div>
+        <iframe id="af-frame-${i}" title="Análise Focada — ${LW.escaparHtml(it.label)}"
+          style="width:100%;border:1px solid var(--border);border-radius:var(--radius-lg);display:block;background:transparent"
+          scrolling="no"></iframe>
+      </div>`).join(itens.length > 1 ? '<hr style="border:none;border-top:1px solid var(--border);margin:8px 0 32px">' : '');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise Focada — Dia ${LW.escaparHtml(dataFmt)} — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}
+  .af-indice { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0; margin-bottom:24px; }
+</style>
+</head>
+<body>
+  <h1>🔎 Análise Focada — Todas as Operações do Dia ${LW.escaparHtml(dataFmt)}</h1>
+  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste dia</div>
+
+  <div class="chart-box" style="margin-bottom:24px">
+    <h4>Índice</h4>
+    <div class="af-indice">${indice}</div>
+  </div>
+
+  ${secoes}
+
+  <div class="rodape">Exportado da Análise Focada — Lightwall SC · dados embutidos neste arquivo, funciona offline. Cada bloco acima é o mesmo arquivo que sairia pela Exportação Simples daquela operação.</div>
+
+<script>
+(function () {
+  'use strict';
+  const HTMLS = ${itensJson};
+  HTMLS.forEach(function (html, i) {
+    const frame = document.getElementById('af-frame-' + i);
+    if (!frame) return;
+    frame.addEventListener('load', function () {
+      try {
+        const doc = frame.contentWindow.document;
+        const altura = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+        frame.style.height = (altura + 24) + 'px';
+      } catch (e) { frame.style.height = '600px'; }
+    });
+    frame.srcdoc = html;
+  });
 })();
 </script>
 </body>
