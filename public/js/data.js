@@ -2025,6 +2025,89 @@ function mostrarEscolha(mensagem, opcoes = {}) {
   });
 }
 
+/**
+ * Exibe um modal pro usuário digitar um texto livre — mesmo padrão visual
+ * de mostrarConfirmacao (acima), com um <textarea> no lugar dos botões de
+ * Confirmar/Cancelar simples. Usado, por exemplo, pra pedir a justificativa
+ * de uma pausa de operação (ver togglePausaOperacao, operacao.js).
+ * @param {string} mensagem
+ * @param {object} [opcoes]
+ * @param {string} [opcoes.titulo='Informe um texto']
+ * @param {string} [opcoes.placeholder='']
+ * @param {string} [opcoes.textoConfirmar='Confirmar']
+ * @param {string} [opcoes.textoCancelar='Cancelar']
+ * @param {string} [opcoes.icon='📝']
+ * @param {boolean} [opcoes.obrigatorio=true] - se true, o botão de confirmar só habilita com texto preenchido.
+ * @returns {Promise<string|null>} o texto digitado (já sem espaços nas pontas), ou null se cancelado (botão, Esc ou clique fora).
+ */
+function mostrarPrompt(mensagem, opcoes = {}) {
+  const titulo = opcoes.titulo || 'Informe um texto';
+  const placeholder = opcoes.placeholder || '';
+  const textoConfirmar = opcoes.textoConfirmar || 'Confirmar';
+  const textoCancelar = opcoes.textoCancelar || 'Cancelar';
+  const icon = opcoes.icon || '📝';
+  const obrigatorio = opcoes.obrigatorio !== false;
+
+  return new Promise(resolve => {
+    const anterior = document.getElementById('modal-prompt-global');
+    if (anterior) anterior.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-prompt-global';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:32px;width:440px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2.2rem;margin-bottom:8px">${icon}</div>
+          <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--text);margin:0">
+            ${_escaparHtml(titulo)}
+          </h2>
+        </div>
+        <p style="color:var(--text-2);text-align:center;margin-bottom:16px;line-height:1.5;white-space:pre-line">${_escaparHtml(mensagem)}</p>
+        <textarea id="prompt-textarea-global" class="form-input" rows="3" placeholder="${_escaparHtml(placeholder)}"
+          style="width:100%;margin-bottom:24px;resize:vertical;font:inherit;padding:10px"></textarea>
+        <div style="display:flex;gap:12px">
+          <button id="btn-prompt-confirmar" ${obrigatorio ? 'disabled' : ''}
+            style="flex:1;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
+                   font-weight:700;font-size:.9rem;cursor:pointer">
+            ${_escaparHtml(textoConfirmar)}
+          </button>
+          <button id="btn-prompt-cancelar"
+            style="flex:1;padding:12px;background:var(--bg-2);color:var(--text);border:1px solid var(--border);
+                   border-radius:var(--radius);font-size:.9rem;cursor:pointer">
+            ${_escaparHtml(textoCancelar)}
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+    const textarea = document.getElementById('prompt-textarea-global');
+    const btnConfirmar = document.getElementById('btn-prompt-confirmar');
+
+    const fechar = (resultado) => {
+      modal.remove();
+      document.removeEventListener('keydown', onKeydown);
+      resolve(resultado);
+    };
+    const onKeydown = (e) => { if (e.key === 'Escape') fechar(null); };
+
+    if (obrigatorio) {
+      textarea.addEventListener('input', () => { btnConfirmar.disabled = !textarea.value.trim(); });
+    }
+    btnConfirmar.addEventListener('click', () => {
+      const valor = textarea.value.trim();
+      if (obrigatorio && !valor) return;
+      fechar(valor);
+    });
+    document.getElementById('btn-prompt-cancelar').addEventListener('click', () => fechar(null));
+    modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
+    document.addEventListener('keydown', onKeydown);
+    textarea.focus();
+  });
+}
+
 // ---- Export ----
 
 /**
@@ -2327,6 +2410,9 @@ window.LW = {
 
   // Escolha entre 2+ opções nomeadas (generalização de mostrarConfirmacao)
   mostrarEscolha,
+
+  // Texto livre customizado (substitui prompt() nativo)
+  mostrarPrompt,
 
   // Escape de HTML — usar sempre que texto livre (digitado pelo usuário)
   // for inserido via innerHTML, pra evitar XSS armazenado.
