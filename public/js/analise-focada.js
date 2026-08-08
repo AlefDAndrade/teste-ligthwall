@@ -716,6 +716,10 @@
   function _renderParadas(paradas) {
     const el = document.getElementById('af-paradas');
     if (!el) return;
+    // Contador ao lado do título — visível mesmo com o <details> fechado,
+    // pra dar uma pista do que tem lá dentro sem precisar expandir.
+    const contagem = document.getElementById('af-paradas-contagem');
+    if (contagem) contagem.textContent = paradas.length ? `(${paradas.length})` : '(nenhuma)';
     if (!paradas.length) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Nenhuma parada registrada durante esta operação.</div>`;
       return;
@@ -1084,6 +1088,15 @@
   .badge-blue { background:rgba(59,130,246,.15); color:#93c5fd; }
   .badge-red { background:rgba(239,68,68,.15); color:#fecaca; }
   .mono { font-family:var(--font-mono); }
+  /* Paradas Nesta Janela — retrátil, fechado por padrão (mesmo tratamento da tela ao vivo) */
+  details.chart-box { padding:0; }
+  details.chart-box > summary { padding:16px; margin:0; cursor:pointer; user-select:none; list-style:none; }
+  details.chart-box > summary::-webkit-details-marker { display:none; }
+  details.chart-box > summary::after { content:'▸'; float:right; color:var(--text-3); transition:transform .15s ease; }
+  details.chart-box[open] > summary { border-bottom:1px solid var(--border); }
+  details.chart-box[open] > summary::after { transform:rotate(90deg); }
+  details.chart-box > div { padding:16px; }
+  #af-paradas-contagem { text-transform:none; letter-spacing:normal; font-weight:400; }
 </style>
 </head>
 <body>
@@ -1093,7 +1106,7 @@
   <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div id="af-cabecalho" class="af-cabecalho-grid"></div></div>
   <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div id="af-bercos"></div></div>
   <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div id="af-receita"></div></div>
-  <div class="chart-box" style="margin-bottom:14px"><h4>🛑 Paradas Nesta Janela</h4><div id="af-paradas"></div></div>
+  <details class="chart-box" style="margin-bottom:14px"><summary><h4 style="display:inline;border:none;padding:0">🛑 Paradas Nesta Janela</h4> <span id="af-paradas-contagem"></span></summary><div id="af-paradas"></div></details>
   <div class="chart-box"><h4>✅ Avaliação de Qualidade</h4><div id="af-avaliacao"></div></div>
 
   <div class="rodape">Exportado da Análise Focada — Lightwall SC · dados embutidos neste arquivo, funciona offline. Cores de tipo de montagem são aproximadas (não refletem necessariamente a cor configurada na tela ao vivo). Os badges de "Origem"/"Reaproveitado depois em" são só informativos aqui — abrir a outra operação exige a tela ao vivo.</div>

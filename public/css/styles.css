@@ -672,6 +672,45 @@ h4 {
   border-radius: 2px;
 }
 
+/* ---- Card retrátil (ex: "Paradas Nesta Janela" na Análise Focada) ---- */
+/* <details class="card af-paradas-card"><summary class="card-title">…</summary>…</details>
+   Some raramente tem conteúdo relevante, então fica fechado por padrão —
+   clique no título expande. Reaproveitável por qualquer outro card que
+   também deva nascer retraído. */
+details.card > summary.card-title {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  margin-bottom: 0;
+}
+
+details.card > summary.card-title::-webkit-details-marker {
+  display: none;
+}
+
+details.card > summary.card-title::after {
+  content: '▸';
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: .9em;
+  transition: transform .15s ease;
+}
+
+details.card[open] > summary.card-title {
+  margin-bottom: 12px;
+}
+
+details.card[open] > summary.card-title::after {
+  transform: rotate(90deg);
+}
+
+details.card > summary.card-title span[id$="-contagem"] {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
 /* ---- "Ordem dos Paletes" (Configurações → Paletes) ---- */
 /* Grade 2x2 arrastável — mesmo mecanismo de CSS `order` que a tela do
    Setor de Qualidade usa pra exibir os paletes (ver setor-qualidade.css),
