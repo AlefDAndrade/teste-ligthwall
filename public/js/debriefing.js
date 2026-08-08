@@ -37,19 +37,39 @@
   }
 
   /**
-   * Extrai a data (AAAA-MM-DD) de um timestamp ISO de avaliação
+   * Extrai a data (AAAA-MM-DD) de um timestamp ISO de AVALIAÇÃO
    * (registeredAt/dtDesmoldagem), pra comparar com a data selecionada no
-   * popover. Usa timeZone:'UTC' de propósito — MESMA convenção de
-   * horaBrasilia() acima: os timestamps do sistema já são gravados como
-   * horário de Brasília "disfarçado" de UTC (sem isso, o dia viraria com a
-   * conversão real de fuso e uma avaliação feita às 23h apareceria no dia
-   * seguinte, ou de madrugada no dia anterior).
+   * popover.
+   *
+   * IMPORTANTE — NÃO é a mesma convenção de horaBrasilia() acima:
+   * historico.inicio/fim (aba Operação) são gravados "disfarçados" de
+   * UTC (dígitos = hora de parede de Brasília, sem conversão real — ver
+   * comentário em _filaData/_filaHora, setor-qualidade.js). Mas
+   * dtDesmoldagem/registeredAt (aba Avaliação, usados só aqui) são
+   * gravados como UTC DE VERDADE: registeredAt é literalmente
+   * `new Date().toISOString()`, e dtDesmoldagem passa por `toISO()`
+   * (`new Date(val).toISOString()`) — ambos com conversão real de fuso
+   * (ver salvarAvaliacaoQualidade, setor-qualidade.js).
+   *
+   * BUG CORRIGIDO: esta função usava timeZone:'UTC' (copiando o
+   * raciocínio de horaBrasilia(), que é certo pra Operação mas errado
+   * aqui) — extraía o dia direto dos dígitos UTC brutos. Pra uma
+   * avaliação feita à noite em Brasília (ex: 21h de dia 08), o UTC vira
+   * madrugada do dia SEGUINTE (00h+3=03h; 21h+3=00h do dia 09) — a
+   * função jogava essa avaliação pro dia 09, quando na hora de parede de
+   * quem trabalhou ali (Brasília) ela é do dia 08. O Espelho/Dashboard
+   * (setor-qualidade.js, _dashboardFiltrado) já compara por intervalo de
+   * tempo real, então não erra o dia — só o Debriefing, que comparava
+   * uma STRING de data, sofria disso. timeZone:'America/Sao_Paulo' aqui
+   * faz a mesma conversão real que o resto do sistema já faz pra exibir
+   * essas datas (ex: item.dtDesmoldagem exibido no Espelho via
+   * `new Date(...).toLocaleString('pt-BR')`).
    */
   function dataDoISO(isoString) {
     if (!isoString) return null;
     try {
       return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit'
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
       }).format(new Date(isoString));
     } catch (_) { return null; }
   }

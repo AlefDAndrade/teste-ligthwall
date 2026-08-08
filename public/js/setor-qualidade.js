@@ -3223,7 +3223,9 @@
       if (!(item.batteryId||'').toLowerCase().includes(search)) return false;
       if (turno && item.turno !== turno) return false;
       const dt = new Date(_dataReferenciaAvaliacao(item));
-      if (sd && dt < new Date(sd)) return false;
+      // ─── BUG CORRIGIDO — início do intervalo em UTC, fim em horário
+      // local (ver _dashboardFiltrado, mesmo raciocínio completo) ──────
+      if (sd && dt < new Date(sd + 'T00:00:00')) return false;
       if (ed && dt > new Date(ed + 'T23:59:59')) return false;
       return true;
     }).sort((a, b) => new Date(_dataReferenciaAvaliacao(b)) - new Date(_dataReferenciaAvaliacao(a)));
@@ -3814,7 +3816,22 @@
     return d.avaliacoes.filter(item => {
       if (item.excluidaDaFila) return false;
       const dt = new Date(_dataReferenciaAvaliacao(item));
-      return (!sd || dt >= new Date(sd)) &&
+      // ─── BUG CORRIGIDO — "Espelho mostra 2, Debriefing mostra 1" pro
+      // MESMO dia (ver conversa que motivou esta mudança) ─────────────
+      // `new Date(sd)` (só "AAAA-MM-DD", sem hora) é interpretado pelo
+      // JS como meia-noite em UTC. `new Date(ed + 'T23:59:59')` (com
+      // hora, sem 'Z') é interpretado como 23:59:59 no fuso LOCAL do
+      // navegador (Brasília, no chão de fábrica). Resultado: o FIM do
+      // intervalo respeitava o horário de Brasília, mas o INÍCIO ficava
+      // 3h adiantado (UTC-3) — o filtro "abria a porta" 3h mais cedo do
+      // que devia e contava avaliações feitas entre 21h e 23h59
+      // (horário de Brasília) do dia ANTERIOR como se fossem do dia
+      // filtrado. O Debriefing não sofria disso (dataDoISO já converte
+      // pro fuso 'America/Sao_Paulo' certinho — ver debriefing.js), só
+      // o Espelho/Dashboard e o Relatório/Registros (_historicoFiltrado,
+      // acima, mesmo bug). Forçar 'T00:00:00' faz o `new Date(...)`
+      // interpretar o início também no fuso LOCAL, igual o fim.
+      return (!sd || dt >= new Date(sd + 'T00:00:00')) &&
              (!ed || dt <= new Date(ed + 'T23:59:59')) &&
              (!bf || item.batteryId === bf);
     });
