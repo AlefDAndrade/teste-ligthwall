@@ -1024,22 +1024,29 @@ h4 {
   border: 1px solid var(--border);
   /* Para Chrome, Safari e Opera */
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  /* Para Firefox */
-  -ms-overflow-style: none;
-  /* Para Internet Explorer e Edge */
+  /* BUG CORRIGIDO — a scrollbar horizontal nativa ficava escondida de
+     propósito aqui (scrollbar-width:none/-ms-overflow-style:none +
+     ::-webkit-scrollbar{display:none}, ver histórico do git), trocada
+     por uma faixa de gradiente artificial nas bordas (removida acima —
+     ver comentário logo abaixo do bloco .table-wrap::before/::after).
+     Essa faixa é que causava a "linha estranha" reportada — pedido
+     explícito (ver conversa que motivou esta mudança): trazer de volta a
+     barra de rolagem horizontal nativa, visível de verdade, em vez de
+     qualquer indicador artificial. */
 }
 
-.table-wrap::-webkit-scrollbar {
-  display: none;
-  /* Para Chrome, Safari e Opera */
-}
-
-/* Indicador de rolagem lateral — como a scrollbar fica escondida (regra
-   acima), sem isso não dá pra perceber que a tabela continua pra direita.
-   .table-wrap.js aplica/remove essas classes conforme a posição do scroll
-   (ver public/js/table-scroll-indicador.js): some sozinho ao chegar nas
-   pontas, então nunca fica um "fade" enganando quem já rolou até o fim. */
+/* BUG CORRIGIDO — "linha estranha" que só sumia ao chegar no fim do
+   scroll horizontal (ver conversa que motivou esta mudança — prints no
+   Registro de Baterias, Relatório de Injeção e Análise de Berços, todas
+   usando .table-wrap): a "linha" era esta faixa de 28px com gradiente,
+   ligada/desligada por table-scroll-indicador.js EXATAMENTE quando o
+   scroll chega no fim (.tem-scroll-direita some => opacity:0 aqui) — por
+   isso sumia só ali, e não em outro ponto qualquer do scroll. Existia
+   pra compensar a scrollbar nativa escondida (regra .table-wrap acima,
+   já revertida) — sem scrollbar escondida, o indicador de gradiente vira
+   redundante (a barra já mostra visualmente que dá pra rolar mais),
+   então foi removido junto (bloco inteiro abaixo, comentado por
+   referência — ver histórico do git pra restaurar se precisar).
 .table-wrap::before,
 .table-wrap::after {
   content: '';
@@ -1070,6 +1077,7 @@ h4 {
 .table-wrap.tem-scroll-direita::after {
   opacity: 1;
 }
+*/
 
 /* Fixar o cabeçalho da tabela ao rolar */
 .table-wrap thead th {

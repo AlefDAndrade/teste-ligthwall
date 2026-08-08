@@ -2,17 +2,29 @@
 // Indicador visual de "tem mais conteúdo pra esse lado" nas tabelas.
 //
 // As tabelas do sistema rolam na horizontal (.table-wrap / .man-table-wrap
-// têm overflow-x: auto), mas a scrollbar é escondida de propósito (ver
-// .table-wrap::-webkit-scrollbar em styles.css) — sem scrollbar visível,
-// não dá pra perceber que a tabela continua pra direita/esquerda.
+// têm overflow-x: auto). Só .man-table-wrap ainda esconde a scrollbar
+// nativa (ver .man-table-wrap::-webkit-scrollbar, manutencao.css) — por
+// isso só ali esse indicador continua tendo efeito visual.
+//
+// .table-wrap (Registro de Baterias, Relatório de Injeção, Análise de
+// Berços, Registros do Setor de Qualidade) passou a mostrar a scrollbar
+// nativa de verdade (ver conversa que motivou esta mudança — a faixa de
+// gradiente que este script controlava ali causava uma "linha estranha"
+// que só sumia ao chegar no fim do scroll, exatamente o momento em que
+// este script remove a classe). O CSS do fade pra .table-wrap foi
+// REMOVIDO (ver styles.css) — este script continua rodando pra ele
+// também (SELETOR_WRAPS não mudou, de propósito: não faz mal nenhum
+// ficar alternando uma classe sem efeito visual, e evita duplicar/tornar
+// esse arquivo condicional por wrapper), só não tem mais nada pra
+// mostrar/esconder lá.
 //
 // Este script observa cada wrapper e liga/desliga duas classes:
 //   .tem-scroll-esquerda  → ainda dá pra rolar pra esquerda
 //   .tem-scroll-direita   → ainda dá pra rolar pra direita
-// O CSS (styles.css / manutencao.css) usa essas classes pra mostrar um
-// "fade" nas bordas do wrapper. O fade some sozinho quando não há mais
-// conteúdo naquele sentido — inclusive numa tabela que nunca teve overflow
-// pra começo de conversa.
+// O CSS (manutencao.css, só pra .man-table-wrap agora) usa essas classes
+// pra mostrar um "fade" nas bordas do wrapper. O fade some sozinho quando
+// não há mais conteúdo naquele sentido — inclusive numa tabela que nunca
+// teve overflow pra começo de conversa.
 
 (function () {
   const SELETOR_WRAPS = '.table-wrap, .man-table-wrap';
