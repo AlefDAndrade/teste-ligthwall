@@ -537,6 +537,22 @@
     return v + ' cm';
   }
 
+  // Formatação da Receita do Traço no modal "Detalhes do Berço" — mesmos
+  // helpers de _fmtKg/_fmtTempoBatidaOriginal (analise-focada.js),
+  // duplicados aqui de propósito (mesmo padrão já usado no resto deste
+  // arquivo, ver cabeçalho de _abrirDetalhesBerco acima) pra não acoplar
+  // esta tela à de Análise Focada. tempo_batida aqui também é guardado em
+  // SEGUNDOS (ver _registrarAjusteTraco, operacao.js), mesma unidade.
+  function _baFmtKg(v, casas = 2) {
+    return (v === null || v === undefined || v === '') ? null : Number(v).toFixed(casas);
+  }
+  function _baFmtTempoBatida(segundos) {
+    if (segundos === null || segundos === undefined || segundos === '') return '—';
+    const s = Math.round(Number(segundos));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h > 0 ? `${h}h${String(m).padStart(2, '0')}m${String(sec).padStart(2, '0')}s` : `${m}m${String(sec).padStart(2, '0')}s`;
+  }
+
   function _abrirDetalhesBerco(berco) {
     const dados = _dadosAtuais;
     if (!dados || !berco) return;
@@ -588,6 +604,32 @@
     const posicaoDireito = _baPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
     const posicaoEsquerdo = _baPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
 
+    // Receita do traço que enche este berço — traço AO VIVO (state.tracos,
+    // ainda em memória), então os campos vêm no formato *_real.original
+    // (ver _criarEstruturaTraco, operacao.js) em vez do formato já
+    // persistido (traco.original.*) usado em analise-focada.js. Mesma
+    // classe .af-receita-grid (styles.css) pra manter a aparência igual
+    // nas duas telas.
+    let receitaHtml = null;
+    if (traco) {
+      const camposReceita = [
+        ['Cimento', _baFmtKg(traco.cimento_real?.original), 'kg'],
+        ['Água', _baFmtKg(traco.agua_real?.original), 'kg'],
+        ['EPS', _baFmtKg(traco.eps_real?.original), 'kg'],
+        ['Densidade EPS', traco.densidadeEPS || null, 'kg/m³'],
+        ['Silo EPS', traco.silo || null, ''],
+        ['Expansão', traco.expansao || null, ''],
+        ['Superplast.', _baFmtKg(traco.superplast_real?.original), 'kg'],
+        ['Incorp. de Ar', _baFmtKg(traco.incorporador_real?.original), 'kg'],
+        ['Tempo de Batida', _baFmtTempoBatida(traco.tempo_batida?.original), ''],
+        ['Densidade', traco.densidade || null, 'kg/m³'],
+        ['Flow', traco.flow || null, ''],
+      ];
+      receitaHtml = camposReceita.map(([label, valor, unidade]) =>
+        `<div>${label}: <strong>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`
+      ).join('');
+    }
+
     const overlay = document.createElement('div');
     overlay.id = 'ba-modal-detalhes-berco';
     overlay.className = 'ba-detalhes-overlay';
@@ -626,6 +668,11 @@
             <label class="form-label">Traço Usado</label>
             <div class="ba-det-valor">${labelTraco}</div>
           </div>
+          ${receitaHtml ? `
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Receita do Traço</label>
+            <div class="af-receita-grid">${receitaHtml}</div>
+          </div>` : ''}
           <div class="ba-detalhes-campo">
             <label class="form-label">Posição no Palete</label>
             <div class="ba-detalhes-paletes">

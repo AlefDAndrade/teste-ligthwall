@@ -364,6 +364,31 @@
     const posicaoDireito = _afPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
     const posicaoEsquerdo = _afPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
 
+    // Receita do traço que encheu este berço — mesmos campos e mesma
+    // formatação de "Receita Utilizada" (_renderReceita, acima), só que
+    // filtrados pra UM traço em vez da lista inteira da operação.
+    // Reaproveita a classe .af-receita-grid (styles.css) pra manter a
+    // mesma aparência.
+    let receitaHtml = null;
+    if (traco) {
+      const camposReceita = [
+        ['Cimento', _fmtKg(traco.original?.cimento), 'kg'],
+        ['Água', _fmtKg(traco.original?.agua), 'kg'],
+        ['EPS', _fmtKg(traco.original?.eps), 'kg'],
+        ['Densidade EPS', traco.densidade_eps || null, 'kg/m³'],
+        ['Silo EPS', traco.silo || null, ''],
+        ['Expansão', traco.expansao || null, ''],
+        ['Superplast.', _fmtKg(traco.original?.superplast), 'kg'],
+        ['Incorp. de Ar', _fmtKg(traco.original?.incorporador), 'kg'],
+        ['Tempo de Batida', _fmtTempoBatidaOriginal(traco.original?.tempo_batida), ''],
+        ['Densidade', traco.densidade ?? null, 'kg/m³'],
+        ['Flow', traco.flow ?? null, ''],
+      ];
+      receitaHtml = camposReceita.map(([label, valor, unidade]) =>
+        `<div>${label}: <strong>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`
+      ).join('');
+    }
+
     const numeroFmt = String(numeroBerco).padStart(2, '0');
     const overlay = document.createElement('div');
     overlay.id = 'af-modal-detalhes-berco';
@@ -403,6 +428,11 @@
             <label class="form-label">Traço Usado</label>
             <div class="ba-det-valor">${labelTraco}</div>
           </div>
+          ${receitaHtml ? `
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Receita do Traço</label>
+            <div class="af-receita-grid">${receitaHtml}</div>
+          </div>` : ''}
           <div class="ba-detalhes-campo">
             <label class="form-label">Posição no Palete</label>
             <div class="ba-detalhes-paletes">
