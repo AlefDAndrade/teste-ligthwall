@@ -125,6 +125,26 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_edicoes_operacao_id ON edicoes_operacao(id_operacao);
 
+  -- Motivos de Pausa — justificativa pedida ao operador ao pausar uma
+  -- injeção em andamento (ver togglePausaOperacao/mostrarPrompt,
+  -- operacao.js). 1 linha por pausa (uma mesma operação pode pausar e
+  -- retomar mais de uma vez). id_operacao NÃO tem FK pra operacoes(id) de
+  -- propósito, mesmo raciocínio de traco_usos.id_operacao (acima): a pausa
+  -- acontece ENQUANTO a operação ainda está rodando — o id real (opId) só
+  -- é gerado no fim, ao registrar (ver operacao.js) — exigir o FK aqui
+  -- quebraria o fluxo ao vivo. Gravada junto com o resto da operação, no
+  -- mesmo POST /registrar-operacao (nunca em tempo real, no instante em
+  -- que a pausa acontece).
+  CREATE TABLE IF NOT EXISTS pausas_operacao (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_operacao   TEXT NOT NULL,
+    pausado_em    TEXT NOT NULL,
+    retomado_em   TEXT,
+    motivo        TEXT NOT NULL,
+    registrado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_pausas_operacao_id ON pausas_operacao(id_operacao);
+
   -- ============================================================
   --  FASE 5 — Traços (substitui relatorio_injecao.json)
   --
