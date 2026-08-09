@@ -2908,6 +2908,21 @@ td.mono {
   letter-spacing: .05em;
 }
 
+/* "Total de Registros" (aba Avaliação) — leva pra Base de Registros do
+   Setor de Qualidade já filtrada pela mesma data (ver
+   LWDebriefing.abrirAvaliacoes, debriefing.js). Mesmo tratamento visual
+   de .dbf-bateria-card-clicavel (abaixo), reaproveitável por qualquer
+   outro .dbf-stat que ganhar navegação no futuro. */
+.dbf-stat-clicavel {
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.dbf-stat-clicavel:hover {
+  background: var(--bg-hover, var(--bg-3));
+  border-color: var(--accent);
+}
+
 /* ---- Insights da aba Avaliação — linhas de texto abaixo dos KPIs
    (ex: principal motivo de reprovação, comparação com a média
    histórica). Cada insight ocupa 1 linha própria, empilhados. ---- */

@@ -489,7 +489,7 @@
 
     return `<div class="dbf-avaliacao-grid">
       <div class="dbf-stats dbf-stats-lg">
-        <div class="dbf-stat dbf-stat-lg">
+        <div class="dbf-stat dbf-stat-lg dbf-stat-clicavel" onclick="LWDebriefing.abrirAvaliacoes('${data}')" title="Ver estes registros na Base de Registros (Setor de Qualidade)">
           <span class="dbf-stat-val">${stats.totalRegistros}</span>
           <span class="dbf-stat-label">Total de Registros</span>
         </div>
@@ -590,6 +590,25 @@
       if (!idOperacao) return;
       document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
       if (window.LWFocada) LWFocada.abrir(idOperacao);
+    },
+    // Clique no card "Total de Registros" (aba "Avaliação" do Debriefing)
+    // → Setor de Qualidade, aba "Base de Registros" (SQ.navigateTo
+    // ('history')), já filtrada pela mesma data — mesmo campo "Desmoldagem
+    // de/até" (#sq-hist-start/#sq-hist-end) que já é a referência de data
+    // usada pra contar as avaliações aqui no Debriefing (ver
+    // _dataReferenciaAvaliacao, setor-qualidade.js), então De = Até = a
+    // data selecionada é exatamente "só esse dia".
+    abrirAvaliacoes(data) {
+      if (!data) return;
+      document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
+      if (typeof showPage === 'function') showPage('setor-qualidade');
+      if (!window.SQ) return;
+      SQ.navigateTo('history');
+      const inicio = document.getElementById('sq-hist-start');
+      const fim = document.getElementById('sq-hist-end');
+      if (inicio) inicio.value = data;
+      if (fim) fim.value = data;
+      SQ.renderHistory();
     }
   };
 
