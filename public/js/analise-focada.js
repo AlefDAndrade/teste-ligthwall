@@ -913,6 +913,7 @@
         itens: [
           { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação, do jeito que já era.' },
           { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela.' },
+          { valor: 'personalizada', texto: '🗓️ Personalizada', desc: 'Escolha um período — todas as operações feitas nele, uma embaixo da outra.' },
         ],
         textoCancelar: 'Cancelar',
       }
@@ -924,6 +925,16 @@
         return;
       }
       await _exportarSimples();
+      return;
+    }
+    if (escolha === 'personalizada') {
+      // Mesma data sugerida de "Do Dia" (a da operação aberta), usada
+      // como ponto de partida pros DOIS campos (De/Até) — quem só quer 1
+      // dia específico não precisa mexer em nada além de trocar o "Até".
+      const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
+      const periodo = await _escolherRangeDatas(dataSugerida);
+      if (!periodo) return;
+      await _exportarPersonalizado(periodo.inicio, periodo.fim);
       return;
     }
     // "Do Dia" pede a data ANTES de exportar — sugere a data da operação
@@ -1018,6 +1029,87 @@
     });
   }
 
+  // ── Modal de escolha de PERÍODO (De/Até) pra Exportação "Personalizada"
+  // — mesmo padrão visual de _escolherDataDoDia (acima), só com 2 <input
+  // type="date"> lado a lado em vez de 1. Os dois vêm pré-preenchidos com
+  // `dataSugerida` (a data da operação que estava aberta) — quem só quer
+  // 1 dia específico só troca o "Até" (ou nem mexe, se já for hoje).
+  // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
+  // @returns {Promise<{inicio:string,fim:string}|null>} - null se cancelado (Cancelar, Esc ou clique fora).
+  function _escolherRangeDatas(dataSugerida) {
+    return new Promise(resolve => {
+      const anterior = document.getElementById('modal-af-range-datas');
+      if (anterior) anterior.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-af-range-datas';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10100;display:flex;align-items:center;justify-content:center;padding:20px';
+
+      modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                    padding:32px;width:400px;max-width:92vw;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+          <div style="text-align:center;margin-bottom:16px">
+            <div style="font-size:2.2rem;margin-bottom:8px">🗓️</div>
+            <h2 style="font-family:var(--font-display);font-size:1.3rem;color:var(--text);margin:0">Exportar Personalizada</h2>
+          </div>
+          <p style="color:var(--text-2);text-align:center;margin-bottom:16px;line-height:1.5">Escolha o período — todas as operações feitas nele entram no arquivo, uma embaixo da outra.</p>
+          <div style="display:flex;gap:10px;margin-bottom:24px">
+            <div style="flex:1">
+              <label class="form-label" style="display:block;margin-bottom:6px;text-align:center">De</label>
+              <input type="date" id="af-range-inicio-input" class="form-input" value="${LW.escaparHtml(dataSugerida)}"
+                style="width:100%;text-align:center;font-size:1rem;padding:10px">
+            </div>
+            <div style="flex:1">
+              <label class="form-label" style="display:block;margin-bottom:6px;text-align:center">Até</label>
+              <input type="date" id="af-range-fim-input" class="form-input" value="${LW.escaparHtml(dataSugerida)}"
+                style="width:100%;text-align:center;font-size:1rem;padding:10px">
+            </div>
+          </div>
+          <div style="display:flex;gap:12px">
+            <button id="af-range-confirmar"
+              style="flex:1;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
+                     font-weight:700;font-size:.9rem;cursor:pointer">
+              Exportar
+            </button>
+            <button id="af-range-cancelar"
+              style="flex:1;padding:12px;background:var(--bg-2);color:var(--text);border:1px solid var(--border);
+                     border-radius:var(--radius);font-size:.9rem;cursor:pointer">
+              Cancelar
+            </button>
+          </div>
+        </div>`;
+
+      document.body.appendChild(modal);
+      const inputIni = document.getElementById('af-range-inicio-input');
+      const inputFim = document.getElementById('af-range-fim-input');
+
+      const fechar = (resultado) => {
+        modal.remove();
+        document.removeEventListener('keydown', onKeydown);
+        resolve(resultado);
+      };
+      const confirmar = () => {
+        const a = inputIni.value, b = inputFim.value;
+        if (!a || !b) { fechar(null); return; }
+        // Se a pessoa preencher invertido (Até antes de De), corrige
+        // sozinho — strings 'YYYY-MM-DD' comparam cronologicamente
+        // igual a números, então min/max direto já resolve, sem travar
+        // pedindo pra reordenar.
+        fechar(a <= b ? { inicio: a, fim: b } : { inicio: b, fim: a });
+      };
+      const onKeydown = (e) => {
+        if (e.key === 'Escape') fechar(null);
+        if (e.key === 'Enter') confirmar();
+      };
+
+      document.getElementById('af-range-confirmar').addEventListener('click', confirmar);
+      document.getElementById('af-range-cancelar').addEventListener('click', () => fechar(null));
+      modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
+      document.addEventListener('keydown', onKeydown);
+      inputIni.focus();
+    });
+  }
+
   // ── Exportação "Do Dia" — uma Análise Focada completa para CADA
   // operação feita na `dataAlvo` escolhida (ver _escolherDataDoDia,
   // acima), empilhadas numa página só. Reaproveita _gerarHtmlAfStandalone
@@ -1068,6 +1160,61 @@
       );
     } catch (err) {
       console.error('Falha ao exportar Análise Focada do Dia:', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Exportação "Personalizada" — mesma ideia de "Do Dia" (acima), só
+  // que num INTERVALO de datas em vez de 1 dia só (ver _escolherRangeDatas).
+  // Reaproveita a mesma "casca" _gerarHtmlAfMultiplas que empilha os
+  // <iframe srcdoc="..."> — só muda o título/rótulo do período e o
+  // critério do filtro (>=/<= em vez de ===). Como pode abranger mais de
+  // um dia, o label de cada bloco no índice ganha a DATA na frente (ver
+  // itens.map abaixo) — em "Do Dia" isso é redundante (já é um dia só,
+  // dito no título), mas aqui é essencial pra diferenciar operações de
+  // dias diferentes.
+  // @param {string} dataInicio - 'YYYY-MM-DD'.
+  // @param {string} dataFim - 'YYYY-MM-DD'.
+  async function _exportarPersonalizado(dataInicio, dataFim) {
+    const btn = document.getElementById('btn-af-exportar');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      await _carregarCaches();
+
+      const opsDoPeriodo = _cacheHistorico
+        .filter(op => op.data >= dataInicio && op.data <= dataFim)
+        .sort((a, b) => (a.data === b.data) ? (a.inicio || '').localeCompare(b.inicio || '') : a.data.localeCompare(b.data));
+
+      if (!opsDoPeriodo.length) { if (LW.mostrarAlerta) LW.mostrarAlerta(`Não encontrei nenhuma operação entre ${_fmtData(dataInicio)} e ${_fmtData(dataFim)}.`, { tipo: 'erro' }); return; }
+
+      const detalhesDetalhados = await Promise.all(opsDoPeriodo.map(async op => {
+        const detalhe = await LW.getDetalheOperacao(op.id);
+        return { op, detalhe };
+      }));
+
+      const itens = detalhesDetalhados
+        .filter(({ detalhe }) => !!detalhe)
+        .map(({ op, detalhe }) => {
+          _anotarOrigemEReaproveitamento(detalhe.tracos, op.id);
+          const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
+          return {
+            id: detalhe.operacao?.id || op.id,
+            label: `${_fmtData(detalhe.operacao?.data)} · ${detalhe.operacao?.id_bateria || '—'} · ${_fmtHora(detalhe.operacao?.inicio)} — ${_fmtHora(detalhe.operacao?.fim)} · ${detalhe.operacao?.turno || '—'}`,
+            html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela),
+          };
+        });
+
+      if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste período.', { tipo: 'erro' }); return; }
+
+      const html = _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens);
+      LW.baixarArquivoTexto(
+        `analise_focada_${String(dataInicio).replace(/[^a-zA-Z0-9_-]/g, '_')}_a_${String(dataFim).replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+        html
+      );
+    } catch (err) {
+      console.error('Falha ao exportar Análise Focada Personalizada:', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
@@ -1195,19 +1342,24 @@
 </html>`;
   }
 
-  // ── Página "casca" da exportação "Do Dia" — empilha um <iframe> por
-  // operação (cada um recebendo, via .srcdoc, o MESMO HTML autossuficiente
-  // que _gerarHtmlAfStandalone gera pra Exportação Simples), com um
-  // índice no topo pra pular direto pra qualquer operação. Cada iframe se
+  // ── Página "casca" que empilha um <iframe> por operação — motor comum
+  // por trás de "Do Dia" e "Personalizada" (só muda o título/rótulo de
+  // cada uma, ver _gerarHtmlAfDoDia/_gerarHtmlAfPersonalizado, abaixo).
+  // Cada <iframe> recebe, via .srcdoc, o MESMO HTML autossuficiente que
+  // _gerarHtmlAfStandalone gera pra Exportação Simples, com um índice no
+  // topo pra pular direto pra qualquer operação. Cada iframe se
   // auto-ajusta de altura no load (mede o scrollHeight do documento de
   // dentro) — sem isso ficaria com scroll interno, quebrando a ideia de
   // "uma embaixo da outra" numa página só.
-  function _gerarHtmlAfDoDia(dataISO, itens) {
+  // @param {string} tituloPagina - vai na <title> da aba do navegador.
+  // @param {string} tituloH1 - cabeçalho grande no topo da página (já em HTML, não escapado de novo).
+  // @param {string} subLabel - linha pequena abaixo do H1 (ex: "3 operações neste dia").
+  // @param {Array<{id,label,html}>} itens - uma entrada por operação (ver chamadas abaixo).
+  function _gerarHtmlAfMultiplas(tituloPagina, tituloH1, subLabel, itens) {
     // As strings de cada operação já têm <script> internos (ver
     // _gerarHtmlAfStandalone) — mesma proteção contra fechar o <script>
     // externo cedo demais já usada lá pros blobs de dados.
     const itensJson = JSON.stringify(itens.map(it => it.html)).replace(/<\/script/gi, '<\\/script');
-    const dataFmt = _fmtData(dataISO);
 
     const indice = itens.map((it, i) => `
       <a href="#op-${i}" style="display:block;padding:8px 12px;border-radius:var(--radius);color:var(--text-2);text-decoration:none;font-size:.82rem;border:1px solid var(--border);margin-bottom:6px">
@@ -1228,14 +1380,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Análise Focada — Dia ${LW.escaparHtml(dataFmt)} — Exportado</title>
+<title>${LW.escaparHtml(tituloPagina)}</title>
 <style>${LW.gerarCssExportPadrao()}
   .af-indice { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:0; margin-bottom:24px; }
 </style>
 </head>
 <body>
-  <h1>🔎 Análise Focada — Todas as Operações do Dia ${LW.escaparHtml(dataFmt)}</h1>
-  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste dia</div>
+  <h1>${tituloH1}</h1>
+  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${LW.escaparHtml(subLabel)}</div>
 
   <div class="chart-box" style="margin-bottom:24px">
     <h4>Índice</h4>
@@ -1266,6 +1418,34 @@
 </script>
 </body>
 </html>`;
+  }
+
+  // ── Página "casca" da exportação "Do Dia" — 1 dia só. ──────────────
+  function _gerarHtmlAfDoDia(dataISO, itens) {
+    const dataFmt = _fmtData(dataISO);
+    return _gerarHtmlAfMultiplas(
+      `Análise Focada — Dia ${dataFmt} — Exportado`,
+      `🔎 Análise Focada — Todas as Operações do Dia ${LW.escaparHtml(dataFmt)}`,
+      `${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste dia`,
+      itens
+    );
+  }
+
+  // ── Página "casca" da exportação "Personalizada" — intervalo de datas
+  // (ver _escolherRangeDatas/_exportarPersonalizado, acima). Quando
+  // dataInicio === dataFim (a pessoa escolheu só 1 dia mesmo na tela de
+  // período), mostra só a data uma vez em vez de "X a X", que ficaria
+  // estranho repetido.
+  function _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens) {
+    const fmtIni = _fmtData(dataInicio);
+    const fmtFim = _fmtData(dataFim);
+    const periodoLabel = dataInicio === dataFim ? fmtIni : `${fmtIni} a ${fmtFim}`;
+    return _gerarHtmlAfMultiplas(
+      `Análise Focada — ${periodoLabel} — Exportado`,
+      `🔎 Análise Focada — Operações de ${LW.escaparHtml(periodoLabel)}`,
+      `${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste período`,
+      itens
+    );
   }
 
   function init() {
