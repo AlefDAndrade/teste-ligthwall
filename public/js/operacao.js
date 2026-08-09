@@ -643,7 +643,17 @@
         { titulo: 'Pausar esta operação?', textoConfirmar: 'Pausar', icon: '⏸' }
       );
       if (!confirmou) return;
-      state.pausas.push({ pausado_em: nowBrasilia().toISOString(), retomado_em: null });
+
+      // Depois de confirmar, pede o motivo — obrigatório, senão a pausa
+      // fica sem contexto pra quem for olhar o histórico depois. Cancelar
+      // aqui desiste da pausa inteira (não fica um "meio pausado").
+      const motivo = await LW.mostrarPrompt(
+        'Explique rapidamente por que esta operação está sendo pausada.',
+        { titulo: 'Motivo da pausa', placeholder: 'Ex.: aguardando liberação de manutenção…', textoConfirmar: 'Pausar', icon: '📝' }
+      );
+      if (!motivo) return;
+
+      state.pausas.push({ pausado_em: nowBrasilia().toISOString(), retomado_em: null, motivo });
     } else {
       // Retomar não pede confirmação — é só voltar ao trabalho normal.
       state.pausas[state.pausas.length - 1].retomado_em = nowBrasilia().toISOString();

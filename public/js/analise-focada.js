@@ -869,7 +869,12 @@
   // abaixo. Mantido com este mesmo nome pra não quebrar quem já chama
   // LWFocada.exportarInterativo() de fora.
   async function exportarInterativo() {
-    if (!_idAtual) return;
+    // Antes saía de cara se não houvesse operação carregada (_idAtual),
+    // deixando o botão parecendo morto mesmo pra quem só queria "Do Dia"
+    // (que nem depende de operação selecionada — roda em cima de uma data
+    // escolhida no calendário). Agora o botão sempre abre o menu de
+    // escolha; só a opção "Simples" (que exporta A operação atual) exige
+    // _idAtual, e avisa em vez de falhar em silêncio.
     const escolha = await LW.mostrarEscolha(
       'Como você quer exportar esta Análise Focada?',
       {
@@ -884,6 +889,10 @@
     );
     if (!escolha) return;
     if (escolha === 'simples') {
+      if (!_idAtual) {
+        if (LW.mostrarAlerta) LW.mostrarAlerta('Selecione uma operação primeiro para usar a Exportação Simples.', { tipo: 'erro' });
+        return;
+      }
       await _exportarSimples();
       return;
     }
