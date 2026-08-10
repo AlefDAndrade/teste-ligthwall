@@ -315,7 +315,17 @@ test('reagendar (mudar a data) reseta o "já lembrado" — volta a ser elegível
   const captura = await subirCapturaPush();
   try {
     const cookieAdmin = await logarComoAdminMaster(servidor.baseUrl);
-    const cookieDestino = await cadastrarELogar(servidor.baseUrl, 'lembrete.reagendado', 'Manutencao');
+    // Perfil 'AssistenteQualidade' de propósito (não 'Manutencao'): não
+    // edita a área 'manutencao', então por padrão NÃO recebe a
+    // notificação GENÉRICA de "Atualização de Etiqueta" (ver
+    // lib/perfis.js) — o reagendamento abaixo (POST /manutencao/programada
+    // num agendamento já existente) dispara essa genérica pra quem tem a
+    // permissão, o que duplicaria a contagem de pushes neste endpoint e
+    // confundiria com o que este teste quer medir (só o job de LEMBRETE).
+    // O item de lembrete em si continua 'total' por padrão pra QUALQUER
+    // perfil fixo (ver permissoesPadraoDoPerfilFixo), então a cobertura
+    // do job não é afetada pela troca de perfil.
+    const cookieDestino = await cadastrarELogar(servidor.baseUrl, 'lembrete.reagendado', 'AssistenteQualidade');
 
     const id = 'PRG-lembrete-reagendado-' + Date.now();
     const base = { id, setor: 'Producao', maquina: 'Injetora 3', solicitante: 'Maria' };

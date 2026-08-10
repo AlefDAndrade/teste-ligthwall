@@ -4,7 +4,8 @@
 // itens de notificação já existentes no catálogo de permissões
 // (`manutencao-notificacao-abertura`/`manutencao-notificacao-aceite`/
 // `manutencao-notificacao-pedido-peca`/`manutencao-notificacao-peca-recebida`/
-// `manutencao-notificacao-programada`/`manutencao-notificacao-programada-lembrete`,
+// `manutencao-notificacao-programada`/`manutencao-notificacao-programada-lembrete`/
+// `manutencao-notificacao-atualizacao`,
 // ver lib/itens-permissao.js)
 // e as mesmas rotas de leitura/escrita que já existem pra permissões de
 // perfil (GET/POST /permissoes-perfil-fixo pros 6 fixos, POST
@@ -24,6 +25,7 @@ const _NC_ITEM_PEDIDO_PECA = 'manutencao-notificacao-pedido-peca';
 const _NC_ITEM_PECA_RECEBIDA = 'manutencao-notificacao-peca-recebida';
 const _NC_ITEM_PROGRAMADA = 'manutencao-notificacao-programada';
 const _NC_ITEM_PROGRAMADA_LEMBRETE = 'manutencao-notificacao-programada-lembrete';
+const _NC_ITEM_ATUALIZACAO = 'manutencao-notificacao-atualizacao';
 
 let _ncCarregando = false;
 
@@ -109,6 +111,7 @@ function _ncRenderLinha({ perfilId, rotulo, ehCustomizado, permissoes }) {
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PECA_RECEBIDA, 'Peça Recebida', '📦', permissoes[_NC_ITEM_PECA_RECEBIDA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PROGRAMADA, 'Manutenção Programada', '📅', permissoes[_NC_ITEM_PROGRAMADA] === 'total')}
       ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_PROGRAMADA_LEMBRETE, 'Lembrete no Dia (09h)', '⏰', permissoes[_NC_ITEM_PROGRAMADA_LEMBRETE] === 'total')}
+      ${_ncToggle(perfilId, ehCustomizado, _NC_ITEM_ATUALIZACAO, 'Atualização de Etiqueta', '✏️', permissoes[_NC_ITEM_ATUALIZACAO] === 'total')}
     </div>
   `;
 }

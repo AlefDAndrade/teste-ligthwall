@@ -578,9 +578,21 @@ test('chamado em execução salvo com aguardandoPecas=Sim notifica quem tem a pe
   const id = 'MAN-push-peca-1-' + Date.now();
   await abrirEAceitarChamado(id, cookieAbre, cookieTecnico);
 
-  // Inscrições feitas só DEPOIS do chamado já aberto — de propósito, pra
-  // não confundir com a notificação de ABERTURA (outro evento, já
-  // testado acima) que teria disparado no momento da criação.
+  // Técnico coloca o chamado em execução — ANTES das inscrições abaixo,
+  // de propósito: este salvamento não dispara nenhuma notificação
+  // específica (só muda "situacao"), mas agora DISPARA a notificação
+  // GENÉRICA de "Atualização de Etiqueta" (ver bloco de testes dedicado,
+  // mais abaixo) — inscrever DEPOIS dele garante que este teste segue
+  // isolado, testando só a transição de pedido de peça em si.
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao' })),
+  });
+
+  // Inscrições feitas só DEPOIS do chamado já em execução — de
+  // propósito, pra não confundir com a notificação de ABERTURA (outro
+  // evento, já testado acima) nem com a genérica de atualização
+  // disparada pelo passo acima.
   const subSupervisorMarca = subscriptionReal('peca-supervisor-marca');
   const subEncarregadoRecebe = subscriptionReal('peca-encarregado-recebe');
   await fetch(`${servidor.baseUrl}/push/inscrever`, {
@@ -590,12 +602,6 @@ test('chamado em execução salvo com aguardandoPecas=Sim notifica quem tem a pe
   await fetch(`${servidor.baseUrl}/push/inscrever`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregadoRecebe },
     body: JSON.stringify({ subscription: subEncarregadoRecebe }),
-  });
-
-  // Técnico coloca o chamado em execução.
-  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
-    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao' })),
   });
 
   // Supervisão marca "Aguardando peças? = Sim" — é isso que deve
@@ -613,7 +619,7 @@ test('chamado em execução salvo com aguardandoPecas=Sim notifica quem tem a pe
   assert.ok(!pushesRecebidos.some(p => p.caminho === '/peca-supervisor-marca'), 'quem marcou o pedido não deveria receber a própria notificação');
 });
 
-test('aguardandoPecas=Sim em chamado que NÃO está em execução não dispara a notificação de pedido de peça', async () => {
+test('aguardandoPecas=Sim em chamado que NÃO está em execução não dispara a notificação ESPECÍFICA de pedido de peça (mas dispara a genérica de atualização)', async () => {
   const cookieAbre = await cadastrarELogar('peca.sem.execucao.abre', 'Encarregado');
   const cookieTecnico = await cadastrarELogar('peca.sem.execucao.tecnico', 'Manutencao');
   const cookieSupervisor = await cadastrarELogar('peca.sem.execucao.supervisor', 'Supervisao');
@@ -640,7 +646,16 @@ test('aguardandoPecas=Sim em chamado que NÃO está em execução não dispara a
 
   await new Promise((resolve) => setTimeout(resolve, 1500));
 
-  assert.ok(!pushesRecebidos.some(p => p.caminho === '/peca-sem-execucao-supervisor'), 'não deveria notificar pedido de peça fora do estado "em execução"');
+  // A notificação ESPECÍFICA de "pedido de peça" continua não disparando
+  // fora do estado "em execução" (regra de negócio inalterada) — mas,
+  // como este salvamento é um UPDATE de um chamado já existente e
+  // NENHUMA notificação específica disparou pra ele, a notificação
+  // GENÉRICA de "Atualização de Etiqueta" (pedido do usuário: "notificar
+  // todas as atualizações") cobre esse caso — Supervisão recebe 'total'
+  // por padrão pra esse item (ver permissoesPadraoDoPerfilFixo,
+  // lib/perfis.js), então o push chega mesmo assim, só que por esse
+  // canal genérico, não o específico de pedido de peça.
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/peca-sem-execucao-supervisor'), 'a notificação genérica de atualização deveria ter disparado, já que nenhuma específica disparou pra este update');
 });
 
 test('salvar de novo um chamado que já estava com aguardandoPecas=Sim não notifica de novo (só na transição)', async () => {
@@ -799,4 +814,198 @@ test('salvar de novo um chamado que já estava com statusCompra="Peça recebida"
   await new Promise((resolve) => setTimeout(resolve, 1500));
   const totalDepois = pushesRecebidos.filter(p => p.caminho === '/recebida-repeticao-supervisor').length;
   assert.equal(totalDepois, 1, 'não deveria notificar de novo pro mesmo chamado já com a peça recebida');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Notificação GENÉRICA de "Atualização de Etiqueta" (corretiva e
+// programada) — pedido do usuário: "notificar todas as atualizações que
+// forem feitas em uma etiqueta, tanto corretiva como programada". Cobre
+// updates de um registro JÁ EXISTENTE que não disparam nenhuma das
+// notificações específicas de cima (ver lib/notificacoes-push.js,
+// lib/itens-permissao.js, lib/rotas/manutencao.js). NÃO cobre criação
+// (já tem "abertura"/"agendamento criado") nem exclusão (fora do escopo
+// pedido).
+// ═══════════════════════════════════════════════════════════════════════
+
+test('catálogo de permissões inclui o item de notificação genérica de atualização de etiqueta', async () => {
+  const resp = await fetch(`${servidor.baseUrl}/catalogo-permissoes`);
+  const data = await resp.json();
+  assert.equal(data.ok, true);
+  const item = data.catalogo.find(i => i.id === 'manutencao-notificacao-atualizacao');
+  assert.ok(item, 'item de notificação de atualização de etiqueta deveria estar no catálogo');
+  assert.equal(item.pai, 'manutencao-corretiva');
+  assert.equal(item.area, undefined, 'não deve conceder nenhuma área de edição');
+});
+
+test('padrão do item de atualização de etiqueta: quem edita Manutenção recebe "total"; Assistente de Qualidade recebe "ocultar"', async () => {
+  const respManutencao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Manutencao`);
+  assert.equal((await respManutencao.json()).permissoes['manutencao-notificacao-atualizacao'], 'total');
+
+  const respSupervisao = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Supervisao`);
+  assert.equal((await respSupervisao.json()).permissoes['manutencao-notificacao-atualizacao'], 'total');
+
+  const respEncarregado = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Encarregado`);
+  assert.equal((await respEncarregado.json()).permissoes['manutencao-notificacao-atualizacao'], 'total');
+
+  const respAdmin = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=Administrativo`);
+  assert.equal((await respAdmin.json()).permissoes['manutencao-notificacao-atualizacao'], 'total');
+
+  const respOperador = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=OperadorInjetora`);
+  assert.equal((await respOperador.json()).permissoes['manutencao-notificacao-atualizacao'], 'total');
+
+  const respQualidade = await fetch(`${servidor.baseUrl}/permissoes-perfil-fixo?perfil=AssistenteQualidade`);
+  assert.equal((await respQualidade.json()).permissoes['manutencao-notificacao-atualizacao'], 'ocultar');
+});
+
+test('editar um chamado corretivo já existente (sem disparar nenhuma notificação específica) notifica quem tem a permissão de atualização, exceto quem salvou', async () => {
+  const cookieAbre = await cadastrarELogar('atualizacao.abre.chamado', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('atualizacao.tecnico.edita', 'Manutencao');
+  const cookieSupervisorRecebe = await cadastrarELogar('atualizacao.supervisor.recebe', 'Supervisao');
+
+  const id = 'MAN-push-atualizacao-1-' + Date.now();
+  await abrirEAceitarChamado(id, cookieAbre, cookieTecnico);
+
+  // Inscrição só depois de aberto/aceito — mesmo motivo dos testes acima.
+  const subSupervisorRecebe = subscriptionReal('atualizacao-supervisor-recebe');
+  const subTecnicoEdita = subscriptionReal('atualizacao-tecnico-edita');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieSupervisorRecebe },
+    body: JSON.stringify({ subscription: subSupervisorRecebe }),
+  });
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify({ subscription: subTecnicoEdita }),
+  });
+
+  // Técnico só edita a Execução (sem mexer em aguardandoPecas/statusCompra)
+  // — não é abertura, não é pedido de peça, não é peça recebida: nenhuma
+  // notificação específica se aplica aqui.
+  const respEdita = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', diagnostico: 'Rolamento gasto — troca em andamento' })),
+  });
+  assert.equal(respEdita.status, 200);
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/atualizacao-supervisor-recebe'), 'Supervisão deveria ter recebido a notificação genérica de atualização');
+  assert.ok(!pushesRecebidos.some(p => p.caminho === '/atualizacao-tecnico-edita'), 'quem editou não deveria receber a própria notificação');
+});
+
+test('fechar a etiqueta de um chamado corretivo (etiquetaFechada=true) notifica pela atualização genérica', async () => {
+  const cookieAbre = await cadastrarELogar('atualizacao.fecha.abre', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('atualizacao.fecha.tecnico', 'Manutencao');
+  const cookieEncarregadoRecebe = await cadastrarELogar('atualizacao.fecha.encarregado', 'Encarregado');
+
+  const id = 'MAN-push-atualizacao-fecha-' + Date.now();
+  await abrirEAceitarChamado(id, cookieAbre, cookieTecnico);
+
+  const subEncarregadoRecebe = subscriptionReal('atualizacao-fecha-encarregado');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregadoRecebe },
+    body: JSON.stringify({ subscription: subEncarregadoRecebe }),
+  });
+
+  // Encarregado fecha a etiqueta — exige 'manutencao' completa (grupo
+  // certo pra isso, ver lib/rotas/manutencao.js).
+  const respFecha = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAbre },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-23' })),
+  });
+  assert.equal(respFecha.status, 200);
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/atualizacao-fecha-encarregado'), 'deveria notificar o fechamento da etiqueta pela atualização genérica');
+});
+
+test('abrir um chamado corretivo novo NÃO dispara a notificação genérica de atualização (só a de abertura)', async () => {
+  const cookieAbre = await cadastrarELogar('atualizacao.criacao.abre', 'Encarregado');
+  const cookieOutro = await cadastrarELogar('atualizacao.criacao.outro', 'Supervisao');
+
+  const subOutro = subscriptionReal('atualizacao-criacao-outro');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieOutro },
+    body: JSON.stringify({ subscription: subOutro }),
+  });
+
+  const id = 'MAN-push-atualizacao-criacao-' + Date.now();
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAbre },
+    body: JSON.stringify(payloadChamado(id)),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // Recebe (via notificação de ABERTURA — já testado em outro bloco),
+  // mas só uma vez — a genérica não duplica o aviso na criação.
+  const total = pushesRecebidos.filter(p => p.caminho === '/atualizacao-criacao-outro').length;
+  assert.equal(total, 1, 'criação de chamado deveria notificar só uma vez (abertura), sem duplicar pela genérica');
+});
+
+test('salvar um pedido de peça (transição específica) NÃO duplica com a notificação genérica de atualização', async () => {
+  const cookieAbre = await cadastrarELogar('atualizacao.dup.abre', 'Encarregado');
+  const cookieTecnico = await cadastrarELogar('atualizacao.dup.tecnico', 'Manutencao');
+  const cookieEncarregadoRecebe = await cadastrarELogar('atualizacao.dup.encarregado', 'Encarregado');
+
+  const id = 'MAN-push-atualizacao-dup-' + Date.now();
+  await abrirEAceitarChamado(id, cookieAbre, cookieTecnico);
+
+  const subEncarregadoRecebe = subscriptionReal('atualizacao-dup-encarregado');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieEncarregadoRecebe },
+    body: JSON.stringify({ subscription: subEncarregadoRecebe }),
+  });
+
+  // Técnico abre um pedido de peça de verdade (transição) — dispara a
+  // notificação ESPECÍFICA de pedido de peça; a genérica de atualização
+  // NÃO deveria disparar também pra este mesmo salvamento (evitar
+  // duplicar aviso pro mesmo evento).
+  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieTecnico },
+    body: JSON.stringify(payloadChamado(id, { situacao: 'Em Manutencao', aguardandoPecas: 'Sim', pecasComprar: 'Correia push' })),
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  const total = pushesRecebidos.filter(p => p.caminho === '/atualizacao-dup-encarregado').length;
+  assert.equal(total, 1, 'não deveria duplicar: só a notificação específica de pedido de peça, não a genérica também');
+});
+
+test('atualizar um agendamento de manutenção programada já existente (aprovar) notifica pela atualização genérica', async () => {
+  const cookieCria = await cadastrarELogar('atualizacao.prog.cria', 'Encarregado');
+  const cookieAprova = await cadastrarELogar('atualizacao.prog.aprova', 'Encarregado');
+  const cookieOutroRecebe = await cadastrarELogar('atualizacao.prog.outro', 'Supervisao');
+
+  const id = 'MAN-PROG-push-atualizacao-1-' + Date.now();
+  const agendamentoBase = {
+    id, data: '2026-08-20', hora: '09:00', setor: 'Injetora', maquina: 'M-prog-push',
+    tipo: 'Preventiva', solicitante: 'joao.solicitante', status: 'Pendente',
+  };
+
+  await fetch(`${servidor.baseUrl}/manutencao/programada`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieCria },
+    body: JSON.stringify(agendamentoBase),
+  });
+
+  // Inscrição só DEPOIS da criação — de propósito, pra não confundir com
+  // a notificação de "agendamento criado" (outro evento, já testado
+  // noutro bloco).
+  const subOutroRecebe = subscriptionReal('atualizacao-prog-outro');
+  await fetch(`${servidor.baseUrl}/push/inscrever`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieOutroRecebe },
+    body: JSON.stringify({ subscription: subOutroRecebe }),
+  });
+
+  // Aprova o agendamento (update de um registro já existente) — dispara
+  // a notificação genérica de atualização.
+  const respAprova = await fetch(`${servidor.baseUrl}/manutencao/programada`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieAprova },
+    body: JSON.stringify({ ...agendamentoBase, status: 'Aprovado' }),
+  });
+  assert.equal(respAprova.status, 200);
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  assert.ok(pushesRecebidos.some(p => p.caminho === '/atualizacao-prog-outro'), 'deveria notificar a aprovação do agendamento pela atualização genérica');
 });

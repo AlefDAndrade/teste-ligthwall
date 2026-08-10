@@ -234,6 +234,8 @@ const rotasManutencao = require('./lib/rotas/manutencao.js')({
   notificarPecaRecebida: notificacoesPush.notificarPecaRecebida,
   notificarManutencaoProgramada: notificacoesPush.notificarManutencaoProgramada,
   notificarAceiteChamado: notificacoesPush.notificarAceiteChamado,
+  notificarAtualizacaoChamadoCorretivo: notificacoesPush.notificarAtualizacaoChamadoCorretivo,
+  notificarAtualizacaoManutencaoProgramada: notificacoesPush.notificarAtualizacaoManutencaoProgramada,
 });
 const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemAceita });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
