@@ -222,6 +222,67 @@
     }
   }
 
+  // Popula #sq-batteryId (formulário de registro) e #sq-dash-bat (filtro do
+  // Dashboard) a partir de LW.BATERIA_IDS — mesma fonte de verdade que
+  // Registrar Operação usa (populateSelects, operacao.js) e que
+  // Configurações → Bateria e Montagem usa pra cadastrar baterias.
+  //
+  // BUG CORRIGIDO (ver conversa que motivou esta mudança): antes, os dois
+  // <select>s tinham 13 <option>s FIXAS escritas à mão no HTML — 2 delas
+  // ("B5-7,5cm"/"B6-12cm") com um VALUE diferente do ID de verdade salvo em
+  // config.json ("B5-7.5"/"B6-12" aqui vs "B5-7,5cm"/"B6-12cm" lá). Registrar
+  // uma avaliação nova escolhendo qualquer uma dessas 2 baterias salvava um
+  // batteryId que NUNCA batia com o ID real da bateria — e o filtro de
+  // bateria do Dashboard (sq-dash-bat) nunca dava match nenhum pra essas 2
+  // baterias, mesmo com avaliações registradas de verdade pra elas. Fora
+  // isso, o cadastro de baterias é DINÂMICO (Configurações → Bateria e
+  // Montagem — adicionar/remover/renomear a qualquer momento), mas a lista
+  // fixa no HTML nunca acompanhava: uma bateria nova cadastrada não
+  // aparecia pra escolher aqui até alguém editar o HTML à mão.
+  //
+  // Corrigido de raiz: os dois <select>s agora são sempre regenerados a
+  // partir da MESMA lista usada em qualquer outro lugar do app — nunca mais
+  // duas fontes divergentes. As <option>s que continuam no HTML (ver
+  // page-setor-qualidade.html) viram só um FALLBACK, pro campo nunca ficar
+  // vazio antes do config carregar (mesmo raciocínio de "Carregando…" em
+  // sq-mountType) ou em harness de teste sem config nenhum (ver
+  // test/helpers/setor-qualidade-dom.js, que devolve LW.BATERIA_IDS=[] de
+  // propósito) — se a lista ainda estiver vazia quando isto rodar, não mexe
+  // em nada, mantém o fallback do HTML como está.
+  function _carregarOpcoesBaterias() {
+    const aplicar = () => {
+      const lista = (typeof LW !== 'undefined' && Array.isArray(LW.BATERIA_IDS)) ? LW.BATERIA_IDS : [];
+      if (!lista.length) return; // config ainda não carregou (ou harness de teste) — mantém o fallback do HTML
+      const ids = lista.map(b => (typeof b === 'string' ? b : b.id)).filter(Boolean);
+
+      const selForm = document.getElementById('sq-batteryId');
+      if (selForm) {
+        const atual = selForm.value;
+        selForm.innerHTML = ids.map(id => `<option value="${id}">${id}</option>`).join('');
+        if (atual && ids.includes(atual)) selForm.value = atual;
+      }
+
+      const selFiltro = document.getElementById('sq-dash-bat');
+      if (selFiltro) {
+        const atual = selFiltro.value;
+        selFiltro.innerHTML = '<option value="">Todas</option>' +
+          ids.map(id => `<option value="${id}">${id}</option>`).join('');
+        if (atual && (atual === '' || ids.includes(atual))) selFiltro.value = atual;
+      }
+    };
+    // Mesmo raciocínio de _aplicarOrdemPaletes, acima (mesma classe de
+    // corrida): esta função roda em init(), que dispara ANTES de
+    // loadConfig() (data.js) necessariamente ter terminado o fetch de
+    // config.json — LW.waitConfig garante que só aplica depois que
+    // LW.BATERIA_IDS de verdade está pronto, sem travar nada nesse meio
+    // tempo (o fallback do HTML cobre a espera).
+    if (typeof LW !== 'undefined' && typeof LW.waitConfig === 'function') {
+      LW.waitConfig(aplicar);
+    } else {
+      aplicar();
+    }
+  }
+
   // Migração única — instalações de antes desta mudança têm as
   // combinações separadas em cfg.marcadores_qualidade.opcoes. Copia cada
   // uma pro campo combinacaoAvaliacao do tipo correspondente (por código
@@ -2070,21 +2131,22 @@
   }
 
   // Seleciona no <select> de ID da Bateria (sq-batteryId) um valor que pode
-  // não existir entre as <option>s fixas do HTML (só 13 baterias
-  // hardcoded, ver page-setor-qualidade.html) — cadastro de baterias é
-  // dinâmico (LW.BATERIA_IDS, configurável em Registro de Baterias), então
-  // uma avaliação salva ou uma operação da fila podem referenciar uma
-  // bateria fora dessa lista fixa (bateria nova, cadastrada depois, ou só
-  // convenção de nome divergente: ex. "B5-7,5cm" em Registro de Baterias
-  // vs "B5-7.5" aqui). Sem checar isso, sel.value = bid que não bate com
-  // nenhuma <option> é ignorado silenciosamente pelo navegador — o select
-  // fica na primeira opção (ou vazio) sem nenhum aviso, e some com o ID
-  // que deveria estar lá. Usado tanto no prefill da fila
-  // (_prefillFromOperacao) quanto ao reabrir uma avaliação já registrada
-  // (_carregarAvaliacaoNoFormulario — Espelho/Histórico), que é onde esse
-  // problema apareceu de fato: bateria salva já tinha saído das <option>s
-  // fixas, editar pelo Espelho abria o campo vazio e a correção não dava
-  // pra salvar (registerEvaluation exige o campo preenchido).
+  // não existir entre as <option>s atuais — desde _carregarOpcoesBaterias
+  // (acima), o <select> já é regenerado a partir de LW.BATERIA_IDS (nunca
+  // mais fixo), então isso só acontece mesmo num caso legítimo: uma
+  // avaliação salva referenciando uma bateria que EXISTIA na época do
+  // registro mas foi removida/renomeada depois em Configurações → Bateria e
+  // Montagem — não está mais entre as baterias cadastradas hoje, mas a
+  // avaliação antiga continua com aquele ID gravado. Sem checar isso,
+  // sel.value = bid que não bate com nenhuma <option> é ignorado
+  // silenciosamente pelo navegador — o select fica na primeira opção (ou
+  // vazio) sem nenhum aviso, e some com o ID que deveria estar lá. Usado
+  // tanto no prefill da fila (_prefillFromOperacao) quanto ao reabrir uma
+  // avaliação já registrada (_carregarAvaliacaoNoFormulario — Espelho/
+  // Histórico), que é onde esse problema apareceu de fato: bateria salva
+  // já tinha saído da lista, editar pelo Espelho abria o campo vazio e a
+  // correção não dava pra salvar (registerEvaluation exige o campo
+  // preenchido).
   function _selecionarBateriaNoForm(bid) {
     if (!bid) return;
     const sel = document.getElementById('sq-batteryId');
@@ -3058,15 +3120,13 @@
     palletTypes = [item.montagem?.pallet1, item.montagem?.pallet2, item.montagem?.pallet3, item.montagem?.pallet4];
     slabConfig  = {};
     updateMountTypeDropdown();
-    // bug: sq-batteryId é um <select> com só 13 <option>s fixas no HTML,
-    // mas o cadastro de baterias é dinâmico — uma avaliação salva pode
-    // referenciar uma bateria fora dessa lista. Atribuir .value direto
-    // (como antes) falha em silêncio quando não existe <option>
-    // correspondente: o campo fica vazio/errado e registerEvaluation
-    // recusa salvar a correção por "faltar" o ID da bateria, mesmo a
-    // avaliação já tendo uma. _selecionarBateriaNoForm injeta a <option>
-    // que falta antes de selecionar (mesma correção já usada em
-    // _prefillFromOperacao, acima).
+    // sq-batteryId agora é regenerado a partir de LW.BATERIA_IDS (ver
+    // _carregarOpcoesBaterias), mas uma avaliação salva pode referenciar
+    // uma bateria já removida/renomeada do cadastro desde então — pra
+    // esse caso, _selecionarBateriaNoForm injeta a <option> que falta
+    // antes de selecionar (mesma correção já usada em
+    // _prefillFromOperacao, acima; ver comentário lá pro histórico
+    // completo do bug original).
     _selecionarBateriaNoForm(item.batteryId || 'B1');
     // Mostra a Sequência do Dia REAL desta avaliação (a que foi calculada
     // no servidor quando ela foi registrada) — não recalcula pra "próximo
@@ -4753,8 +4813,10 @@
     calcularMontagemDoRegistro: _montagemDoRegistro,
     getExpectedType,
     aplicarOrdemPaletes: _aplicarOrdemPaletes,
+    carregarOpcoesBaterias: _carregarOpcoesBaterias,
     init() {
       _carregarOpcoesMontagem();
+      _carregarOpcoesBaterias();
       carregarAvaliacoesQualidade();
       _renderReferenciaMotivos();
       _aplicarOrdemPaletes();

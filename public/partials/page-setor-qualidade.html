@@ -48,9 +48,15 @@
             <div class="form-group">
               <label class="form-label">Bateria</label>
               <select class="form-input form-select" id="sq-dash-bat" style="width:140px;">
+                <!-- Mesmo fallback estático de sq-batteryId, acima — ver
+                     comentário lá. IDs corrigidos ("B5-7,5cm"/"B6-12cm") pelo
+                     mesmo motivo: com o ID errado, filtrar o Dashboard por
+                     essas 2 baterias nunca dava match nenhum (item.batteryId
+                     nunca era igual a "B5-7.5"/"B6-12" — o ID de verdade
+                     salvo em qualquer avaliação é o de config.json). -->
                 <option value="">Todas</option>
                 <option value="B1">B1</option><option value="B2">B2</option><option value="B3">B3</option>
-                <option value="B4">B4</option><option value="B5-7.5">B5-7,5cm</option><option value="B6-12">B6-12cm</option>
+                <option value="B4">B4</option><option value="B5-7,5cm">B5-7,5cm</option><option value="B6-12cm">B6-12cm</option>
                 <option value="B7">B7</option><option value="B8">B8</option><option value="B9">B9</option>
                 <option value="B10">B10</option><option value="B11">B11</option><option value="B12">B12</option><option value="B13">B13</option>
               </select>
@@ -206,8 +212,20 @@
               <div class="form-group">
                 <label class="form-label">ID da Bateria</label>
                 <select class="form-input form-select" id="sq-batteryId" onchange="SQ.autoSetThickness()">
+                  <!-- Fallback estático — só usado se SQ._carregarOpcoesBaterias()
+                       ainda não rodou (ex: config.json não carregou a tempo) ou
+                       não tem nenhuma bateria cadastrada (ex: harness de teste,
+                       ver test/helpers/setor-qualidade-dom.js). Fonte de
+                       verdade de verdade é config.json (LW.BATERIA_IDS,
+                       cadastrado em Registro de Baterias) — nunca mais editar
+                       esta lista aqui à mão, ver setor-qualidade.js. IDs
+                       corrigidos pra bater com config.json de verdade
+                       ("B5-7,5cm"/"B6-12cm", não "B5-7.5"/"B6-12" — eram
+                       DIFERENTES, causava um chamado novo salvar um ID que
+                       nunca batia com a bateria real, ver conversa que
+                       motivou esta correção). -->
                   <option value="B1">B1</option><option value="B2">B2</option><option value="B3">B3</option>
-                  <option value="B4">B4</option><option value="B5-7.5">B5-7,5cm</option><option value="B6-12">B6-12cm</option>
+                  <option value="B4">B4</option><option value="B5-7,5cm">B5-7,5cm</option><option value="B6-12cm">B6-12cm</option>
                   <option value="B7">B7</option><option value="B8">B8</option><option value="B9">B9</option>
                   <option value="B10">B10</option><option value="B11">B11</option><option value="B12">B12</option><option value="B13">B13</option>
                 </select>

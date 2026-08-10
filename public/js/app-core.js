@@ -387,6 +387,7 @@
         // a página, mas deixa a tela sempre consistente de qualquer
         // forma) de o config mudar sem um reload completo no meio.
         SQ.aplicarOrdemPaletes();
+        SQ.carregarOpcoesBaterias();
       }
 
       // Manutenção — mesmo padrão de guarda "só uma vez, na 1ª vez que
