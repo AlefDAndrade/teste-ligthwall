@@ -49,6 +49,9 @@
           <button type="button" id="cfg-nav-paradas" onclick="cfgMostrarSecao('paradas')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             ⏸️ Motivos de Parada</button>
+          <button type="button" id="cfg-nav-tipos-manutencao" onclick="cfgMostrarSecao('tipos-manutencao')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🔧 Tipos de Manutenção</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -630,6 +633,32 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Motivos de Parada ========== -->
+
+          <!-- ========== SEÇÃO: Tipos de Manutenção ========== -->
+          <div id="cfg-secao-tipos-manutencao" style="display:none">
+            <div class="card-title">🔧 Tipos de Manutenção</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Tipos disponíveis para escolher ao abrir um chamado corretivo ou agendar uma manutenção programada
+              (Registro de Manutenção). Adicionar, remover ou renomear aqui reflete na hora nos 3 selects daquela
+              tela (filtro, chamado corretivo e manutenção programada).
+            </p>
+            <div id="cfg-tipos-manutencao-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+            </div>
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div
+                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Novo Tipo</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
+                  <label class="form-label">Descrição do Tipo</label>
+                  <input class="form-input" id="cfg-tipo-manutencao-novo" placeholder="Ex: Hidráulica"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarTipoManutencao();}">
+                </div>
+                <button class="btn btn-outline-accent" onclick="cfgAdicionarTipoManutencao()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Tipos de Manutenção ========== -->
 
         </div>
       </div>

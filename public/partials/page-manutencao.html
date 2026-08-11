@@ -51,6 +51,11 @@
       <div class="man-filter-group"><label><i class="fas fa-industry"></i> Máquina</label><input type="text" id="man-filtroMaquina" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
       <div class="man-filter-group"><label><i class="fas fa-building"></i> Setor</label><input type="text" id="man-filtroSetor" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
       <div class="man-filter-group"><label><i class="fas fa-bolt"></i> Tipo</label>
+        <!-- Fallback estático — MAN.carregarOpcoesTipoManutencao()
+             (manutencao.js) regenera a partir de config.json
+             (LW.TIPO_MANUTENCAO_OPTS, configurável em Configurações >
+             Tipos de Manutenção) assim que carregar; isto só cobre o
+             instante antes disso. -->
         <select id="man-filtroTipo" onchange="aplicarFiltrosCorretiva()">
           <option value="">Todos</option>
           <option value="Elétrica">Elétrica</option>
@@ -152,6 +157,7 @@
               <input type="hidden" id="man-manPrioridade">
             </div>
           </div>
+          <!-- Fallback estático — ver comentário em man-filtroTipo, acima. -->
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-manTipoManutencao"><option value="">Selecione...</option><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
           <div class="man-form-row">
             <div class="man-form-label"><i class="fas fa-tag"></i> Tipo de Etiqueta</div>
@@ -356,6 +362,7 @@
           <div style="padding:0 16px 8px 16px; color:var(--blue); font-weight:600;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-progSetor" placeholder="Ex: Injetora"></div></div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-progMaquina" placeholder="Ex: M01"></div></div>
+          <!-- Fallback estático — ver comentário em man-filtroTipo, acima. -->
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-progTipo"><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
           <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Solicitante</div><div class="man-form-field"><input type="text" id="man-progSolicitante" placeholder="Seu nome"></div></div>
         </div>

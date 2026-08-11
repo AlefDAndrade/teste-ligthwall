@@ -174,5 +174,11 @@
       "Pausa de Descanso",
       "Outro"
     ]
+  },
+  "tipos_manutencao": {
+    "opcoes": [
+      "Elétrica",
+      "Mecânica"
+    ]
   }
 }

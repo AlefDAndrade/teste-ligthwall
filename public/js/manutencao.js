@@ -2728,10 +2728,55 @@
   // as listas chegarem do servidor (ver carregarTudoDoServidor(), início
   // do arquivo) ANTES de renderizar qualquer coisa, senão a primeira
   // renderização mostraria tudo vazio por um instante.
+  // Popula #man-filtroTipo, #man-manTipoManutencao e #man-progTipo a
+  // partir de LW.TIPO_MANUTENCAO_OPTS — mesmo padrão de
+  // _carregarOpcoesBaterias() em setor-qualidade.js (ver comentário lá
+  // pro histórico completo desse padrão). Os 3 selects tinham só
+  // "Elétrica"/"Mecânica" fixos no HTML (ver page-manutencao.html);
+  // agora são regenerados a partir de config.json (Configurações > Tipos
+  // de Manutenção), preservando o valor já selecionado quando possível.
+  // As <option>s que continuam no HTML viram só um FALLBACK, pro campo
+  // nunca ficar vazio antes do config carregar.
+  function carregarOpcoesTipoManutencao() {
+    const aplicar = () => {
+      const tipos = (typeof LW !== 'undefined' && Array.isArray(LW.TIPO_MANUTENCAO_OPTS)) ? LW.TIPO_MANUTENCAO_OPTS : [];
+      if (!tipos.length) return; // config ainda não carregou — mantém o fallback do HTML
+
+      const selFiltro = document.getElementById('man-filtroTipo');
+      if (selFiltro) {
+        const atual = selFiltro.value;
+        selFiltro.innerHTML = '<option value="">Todos</option>' +
+          tipos.map(t => `<option value="${t}">${t}</option>`).join('');
+        if (atual && (atual === '' || tipos.includes(atual))) selFiltro.value = atual;
+      }
+
+      const selChamado = document.getElementById('man-manTipoManutencao');
+      if (selChamado) {
+        const atual = selChamado.value;
+        selChamado.innerHTML = '<option value="">Selecione...</option>' +
+          tipos.map(t => `<option value="${t}">${t}</option>`).join('');
+        if (atual && (atual === '' || tipos.includes(atual))) selChamado.value = atual;
+      }
+
+      const selProgramada = document.getElementById('man-progTipo');
+      if (selProgramada) {
+        const atual = selProgramada.value;
+        selProgramada.innerHTML = tipos.map(t => `<option value="${t}">${t}</option>`).join('');
+        if (atual && tipos.includes(atual)) selProgramada.value = atual;
+      }
+    };
+    if (typeof LW !== 'undefined' && typeof LW.waitConfig === 'function') {
+      LW.waitConfig(aplicar);
+    } else {
+      aplicar();
+    }
+  }
+
   async function init() {
     const progData = document.getElementById('man-progData');
     if (progData) progData.valueAsDate = new Date();
     navegar('manutencao');
+    carregarOpcoesTipoManutencao();
     await carregarTudoDoServidor();
     renderDashboard(); renderCorretiva(); renderProgramada();
     _aplicarVisibilidadeDeEdicao();
@@ -2837,6 +2882,7 @@
     toggleTipo,
     verificarEAgendiar,
     init,
+    carregarOpcoesTipoManutencao,
   };
   window.abrirDetalhesProgramada = MAN.abrirDetalhesProgramada;
   window.abrirHistorico = MAN.abrirHistorico;

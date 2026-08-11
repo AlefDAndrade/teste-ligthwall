@@ -395,6 +395,13 @@
       if (pageId === 'manutencao' && !window._manInit) {
         window._manInit = true;
         MAN.init();
+      } else if (pageId === 'manutencao') {
+        // "Tipos de Manutenção" (Configurações > Tipos de Manutenção)
+        // reaplicado ao reentrar — mesmo raciocínio de "Ordem dos
+        // Paletes"/"Bateria" no Setor de Qualidade, acima (ver comentário
+        // lá): cobre o caso raro de o config mudar sem um reload completo
+        // no meio.
+        MAN.carregarOpcoesTipoManutencao();
       }
 
       // Tour guiado automático no 1º acesso a cada página (ver tour.js) —
@@ -2173,7 +2180,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas') && !_paginaPermitida('config-tipos-manutencao')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -2185,6 +2192,9 @@
         // acima: editar aqui não deve mexer em LW.MOTIVO_PARADA_OPTS
         // direto até salvar de verdade.
         motivosParada: [...LW.MOTIVO_PARADA_OPTS],
+        // Tipos de Manutenção (Configurações → Tipos de Manutenção) —
+        // mesmo raciocínio de motivosParada, acima.
+        tiposManutencao: [...LW.TIPO_MANUTENCAO_OPTS],
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
@@ -2204,7 +2214,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes', 'paradas'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes', 'paradas', 'tipos-manutencao'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2226,7 +2236,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas', 'tipos-manutencao': 'cfg-nav-tipos-manutencao' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2284,6 +2294,7 @@
       const elSql = document.getElementById('cfg-secao-sql');
       const elNotificacoes = document.getElementById('cfg-secao-notificacoes');
       const elParadas = document.getElementById('cfg-secao-paradas');
+      const elTiposManutencao = document.getElementById('cfg-secao-tipos-manutencao');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elPaletes) elPaletes.style.display = secao === 'paletes' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
@@ -2294,6 +2305,7 @@
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
       if (elNotificacoes) elNotificacoes.style.display = secao === 'notificacoes' ? 'block' : 'none';
       if (elParadas) elParadas.style.display = secao === 'paradas' ? 'block' : 'none';
+      if (elTiposManutencao) elTiposManutencao.style.display = secao === 'tipos-manutencao' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
@@ -2307,6 +2319,7 @@
       const navSql = document.getElementById('cfg-nav-sql');
       const navNotificacoes = document.getElementById('cfg-nav-notificacoes');
       const navParadas = document.getElementById('cfg-nav-paradas');
+      const navTiposManutencao = document.getElementById('cfg-nav-tipos-manutencao');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navPaletes) navPaletes.style.cssText = secao === 'paletes' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
@@ -2317,6 +2330,7 @@
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navNotificacoes) navNotificacoes.style.cssText = secao === 'notificacoes' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navParadas) navParadas.style.cssText = secao === 'paradas' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navTiposManutencao) navTiposManutencao.style.cssText = secao === 'tipos-manutencao' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
@@ -2805,6 +2819,18 @@
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum motivo cadastrado.</span>';
       }
 
+      // Tipos de Manutenção (Configurações → Tipos de Manutenção) —
+      // mesmo padrão de Motivos de Parada, acima.
+      const ltm = document.getElementById('cfg-tipos-manutencao-lista');
+      if (ltm) {
+        ltm.innerHTML = _cfgDados.tiposManutencao.map((t, i) => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
+      <span style="font-size:.85rem;color:var(--text)">${t}</span>
+      <button onclick="cfgRemoverTipoManutencao(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum tipo cadastrado.</span>';
+      }
+
       // "Definir Paletes" (ver public/js/paletes-config.js) — função
       // global definida naquele arquivo, chamável daqui porque scripts
       // sem módulo compartilham o mesmo escopo global da página (mesmo
@@ -2882,6 +2908,32 @@
       );
       if (!confirmou) return;
       _cfgDados.motivosParada.splice(i, 1);
+      cfgRenderTudo();
+    }
+
+    // ---- Tipos de Manutenção (Configurações → Tipos de Manutenção) ----
+    // Mesmo padrão de cfgAdicionarMotivoParada/cfgRemoverMotivoParada,
+    // acima — lista simples de strings.
+    function cfgAdicionarTipoManutencao() {
+      const input = document.getElementById('cfg-tipo-manutencao-novo');
+      const tipo = input.value.trim();
+      if (!tipo) { LW.mostrarAlerta('Digite a descrição do tipo (ex: Hidráulica).', { tipo: 'aviso' }); return; }
+      if (_cfgDados.tiposManutencao.some(t => t.toLowerCase() === tipo.toLowerCase())) {
+        LW.mostrarAlerta('Este tipo já existe.', { tipo: 'aviso' });
+        return;
+      }
+      _cfgDados.tiposManutencao.push(tipo);
+      input.value = '';
+      cfgRenderTudo();
+    }
+
+    async function cfgRemoverTipoManutencao(i) {
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover o tipo "${_cfgDados.tiposManutencao[i]}"?`,
+        { titulo: 'Remover tipo', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+      _cfgDados.tiposManutencao.splice(i, 1);
       cfgRenderTudo();
     }
 
@@ -3051,6 +3103,7 @@
       if (!_cfgDados.baterias.length) { LW.mostrarAlerta('Adicione ao menos uma bateria.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.montagens.length) { LW.mostrarAlerta('Adicione ao menos um tipo de montagem.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.motivosParada.length) { LW.mostrarAlerta('Adicione ao menos um motivo de parada.', { tipo: 'aviso' }); return; }
+      if (!_cfgDados.tiposManutencao.length) { LW.mostrarAlerta('Adicione ao menos um tipo de manutenção.', { tipo: 'aviso' }); return; }
 
       // "Definir Paletes" (ver public/js/paletes-config.js) — valida
       // ANTES de tentar salvar (mesmo raciocínio das duas checagens
@@ -3126,6 +3179,9 @@
           // (rascunho desta tela), nunca herdado de cfgAtual pra este
           // campo específico.
           motivos_parada: { opcoes: _cfgDados.motivosParada },
+          // Tipos de Manutenção — mesmo raciocínio de motivos_parada,
+          // acima.
+          tipos_manutencao: { opcoes: _cfgDados.tiposManutencao },
           // Preserva volume_por_placa — usa o que acabou de vir do
           // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.

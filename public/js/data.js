@@ -41,6 +41,12 @@ let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
 // motivos que sempre existiram, pra instalações de antes desta mudança
 // não perderem nenhum motivo já em uso.
 let MOTIVO_PARADA_OPTS = [];
+// Tipos de Manutenção (Registro de Chamado/Manutenção Programada →
+// Configurações → Tipos de Manutenção) — mesmo raciocínio de
+// MOTIVO_PARADA_OPTS, acima: antes fixo em 2 valores ("Elétrica"/
+// "Mecânica") em page-manutencao.html, agora configurável. Fallback
+// (defaults abaixo, em loadConfig) mantém os mesmos 2 tipos de sempre.
+let TIPO_MANUTENCAO_OPTS = [];
 
 // Dispositivos autorizados a controlar operação (voltou — ver conversa que
 // motivou a mudança) — [{ deviceId, nome, autorizadoEm }], espelho em
@@ -425,6 +431,16 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "motivos_parada.opcoes" válido — mantendo motivos já carregados.');
     }
 
+    // Tipos de Manutenção — mesmo padrão de Motivos de Parada, acima.
+    if (Array.isArray(cfg.tipos_manutencao?.opcoes) && cfg.tipos_manutencao.opcoes.length) {
+      TIPO_MANUTENCAO_OPTS = cfg.tipos_manutencao.opcoes;
+    } else if (!TIPO_MANUTENCAO_OPTS.length) {
+      console.warn('[LW] config.json sem "tipos_manutencao.opcoes" válido — usando fallback de tipos de manutenção.');
+      TIPO_MANUTENCAO_OPTS = ['Elétrica', 'Mecânica'];
+    } else {
+      console.warn('[LW] config.json sem "tipos_manutencao.opcoes" válido — mantendo tipos de manutenção já carregados.');
+    }
+
 
     if (Array.isArray(cfg.volume_por_placa)) {
       VOLUME_POR_PLACA = cfg.volume_por_placa.map(v => ({ label: v.label, volume: v.volume }));
@@ -510,6 +526,7 @@ async function loadConfig() {
       'Reunião / Treinamento', 'Parada de Qualidade', 'Aguardando Liberação',
       'Pausa de Descanso', 'Outro',
     ];
+    TIPO_MANUTENCAO_OPTS = ['Elétrica', 'Mecânica'];
     DISPOSITIVOS_AUTORIZADOS = []; // config.json indisponível — nenhum dispositivo autorizado conhecido
   }
 
@@ -2357,6 +2374,7 @@ window.LW = {
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
   get MOTIVO_PARADA_OPTS() { return MOTIVO_PARADA_OPTS; },
+  get TIPO_MANUTENCAO_OPTS() { return TIPO_MANUTENCAO_OPTS; },
 
 
   // Config loader
