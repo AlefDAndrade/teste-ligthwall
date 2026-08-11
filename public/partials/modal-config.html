@@ -46,6 +46,9 @@
           <button type="button" id="cfg-nav-notificacoes" onclick="cfgMostrarSecao('notificacoes')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔔 Notificações</button>
+          <button type="button" id="cfg-nav-paradas" onclick="cfgMostrarSecao('paradas')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            ⏸️ Motivos de Parada</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -603,6 +606,30 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Notificações ========== -->
+
+          <!-- ========== SEÇÃO: Motivos de Parada ========== -->
+          <div id="cfg-secao-paradas" style="display:none">
+            <div class="card-title">⏸️ Motivos de Parada</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Motivos disponíveis para escolher ao registrar uma parada de máquina (Registro de Paradas). Adicionar,
+              remover ou renomear aqui reflete na hora nos dois selects daquela tela (formulário e filtro).
+            </p>
+            <div id="cfg-paradas-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div
+                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Novo Motivo</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
+                  <label class="form-label">Descrição do Motivo</label>
+                  <input class="form-input" id="cfg-parada-motivo-novo" placeholder="Ex: Falta de Energia"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarMotivoParada();}">
+                </div>
+                <button class="btn btn-outline-accent" onclick="cfgAdicionarMotivoParada()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Motivos de Parada ========== -->
 
         </div>
       </div>

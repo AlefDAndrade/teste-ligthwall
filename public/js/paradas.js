@@ -11,22 +11,25 @@
 
   const CLASSIFICACAO_OPTS = ['Não Planejada', 'Planejada'];
 
-  const MOTIVO_OPTS = [
-    'Manutenção Corretiva',
-    'Manutenção Preventiva',
-    'Falta de Material',
-    'Falta de Operador',
-    'Setup / Troca de Produto',
-    'Problema Elétrico',
-    'Problema Mecânico',
-    'Problema Hidráulico',
-    'Limpeza / Organização',
-    'Reunião / Treinamento',
-    'Parada de Qualidade',
-    'Aguardando Liberação',
-    'Pausa de Descanso',
-    'Outro',
-  ];
+  // Motivos de Parada — ANTES era uma lista fixa aqui (14 motivos
+  // hardcoded). Agora vem de LW.MOTIVO_PARADA_OPTS (config.json →
+  // motivos_parada.opcoes), configurável em Configurações → Motivos de
+  // Parada. Fallback (mesmos 14 motivos de sempre) só pro caso raro de
+  // preencherSelects()/preencherFiltroMotivo() rodarem ANTES do
+  // config.json terminar de carregar (ver init(), mais abaixo, que
+  // espera LW.waitConfig antes de chamar as duas) — nunca deve aparecer
+  // vazio pro usuário mesmo nesse meio tempo.
+  function _motivoOpts() {
+    return (typeof LW !== 'undefined' && Array.isArray(LW.MOTIVO_PARADA_OPTS) && LW.MOTIVO_PARADA_OPTS.length)
+      ? LW.MOTIVO_PARADA_OPTS
+      : [
+          'Manutenção Corretiva', 'Manutenção Preventiva', 'Falta de Material',
+          'Falta de Operador', 'Setup / Troca de Produto', 'Problema Elétrico',
+          'Problema Mecânico', 'Problema Hidráulico', 'Limpeza / Organização',
+          'Reunião / Treinamento', 'Parada de Qualidade', 'Aguardando Liberação',
+          'Pausa de Descanso', 'Outro',
+        ];
+  }
 
   // ── Estado local ──────────────────────────────────────────────────────────
 
@@ -140,7 +143,7 @@
     if (!selMotivo || !selClass) return;
 
     selMotivo.innerHTML = '<option value="">Selecione o motivo</option>' +
-      MOTIVO_OPTS.map(m => `<option value="${m}">${m}</option>`).join('');
+      _motivoOpts().map(m => `<option value="${m}">${m}</option>`).join('');
 
     selClass.innerHTML = '<option value="">Selecione</option>' +
       CLASSIFICACAO_OPTS.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -488,7 +491,7 @@
     const sel = document.getElementById('paradas-filtro-motivo');
     if (!sel) return;
     sel.innerHTML = '<option value="">Todos os motivos</option>' +
-      MOTIVO_OPTS.map(m => `<option value="${m}">${m}</option>`).join('');
+      _motivoOpts().map(m => `<option value="${m}">${m}</option>`).join('');
   }
 
   // ── Exclusão ──────────────────────────────────────────────────────────────
@@ -519,6 +522,16 @@
   async function init() {
     preencherSelects();
     preencherFiltroMotivo();
+    // Reaplica assim que config.json terminar de carregar (ver
+    // _motivoOpts, acima) — cobre o caso de init() rodar ANTES de
+    // loadConfig() ter terminado (ex: página recarrega direto em
+    // Paradas). Sem custo se já estiver pronto: LW.waitConfig dispara na
+    // hora. Reconstruir os 2 selects de novo não perde nada: nenhum dos
+    // dois tem valor selecionado ainda neste ponto do fluxo (é logo na
+    // abertura da página).
+    if (typeof LW !== 'undefined' && typeof LW.waitConfig === 'function') {
+      LW.waitConfig(() => { preencherSelects(); preencherFiltroMotivo(); });
+    }
 
     // Preenche início/fim padrão (últimos 30 dias)
     const hoje = typeof todayBrasilia === 'function' ? todayBrasilia() : new Date().toISOString().slice(0, 10);

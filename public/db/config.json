@@ -156,5 +156,23 @@
       "label": "2/P - 12 cm",
       "volume": 0.1903
     }
-  ]
+  ],
+  "motivos_parada": {
+    "opcoes": [
+      "Manutenção Corretiva",
+      "Manutenção Preventiva",
+      "Falta de Material",
+      "Falta de Operador",
+      "Setup / Troca de Produto",
+      "Problema Elétrico",
+      "Problema Mecânico",
+      "Problema Hidráulico",
+      "Limpeza / Organização",
+      "Reunião / Treinamento",
+      "Parada de Qualidade",
+      "Aguardando Liberação",
+      "Pausa de Descanso",
+      "Outro"
+    ]
+  }
 }

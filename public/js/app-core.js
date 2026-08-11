@@ -2173,13 +2173,18 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
       _cfgDados = {
         baterias: LW.BATERIA_IDS.map(b => ({ id: b.id, label: b.label || '', bercos: b.bercos || 20 })),
         montagens: LW.MONTAGEM_OPCOES.map(_montagemDoConfigParaUI),
+        // Motivos de Parada (Configurações → Motivos de Parada) — cópia
+        // independente (spread), mesmo raciocínio de baterias/montagens
+        // acima: editar aqui não deve mexer em LW.MOTIVO_PARADA_OPTS
+        // direto até salvar de verdade.
+        motivosParada: [...LW.MOTIVO_PARADA_OPTS],
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
@@ -2199,7 +2204,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes', 'paradas'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2221,7 +2226,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2278,6 +2283,7 @@
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       const elNotificacoes = document.getElementById('cfg-secao-notificacoes');
+      const elParadas = document.getElementById('cfg-secao-paradas');
       if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
       if (elPaletes) elPaletes.style.display = secao === 'paletes' ? 'block' : 'none';
       if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
@@ -2287,6 +2293,7 @@
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
       if (elNotificacoes) elNotificacoes.style.display = secao === 'notificacoes' ? 'block' : 'none';
+      if (elParadas) elParadas.style.display = secao === 'paradas' ? 'block' : 'none';
 
       const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
       const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
@@ -2299,6 +2306,7 @@
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       const navNotificacoes = document.getElementById('cfg-nav-notificacoes');
+      const navParadas = document.getElementById('cfg-nav-paradas');
       if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navPaletes) navPaletes.style.cssText = secao === 'paletes' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
@@ -2308,6 +2316,7 @@
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navNotificacoes) navNotificacoes.style.cssText = secao === 'notificacoes' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navParadas) navParadas.style.cssText = secao === 'paradas' ? ESTILO_ATIVO : ESTILO_INATIVO;
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
@@ -2783,6 +2792,19 @@
 
       cfgPopularSelectsHibrida();
 
+      // Motivos de Parada (Configurações → Motivos de Parada) — lista
+      // simples de strings, mesmo padrão visual da lista de baterias
+      // acima, só sem os campos extras (dimensão/berços).
+      const lp = document.getElementById('cfg-paradas-lista');
+      if (lp) {
+        lp.innerHTML = _cfgDados.motivosParada.map((m, i) => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
+      <span style="font-size:.85rem;color:var(--text)">${m}</span>
+      <button onclick="cfgRemoverMotivoParada(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum motivo cadastrado.</span>';
+      }
+
       // "Definir Paletes" (ver public/js/paletes-config.js) — função
       // global definida naquele arquivo, chamável daqui porque scripts
       // sem módulo compartilham o mesmo escopo global da página (mesmo
@@ -2836,6 +2858,33 @@
       _cfgDados.baterias.splice(i, 1);
       cfgRenderTudo();
     }
+
+    // ---- Motivos de Parada (Configurações → Motivos de Parada) ----
+    // Mesmo padrão de cfgAdicionarBateria/cfgRemoverBateria, acima, só que
+    // pra uma lista simples de strings (sem campos extras).
+    function cfgAdicionarMotivoParada() {
+      const input = document.getElementById('cfg-parada-motivo-novo');
+      const motivo = input.value.trim();
+      if (!motivo) { LW.mostrarAlerta('Digite a descrição do motivo (ex: Falta de Energia).', { tipo: 'aviso' }); return; }
+      if (_cfgDados.motivosParada.some(m => m.toLowerCase() === motivo.toLowerCase())) {
+        LW.mostrarAlerta('Este motivo já existe.', { tipo: 'aviso' });
+        return;
+      }
+      _cfgDados.motivosParada.push(motivo);
+      input.value = '';
+      cfgRenderTudo();
+    }
+
+    async function cfgRemoverMotivoParada(i) {
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover o motivo "${_cfgDados.motivosParada[i]}"?`,
+        { titulo: 'Remover motivo', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+      _cfgDados.motivosParada.splice(i, 1);
+      cfgRenderTudo();
+    }
+
 
     // cfgAdicionarDimensao e cfgRemoverDimensao removidos — dimensão agora pertence à bateria
 
@@ -3001,6 +3050,7 @@
     async function cfgSalvar() {
       if (!_cfgDados.baterias.length) { LW.mostrarAlerta('Adicione ao menos uma bateria.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.montagens.length) { LW.mostrarAlerta('Adicione ao menos um tipo de montagem.', { tipo: 'aviso' }); return; }
+      if (!_cfgDados.motivosParada.length) { LW.mostrarAlerta('Adicione ao menos um motivo de parada.', { tipo: 'aviso' }); return; }
 
       // "Definir Paletes" (ver public/js/paletes-config.js) — valida
       // ANTES de tentar salvar (mesmo raciocínio das duas checagens
@@ -3071,6 +3121,11 @@
           baterias: { ids: _cfgDados.baterias },
           dimensoes: { opcoes: dimensoesOpcoes }, // mantido para compatibilidade com registros antigos
           tipos_montagem: { opcoes: novasOpcoesMontagem },
+          // Motivos de Parada — mesmo raciocínio de tipos_montagem, acima:
+          // sempre reconstruído do zero a partir de _cfgDados.motivosParada
+          // (rascunho desta tela), nunca herdado de cfgAtual pra este
+          // campo específico.
+          motivos_parada: { opcoes: _cfgDados.motivosParada },
           // Preserva volume_por_placa — usa o que acabou de vir do
           // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.

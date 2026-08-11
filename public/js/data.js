@@ -34,6 +34,13 @@ let MONTAGEM_OPCOES = [];
 let CIMENTICIA_POR_TIPO = {};
 let BATERIA_IDS = [];
 let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
+// Motivos de Parada (Registro de Paradas → Configurações → Motivos de
+// Parada) — antes fixo em MOTIVO_OPTS (public/js/paradas.js), agora
+// configurável pelo Administrador igual às baterias/tipos de montagem
+// acima. Fallback (defaults abaixo, em loadConfig) mantém os mesmos 14
+// motivos que sempre existiram, pra instalações de antes desta mudança
+// não perderem nenhum motivo já em uso.
+let MOTIVO_PARADA_OPTS = [];
 
 // Dispositivos autorizados a controlar operação (voltou — ver conversa que
 // motivou a mudança) — [{ deviceId, nome, autorizadoEm }], espelho em
@@ -400,6 +407,25 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "baterias.ids" válido — mantendo baterias já carregadas.');
     }
 
+    // Motivos de Parada — mesmo padrão de baterias/tipos de montagem,
+    // acima: lê de config.json, com fallback pros 14 motivos que sempre
+    // existiram (ver comentário na declaração de MOTIVO_PARADA_OPTS).
+    if (Array.isArray(cfg.motivos_parada?.opcoes) && cfg.motivos_parada.opcoes.length) {
+      MOTIVO_PARADA_OPTS = cfg.motivos_parada.opcoes;
+    } else if (!MOTIVO_PARADA_OPTS.length) {
+      console.warn('[LW] config.json sem "motivos_parada.opcoes" válido — usando fallback de motivos.');
+      MOTIVO_PARADA_OPTS = [
+        'Manutenção Corretiva', 'Manutenção Preventiva', 'Falta de Material',
+        'Falta de Operador', 'Setup / Troca de Produto', 'Problema Elétrico',
+        'Problema Mecânico', 'Problema Hidráulico', 'Limpeza / Organização',
+        'Reunião / Treinamento', 'Parada de Qualidade', 'Aguardando Liberação',
+        'Pausa de Descanso', 'Outro',
+      ];
+    } else {
+      console.warn('[LW] config.json sem "motivos_parada.opcoes" válido — mantendo motivos já carregados.');
+    }
+
+
     if (Array.isArray(cfg.volume_por_placa)) {
       VOLUME_POR_PLACA = cfg.volume_por_placa.map(v => ({ label: v.label, volume: v.volume }));
     } else if (!VOLUME_POR_PLACA.length) {
@@ -477,6 +503,13 @@ async function loadConfig() {
       { label: 'S/P - 12 cm', volume: 0.2196 },
       { label: '2/P - 12 cm', volume: 0.1903 },
     ]
+    MOTIVO_PARADA_OPTS = [
+      'Manutenção Corretiva', 'Manutenção Preventiva', 'Falta de Material',
+      'Falta de Operador', 'Setup / Troca de Produto', 'Problema Elétrico',
+      'Problema Mecânico', 'Problema Hidráulico', 'Limpeza / Organização',
+      'Reunião / Treinamento', 'Parada de Qualidade', 'Aguardando Liberação',
+      'Pausa de Descanso', 'Outro',
+    ];
     DISPOSITIVOS_AUTORIZADOS = []; // config.json indisponível — nenhum dispositivo autorizado conhecido
   }
 
@@ -2323,6 +2356,7 @@ window.LW = {
   get CIMENTICIA_POR_TIPO() { return CIMENTICIA_POR_TIPO; },
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
+  get MOTIVO_PARADA_OPTS() { return MOTIVO_PARADA_OPTS; },
 
 
   // Config loader
