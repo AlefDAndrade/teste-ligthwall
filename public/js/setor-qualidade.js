@@ -3303,6 +3303,21 @@
     return Object.entries(counts).map(([k,n]) => `${k}: ${n}`).join(', ') || '—';
   }
 
+  // Limpa os 4 filtros da aba "Registros" (busca por bateria, turno,
+  // período por data de desmoldagem) de uma vez e re-renderiza a tabela —
+  // mesmo padrão de LWParadas.limparFiltros() (paradas.js) e
+  // limparFiltrosProgramada()/limparFiltrosCorretiva() (manutencao.js):
+  // zera os campos no DOM e deixa renderHistory()/_historicoFiltrado()
+  // lerem os valores (já vazios) de novo, sem precisar duplicar o estado
+  // em outra variável.
+  function limparHistoryFiltros() {
+    ['sq-hist-search', 'sq-hist-turno', 'sq-hist-start', 'sq-hist-end'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    renderHistory();
+  }
+
   function renderHistory() {
     const d        = getData();
     const filtered = _historicoFiltrado();
@@ -4789,7 +4804,7 @@
     carregarFilaNaoAvaliadas,
     saveDraft, loadDraft, deleteDraft, viewDraft,
     registerEvaluation, viewHistoryRecord,
-    renderDashboard, renderHistory,
+    renderDashboard, renderHistory, limparHistoryFiltros,
     abrirExportModal, fecharExportModal,
     selecionarTodasColunasSQ,
     atualizarPreviewCountSQ,

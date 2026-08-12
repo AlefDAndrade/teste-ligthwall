@@ -514,6 +514,15 @@
               <label class="form-label">Desmoldagem até</label>
               <input class="form-input" type="date" id="sq-hist-end" onchange="SQ.renderHistory()" style="width:150px;">
             </div>
+            <!-- Limpar Filtros — mesmo padrão visual/posição de
+                 public/partials/page-paradas.html (LWParadas.limparFiltros)
+                 — label vazio pra alinhar o botão com a base dos outros
+                 campos (mesmo truque usado em page-manutencao.html,
+                 limparFiltrosProgramada). -->
+            <div class="form-group">
+              <label class="form-label">&nbsp;</label>
+              <button class="btn btn-ghost" style="height:34px" onclick="SQ.limparHistoryFiltros()" title="Limpar todos os filtros acima"><i class="fas fa-eraser"></i> Limpar</button>
+            </div>
           </div>
           <div>
             <div class="sq-empty" id="sq-hist-empty"><i class="fas fa-database"></i>Nenhum registro ainda.</div>
