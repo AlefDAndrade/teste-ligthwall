@@ -1329,6 +1329,7 @@
   ${_renderParadas}
   ${_labelPainel}
   ${_corPainel}
+  ${_totalPorPallet}
   ${_renderAvaliacao}
 
   _renderCabecalho(DETALHE.operacao || {});
