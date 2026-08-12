@@ -390,6 +390,7 @@
     // nunca "troca" pro combo anterior de `id` (ele pode nem ter um).
     if (conflito) _overrides[conflito.id] = '';
     _salvarOverrides();
+    _ordenarTabbarPorAtalho(); // combo mudou — navbar reflete na hora
     return { ok: true, substituiu: conflito ? { id: conflito.id, label: conflito.label } : null };
   }
 
@@ -397,6 +398,7 @@
   function _resetarAtalhos() {
     _overrides = {};
     _salvarOverrides();
+    _ordenarTabbarPorAtalho(); // volta pra ordem de fábrica na navbar também
   }
 
   /**
@@ -488,6 +490,72 @@
     target.classList.add('kb-active');
     // Remove o destaque após 1,5 s (é apenas um flash visual)
     setTimeout(() => target.classList.remove('kb-active'), 1500);
+  }
+
+  /* ──────────────────────────────────────────────────────────
+   * 4.1 ORDENAÇÃO DA NAVBAR PELO ATALHO
+   *
+   * A barra de abas (.tabbar-scroll, nav-tabbar.html) passa a refletir a
+   * ordem dos atalhos de navegação: primeiro as páginas com atalho
+   * NUMÉRICO (Alt+1, Alt+2... Alt+9, Alt+0 — nessa ordem "humana", como
+   * num teclado, não a ordem alfanumérica 0-9), depois as com atalho de LETRA
+   * (Alt+P, Alt+Q...), por último as sem nenhum atalho (ficam no fim, na
+   * ordem em que já apareciam no HTML). Se a pessoa personalizar um
+   * atalho (Configurações → Atalhos de Teclado), a navbar reordena na
+   * hora — ver chamadas a _ordenarTabbarPorAtalho() em _definirAtalho e
+   * _resetarAtalhos, mais abaixo, e no listener de
+   * 'lwkeyboard:overrides-carregados' (atalhos vindos do servidor).
+   * ────────────────────────────────────────────────────────── */
+
+  /** Classifica um combo pra fins de ordenação: [grupo, chave].
+   * grupo 0 = dígito (1..9,0 — 0 por último dentro do próprio grupo,
+   * como num teclado), grupo 1 = letra (ordem alfabética), grupo 2 = sem
+   * atalho (sempre por último). Só a ÚLTIMA tecla do combo importa aqui
+   * (a de fato pressionada por cima do Alt — ex.: em 'Alt+Shift+P' seria
+   * 'P'), já que é isso que a pessoa associa visualmente à posição. */
+  function _ordemDoCombo(combo) {
+    if (!combo) return [2, ''];
+    const tecla = combo.split('+').pop().toUpperCase();
+    if (/^[0-9]$/.test(tecla)) {
+      return [0, tecla === '0' ? '10' : '0' + tecla]; // '0' vai depois de '9'
+    }
+    return [1, tecla];
+  }
+
+  /** Reordena de fato os botões .nav-item dentro de .tabbar-scroll, com
+   * base no atalho EFETIVO (padrão ou personalizado) de cada um. Só
+   * reordena — nunca esconde nem cria/remove item (isso já é papel de
+   * _paginaPermitida/showPage). Não faz nada se a página atual não tiver
+   * a tabbar (ex.: tv.html). */
+  function _ordenarTabbarPorAtalho() {
+    const scroll = document.querySelector('.tabbar-scroll');
+    if (!scroll) return;
+
+    const itens = Array.from(scroll.querySelectorAll('.nav-item[data-page]'));
+    if (!itens.length) return;
+
+    itens.sort((a, b) => {
+      const cfgA = NAV_CONFIG.find(n => n.page === a.getAttribute('data-page'));
+      const cfgB = NAV_CONFIG.find(n => n.page === b.getAttribute('data-page'));
+      const comboA = cfgA ? _comboEfetivo(cfgA.id, cfgA.comboPadrao) : '';
+      const comboB = cfgB ? _comboEfetivo(cfgB.id, cfgB.comboPadrao) : '';
+      const [grupoA, chaveA] = _ordemDoCombo(comboA);
+      const [grupoB, chaveB] = _ordemDoCombo(comboB);
+      if (grupoA !== grupoB) return grupoA - grupoB;
+      if (chaveA !== chaveB) return chaveA < chaveB ? -1 : 1;
+      return 0; // empate (ex.: duas páginas sem atalho) — Array.sort é
+                // estável, então mantém a ordem relativa original do HTML
+    });
+
+    // Os divisores (.tabbar-divider) marcavam agrupamentos da ordem FIXA
+    // antiga — depois de reordenar por atalho eles deixam de fazer
+    // sentido (ficariam soltos em posições arbitrárias), então somem.
+    scroll.querySelectorAll('.tabbar-divider').forEach(el => el.remove());
+
+    // appendChild em nó já existente no DOM só MOVE (não clona) — os
+    // listeners (onclick="showPage(...)") e a classe "active" do item
+    // corrente sobrevivem à reordenação.
+    itens.forEach(el => scroll.appendChild(el));
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -1265,5 +1333,15 @@
   // 'lwkeyboard:overrides-carregados', escutado por quem precisar
   // re-renderizar, ex: Configurações → Atalhos, app-core.js).
   _carregarOverrides();
+
+  // Ordena a navbar já de cara: se os overrides vieram do localStorage
+  // (Administrador), _carregarOverrides() acima já rodou 100% síncrono
+  // (sem nenhum await no caminho), então a linha abaixo já usa os combos
+  // PERSONALIZADOS certos. Se vieram do servidor (demais perfis), ainda
+  // não chegaram — usa os de FÁBRICA por enquanto, e reordena de novo
+  // assim que a resposta chegar (ver listener logo abaixo), pra navbar
+  // nunca ficar "errada" esperando a rede.
+  _ordenarTabbarPorAtalho();
+  window.addEventListener('lwkeyboard:overrides-carregados', _ordenarTabbarPorAtalho);
   console.log('[LWKeyboard] Atalhos globais carregados. Pressione F1 ou ? para ajuda.');
 })();
