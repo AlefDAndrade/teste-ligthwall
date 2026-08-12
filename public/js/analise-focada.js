@@ -310,6 +310,18 @@
     return null;
   }
 
+  // Painel avaliado que caiu na posição (pallet+posicao) informada —
+  // mesmo cruzamento que _afPaleteDoBerco já faz pra desenhar o mini
+  // palete (acima), só que aqui contra avaliacao.paineis em vez de só
+  // devolver a posição. Usa _labelPainel/_corPainel (mesmas funções da
+  // seção "✅ Avaliação de Qualidade" da tela cheia, ver _renderAvaliacao)
+  // pra manter o mesmo texto/cor em ambos os lugares.
+  function _afPainelDoBerco(avaliacao, pos) {
+    if (!avaliacao || !pos) return null;
+    const paineis = avaliacao.paineis || [];
+    return paineis.find(p => p.pallet === pos.pallet && p.posicao === pos.posicao) || null;
+  }
+
   // Chamada pelo clique numa célula da grade (ver _renderBercos, abaixo)
   // — usa _ultimoDetalhe (preenchido por render()) em vez de receber os
   // dados por parâmetro, pra poder ser referenciada direto no onclick
@@ -363,6 +375,16 @@
     const capacidadePalete = capacidade;
     const posicaoDireito = _afPaleteDoBerco(numeroBerco, 'direito', capacidadePalete);
     const posicaoEsquerdo = _afPaleteDoBerco(numeroBerco, 'esquerdo', capacidadePalete);
+
+    // Avaliação de Qualidade DESTE berço — acha, pra cada lado, o painel
+    // avaliado que caiu na mesma posição de palete calculada acima (ver
+    // _afPainelDoBerco). Bateria sem avaliação nenhuma (avaliacao null,
+    // ver _renderAvaliacao) some o campo inteiro em vez de mostrar
+    // "— Sem marcação" nos dois lados, que sugeriria marcação zerada
+    // quando na verdade é que a bateria nunca foi avaliada.
+    const avaliacaoOp = _ultimoDetalhe.avaliacao || null;
+    const painelDireito = _afPainelDoBerco(avaliacaoOp, posicaoDireito);
+    const painelEsquerdo = _afPainelDoBerco(avaliacaoOp, posicaoEsquerdo);
 
     // Receita do traço que encheu este berço — mesmos campos e mesma
     // formatação de "Receita Utilizada" (_renderReceita, acima), só que
@@ -446,6 +468,24 @@
               </div>
             </div>
           </div>
+          ${avaliacaoOp ? `
+          <div class="ba-detalhes-campo">
+            <label class="form-label">Avaliação de Qualidade</label>
+            <div class="ba-detalhes-paletes">
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Direito</span>
+                <div class="af-slab" style="border-left-color:${_corPainel(painelDireito)}">
+                  <span class="af-slab-resultado" style="color:${_corPainel(painelDireito)}">${LW.escaparHtml(_labelPainel(painelDireito))}</span>
+                </div>
+              </div>
+              <div class="ba-detalhes-palete-lado">
+                <span class="ba-detalhes-palete-lado-label">Esquerdo</span>
+                <div class="af-slab" style="border-left-color:${_corPainel(painelEsquerdo)}">
+                  <span class="af-slab-resultado" style="color:${_corPainel(painelEsquerdo)}">${LW.escaparHtml(_labelPainel(painelEsquerdo))}</span>
+                </div>
+              </div>
+            </div>
+          </div>` : ''}
         </div>
 
         <div class="ba-detalhes-acoes">
