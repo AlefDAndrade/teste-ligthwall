@@ -835,10 +835,47 @@
   }
 
   // ── Avaliação de qualidade (painéis em texto, não em marca) ──────
+  // Lista de motivos de defeito — mesma lista fixa de MOTIVOS_DEFEITO em
+  // setor-qualidade.js (terminologia de qualidade da fábrica, não
+  // configurável). Duplicada aqui porque cada página carrega seu próprio
+  // script, sem módulo compartilhado — só o necessário pro tooltip do
+  // código (nome completo do motivo), a exibição em si usa o código puro
+  // já salvo em p.motivo.
+  const _MOTIVO_POR_CODIGO = {
+    BC: 'Borra de Cimento',
+    CD: 'Cimentícia Descamando',
+    CC: 'Cimentícia Não Colada',
+    CF: 'Cimentícia Fora de Posição',
+    EM: 'Espessura Maior',
+    EP: 'Engoliu Placa',
+    FD: 'Falha Desmoldante',
+    FE: 'Falha Enchimento',
+    FT: 'Falha Traço',
+    PA: 'Painel Amassado',
+    QE: 'Quebra por Empilhadeira',
+    PQ: 'Painel Quebrado',
+    PT: 'Perfil Torto',
+    TR: 'Trincada',
+    OT: 'Outros',
+  };
+  // Sufixo " — CÓDIGO" pra rótulo de painel com motivo de defeito
+  // registrado (2ª linha ou reprovado — únicos resultados que exigem
+  // motivo, ver _corExigeMotivo em setor-qualidade.js). Sem motivo salvo
+  // (avaliação antiga, anterior à feature de motivos), fica em branco —
+  // não força nada.
+  function _sufixoMotivo(p) {
+    if (!p || !p.motivo) return '';
+    return ` — ${LW.escaparHtml(p.motivo)}`;
+  }
+  function _tituloMotivo(p) {
+    if (!p || !p.motivo) return '';
+    if (p.motivo === 'OT') return p.motivoDescricao ? LW.escaparHtml(p.motivoDescricao) : 'Outros (sem descrição)';
+    return LW.escaparHtml(_MOTIVO_POR_CODIGO[p.motivo] || p.motivo);
+  }
   function _labelPainel(p) {
     if (!p) return '— Sem marcação';
-    if (p.resultado === 'aprovado') return p.linha === '2ª' ? 'Aprovado / 2ª linha' : 'Aprovado / 1ª linha';
-    if (p.resultado === 'reprovado') return 'Reprovado';
+    if (p.resultado === 'aprovado') return (p.linha === '2ª' ? 'Aprovado / 2ª linha' : 'Aprovado / 1ª linha') + _sufixoMotivo(p);
+    if (p.resultado === 'reprovado') return 'Reprovado' + _sufixoMotivo(p);
     // Bateria excluída da fila do Setor de Qualidade antes de ser avaliada
     // de verdade (ver SQ.excluirDaFila, setor-qualidade.js) — TODOS os
     // painéis dela nascem com este resultado, tipoObtido sempre null.
@@ -892,9 +929,10 @@
       for (let i = 1; i <= totalPorPallet; i++) {
         const painel = paineis.find(pp => pp.pallet === p && pp.posicao === i);
         const cor = _corPainel(painel);
+        const tituloMotivo = _tituloMotivo(painel);
         html += `<div class="af-slab" style="border-left-color:${cor}">
           <span class="af-slab-num">${i}</span>
-          <span class="af-slab-resultado" style="color:${cor}">${_labelPainel(painel)}</span>
+          <span class="af-slab-resultado" style="color:${cor}"${tituloMotivo ? ` title="${tituloMotivo}"` : ''}>${_labelPainel(painel)}</span>
         </div>`;
       }
       html += '</div></div>';
