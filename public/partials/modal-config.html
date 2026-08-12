@@ -52,6 +52,9 @@
           <button type="button" id="cfg-nav-tipos-manutencao" onclick="cfgMostrarSecao('tipos-manutencao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔧 Tipos de Manutenção</button>
+          <button type="button" id="cfg-nav-prioridades" onclick="cfgMostrarSecao('prioridades')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            🚦 Prioridades</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -659,6 +662,37 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Tipos de Manutenção ========== -->
+
+          <!-- ========== SEÇÃO: Prioridades ========== -->
+          <div id="cfg-secao-prioridades" style="display:none">
+            <div class="card-title">🚦 Prioridades</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Níveis de prioridade disponíveis ao abrir um chamado corretivo, cada um com sua própria cor (usada nos
+              botões de seleção, no painel de chamados e no filtro). Adicionar, remover ou renomear aqui reflete na
+              hora na tela de Manutenção.
+            </p>
+            <div id="cfg-prioridades-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+            </div>
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div
+                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Nova Prioridade</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
+                  <label class="form-label">Descrição</label>
+                  <input class="form-input" id="cfg-prioridade-label-novo" placeholder="Ex: URGENTE"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarPrioridade();}">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label">Cor</label>
+                  <input type="color" id="cfg-prioridade-cor-novo" value="#f59e0b"
+                    style="width:44px;height:38px;padding:2px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-3);cursor:pointer">
+                </div>
+                <button class="btn btn-outline-accent" onclick="cfgAdicionarPrioridade()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Prioridades ========== -->
 
         </div>
       </div>

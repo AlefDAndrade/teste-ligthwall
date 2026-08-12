@@ -102,10 +102,14 @@
 
 .man-prioridade-box { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg-3); width: 100%; max-width: 320px; }
 .man-prioridade-btn { flex: 1; padding: 6px 0; text-align: center; background: transparent; color: var(--text-2); border: none; cursor: pointer; font-weight: 600; font-size: 12px; transition: 0.2s; }
-.man-prioridade-btn.active-baixa { background: var(--green); color: #fff; }
-.man-prioridade-btn.active-media { background: var(--accent); color: #fff; }
-.man-prioridade-btn.active-alta { background: var(--red); color: #fff; }
-.man-prioridade-btn:hover:not(.active-baixa, .active-media, .active-alta) { background: var(--bg-card); }
+/* Cor do botão ATIVO agora vem inline (background/color setados por
+   setPrioridade(), manutencao.js), não mais 3 classes fixas
+   (active-baixa/media/alta) — Prioridade é configurável (Configurações >
+   Prioridades), qualquer quantidade de níveis, cada um com a cor que o
+   admin escolheu. A classe .active só marca ESTADO (pra excluir do
+   :hover abaixo); a cor em si é sempre inline. */
+.man-prioridade-btn.active { color: #fff; }
+.man-prioridade-btn:hover:not(.active) { background: var(--bg-card); }
 
 .man-tipos-anomalia { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
 .man-tag-anomalia { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: 0.2s; opacity: 0.5; }

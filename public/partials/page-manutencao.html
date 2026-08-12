@@ -63,6 +63,10 @@
         </select>
       </div>
       <div class="man-filter-group"><label><i class="fas fa-exclamation-triangle"></i> Prioridade</label>
+        <!-- Fallback estático — MAN.carregarOpcoesPrioridade()
+             (manutencao.js) regenera a partir de config.json
+             (LW.PRIORIDADE_OPTS, configurável em Configurações >
+             Prioridades) assim que carregar. -->
         <select id="man-filtroPrioridade" onchange="aplicarFiltrosCorretiva()">
           <option value="">Todas</option>
           <option value="BAIXA">Baixa</option>
@@ -149,6 +153,11 @@
           <div class="man-form-row">
             <div class="man-form-label"><i class="fas fa-exclamation-circle"></i> Prioridade</div>
             <div class="man-form-field">
+              <!-- Fallback estático — MAN.carregarOpcoesPrioridade()
+                   (manutencao.js) RECONSTRÓI este bloco inteiro a partir
+                   de config.json assim que carregar (mesmo motivo do
+                   filtro, acima — cada nível tem uma cor própria
+                   configurável, não dá pra manter isso em CSS fixo). -->
               <div class="man-prioridade-box">
                 <button type="button" class="man-prioridade-btn" data-value="BAIXA" onclick="setPrioridade('BAIXA')">BAIXA</button>
                 <button type="button" class="man-prioridade-btn" data-value="MÉDIA" onclick="setPrioridade('MÉDIA')">MÉDIA</button>

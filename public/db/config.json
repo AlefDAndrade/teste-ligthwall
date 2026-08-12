@@ -180,5 +180,21 @@
       "Elétrica",
       "Mecânica"
     ]
+  },
+  "prioridades": {
+    "opcoes": [
+      {
+        "label": "BAIXA",
+        "cor": "var(--green)"
+      },
+      {
+        "label": "MÉDIA",
+        "cor": "var(--accent)"
+      },
+      {
+        "label": "ALTA",
+        "cor": "var(--red)"
+      }
+    ]
   }
 }

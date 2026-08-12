@@ -47,6 +47,19 @@ let MOTIVO_PARADA_OPTS = [];
 // "Mecânica") em page-manutencao.html, agora configurável. Fallback
 // (defaults abaixo, em loadConfig) mantém os mesmos 2 tipos de sempre.
 let TIPO_MANUTENCAO_OPTS = [];
+// Prioridade de Chamado (Registro de Manutenção → Configurações →
+// Prioridades) — mesmo raciocínio de TIPO_MANUTENCAO_OPTS, acima, só
+// que cada item é um objeto { label, cor } (não só uma string): cada
+// nível de prioridade tem uma cor própria (usada nas bolinhas do
+// kanban, badges e botões de seleção — ver _corPrioridade,
+// manutencao.js). Fallback (defaults abaixo, em loadConfig) mantém os
+// mesmos 3 níveis/cores de sempre (BAIXA=verde, MÉDIA=azul,
+// ALTA=vermelho) — cor em var(--...) de propósito nos 3 defaults
+// (nunca hexadecimal fixo), pra continuar acompanhando o tema
+// claro/escuro como sempre acompanhou; prioridades novas cadastradas
+// pelo admin usam hexadecimal fixo (escolhido num color picker — ver
+// Configurações > Prioridades), sem essa integração com o tema.
+let PRIORIDADE_OPTS = [];
 
 // Dispositivos autorizados a controlar operação (voltou — ver conversa que
 // motivou a mudança) — [{ deviceId, nome, autorizadoEm }], espelho em
@@ -441,6 +454,22 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "tipos_manutencao.opcoes" válido — mantendo tipos de manutenção já carregados.');
     }
 
+    // Prioridade de Chamado — mesmo padrão de Tipos de Manutenção,
+    // acima, validando também que cada item tenha 'label' e 'cor'.
+    if (Array.isArray(cfg.prioridades?.opcoes) && cfg.prioridades.opcoes.length &&
+        cfg.prioridades.opcoes.every(o => o && typeof o.label === 'string' && typeof o.cor === 'string')) {
+      PRIORIDADE_OPTS = cfg.prioridades.opcoes;
+    } else if (!PRIORIDADE_OPTS.length) {
+      console.warn('[LW] config.json sem "prioridades.opcoes" válido — usando fallback de prioridades.');
+      PRIORIDADE_OPTS = [
+        { label: 'BAIXA', cor: 'var(--green)' },
+        { label: 'MÉDIA', cor: 'var(--accent)' },
+        { label: 'ALTA', cor: 'var(--red)' },
+      ];
+    } else {
+      console.warn('[LW] config.json sem "prioridades.opcoes" válido — mantendo prioridades já carregadas.');
+    }
+
 
     if (Array.isArray(cfg.volume_por_placa)) {
       VOLUME_POR_PLACA = cfg.volume_por_placa.map(v => ({ label: v.label, volume: v.volume }));
@@ -527,6 +556,11 @@ async function loadConfig() {
       'Pausa de Descanso', 'Outro',
     ];
     TIPO_MANUTENCAO_OPTS = ['Elétrica', 'Mecânica'];
+    PRIORIDADE_OPTS = [
+      { label: 'BAIXA', cor: 'var(--green)' },
+      { label: 'MÉDIA', cor: 'var(--accent)' },
+      { label: 'ALTA', cor: 'var(--red)' },
+    ];
     DISPOSITIVOS_AUTORIZADOS = []; // config.json indisponível — nenhum dispositivo autorizado conhecido
   }
 
@@ -2375,6 +2409,7 @@ window.LW = {
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
   get MOTIVO_PARADA_OPTS() { return MOTIVO_PARADA_OPTS; },
   get TIPO_MANUTENCAO_OPTS() { return TIPO_MANUTENCAO_OPTS; },
+  get PRIORIDADE_OPTS() { return PRIORIDADE_OPTS; },
 
 
   // Config loader
