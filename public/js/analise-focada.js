@@ -1321,18 +1321,84 @@
     }
   }
 
-  // Cor determinística (hash simples) por tipo de montagem — simplificação
-  // assumida aqui: sem a cor REAL configurada em Configurações → Montagem
-  // embutida (exigiria embutir MONTAGEM_OPCOES inteiro), cada tipo distinto
-  // ganha uma cor fixa e consistente dentro do próprio arquivo exportado
-  // (mesmo tipo = mesma cor sempre, só não é a mesma cor da tela ao vivo).
-  const _PALETA_TIPO = ['#4d8dff', '#2ecc71', '#8b5cf6', '#f5821f', '#06b6d4', '#e5484d', '#f1c40f'];
-  function _corPorTipoSimplificada(tipo) {
-    if (!tipo) return null;
-    let hash = 0;
-    for (let i = 0; i < tipo.length; i++) hash = (hash * 31 + tipo.charCodeAt(i)) >>> 0;
-    const cor = _PALETA_TIPO[hash % _PALETA_TIPO.length];
-    return { cor: '#fff', bg: cor, borda: cor };
+  // Cor REAL de um tipo de montagem — mesma lógica de corPorTipoSimples/
+  // corMontagemPorLabel (data.js: _hexDoTipoSimples/corCssDoHex/
+  // hslParaHex/hexParaRgba), reimplementada aqui com o prefixo "_af" porque
+  // o HTML exportado standalone não carrega data.js — ele só tem acesso ao
+  // que for colado neste template (ver _gerarHtmlAfStandalone, abaixo).
+  // Lê de LW.MONTAGEM_OPCOES, que é o retrato de configuração embutido no
+  // export (ver "const LW = {...}", mais abaixo) — cada tipo de montagem
+  // usa a MESMA cor configurada em Configurações → Montagem, igual à tela
+  // ao vivo. Substitui _corPorTipoSimplificada/_PALETA_TIPO (hash
+  // determinístico), que dava uma cor genérica e consistente mas
+  // DIFERENTE da cor real (ver conversa que motivou: "os cards de berço no
+  // export ficam todos com cores genéricas, quero a cor real que indica o
+  // tipo de montagem").
+  function _afHslParaHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const paraHex = x => Math.round(255 * x).toString(16).padStart(2, '0');
+    return `#${paraHex(f(0))}${paraHex(f(8))}${paraHex(f(4))}`;
+  }
+  function _afHexParaRgb(hex) {
+    let h = String(hex || '').replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const num = parseInt(h, 16) || 0;
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+  function _afHexParaRgba(hex, alpha) {
+    const { r, g, b } = _afHexParaRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  function _afCorCssDoHex(hex) {
+    return { cor: hex, bg: _afHexParaRgba(hex, .15), borda: _afHexParaRgba(hex, .3) };
+  }
+  function _afCorMontagemNeutra() {
+    return { hibrida: false, cor: '#5c6475', bg: 'rgba(156, 163, 175, .1)', borda: '#2a2f3a' };
+  }
+  // Extrai o hex de um tipo SIMPLES — aceita o objeto da opção ou o código
+  // do tipo (ex: 'sp'), buscando em LW.MONTAGEM_OPCOES nesse 2º caso.
+  function _afHexDoTipoSimples(tipoOuOpcao) {
+    const op = typeof tipoOuOpcao === 'string'
+      ? (LW.MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipoOuOpcao)
+      : tipoOuOpcao;
+    if (!op) return null;
+    if (typeof op.cor === 'string' && op.cor) return op.cor;
+    if (typeof op.corHue === 'number') return _afHslParaHex(op.corHue, 60, 52);
+    return null;
+  }
+  function _afCorMontagemPorLabel(label) {
+    const opcao = (LW.MONTAGEM_OPCOES || []).find(o => o.label === label);
+    if (!opcao) return _afCorMontagemNeutra();
+    if (opcao.modo === 'simples') {
+      const hex = _afHexDoTipoSimples(opcao);
+      if (hex) return { ..._afCorCssDoHex(hex), hibrida: false };
+    }
+    if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos) && opcao.tipos.length === 2) {
+      const [op1, op2] = opcao.tipos.map(t =>
+        (LW.MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === t));
+      const hex1 = _afHexDoTipoSimples(op1);
+      const hex2 = _afHexDoTipoSimples(op2);
+      if (hex1 && hex2) {
+        const c1 = _afCorCssDoHex(hex1);
+        const c2 = _afCorCssDoHex(hex2);
+        return {
+          hibrida: true,
+          cor1: c1.cor, cor2: c2.cor,
+          cor: c1.cor,
+          bg: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`,
+          borda: c1.borda,
+        };
+      }
+    }
+    return _afCorMontagemNeutra();
+  }
+  function _afCorPorTipoSimples(tipo) {
+    const hex = _afHexDoTipoSimples(tipo);
+    if (!hex) return _afCorMontagemNeutra();
+    return { ..._afCorCssDoHex(hex), hibrida: false };
   }
 
   function _gerarHtmlAfStandalone(detalhe, paradasDaJanela = []) {
@@ -1447,15 +1513,20 @@
   const LW = {
     escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
     TIPO_MONTAGEM_PERSONALIZADA: 'PERSONALIZADA',
-    corPorTipoSimples: ${_corPorTipoSimplificada},
-    corMontagemPorLabel: ${_corPorTipoSimplificada},
+    corPorTipoSimples: ${_afCorPorTipoSimples},
+    corMontagemPorLabel: ${_afCorMontagemPorLabel},
     formatDateTime: ${_afFormatDateTime},
     MONTAGEM_OPCOES: ${JSON.stringify(LW.MONTAGEM_OPCOES || [])},
     BATERIA_IDS: ${JSON.stringify(LW.BATERIA_IDS || [])},
     PALETES_CONFIG: ${JSON.stringify(LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT || {})},
     PALETES_CONFIG_DEFAULT: ${JSON.stringify(LW.PALETES_CONFIG_DEFAULT || {})},
   };
-  const _PALETA_TIPO = ${JSON.stringify(_PALETA_TIPO)};
+  ${_afHslParaHex}
+  ${_afHexParaRgb}
+  ${_afHexParaRgba}
+  ${_afCorCssDoHex}
+  ${_afCorMontagemNeutra}
+  ${_afHexDoTipoSimples}
   const AF_CORES_PALETE = ${JSON.stringify(AF_CORES_PALETE)};
   // abrirDetalhesBerco (embaixo) lê _ultimoDetalhe por closure, igual à
   // tela ao vivo (ver comentário original da função) — aqui é sempre
