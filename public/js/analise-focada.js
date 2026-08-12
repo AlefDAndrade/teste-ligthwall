@@ -250,6 +250,20 @@
     return bateria?.bercos || 0;
   }
 
+  // Cópia local de LW.formatDateTime (data.js) — mesmo padrão de
+  // duplicação já usado neste arquivo (ver comentário no topo desta
+  // seção): o HTML exportado standalone não tem acesso a data.js, então
+  // o modal de Detalhes do Berço embutido no export (ver
+  // _gerarHtmlAfStandalone, mais abaixo) precisa da própria cópia.
+  function _afFormatDateTime(isoString) {
+    if (!isoString) return '—';
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '—';
+    const data = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    return `${data} ${hora}`;
+  }
+
   const AF_CORES_PALETE = { 1: '#66bb6a', 2: '#42a5f5', 3: '#ab47bc', 4: '#ffa726' };
 
   function _afPaletePorMetadeELado() {
@@ -532,7 +546,15 @@
 
     const podeAbrirDetalhes = typeof LWFocada !== 'undefined';
 
-    el.innerHTML = `<div class="ba-grid">${ordenados.map(b => {
+    // Dica de clique — só faz sentido mostrar quando o clique realmente
+    // funciona (podeAbrirDetalhes true tanto na tela ao vivo quanto no
+    // HTML exportado standalone, ver window.LWFocada em
+    // _gerarHtmlAfStandalone, mais abaixo).
+    const dicaClique = podeAbrirDetalhes
+      ? `<div style="text-align:center;font-size:.78rem;color:var(--text-3);margin-bottom:10px">💡 Clique em um berço para ver os detalhes.</div>`
+      : '';
+
+    el.innerHTML = `${dicaClique}<div class="ba-grid">${ordenados.map(b => {
       // "✕" (não enchido) é um estado À PARTE de "baixou" (vazamento) —
       // mesma distinção de bateria-atual.js: o painel nunca existiu pra
       // avaliar, diferente de um vazamento observado. Sem checar os dois
@@ -1326,6 +1348,39 @@
   details.chart-box[open] > summary::after { transform:rotate(90deg); }
   details.chart-box > div { padding:16px; }
   #af-paradas-contagem { text-transform:none; letter-spacing:normal; font-weight:400; }
+  /* Modal "📋 Detalhes do Berço" (ver abrirDetalhesBerco, acima) — cópia
+     das regras de .ba-detalhes-*/.ba-palete-*/.form-label/.btn de
+     styles.css, local a este export (mesmo padrão já usado acima pra
+     .af-*/.ba-grid/.ba-celula): o HTML exportado é autossuficiente, não
+     carrega styles.css. var(--bg-2)/var(--bg-3)/var(--font-display) não
+     existem nas paletas de LW.gerarCssExportPadrao (acima), por isso os
+     fallbacks abaixo (2º valor de var()). */
+  .ba-detalhes-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .ba-detalhes-box { position:relative; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:0 24px 80px rgba(0,0,0,.6); padding:28px; width:420px; max-width:94vw; max-height:90vh; overflow-y:auto; }
+  .ba-detalhes-fechar { position:absolute; top:14px; right:14px; background:none; border:none; color:var(--text-3); font-size:1.1rem; cursor:pointer; line-height:1; padding:4px; }
+  .ba-detalhes-fechar:hover { color:var(--text); }
+  .ba-detalhes-titulo { font-family:var(--font-display, inherit); font-size:1.1rem; color:var(--accent); text-align:center; margin:0 0 18px; }
+  .ba-detalhes-desenho { display:flex; justify-content:center; margin-bottom:22px; }
+  .ba-detalhes-celula { display:flex; flex-direction:column; align-items:center; justify-content:space-between; width:110px; height:150px; border-radius:var(--radius-lg); padding:14px 0; font-weight:700; }
+  .ba-detalhes-dot { font-size:1.3rem; opacity:.45; }
+  .ba-detalhes-dot-x { opacity:1; color:var(--blue); text-shadow:0 0 6px var(--blue); }
+  .ba-detalhes-dot-vazou { opacity:1; color:var(--red); text-shadow:0 0 6px var(--red); }
+  .ba-detalhes-label { font-size:1.05rem; }
+  .ba-detalhes-campos { display:flex; flex-direction:column; gap:14px; margin-bottom:22px; }
+  .ba-det-valor { color:var(--text-2); font-size:.92rem; padding:8px 0; }
+  .ba-detalhes-acoes { display:flex; justify-content:flex-end; gap:10px; }
+  .ba-detalhes-paletes { display:flex; gap:18px; padding-top:4px; }
+  .ba-detalhes-palete-lado { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }
+  .ba-detalhes-palete-lado-label { font-size:.74rem; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); }
+  .ba-palete-mini { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .ba-palete-mini-titulo { font-size:.8rem; font-weight:700; }
+  .ba-palete-mini-stack { display:flex; flex-direction:column-reverse; gap:2px; width:70px; }
+  .ba-palete-slot { display:flex; align-items:center; justify-content:center; width:100%; height:20px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg-2, var(--bg-1)); color:var(--text-3); font-size:.68rem; font-weight:600; }
+  .ba-palete-slot-ativo { color:#fff; box-shadow:0 0 6px rgba(0,0,0,.35); }
+  .form-label { font-size:.67rem; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); }
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; border-radius:var(--radius); font-family:var(--font-display, inherit); font-size:.88rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; border:none; transition:all .15s; white-space:nowrap; }
+  .btn-ghost { background:transparent; color:var(--text-2); border:1px solid var(--border-2); }
+  .btn-ghost:hover { background:var(--bg-3, var(--bg-card)); color:var(--text); }
 </style>
 </head>
 <body>
@@ -1345,13 +1400,29 @@
   'use strict';
   const DETALHE = ${detalheJson};
   const PARADAS = ${paradasJson};
+  // Só leitura: retrato dos dados de CONFIG que o modal de Detalhes do
+  // Berço precisa (BATERIA_IDS/MONTAGEM_OPCOES/PALETES_CONFIG), tal como
+  // estavam quando esta exportação foi gerada — o mesmo espírito de
+  // DETALHE/PARADAS acima. Uma config alterada DEPOIS da exportação
+  // (ex: nº de berços de uma bateria, opções de montagem) não reflete
+  // aqui; é um retrato fixo, igual ao resto do arquivo.
   const LW = {
     escaparHtml: s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; },
     TIPO_MONTAGEM_PERSONALIZADA: 'PERSONALIZADA',
     corPorTipoSimples: ${_corPorTipoSimplificada},
     corMontagemPorLabel: ${_corPorTipoSimplificada},
+    formatDateTime: ${_afFormatDateTime},
+    MONTAGEM_OPCOES: ${JSON.stringify(LW.MONTAGEM_OPCOES || [])},
+    BATERIA_IDS: ${JSON.stringify(LW.BATERIA_IDS || [])},
+    PALETES_CONFIG: ${JSON.stringify(LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT || {})},
+    PALETES_CONFIG_DEFAULT: ${JSON.stringify(LW.PALETES_CONFIG_DEFAULT || {})},
   };
   const _PALETA_TIPO = ${JSON.stringify(_PALETA_TIPO)};
+  const AF_CORES_PALETE = ${JSON.stringify(AF_CORES_PALETE)};
+  // abrirDetalhesBerco (embaixo) lê _ultimoDetalhe por closure, igual à
+  // tela ao vivo (ver comentário original da função) — aqui é sempre
+  // DETALHE, já que o export só tem 1 operação.
+  const _ultimoDetalhe = DETALHE;
 
   ${_fmtData}
   ${_fmtHora}
@@ -1371,6 +1442,20 @@
   ${_corPainel}
   ${_totalPorPallet}
   ${_renderAvaliacao}
+  ${_afCapacidadeConfigurada}
+  ${_afPaletePorMetadeELado}
+  ${_afPaleteDoBerco}
+  ${_afDesenhoPaleteMini}
+  ${_afTiposPorBerco}
+  ${_afTracoDoBerco}
+  ${_afPainelDoBerco}
+  ${abrirDetalhesBerco}
+
+  // Expõe abrirDetalhesBerco globalmente com o mesmo nome usado na tela
+  // ao vivo (LWFocada.abrirDetalhesBerco) — é isso que faz _renderBercos
+  // (acima) tratar as células como clicáveis (podeAbrirDetalhes = typeof
+  // LWFocada !== 'undefined') e o onclick inline de cada célula resolver.
+  window.LWFocada = { abrirDetalhesBerco };
 
   _renderCabecalho(DETALHE.operacao || {});
   _renderBercos(DETALHE.bercosVisuais, DETALHE.operacao);
