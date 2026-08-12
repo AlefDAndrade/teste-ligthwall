@@ -1476,6 +1476,9 @@
   ${_fmtLeitura}
   ${_renderReceita}
   ${_renderParadas}
+  const _MOTIVO_POR_CODIGO = ${JSON.stringify(_MOTIVO_POR_CODIGO)};
+  ${_sufixoMotivo}
+  ${_tituloMotivo}
   ${_labelPainel}
   ${_corPainel}
   ${_totalPorPallet}
