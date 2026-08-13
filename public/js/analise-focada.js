@@ -1001,11 +1001,37 @@
   // com a mesma formatação".
   //
   // Ponto de entrada público (botão "🌐 Exportar Interativo" e atalho de
-  // teclado, ver keyboard-shortcuts.js) — pergunta ao usuário qual das 2
+  // teclado, ver keyboard-shortcuts.js) — pergunta ao usuário qual das 3
   // exportações ele quer e delega pra _exportarSimples/_exportarDoDia,
   // abaixo. Mantido com este mesmo nome pra não quebrar quem já chama
   // LWFocada.exportarInterativo() de fora.
   async function exportarInterativo() {
+    await _perguntarTipoEExportar('html');
+  }
+
+  // Ponto de entrada público (botão "📕 Exportar PDF") — MESMO menu de
+  // escolha (Simples/Do Dia/Personalizada) do Exportar Interativo, só que
+  // termina em PDF em vez de HTML (ver _finalizarExportacao, abaixo: o
+  // caminho é idêntico até gerar o HTML autossuficiente de sempre — a
+  // única diferença é o que se faz com ele no fim: baixar direto, ou
+  // mandar pro servidor converter em PDF via Chromium headless — ver
+  // lib/rotas/exportar-pdf.js). Assim a Exportação em PDF nunca duplica
+  // lógica nem "atrasa" em relação à Interativa: qualquer ajuste em como
+  // os dados são montados (_gerarHtmlAfStandalone e afins) vale pros dois
+  // formatos automaticamente.
+  async function exportarPDF() {
+    await _perguntarTipoEExportar('pdf');
+  }
+
+  // Menu de escolha (Simples/Do Dia/Personalizada) compartilhado pelos 2
+  // pontos de entrada acima — `formato` é 'html' ou 'pdf' e só muda o
+  // título do menu e é repassado adiante pras 3 funções de exportação
+  // (_exportarSimples/_exportarDoDia/_exportarPersonalizado), que de fato
+  // decidem, no final, se baixam o HTML puro ou mandam converter em PDF
+  // (ver _finalizarExportacao).
+  // @param {'html'|'pdf'} formato
+  async function _perguntarTipoEExportar(formato) {
+    const ehPdf = formato === 'pdf';
     // Antes saía de cara se não houvesse operação carregada (_idAtual),
     // deixando o botão parecendo morto mesmo pra quem só queria "Do Dia"
     // (que nem depende de operação selecionada — roda em cima de uma data
@@ -1015,8 +1041,8 @@
     const escolha = await LW.mostrarEscolha(
       'Como você quer exportar esta Análise Focada?',
       {
-        titulo: '🌐 Exportar Interativo',
-        icon: '🌐',
+        titulo: ehPdf ? '📕 Exportar PDF' : '🌐 Exportar Interativo',
+        icon: ehPdf ? '📕' : '🌐',
         itens: [
           { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação, do jeito que já era.' },
           { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela.' },
@@ -1031,7 +1057,7 @@
         if (LW.mostrarAlerta) LW.mostrarAlerta('Selecione uma operação primeiro para usar a Exportação Simples.', { tipo: 'erro' });
         return;
       }
-      await _exportarSimples();
+      await _exportarSimples(formato);
       return;
     }
     if (escolha === 'personalizada') {
@@ -1041,7 +1067,7 @@
       const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
       const periodo = await _escolherRangeDatas(dataSugerida);
       if (!periodo) return;
-      await _exportarPersonalizado(periodo.inicio, periodo.fim);
+      await _exportarPersonalizado(periodo.inicio, periodo.fim, formato);
       return;
     }
     // "Do Dia" pede a data ANTES de exportar — sugere a data da operação
@@ -1050,12 +1076,40 @@
     const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
     const dataEscolhida = await _escolherDataDoDia(dataSugerida);
     if (!dataEscolhida) return;
-    await _exportarDoDia(dataEscolhida);
+    await _exportarDoDia(dataEscolhida, formato);
+  }
+
+  // Último passo comum às 3 exportações — decide o que fazer com o HTML
+  // autossuficiente já pronto: baixar direto (formato 'html', comportamento
+  // de sempre) ou mandar pro servidor converter em PDF de verdade (formato
+  // 'pdf' — ver lib/rotas/exportar-pdf.js e LW.baixarPdfApartirDeHtml,
+  // data.js). `nomeBase` vem SEM extensão (cada chamador já monta o nome
+  // sanitizado, sem ".html"/".pdf" — esta função completa a extensão certa).
+  // @param {'html'|'pdf'} formato
+  // @param {string} nomeBase - nome do arquivo, sem extensão.
+  // @param {string} html - o documento autossuficiente já gerado.
+  async function _finalizarExportacao(formato, nomeBase, html) {
+    if (formato === 'pdf') {
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+      return;
+    }
+    LW.baixarArquivoTexto(`${nomeBase}.html`, html);
+  }
+
+  // Texto do botão em repouso, conforme o formato — usado pra restaurar o
+  // botão certo (Interativo x PDF, cada um com seu id — ver
+  // page-analise-focada.html) depois de qualquer exportação, sucesso ou erro.
+  function _botaoDoFormato(formato) {
+    return formato === 'pdf'
+      ? { id: 'btn-af-exportar-pdf', textoRepouso: '📕 Exportar PDF' }
+      : { id: 'btn-af-exportar', textoRepouso: '🌐 Exportar Interativo' };
   }
 
   // ── Exportação Simples — comportamento original: só a operação atual. ──
-  async function _exportarSimples() {
-    const btn = document.getElementById('btn-af-exportar');
+  // @param {'html'|'pdf'} formato
+  async function _exportarSimples(formato = 'html') {
+    const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
+    const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
       const [detalhe] = await Promise.all([LW.getDetalheOperacao(_idAtual), _carregarCaches()]);
@@ -1063,15 +1117,16 @@
       _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
       const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
       const html = _gerarHtmlAfStandalone(detalhe, paradasDaJanela);
-      LW.baixarArquivoTexto(
-        `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+      await _finalizarExportacao(
+        formato,
+        `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
         html
       );
     } catch (err) {
       console.error('Falha ao exportar Análise Focada:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+      if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
     }
   }
 
@@ -1229,8 +1284,10 @@
   // sem CORS, mesmo abrindo o arquivo exportado localmente (file://) —
   // é assim que cada iframe se auto-ajusta de altura (ver _gerarHtmlAfDoDia).
   // @param {string} dataAlvo - 'YYYY-MM-DD' escolhida no calendário.
-  async function _exportarDoDia(dataAlvo) {
-    const btn = document.getElementById('btn-af-exportar');
+  // @param {'html'|'pdf'} formato
+  async function _exportarDoDia(dataAlvo, formato = 'html') {
+    const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
+    const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
       await _carregarCaches();
@@ -1261,15 +1318,16 @@
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste dia.', { tipo: 'erro' }); return; }
 
       const html = _gerarHtmlAfDoDia(dataAlvo, itens);
-      LW.baixarArquivoTexto(
-        `analise_focada_dia_${String(dataAlvo || 'data').replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+      await _finalizarExportacao(
+        formato,
+        `analise_focada_dia_${String(dataAlvo || 'data').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
         html
       );
     } catch (err) {
       console.error('Falha ao exportar Análise Focada do Dia:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+      if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
     }
   }
 
@@ -1284,8 +1342,10 @@
   // dias diferentes.
   // @param {string} dataInicio - 'YYYY-MM-DD'.
   // @param {string} dataFim - 'YYYY-MM-DD'.
-  async function _exportarPersonalizado(dataInicio, dataFim) {
-    const btn = document.getElementById('btn-af-exportar');
+  // @param {'html'|'pdf'} formato
+  async function _exportarPersonalizado(dataInicio, dataFim, formato = 'html') {
+    const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
+    const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
       await _carregarCaches();
@@ -1316,15 +1376,16 @@
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste período.', { tipo: 'erro' }); return; }
 
       const html = _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens);
-      LW.baixarArquivoTexto(
-        `analise_focada_${String(dataInicio).replace(/[^a-zA-Z0-9_-]/g, '_')}_a_${String(dataFim).replace(/[^a-zA-Z0-9_-]/g, '_')}.html`,
+      await _finalizarExportacao(
+        formato,
+        `analise_focada_${String(dataInicio).replace(/[^a-zA-Z0-9_-]/g, '_')}_a_${String(dataFim).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
         html
       );
     } catch (err) {
       console.error('Falha ao exportar Análise Focada Personalizada:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+      if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
     }
   }
 
@@ -1697,5 +1758,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, abrirDetalhesBerco, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, exportarPDF, abrirDetalhesBerco, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
 })();

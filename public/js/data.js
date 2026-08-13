@@ -2220,6 +2220,50 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Baixa uma versão em PDF do MESMO HTML autossuficiente que os botões
+ * "🌐 Exportar Interativo" geram — em vez de tirar um "print" da tela no
+ * navegador (frágil: borra em telas HiDPI, texto não-selecionável — ver
+ * exportDashboardPDF em setor-qualidade.js, que faz isso), este HTML já
+ * pronto é mandado pro SERVIDOR, que usa um Chromium headless (via
+ * Puppeteer) pra "imprimir" ele de verdade em PDF — ver
+ * lib/rotas/exportar-pdf.js. Mesmo mecanismo de download (Blob + <a>
+ * temporário) de baixarArquivoTexto(), só que o conteúdo do Blob vem da
+ * RESPOSTA do servidor, não do HTML original.
+ * Usado pelos botões "📕 Exportar PDF" (Análise Focada — ver
+ * public/js/analise-focada.js — e, no futuro, qualquer outro dashboard que
+ * já gere seu HTML interativo do mesmo jeito).
+ * @param {string} nomeArquivoPdf - já com a extensão ".pdf".
+ * @param {string} html - o documento autossuficiente já gerado.
+ * @returns {Promise<void>}
+ */
+async function baixarPdfApartirDeHtml(nomeArquivoPdf, html) {
+  const resposta = await fetch('/exportar-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html, filename: nomeArquivoPdf }),
+  });
+
+  if (!resposta.ok) {
+    let mensagem = 'Não consegui gerar o PDF agora.';
+    try {
+      const erro = await resposta.json();
+      if (erro && erro.erro) mensagem = erro.erro;
+    } catch (_) { /* resposta de erro não veio em JSON — usa a mensagem padrão */ }
+    throw new Error(mensagem);
+  }
+
+  const blob = await resposta.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivoPdf;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // CSS compartilhado por TODOS os exports de "Dashboard Interativo" (Setor
 // de Qualidade, OEE, Desempenho Turnos, Análise Operacional, Análise de
 // Berços, CEP, Análise Focada) — cada um gera seu próprio HTML
@@ -2505,6 +2549,7 @@ window.LW = {
   // for inserido via innerHTML, pra evitar XSS armazenado.
   escaparHtml: _escaparHtml,
   baixarArquivoTexto,
+  baixarPdfApartirDeHtml,
   gerarCssExportPadrao,
   TOOLTIP_JS_FONTE,
 };
