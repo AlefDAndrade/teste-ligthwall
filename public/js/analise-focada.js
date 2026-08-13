@@ -916,11 +916,18 @@
     const paineis = avaliacao.paineis || [];
 
     let html = '<div class="af-paineis-grid">';
-    // Ordem visual pedida: Pallet 2/Pallet 1 na 1ª linha, Pallet 3/Pallet 4
-    // na 2ª (layout 2x2) — só a ORDEM DE EXIBIÇÃO muda; os dados de cada
-    // pallet continuam vindo do mesmo número de sempre (avaliacao.paineis,
-    // montagem['palletN']), sem nenhuma outra mudança.
-    [2, 1, 3, 4].forEach(p => {
+    // Ordem crescente (Pallet 1, 2, 3, 4) — ao contrário do Setor de
+    // Qualidade (setor-qualidade.js), que usa a ordem espelhada [2,1,3,4]
+    // de propósito pra bater com o layout FÍSICO da máquina naquela tela
+    // (ver comentário em setor-qualidade.js e
+    // test/setor-qualidade-layout-2x2-paletes.test.js). Aqui, na Análise
+    // Focada, essa mesma ordem tinha sido copiada sem necessidade e só
+    // dava a impressão de pallets trocados (ver conversa que motivou:
+    // "os paletes estão trocados... quero ordem crescente começando do
+    // 01"). Os DADOS de cada pallet continuam vindo do mesmo número de
+    // sempre (avaliacao.paineis, montagem['palletN']) — só a ordem de
+    // exibição mudou.
+    [1, 2, 3, 4].forEach(p => {
       // Tipo de montagem daquele pallet — "no cantinho", cabeçalho do
       // próprio card do pallet, não em cada painel individual.
       const tipoMontPallet = montagem['pallet' + p] || '—';
