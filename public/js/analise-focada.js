@@ -1460,9 +1460,9 @@
   details.chart-box > div { padding:16px; }
   #af-paradas-contagem { text-transform:none; letter-spacing:normal; font-weight:400; }
   /* Modal "📋 Detalhes do Berço" (ver abrirDetalhesBerco, acima) — cópia
-     das regras de .ba-detalhes-*/.ba-palete-*/.form-label/.btn de
+     das regras de .ba-detalhes-*, .ba-palete-*, .form-label, .btn de
      styles.css, local a este export (mesmo padrão já usado acima pra
-     .af-*/.ba-grid/.ba-celula): o HTML exportado é autossuficiente, não
+     .af-*, .ba-grid, .ba-celula): o HTML exportado é autossuficiente, não
      carrega styles.css. var(--bg-2)/var(--bg-3)/var(--font-display) não
      existem nas paletas de LW.gerarCssExportPadrao (acima), por isso os
      fallbacks abaixo (2º valor de var()). */
