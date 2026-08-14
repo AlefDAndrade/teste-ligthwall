@@ -626,34 +626,62 @@
   // arquivo via toString() (cópia fiel do código-fonte, sem reescrever
   // nada à mão) — só a orquestração (render()) é reescrita pra ler do
   // objeto já filtrado embutido, sem precisar do servidor depois de gerado.
+  //
+  // _montarExportacaoOee() monta o HTML autossuficiente + nome de arquivo
+  // (sem extensão) — usado tanto por exportarInterativo() (baixa o .html
+  // direto) quanto por exportarPDF() (manda esse mesmo HTML pro servidor
+  // converter em PDF de verdade via Chromium headless — ver
+  // lib/rotas/exportar-pdf.js/LW.baixarPdfApartirDeHtml). Assim os dois
+  // formatos nunca saem dessincronizados: qualquer ajuste em como os dados
+  // são montados vale pros dois automaticamente.
+  async function _montarExportacaoOee() {
+    const filtros = _lerFiltros();
+    const { historico, tracos, paradas } = await _buscarDados(filtros);
+    // Set não é serializável em JSON — converte pra array; o script
+    // exportado reconstrói o Set na hora de usar (ver calcularPorGrupo).
+    const tracosSerializaveis = tracos.map(t => ({ ...t, _baterias: [...(t._baterias || [])] }));
+
+    const descricaoFiltro = [
+      (filtros.dataInicio || filtros.dataFim)
+        ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+        : 'Todos os períodos',
+      filtros.bateria ? `Bateria ${filtros.bateria}` : null,
+      filtros.turno || null,
+    ].filter(Boolean).join(' · ');
+
+    const html = _gerarHtmlOeeStandalone({ historico, tracos: tracosSerializaveis, paradas }, descricaoFiltro);
+    const nomeBase = `oee_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    return { html, nomeBase };
+  }
+
   async function exportarInterativo() {
     const btn = document.getElementById('btn-oee-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      const filtros = _lerFiltros();
-      const { historico, tracos, paradas } = await _buscarDados(filtros);
-      // Set não é serializável em JSON — converte pra array; o script
-      // exportado reconstrói o Set na hora de usar (ver calcularPorGrupo).
-      const tracosSerializaveis = tracos.map(t => ({ ...t, _baterias: [...(t._baterias || [])] }));
-
-      const descricaoFiltro = [
-        (filtros.dataInicio || filtros.dataFim)
-          ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
-          : 'Todos os períodos',
-        filtros.bateria ? `Bateria ${filtros.bateria}` : null,
-        filtros.turno || null,
-      ].filter(Boolean).join(' · ');
-
-      const html = _gerarHtmlOeeStandalone({ historico, tracos: tracosSerializaveis, paradas }, descricaoFiltro);
-      LW.baixarArquivoTexto(
-        `oee_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
-        html
-      );
+      const { html, nomeBase } = await _montarExportacaoOee();
+      LW.baixarArquivoTexto(`${nomeBase}.html`, html);
     } catch (err) {
       console.error('Falha ao exportar dashboard interativo (OEE):', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Exportar em PDF — MESMO HTML de exportarInterativo (acima), só que
+  // convertido no servidor via Chromium headless em vez de baixado direto
+  // (ver _montarExportacaoOee).
+  async function exportarPDF() {
+    const btn = document.getElementById('btn-oee-exportar-pdf');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const { html, nomeBase } = await _montarExportacaoOee();
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+    } catch (err) {
+      console.error('Falha ao exportar PDF (OEE):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o PDF agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📕 Exportar PDF'; }
     }
   }
 
@@ -807,13 +835,14 @@
 
     document.getElementById('btn-oee-filtrar')?.addEventListener('click', render);
     document.getElementById('btn-oee-exportar')?.addEventListener('click', exportarInterativo);
+    document.getElementById('btn-oee-exportar-pdf')?.addEventListener('click', exportarPDF);
 
     _popularFiltroBateria().then(() => render());
   }
 
   // Exposto também pra fins de teste/depuração.
   window.LWOee = {
-    init, render, exportarInterativo,
+    init, render, exportarInterativo, exportarPDF,
     _calcularDisponibilidade: calcularDisponibilidade,
     _calcularPerformance: calcularPerformance,
     _calcularQualidade: calcularQualidade,

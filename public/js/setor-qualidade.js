@@ -4027,9 +4027,9 @@
     document.getElementById('sq-dash-summary').innerHTML = summ;
   }
 
-  // Descreve o período/filtro aplicado no momento — usado tanto no
-  // cabeçalho impresso do PDF quanto no subtítulo do dashboard exportado
-  // em HTML, pra o arquivo se explicar sozinho sem depender da tela.
+  // Descreve o período/filtro aplicado no momento — usado no subtítulo do
+  // dashboard exportado (HTML e PDF), pra o arquivo se explicar sozinho
+  // sem depender da tela.
   function _descricaoPeriodoAtual() {
     const sd = document.getElementById('sq-dash-start').value;
     const ed = document.getElementById('sq-dash-end').value;
@@ -4040,56 +4040,14 @@
     return `Período: ${periodo}${bf ? ' · Bateria: ' + bf : ''}`;
   }
 
-  /* ── Exportar PDF ─────────────────────────────────────────
-     Ajustado pra virar um relatório de verdade, não uma captura de tela
-     crua: os controles interativos (filtros + os próprios botões de
-     exportar) somem da captura — não fazem sentido dentro de um PDF
-     estático, só poluíam a imagem — e ganha um cabeçalho impresso
-     (título + período aplicado + data de geração) que só existe durante
-     a captura, pro arquivo final se explicar sozinho. */
-  async function exportDashboardPDF() {
-    const btn     = document.getElementById('sq-btn-pdf');
-    const acoes   = document.getElementById('sq-dash-acoes');
-    const filtros = document.getElementById('sq-dash-filtros');
-    const dash    = document.getElementById('sq-dashboard');
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
-
-    const cabecalho = document.createElement('div');
-    cabecalho.style.cssText = 'padding:0 0 14px;margin-bottom:14px;border-bottom:2px solid var(--blue);';
-    cabecalho.innerHTML = `
-      <div style="font-size:1.3rem;font-weight:700;color:var(--text);">📋 Relatório de Qualidade — Avaliação de Baterias</div>
-      <div style="font-size:.8rem;color:var(--text-3);margin-top:4px;">${_escaparHtml(_descricaoPeriodoAtual())} · Gerado em ${new Date().toLocaleString('pt-BR')}</div>`;
-
-    if (acoes)   acoes.style.display   = 'none';
-    if (filtros) filtros.style.display = 'none';
-    dash.insertBefore(cabecalho, dash.firstChild);
-
-    try {
-      const canvas = await html2canvas(dash, { scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, scrollX:0, scrollY:-window.scrollY });
-      const { jsPDF } = window.jspdf;
-      const w = 297, h = Math.ceil((canvas.height * w) / canvas.width);
-      const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:[w,h] });
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
-      pdf.save(`relatorio_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.pdf`);
-    } catch (err) {
-      console.error(err); showAlert('Erro','Falha ao gerar PDF.');
-    } finally {
-      cabecalho.remove();
-      if (acoes)   acoes.style.display   = '';
-      if (filtros) filtros.style.display = '';
-      btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false;
-    }
-  }
-
   /* ── Exportar Dashboard Interativo (HTML standalone) ───────
-     Diferente do PDF (imagem estática), gera 1 arquivo .html AUTOSSU-
-     FICIENTE: dados (avaliações + painéis já embutidos, cada avaliação
-     com sua lista de painéis, mesmo formato de /avaliacoes-qualidade),
-     as mesmas funções de gráfico SVG puro (cópia fiel de _svgLineChart/
-     _svgDonutChart/_svgBarChart/_svgHBarChart/_svgScatterChart/
-     _svgGroupedBarChart, sem nenhuma dependência externa) e os mesmos
-     filtros (Data Inicial/Final, Bateria) — tudo recalculado no
-     JavaScript do PRÓPRIO arquivo exportado, sem precisar do servidor.
+     Gera 1 arquivo .html AUTOSSUFICIENTE: dados (avaliações + painéis já
+     embutidos, cada avaliação com sua lista de painéis, mesmo formato de
+     /avaliacoes-qualidade), as mesmas funções de gráfico SVG puro (cópia
+     fiel de _svgLineChart/_svgDonutChart/_svgBarChart/_svgHBarChart/
+     _svgScatterChart/_svgGroupedBarChart, sem nenhuma dependência externa)
+     e os mesmos filtros (Data Inicial/Final, Bateria) — tudo recalculado
+     no JavaScript do PRÓPRIO arquivo exportado, sem precisar do servidor.
      Quem abrir esse .html em qualquer navegador consegue trocar o
      período/bateria e ver os gráficos recalcularem na hora, exatamente
      como na tela ao vivo — só não leva "Espelho Visual" (é sobre revisar
@@ -4100,24 +4058,38 @@
      Exclui avaliações "excluídaDaFila" (ver renderDashboard — mesmo
      critério: painéis marcados 'nao_avaliado_no_sistema' não contam
      como avaliados) ANTES de embutir, pra não precisar duplicar essa
-     regra dentro do script exportado. */
+     regra dentro do script exportado.
+
+     _montarExportacaoSq() monta o HTML + nome de arquivo (sem extensão) —
+     compartilhado entre exportDashboardHTML() (baixa o .html direto) e
+     exportDashboardPDF() (manda esse mesmo HTML pro servidor converter em
+     PDF de verdade via Chromium headless — ver lib/rotas/exportar-pdf.js/
+     LW.baixarPdfApartirDeHtml). Isto SUBSTITUI a captura de tela via
+     html2canvas que este botão usava antes (texto não-selecionável,
+     borrava em telas HiDPI) — o servidor agora "imprime" o MESMO HTML
+     interativo em vez de tirar foto da tela. */
+  async function _montarExportacaoSq() {
+    await carregarAvaliacoesQualidade(); // garante dataset atualizado antes de embutir
+    // MESMO filtro que está valendo no dashboard na tela agora (ver
+    // renderDashboard/_dashboardFiltrado, acima) — período
+    // (sq-dash-start/end) e bateria (sq-dash-bat) — não mais TODAS as
+    // avaliações.
+    const avaliacoes = _dashboardFiltrado();
+    const html = _gerarHtmlDashboardStandalone(avaliacoes, _descricaoPeriodoAtual());
+    const nomeBase = `dashboard_qualidade_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    return { html, nomeBase };
+  }
+
   async function exportDashboardHTML() {
     const btn = document.getElementById('sq-btn-html');
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
     try {
-      await carregarAvaliacoesQualidade(); // garante dataset atualizado antes de embutir
-      // MESMO filtro que está valendo no dashboard na tela agora (ver
-      // renderDashboard/_dashboardFiltrado, acima) — período
-      // (sq-dash-start/end) e bateria (sq-dash-bat) — não mais TODAS as
-      // avaliações.
-      const avaliacoes = _dashboardFiltrado();
-      const html = _gerarHtmlDashboardStandalone(avaliacoes, _descricaoPeriodoAtual());
-
+      const { html, nomeBase } = await _montarExportacaoSq();
       const blob = new Blob([html], { type: 'text/html' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href = url;
-      a.download = `dashboard_qualidade_${new Date().toISOString().replace(/[-:T.]/g,'').slice(0,14)}.html`;
+      a.download = `${nomeBase}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -4129,6 +4101,26 @@
       btn.innerHTML = '<i class="fas fa-file-code"></i> Exportar Interativo'; btn.disabled = false;
     }
   }
+
+  // ── Exportar em PDF — MESMO HTML de exportDashboardHTML (acima), só que
+  // convertido no servidor via Chromium headless (Puppeteer) em vez de
+  // baixado direto — ver lib/rotas/exportar-pdf.js. Texto selecionável,
+  // sem blur, ao contrário da captura de tela (html2canvas) que este botão
+  // usava antes.
+  async function exportDashboardPDF() {
+    const btn = document.getElementById('sq-btn-pdf');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; btn.disabled = true;
+    try {
+      const { html, nomeBase } = await _montarExportacaoSq();
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+    } catch (err) {
+      console.error('Falha ao exportar PDF (Setor de Qualidade):', err);
+      showAlert('Erro', err && err.message ? err.message : 'Falha ao gerar PDF.');
+    } finally {
+      btn.innerHTML = '<i class="fas fa-file-pdf"></i> Exportar PDF'; btn.disabled = false;
+    }
+  }
+
 
   // Cópia standalone da parte de "hover em elemento [data-tooltip]" de
   // tooltip.js (delegação no document, desktop + toque) — os gráficos SVG

@@ -846,28 +846,52 @@
   // Atraso usa uma paleta fixa cíclica no arquivo exportado, em vez da cor
   // configurada. Tudo o mais (KPIs, insights, rankings, tendência,
   // produtividade) é idêntico à tela ao vivo.
+  //
+  // _montarExportacaoAo() monta o HTML + nome de arquivo (sem extensão) —
+  // compartilhado entre exportarInterativo() e exportarPDF() (esta manda o
+  // mesmo HTML pro servidor converter em PDF de verdade via Chromium
+  // headless — ver lib/rotas/exportar-pdf.js/LW.baixarPdfApartirDeHtml).
+  async function _montarExportacaoAo() {
+    const res = await fetch('db/historico.json');
+    const dadosTotal = res.ok ? await res.json() : [];
+    const ini = document.getElementById('ao-data-inicio')?.value || '';
+    const fim = document.getElementById('ao-data-fim')?.value || '';
+    const dados = filtrar(dadosTotal, ini, fim);
+    const descricaoPeriodo = (ini || fim)
+      ? (ini ? new Date(ini + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+      : 'Todos os registros';
+    const html = _gerarHtmlAoStandalone(dados, descricaoPeriodo);
+    const nomeBase = `analise_operacional_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    return { html, nomeBase };
+  }
+
   async function exportarInterativo() {
     const btn = document.getElementById('btn-ao-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      const res = await fetch('db/historico.json');
-      const dadosTotal = res.ok ? await res.json() : [];
-      const ini = document.getElementById('ao-data-inicio')?.value || '';
-      const fim = document.getElementById('ao-data-fim')?.value || '';
-      const dados = filtrar(dadosTotal, ini, fim);
-      const descricaoPeriodo = (ini || fim)
-        ? (ini ? new Date(ini + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
-        : 'Todos os registros';
-      const html = _gerarHtmlAoStandalone(dados, descricaoPeriodo);
-      LW.baixarArquivoTexto(
-        `analise_operacional_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
-        html
-      );
+      const { html, nomeBase } = await _montarExportacaoAo();
+      LW.baixarArquivoTexto(`${nomeBase}.html`, html);
     } catch (err) {
       console.error('Falha ao exportar dashboard interativo (Análise Operacional):', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Exportar em PDF — MESMO HTML de exportarInterativo (acima), só que
+  // convertido no servidor via Chromium headless em vez de baixado direto.
+  async function exportarPDF() {
+    const btn = document.getElementById('btn-ao-exportar-pdf');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const { html, nomeBase } = await _montarExportacaoAo();
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+    } catch (err) {
+      console.error('Falha ao exportar PDF (Análise Operacional):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o PDF agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📕 Exportar PDF'; }
     }
   }
 
@@ -1038,6 +1062,7 @@
     const btn = document.getElementById('btn-ao-filtrar');
     if (btn) btn.addEventListener('click', render);
     document.getElementById('btn-ao-exportar')?.addEventListener('click', exportarInterativo);
+    document.getElementById('btn-ao-exportar-pdf')?.addEventListener('click', exportarPDF);
 
     const periodo = document.getElementById('ao-periodo');
     if (periodo) {
@@ -1055,6 +1080,6 @@
   }
 
   // ── Public ─────────────────────────────────────────────────
-  window.AOp = { init, render, exportarInterativo };
+  window.AOp = { init, render, exportarInterativo, exportarPDF };
 
 })();

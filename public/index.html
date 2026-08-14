@@ -251,7 +251,7 @@
           <span class="nav-text">Manutenção</span>
         </button>
       </div>
-    </nav>
+    </nav>
 <!-- ============ PAGE: MENU ============ -->
     <main class="main active" id="page-menu">
       <div class="menu-page-wrap">
@@ -404,7 +404,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -1120,6 +1120,7 @@
             </div>
             <button class="btn btn-outline-accent" id="btn-ab-filtrar">Filtrar</button>
             <button class="btn btn-outline-accent" id="btn-ab-exportar">🌐 Exportar Interativo</button>
+            <button class="btn btn-outline-accent" id="btn-ab-exportar-pdf">📕 Exportar PDF</button>
           </div>
         </div>
 
@@ -1301,7 +1302,10 @@
 
         <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <button class="btn btn-ghost btn-sm" onclick="LWFocada.voltar()">← Voltar para Registro de Baterias</button>
-          <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar" onclick="LWFocada.exportarInterativo()">🌐 Exportar Interativo</button>
+            <button class="btn btn-outline-accent btn-sm" id="btn-af-exportar-pdf" onclick="LWFocada.exportarPDF()">📕 Exportar PDF</button>
+          </div>
         </div>
 
         <!-- ═══ BUSCA — sempre visível, pra achar outra operação sem voltar ═══ -->
@@ -1417,6 +1421,7 @@
             </div>
             <button class="btn btn-primary" id="btn-qt-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
             <button class="btn btn-outline-accent" id="btn-qt-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
+            <button class="btn btn-outline-accent" id="btn-qt-exportar-pdf" style="height:36px;align-self:flex-end">📕 Exportar PDF</button>
           </div>
         </div>
 
@@ -1678,6 +1683,7 @@
             </div>
             <button class="btn btn-primary" id="btn-oee-filtrar" style="height:36px;align-self:flex-end">Filtrar</button>
             <button class="btn btn-outline-accent" id="btn-oee-exportar" style="height:36px;align-self:flex-end">🌐 Exportar Interativo</button>
+            <button class="btn btn-outline-accent" id="btn-oee-exportar-pdf" style="height:36px;align-self:flex-end">📕 Exportar PDF</button>
           </div>
         </div>
 
@@ -1854,7 +1860,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main>
+    </main>
 <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
@@ -1888,6 +1894,7 @@
             </div>
             <button class="btn btn-outline-accent" id="btn-ao-filtrar">Filtrar</button>
             <button class="btn btn-outline-accent" id="btn-ao-exportar">🌐 Exportar Interativo</button>
+            <button class="btn btn-outline-accent" id="btn-ao-exportar-pdf">📕 Exportar PDF</button>
           </div>
         </div>
 
@@ -2219,7 +2226,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -3476,7 +3483,7 @@
 </div>
 
       </div>
-    </main>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -4293,10 +4300,6 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="/js/vendor/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- html2canvas/jspdf — usados só pelo "Exportar PDF" do Setor de
-       Qualidade; antes só carregados dentro do iframe próprio. -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Pako — usado só por decompressPDF (js/manutencao.js), pra abrir PDFs
        antigos que porventura tenham sido salvos comprimidos com GZIP por
        uma versão anterior do protótipo (novos PDFs não são mais
@@ -4572,7 +4575,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -4642,7 +4645,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -4713,7 +4716,7 @@
 
     </div>
   </div>
-
+
 <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">

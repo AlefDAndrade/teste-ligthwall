@@ -707,31 +707,55 @@
   // (hover funciona, ver TOOLTIP_JS_FONTE), só não dá mais pra trocar o
   // período DENTRO do arquivo exportado — quem quiser outro período,
   // aplica na tela e exporta de novo.
+  //
+  // _montarExportacaoAb() monta o HTML + nome de arquivo (sem extensão) —
+  // compartilhado entre exportarInterativo() e exportarPDF() (esta manda o
+  // mesmo HTML pro servidor converter em PDF de verdade via Chromium
+  // headless — ver lib/rotas/exportar-pdf.js/LW.baixarPdfApartirDeHtml).
+  async function _montarExportacaoAb() {
+    const ini = document.getElementById('ab-data-inicio')?.value || '';
+    const fim = document.getElementById('ab-data-fim')?.value || '';
+    const [linhasTotal, correlacoesTotal] = await Promise.all([
+      LW.getRelatorioBercos(),
+      LW.getCorrelacaoTracoBerco(),
+    ]);
+    const linhas = _filtrar(linhasTotal, ini, fim);
+    const correlacoes = _filtrar(correlacoesTotal, ini, fim).filter(c => c.taxa_vazamento !== null);
+    const descricaoPeriodo = (ini || fim)
+      ? (ini ? new Date(ini + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+      : 'Todos os registros';
+    const html = _gerarHtmlAbStandalone(linhas, correlacoes, descricaoPeriodo);
+    const nomeBase = `analise_bercos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    return { html, nomeBase };
+  }
+
   async function exportarInterativo() {
     const btn = document.getElementById('btn-ab-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      const ini = document.getElementById('ab-data-inicio')?.value || '';
-      const fim = document.getElementById('ab-data-fim')?.value || '';
-      const [linhasTotal, correlacoesTotal] = await Promise.all([
-        LW.getRelatorioBercos(),
-        LW.getCorrelacaoTracoBerco(),
-      ]);
-      const linhas = _filtrar(linhasTotal, ini, fim);
-      const correlacoes = _filtrar(correlacoesTotal, ini, fim).filter(c => c.taxa_vazamento !== null);
-      const descricaoPeriodo = (ini || fim)
-        ? (ini ? new Date(ini + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
-        : 'Todos os registros';
-      const html = _gerarHtmlAbStandalone(linhas, correlacoes, descricaoPeriodo);
-      LW.baixarArquivoTexto(
-        `analise_bercos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
-        html
-      );
+      const { html, nomeBase } = await _montarExportacaoAb();
+      LW.baixarArquivoTexto(`${nomeBase}.html`, html);
     } catch (err) {
       console.error('Falha ao exportar dashboard interativo (Análise de Berços):', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Exportar em PDF — MESMO HTML de exportarInterativo (acima), só que
+  // convertido no servidor via Chromium headless em vez de baixado direto.
+  async function exportarPDF() {
+    const btn = document.getElementById('btn-ab-exportar-pdf');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const { html, nomeBase } = await _montarExportacaoAb();
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+    } catch (err) {
+      console.error('Falha ao exportar PDF (Análise de Berços):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o PDF agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📕 Exportar PDF'; }
     }
   }
 
@@ -903,8 +927,9 @@
   function init() {
     document.getElementById('btn-ab-filtrar')?.addEventListener('click', render);
     document.getElementById('btn-ab-exportar')?.addEventListener('click', exportarInterativo);
+    document.getElementById('btn-ab-exportar-pdf')?.addEventListener('click', exportarPDF);
     render();
   }
 
-  window.ABercos = { init, render, exportarInterativo };
+  window.ABercos = { init, render, exportarInterativo, exportarPDF };
 })();

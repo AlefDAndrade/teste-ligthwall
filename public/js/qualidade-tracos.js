@@ -382,30 +382,54 @@
   // tipo de montagem), não mais tudo com uma UI de filtro pra reaplicar
   // depois. Embute o array já filtrado + as mesmas funções de cálculo/
   // render via toString().
+  //
+  // _montarExportacaoQt() monta o HTML + nome de arquivo (sem extensão) —
+  // compartilhado entre exportarInterativo() e exportarPDF() (esta manda o
+  // mesmo HTML pro servidor converter em PDF de verdade via Chromium
+  // headless — ver lib/rotas/exportar-pdf.js/LW.baixarPdfApartirDeHtml).
+  async function _montarExportacaoQt() {
+    const filtros = lerFiltros();
+    const tracos = await getTracosComFiltros(filtros);
+    const descricaoFiltro = [
+      (filtros.dataInicio || filtros.dataFim)
+        ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
+        : 'Todos os períodos',
+      filtros.bateria ? `Bateria ${filtros.bateria}` : null,
+      filtros.turno || null,
+      filtros.tipoMontagem || null,
+    ].filter(Boolean).join(' · ');
+    const html = _gerarHtmlQtStandalone(tracos, descricaoFiltro);
+    const nomeBase = `cep_qualidade_tracos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    return { html, nomeBase };
+  }
+
   async function exportarInterativo() {
     const btn = document.getElementById('btn-qt-exportar');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      const filtros = lerFiltros();
-      const tracos = await getTracosComFiltros(filtros);
-      const descricaoFiltro = [
-        (filtros.dataInicio || filtros.dataFim)
-          ? (filtros.dataInicio ? new Date(filtros.dataInicio + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (filtros.dataFim ? new Date(filtros.dataFim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
-          : 'Todos os períodos',
-        filtros.bateria ? `Bateria ${filtros.bateria}` : null,
-        filtros.turno || null,
-        filtros.tipoMontagem || null,
-      ].filter(Boolean).join(' · ');
-      const html = _gerarHtmlQtStandalone(tracos, descricaoFiltro);
-      LW.baixarArquivoTexto(
-        `cep_qualidade_tracos_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}.html`,
-        html
-      );
+      const { html, nomeBase } = await _montarExportacaoQt();
+      LW.baixarArquivoTexto(`${nomeBase}.html`, html);
     } catch (err) {
       console.error('Falha ao exportar dashboard interativo (CEP):', err);
       if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui gerar o dashboard interativo agora.', { tipo: 'erro' });
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '🌐 Exportar Interativo'; }
+    }
+  }
+
+  // ── Exportar em PDF — MESMO HTML de exportarInterativo (acima), só que
+  // convertido no servidor via Chromium headless em vez de baixado direto.
+  async function exportarPDF() {
+    const btn = document.getElementById('btn-qt-exportar-pdf');
+    if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    try {
+      const { html, nomeBase } = await _montarExportacaoQt();
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+    } catch (err) {
+      console.error('Falha ao exportar PDF (CEP):', err);
+      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o PDF agora.', { tipo: 'erro' });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📕 Exportar PDF'; }
     }
   }
 
@@ -1329,6 +1353,7 @@
 
     document.getElementById('btn-qt-filtrar')?.addEventListener('click', render);
     document.getElementById('btn-qt-exportar')?.addEventListener('click', exportarInterativo);
+    document.getElementById('btn-qt-exportar-pdf')?.addEventListener('click', exportarPDF);
 
     const periodo = document.getElementById('qt-periodo');
     if (periodo) {
@@ -1345,6 +1370,6 @@
     popularFiltros().then(() => render());
   }
 
-  window.LWQualidade = { init, render, exportarInterativo };
+  window.LWQualidade = { init, render, exportarInterativo, exportarPDF };
 
 })();
