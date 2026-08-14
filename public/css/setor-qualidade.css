@@ -1973,6 +1973,161 @@
   line-height: 1.25;
 }
 
+/* ── Ícone de câmera na placa (fotos do defeito) ──────────────────────
+   Fica no canto SUPERIOR-DIREITO da placa — o único canto livre (número
+   ocupa o superior-esquerdo, motivo+tipo ocupam o inferior-direito, ver
+   .sq-slab-number/.sq-slab-canto-info acima). Some por padrão
+   (display:none) — só aparece via JS (_renderIconeFoto, setor-
+   qualidade.js) quando a placa exige motivo (2ª linha/reprovada) OU já
+   tem alguma foto tirada (mesmo depois de desmarcada — não perde acesso a
+   foto já tirada, ver comentário de slabFotos no JS). */
+.sq-slab-foto {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: .62rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+  user-select: none;
+  opacity: .55;
+  display: none;
+}
+
+.sq-slab-foto:hover {
+  opacity: 1;
+}
+
+/* Já tem pelo menos 1 foto — deixa de ficar "apagado" (opacity .55, acima)
+   pra indicar visualmente que o defeito já está documentado. */
+.sq-slab-foto.tem-foto {
+  opacity: 1;
+}
+
+/* Contador pequeno ao lado do 📷 quando há mais de 1 foto — texto puro
+   (não é um <span> à parte) pra não precisar de outro elemento no DOM já
+   apertado da placa (30px de altura, ver .sq-slab). */
+.sq-slab-foto-contagem {
+  font-size: .58rem;
+  font-weight: 700;
+  color: var(--accent);
+  vertical-align: top;
+}
+
+/* Modal de fotos do defeito — MESMO padrão visual do popover de motivo
+   (.sq-motivo-popover, acima), mas centralizado (não ancorado na placa,
+   já que a galeria pode crescer bastante) e mais largo, pra caber
+   miniaturas em grade. */
+.sq-foto-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeInDown .15s ease;
+}
+
+.sq-foto-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  width: 380px;
+  max-width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
+}
+
+.sq-foto-modal-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.sq-foto-modal-acoes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sq-foto-modal-acoes button {
+  flex: 1;
+}
+
+.sq-foto-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.sq-foto-modal-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.sq-foto-modal-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
+.sq-foto-modal-item-remover {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .65);
+  color: #fff;
+  font-size: .68rem;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sq-foto-modal-vazio {
+  font-size: .7rem;
+  color: var(--text-3);
+  font-style: italic;
+  text-align: center;
+  padding: 10px 0 14px;
+}
+
+/* Visualizador em tela cheia ao clicar numa miniatura — reaproveita o
+   overlay acima (z-index maior pra ficar por cima do próprio modal de
+   galeria). */
+.sq-foto-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .9);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  cursor: zoom-out;
+}
+
+.sq-foto-viewer-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius);
+}
+
 /* ── Responsivo ───────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .sq-container {

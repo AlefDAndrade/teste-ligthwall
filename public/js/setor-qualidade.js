@@ -81,6 +81,23 @@
   // limpar, carregar avaliação existente) trata este objeto exatamente
   // igual a slabMotivo, sempre em paralelo, mesma chave.
   let slabMotivoDescricao = {};
+  // Fotos do defeito por placa — array de data-URIs (JPEG já
+  // redimensionado/comprimido, ver _comprimirFotoDefeito) por id de placa,
+  // mesmo espírito PARALELO de slabMotivo (chave "stack{pallet}-{posicao}",
+  // nunca dentro de uma marca — o conjunto de fotos é do PAINEL, uma placa
+  // pode ter mais de uma). Ícone de câmera (📷, ver _renderIconeFoto)
+  // aparece na placa assim que ela exige motivo (2ª linha azul ou
+  // reprovada vermelho — mesmo critério de _marcaExigeMotivo), igual o
+  // badge de motivo — e continua visível mesmo se a marca depois voltar a
+  // não exigir motivo, CASO já existam fotos tiradas (não apaga foto
+  // sozinho — só a pessoa apaga, ver _renderIconeFoto/_removerFotoPlaca).
+  // Precisa ser resetado/restaurado em todo lugar que mexe em slabState —
+  // MESMA lista de slabMotivo (ver comentário acima), com 1 exceção
+  // deliberada: NÃO entra no snapshot de pushState/undo (ver pushState,
+  // abaixo) — fotos em base64 são pesadas demais pra duplicar a cada
+  // marca/desmarca (até 30 vezes no histórico); desfazer uma marcação não
+  // desfaz fotos já tiradas, só a pessoa remove pelo visualizador.
+  let slabFotos = {};
   let actionHistory  = [];
   let currentDraftId = null;
   let viewMode       = false;
@@ -866,7 +883,7 @@
       const n = stackCounts[sid] || 0;
       for (let i = 1; i <= n; i++) validos.add(`${sid}-${i}`);
     });
-    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig, slabFotos].forEach(dict => {
       Object.keys(dict).forEach(id => {
         if (id.includes('-') && !validos.has(id)) delete dict[id];
       });
@@ -1150,7 +1167,7 @@
   function _trocarPlacas(idA, idB) {
     if (viewMode || idA === idB) return;
     pushState();
-    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig, slabFotos].forEach(dict => {
       const a = dict[idA], b = dict[idB];
       if (b !== undefined) dict[idA] = b; else delete dict[idA];
       if (a !== undefined) dict[idB] = a; else delete dict[idB];
@@ -1176,12 +1193,21 @@
     if (!_stackIds().includes(origStack) || !_stackIds().includes(destStackId)) return;
 
     pushState(); // vira uma ação desfazível, igual marcar/desmarcar uma placa
+    // NOTA: fotos (slabFotos) viajam com a placa aqui embaixo, mas NÃO
+    // fazem parte do snapshot de pushState (ver comentário lá — decisão
+    // deliberada por memória). Desfazer um arraste que moveu uma placa
+    // COM foto volta marca/motivo pro lugar certo, mas a foto fica onde
+    // o arraste a deixou (caso raro: arrastar placa com foto e depois
+    // desfazer). Aceitável — corrigir manualmente pelo próprio 📷 se
+    // acontecer é mais barato que duplicar fotos em cada uma das até 30
+    // ações do histórico.
 
     const tipoFixado = getExpectedType(origemId);
     const registro = {
       marks:           slabState[origemId] ? [...slabState[origemId]] : null,
       motivo:          slabMotivo[origemId] || null,
       motivoDescricao: slabMotivoDescricao[origemId] || null,
+      fotos:           slabFotos[origemId] ? [...slabFotos[origemId]] : null,
     };
 
     // ── Remove da origem, deslocando quem ficou pra trás uma posição
@@ -1193,11 +1219,13 @@
       if (slabMotivo[de] !== undefined) slabMotivo[para] = slabMotivo[de]; else delete slabMotivo[para];
       if (slabMotivoDescricao[de] !== undefined) slabMotivoDescricao[para] = slabMotivoDescricao[de]; else delete slabMotivoDescricao[para];
       if (slabConfig[de] !== undefined) slabConfig[para] = slabConfig[de]; else delete slabConfig[para];
+      if (slabFotos[de] !== undefined) slabFotos[para] = slabFotos[de]; else delete slabFotos[para];
     }
     delete slabState[`${origStack}-${nOrigem}`];
     delete slabMotivo[`${origStack}-${nOrigem}`];
     delete slabMotivoDescricao[`${origStack}-${nOrigem}`];
     delete slabConfig[`${origStack}-${nOrigem}`];
+    delete slabFotos[`${origStack}-${nOrigem}`];
     stackCounts[origStack] = nOrigem - 1;
 
     // ── Adiciona no fim do destino ───────────────────────────────────
@@ -1208,6 +1236,7 @@
     if (registro.motivo)          slabMotivo[novoId] = registro.motivo;
     if (registro.motivoDescricao) slabMotivoDescricao[novoId] = registro.motivoDescricao;
     if (tipoFixado)                slabConfig[novoId] = tipoFixado;
+    if (registro.fotos)            slabFotos[novoId] = registro.fotos;
 
     renderStacks();
     validateAllSlabs();
@@ -1370,6 +1399,22 @@
         canto.appendChild(tp);
         slab.appendChild(canto);
 
+        // Ícone de câmera (fotos do defeito) — canto SUPERIOR direito,
+        // único canto livre da placa (número ocupa o superior-esquerdo,
+        // motivo+tipo ocupam o inferior-direito, ver "canto" acima). Só
+        // aparece quando a placa exige motivo (2ª linha/reprovada) ou já
+        // tem foto salva — ver _renderIconeFoto, chamada mais abaixo e
+        // toda vez que uma marca muda (mesmos pontos que chamam
+        // _renderBadgeMotivo).
+        const fo = document.createElement('span');
+        fo.className = 'sq-slab-foto';
+        fo.title = 'Fotos do defeito';
+        fo.addEventListener('click', (e) => {
+          e.stopPropagation();
+          _abrirGerenciadorFoto(id);
+        });
+        slab.appendChild(fo);
+
         if (slabState[id]) renderMarks(slab, slabState[id]);
         slab.addEventListener('click', () => toggleMark(slab));
         _ligarGestoApagar(slab);
@@ -1393,6 +1438,7 @@
         // "solto" (não anexado), não encontrava nada e saía sem aplicar
         // o display inicial (bug: badge ficava sem display definido).
         _renderBadgeMotivo(id);
+        _renderIconeFoto(id);
       }
     });
     validateAllSlabs();
@@ -1437,6 +1483,204 @@
       badge.textContent = '';
       badge.style.display = 'none';
     }
+  }
+
+  // Mostra/esconde o ícone de câmera (📷) na placa e atualiza a contagem
+  // de fotos já tiradas — MESMO padrão de _renderBadgeMotivo (acima):
+  // chamado sempre que uma marca muda e ao (re)renderizar a placa do
+  // zero (renderStacks). Aparece quando a placa exige motivo (2ª
+  // linha/reprovada, mesmo critério do badge) OU já tem alguma foto
+  // salva (não esconde foto já tirada mesmo se a marca depois mudar —
+  // ver comentário de slabFotos, no topo do arquivo).
+  function _renderIconeFoto(id) {
+    const slab = document.querySelector(`.sq-slab[data-id="${id}"]`);
+    const icone = slab?.querySelector('.sq-slab-foto');
+    if (!icone) return;
+    const exigeMotivo = (slabState[id] || []).some(_marcaExigeMotivo);
+    const fotos = slabFotos[id] || [];
+    if (!exigeMotivo && !fotos.length) {
+      icone.style.display = 'none';
+      return;
+    }
+    icone.style.display = 'block';
+    icone.classList.toggle('tem-foto', fotos.length > 0);
+    icone.innerHTML = fotos.length > 1
+      ? `📷<span class="sq-slab-foto-contagem">${fotos.length}</span>`
+      : '📷';
+    icone.title = fotos.length
+      ? `${fotos.length} foto${fotos.length > 1 ? 's' : ''} do defeito — clique para ver/adicionar`
+      : 'Adicionar foto do defeito';
+  }
+
+  // Redimensiona/comprime uma foto antes de guardar — MESMO padrão já
+  // usado pelos anexos de Manutenção (ver compressImage, manutencao-
+  // front.js/manutencao.js): desenha a imagem num <canvas> limitado a
+  // 1000x1000 (preservando proporção) e reexporta como JPEG qualidade
+  // .75. Fotos de defeito se beneficiam de um pouco mais de resolução
+  // que os 800x600 usados lá (às vezes é preciso dar zoom pra ver uma
+  // trinca fina), mas o princípio é o mesmo: nunca guardar o arquivo
+  // bruto da câmera (podendo passar de 4-8MB por foto — inviável somando
+  // várias placas numa avaliação só).
+  // @returns {Promise<string>} data-URI (JPEG) já redimensionado.
+  function _comprimirFotoDefeito(file) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onerror = () => reject(new Error('Não consegui ler o arquivo da foto.'));
+      leitor.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Arquivo selecionado não é uma imagem válida.'));
+        img.onload = () => {
+          const MAX = 1000;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * (MAX / width)); width = MAX; }
+            else { width = Math.round(width * (MAX / height)); height = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', .75));
+        };
+        img.src = leitor.result;
+      };
+      leitor.readAsDataURL(file);
+    });
+  }
+
+  // Inputs de arquivo ocultos, reaproveitados por TODAS as placas —
+  // criados uma única vez (lazy, na primeira chamada) em vez de 1 par por
+  // placa, pra não acumular centenas de <input> escondidos no DOM à toa
+  // numa avaliação com muitos pallets. `_fotoIdAlvo` guarda pra qual
+  // placa o input foi aberto, lido no 'change' (abaixo).
+  let _inputCamera = null;
+  let _inputGaleria = null;
+  let _fotoIdAlvo = null;
+
+  function _garantirInputsFoto() {
+    if (_inputCamera) return;
+    _inputCamera = document.createElement('input');
+    _inputCamera.type = 'file';
+    _inputCamera.accept = 'image/*';
+    _inputCamera.capture = 'environment'; // abre a câmera traseira direto, em vez da galeria
+    _inputCamera.style.display = 'none';
+    document.body.appendChild(_inputCamera);
+
+    _inputGaleria = document.createElement('input');
+    _inputGaleria.type = 'file';
+    _inputGaleria.accept = 'image/*';
+    _inputGaleria.multiple = true; // várias fotos de uma vez, escolhendo da galeria
+    _inputGaleria.style.display = 'none';
+    document.body.appendChild(_inputGaleria);
+
+    const tratarSelecao = async (input) => {
+      const arquivos = Array.from(input.files || []);
+      input.value = ''; // permite escolher o MESMO arquivo de novo depois (senão 'change' não dispara de novo)
+      if (!arquivos.length || !_fotoIdAlvo) return;
+      const id = _fotoIdAlvo;
+      try {
+        const comprimidas = await Promise.all(arquivos.map(_comprimirFotoDefeito));
+        slabFotos[id] = [...(slabFotos[id] || []), ...comprimidas];
+        _renderIconeFoto(id);
+        _abrirGerenciadorFoto(id); // reabre/atualiza a galeria já com as novas fotos
+      } catch (err) {
+        console.error('Falha ao processar foto do defeito:', err);
+        if (LW.mostrarAlerta) LW.mostrarAlerta(err.message || 'Não consegui processar a foto.', { tipo: 'erro' });
+      }
+    };
+    _inputCamera.addEventListener('change', () => tratarSelecao(_inputCamera));
+    _inputGaleria.addEventListener('change', () => tratarSelecao(_inputGaleria));
+  }
+
+  // Modal de fotos do defeito de uma placa — mostra a galeria já tirada
+  // (com opção de remover cada uma e de ver em tela cheia) + botões pra
+  // tirar mais fotos (câmera) ou importar da galeria do aparelho. Chamado
+  // ao clicar no ícone 📷 da placa (ver renderStacks) — funciona tanto
+  // pra ADICIONAR a primeira foto quanto pra gerenciar as que já existem
+  // (mesmo modal, o conteúdo só muda conforme slabFotos[id]).
+  function _abrirGerenciadorFoto(id) {
+    document.querySelector('.sq-foto-modal-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+    _garantirInputsFoto();
+
+    const fotos = slabFotos[id] || [];
+    const overlay = document.createElement('div');
+    overlay.className = 'sq-foto-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.className = 'sq-foto-modal';
+    overlay.appendChild(modal);
+
+    const titulo = document.createElement('div');
+    titulo.className = 'sq-foto-modal-titulo';
+    titulo.innerHTML = `<span>📷 Fotos do defeito — Placa ${id.split('-').pop()}</span>`;
+    const fechar = document.createElement('span');
+    fechar.textContent = '✕';
+    fechar.style.cursor = 'pointer';
+    fechar.addEventListener('click', () => overlay.remove());
+    titulo.appendChild(fechar);
+    modal.appendChild(titulo);
+
+    // Em modo visualização (avaliação já registrada, só consulta — ver
+    // viewMode) não faz sentido oferecer tirar/apagar foto, só ver as que
+    // já existem.
+    if (!viewMode) {
+      const acoes = document.createElement('div');
+      acoes.className = 'sq-foto-modal-acoes';
+      const btnCamera = document.createElement('button');
+      btnCamera.className = 'btn btn-outline-accent btn-sm';
+      btnCamera.textContent = '📷 Câmera';
+      btnCamera.addEventListener('click', () => { _fotoIdAlvo = id; _inputCamera.click(); });
+      const btnGaleria = document.createElement('button');
+      btnGaleria.className = 'btn btn-outline-accent btn-sm';
+      btnGaleria.textContent = '🖼️ Galeria';
+      btnGaleria.addEventListener('click', () => { _fotoIdAlvo = id; _inputGaleria.click(); });
+      acoes.appendChild(btnCamera);
+      acoes.appendChild(btnGaleria);
+      modal.appendChild(acoes);
+    }
+
+    if (!fotos.length) {
+      const vazio = document.createElement('div');
+      vazio.className = 'sq-foto-modal-vazio';
+      vazio.textContent = 'Nenhuma foto ainda.';
+      modal.appendChild(vazio);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'sq-foto-modal-grid';
+      fotos.forEach((dataUri, indice) => {
+        const item = document.createElement('div');
+        item.className = 'sq-foto-modal-item';
+        const img = document.createElement('img');
+        img.src = dataUri;
+        img.addEventListener('click', () => {
+          const visor = document.createElement('div');
+          visor.className = 'sq-foto-viewer-overlay';
+          visor.innerHTML = `<img src="${dataUri}">`;
+          visor.addEventListener('click', () => visor.remove());
+          document.body.appendChild(visor);
+        });
+        item.appendChild(img);
+        if (!viewMode) {
+          const remover = document.createElement('span');
+          remover.className = 'sq-foto-modal-item-remover';
+          remover.textContent = '✕';
+          remover.title = 'Remover esta foto';
+          remover.addEventListener('click', (e) => {
+            e.stopPropagation();
+            slabFotos[id].splice(indice, 1);
+            if (!slabFotos[id].length) delete slabFotos[id];
+            _renderIconeFoto(id);
+            _abrirGerenciadorFoto(id); // reabre atualizado, sem a foto removida
+          });
+          item.appendChild(remover);
+        }
+        grid.appendChild(item);
+      });
+      modal.appendChild(grid);
+    }
+
+    document.body.appendChild(overlay);
   }
 
   function renderMarks(slabEl, marks) {
@@ -1494,6 +1738,7 @@
       renderMarks(el, slabState[id]);
       validateAllSlabs();
       _renderBadgeMotivo(id);
+      _renderIconeFoto(id);
       return;
     }
 
@@ -1544,6 +1789,7 @@
     renderMarks(el, slabState[id]);
     validateAllSlabs();
     _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
+    _renderIconeFoto(id);
     // Motivo obrigatório só quando é a marca de STATUS (indicador) —
     // marca de identidade nunca exige, mesmo se a cor escolhida "por
     // acaso" for azul/vermelho (ver _corExigeMotivo).
@@ -1626,7 +1872,11 @@
   function _atualizarMotivoAposDesmarcar(id) {
     const aindaExigeMotivo = (slabState[id] || []).some(_marcaExigeMotivo);
     if (!aindaExigeMotivo) { delete slabMotivo[id]; delete slabMotivoDescricao[id]; }
+    // Fotos NÃO são apagadas aqui de propósito (ver comentário de
+    // slabFotos, topo do arquivo) — só o ícone pode sumir, se não sobrou
+    // nem motivo pendente nem foto nenhuma.
     _renderBadgeMotivo(id);
+    _renderIconeFoto(id);
   }
 
   // Seletor de motivo — popover flutuante com os 14 códigos (ver
@@ -1840,6 +2090,7 @@
       }
       renderMarks(slab, slabState[id]);
       _renderBadgeMotivo(id);
+      _renderIconeFoto(id);
     });
     validateAllSlabs();
     // 1 seletor só pro pallet inteiro (não 1 por placa) — quem marca em
@@ -1869,9 +2120,11 @@
         delete slabState[id];
         delete slabMotivo[id];
         delete slabMotivoDescricao[id];
+        delete slabFotos[id]; // pallet inteiro sendo limpo — sem marca, o defeito documentado nas fotos deixa de existir
         renderMarks(slab, []);
       });
       document.querySelectorAll(`#${sid} .sq-slab-motivo`).forEach(b => { b.textContent = ''; b.style.display = 'none'; });
+      document.querySelectorAll(`#${sid} .sq-slab-foto`).forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
       validateAllSlabs();
     });
   }
@@ -2342,11 +2595,13 @@
       if (slabMotivo[de] !== undefined) slabMotivo[para] = slabMotivo[de]; else delete slabMotivo[para];
       if (slabMotivoDescricao[de] !== undefined) slabMotivoDescricao[para] = slabMotivoDescricao[de]; else delete slabMotivoDescricao[para];
       if (slabConfig[de] !== undefined) slabConfig[para] = slabConfig[de]; else delete slabConfig[para];
+      if (slabFotos[de] !== undefined) slabFotos[para] = slabFotos[de]; else delete slabFotos[para];
     }
     delete slabState[`${sid}-${n}`];
     delete slabMotivo[`${sid}-${n}`];
     delete slabMotivoDescricao[`${sid}-${n}`];
     delete slabConfig[`${sid}-${n}`];
+    delete slabFotos[`${sid}-${n}`];
     stackCounts[sid] = n - 1;
   }
 
@@ -2845,6 +3100,7 @@
       slabState,
       slabMotivo,
       slabMotivoDescricao,
+      slabFotos,
       palletInfos: {}
     };
     [1, 2, 3, 4, ...extraStacks].forEach(p => {
@@ -2854,9 +3110,28 @@
         data.palletInfos[p][f] = el ? el.innerText : '';
       });
     });
-    localStorage.setItem(`sq_draft_${id}`, JSON.stringify(data));
-    currentDraftId = id;
-    showAlert('Salvo', 'Avaliação salva com sucesso!');
+    // localStorage tem limite de ~5-10MB por origem (varia por navegador) —
+    // fotos em base64 (mesmo já comprimidas, ver _comprimirFotoDefeito)
+    // podem estourar isso numa avaliação com muitos defeitos fotografados.
+    // Se der QuotaExceededError, salva o rascunho SEM as fotos (nada do
+    // resto se perde) em vez de falhar silenciosamente ou perder a
+    // avaliação inteira — avisa a pessoa pra registrar logo, já que as
+    // fotos só continuam vivas em memória nesta aba/sessão.
+    try {
+      localStorage.setItem(`sq_draft_${id}`, JSON.stringify(data));
+      currentDraftId = id;
+      showAlert('Salvo', 'Avaliação salva com sucesso!');
+    } catch (err) {
+      console.error('Falha ao salvar rascunho com fotos:', err);
+      try {
+        localStorage.setItem(`sq_draft_${id}`, JSON.stringify({ ...data, slabFotos: {} }));
+        currentDraftId = id;
+        showAlert('Salvo com aviso', 'O rascunho foi salvo, mas as fotos não couberam no armazenamento do navegador (não caberia recarregar a página com elas). Elas continuam nesta aba — registre a avaliação logo para não perdê-las.');
+      } catch (err2) {
+        showAlert('Erro', 'Não consegui salvar o rascunho. Tente remover algumas fotos ou registrar a avaliação direto.');
+        return;
+      }
+    }
     // "Em Andamento" não é mais uma tela própria pra navegar até — só
     // atualiza a contagem/lista do colapsável e a fila (o rascunho salvo
     // agora sai da fila, ver carregarFilaNaoAvaliadas), e continua na
@@ -3023,10 +3298,15 @@
       // preenchido pra placa aprovada 1ª linha, ver _corExigeMotivo).
       // "motivoDescricao" só existe quando motivo === 'OT' — descrição
       // livre digitada na hora (ver showPrompt em _abrirSeletorMotivo).
+      // "fotos" — array de data-URIs (pode vir vazio) das fotos do
+      // defeito tiradas/importadas nesta placa (ver slabFotos, topo do
+      // arquivo, e _comprimirFotoDefeito) — flui direto pro banco dentro
+      // do JSON da avaliação (dados: JSON.stringify(avaliacao), ver
+      // db.salvarAvaliacaoQualidade), sem precisar de coluna nova.
       evalObj.paineis = Object.entries(slabState).map(([id, marks]) => {
         const parts = id.split('-');
         const info  = getClassifiedInfo(marks);
-        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null };
+        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null, fotos: slabFotos[id] || [] };
       });
       evalObj.montagem = _montagemDoRegistro(evalObj.paineis);
 
@@ -3155,19 +3435,21 @@
     // (tipo "fixado" na placa, não no pallet — ver _moverPainel) mostraria
     // o tipo errado até a pessoa mexer em algo que force um re-render.
     const paineisDaAvaliacao = d.paineis.filter(p => p.avaliacaoId === item.id);
-    const ns = {}, nm = {}, nd = {}, novoSlabConfig = {}, novasContagens = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
+    const ns = {}, nm = {}, nd = {}, nf = {}, novoSlabConfig = {}, novasContagens = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
     paineisDaAvaliacao.forEach(p => {
       const sid = `stack${p.pallet}`;
       const id  = `${sid}-${p.posicao}`;
       ns[id] = p.marcas;
       if (p.motivo) nm[id] = p.motivo;
       if (p.motivo === 'OT' && p.motivoDescricao) nd[id] = p.motivoDescricao;
+      if (Array.isArray(p.fotos) && p.fotos.length) nf[id] = p.fotos;
       if (p.tipoEsperado) novoSlabConfig[id] = p.tipoEsperado;
       novasContagens[sid] = Math.max(novasContagens[sid] || 0, p.posicao);
     });
     slabState     = ns;
     slabMotivo    = nm;
     slabMotivoDescricao = nd;
+    slabFotos     = nf;
     slabConfig    = novoSlabConfig;
     stackCounts   = novasContagens;
     extraStacks   = Object.keys(novasContagens)
@@ -4457,6 +4739,7 @@
     slabMotivo    = d.slabMotivo || {};
     slabMotivoDescricao = d.slabMotivoDescricao || {};
     slabConfig    = d.slabConfig || {};
+    slabFotos     = d.slabFotos || {};
     actionHistory = [];
     renderStacks();
     validateAllSlabs();
@@ -4521,6 +4804,7 @@
 
   function clearForm() {
     slabState = {}; slabMotivo = {}; slabMotivoDescricao = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
+    slabFotos = {};
     extraStacks = []; stackCounts = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 }; proximoNumeroPalletExtra = 5;
     linkedOperacaoId = null;
     dimensaoOperacaoAtual = null;
@@ -4716,8 +5000,10 @@
       slabState = {};
       slabMotivo = {};
       slabMotivoDescricao = {};
+      slabFotos = {}; // toda marca sumiu — sem defeito classificado, as fotos ficariam sem contexto
       document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
       document.querySelectorAll('.sq-slab-motivo').forEach(b => { b.textContent = ''; b.style.display = 'none'; });
+      document.querySelectorAll('.sq-slab-foto').forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
       validateAllSlabs();
     });
   }
