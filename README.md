@@ -308,7 +308,7 @@ Pontos específicos desse domínio:
 - **`autor_nome`/`autorNome`** grava automaticamente quem registrou (mesmo mecanismo de *Autoria automática de registro*, acima).
 - **Estoque nunca é ajustado diretamente** — toda mudança de quantidade passa por uma movimentação (Entrada/Saída), numa transação que ajusta o saldo e grava o histórico juntos. Cadastrar uma peça nova com quantidade inicial grava só o registro histórico (sem duplicar o saldo — a quantidade já nasce certa no cadastro).
 - **Excluir uma peça** remove também todo o seu histórico de movimentações (cascata manual, já que `foreign_keys` está ativado no banco).
-- **Upload de foto/PDF** ainda é só visual — os campos existem na tela mas não fazem upload de verdade (limitação conhecida, ver abaixo).
+- **Upload de foto/PDF** é funcional: imagens são comprimidas no navegador (redimensionadas pra no máximo 800×600, JPEG 70%) e PDFs são anexados sem compressão — ambos convertidos pra base64 e salvos direto nas colunas `foto_operador`/`foto_tecnico` do chamado (`previewArquivo()`/`compressImage()`, `public/js/manutencao-front.js`).
 - Só `GET`/`POST` (nunca `DELETE`/`PUT`) — mesmo padrão do resto do sistema; exclusão/edição usam rotas próprias com o verbo no path (`/manutencao/excluir-corretiva`, `/manutencao/editar-estoque`), pra ficarem cobertas pela mesma proteção de tamanho máximo de corpo que `server.js` só aplica a `POST`.
 
 ## Notificações Push (Manutenção)
