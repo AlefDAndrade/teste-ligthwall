@@ -100,6 +100,35 @@
 .man-upload-area img { max-width: 60px; max-height: 60px; border-radius: 4px; border: 1px solid var(--border); object-fit: cover; }
 .man-upload-area button { background: var(--red); color: #fff; border: none; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
 
+/* ── Fotos do chamado (Problema/Serviço) — grade + carrossel ──────────
+   MESMO padrão visual/comportamento do Setor de Qualidade para fotos de
+   defeito de pallet (ver .sq-foto-*, setor-qualidade.css, e
+   _manRenderFotosGrid/_manAbrirVisorCarrossel, manutencao.js): várias
+   fotos por campo, miniaturas em grade, clique abre um visor em tela
+   cheia com navegação em carrossel (setas + teclado, wrap-around). O
+   PDF continua sendo um anexo único e separado (ver .man-upload-area,
+   acima) — nunca entra nesta grade. Classes reaproveitadas tanto no
+   formulário (galeria editável, com botão de remover) quanto na
+   trajetória do chamado (galeria só-leitura, ver abrirHistorico). */
+.man-foto-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.man-foto-item { position: relative; width: 60px; height: 60px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-3); flex-shrink: 0; }
+.man-foto-item img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.man-foto-item-remover { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff; font-size: .62rem; line-height: 16px; text-align: center; cursor: pointer; }
+.man-foto-vazio { font-size: 11px; color: var(--text-3); font-style: italic; }
+.man-foto-botoes { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.man-foto-botoes button { padding: 5px 12px; border-radius: 6px; font-size: 12px; }
+
+/* Visor em tela cheia ao clicar numa miniatura — carrossel com setas +
+   contador numa única barra "pílula" sempre embaixo da foto. Navegação
+   é circular (ver _manAbrirVisorCarrossel, manutencao.js). */
+.man-foto-viewer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 20px; cursor: zoom-out; }
+.man-foto-viewer-overlay img { max-width: 100%; max-height: 75vh; border-radius: var(--radius, 8px); box-shadow: 0 12px 50px rgba(0,0,0,.5); cursor: zoom-out; }
+.man-foto-viewer-controles { display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,.08); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 8px 18px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.man-foto-viewer-seta { background: rgba(255,255,255,.12); color: #fff; border: none; width: 38px; height: 38px; border-radius: 50%; font-size: 1.4rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .1s; }
+.man-foto-viewer-seta:hover { background: rgba(255,255,255,.28); }
+.man-foto-viewer-seta:active { transform: scale(.9); }
+.man-foto-viewer-contador { color: #fff; font-size: .8rem; font-weight: 700; letter-spacing: .03em; min-width: 42px; text-align: center; }
+
 .man-prioridade-box { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg-3); width: 100%; max-width: 320px; }
 .man-prioridade-btn { flex: 1; padding: 6px 0; text-align: center; background: transparent; color: var(--text-2); border: none; cursor: pointer; font-weight: 600; font-size: 12px; transition: 0.2s; }
 /* Cor do botão ATIVO agora vem inline (background/color setados por

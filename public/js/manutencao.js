@@ -137,6 +137,42 @@
     });
   }
 
+  // ── Anexos do chamado (fotos + PDF) — Fase 3 ─────────────────────────
+  // Antes, fotoOperador/fotoTecnico guardavam um valor ÚNICO: OU uma foto
+  // (data:image/...) OU um PDF (data:application/pdf/..., 'pdfgz:...' ou
+  // 'PDF: nome.ext'). Agora cada campo pode ter VÁRIAS fotos (mesma
+  // lógica de galeria+carrossel do Setor de Qualidade, ver
+  // _abrirGerenciadorFoto/_abrirVisorCarrossel em setor-qualidade.js) +
+  // continuar aceitando, à parte, um único PDF — por isso o valor
+  // guardado nas colunas foto_operador/foto_tecnico (ainda TEXT, sem
+  // mudar o schema) passa a ser um JSON `{fotos:[...], pdf:...|null}`.
+  // _manParseAnexo() lê os dois formatos (novo E os 3 formatos antigos
+  // de PDF/foto única) — chamados salvos antes desta mudança continuam
+  // abrindo normalmente.
+  function _manParseAnexo(raw) {
+    if (!raw) return { fotos: [], pdf: null };
+    if (typeof raw === 'string' && raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw);
+        return { fotos: Array.isArray(parsed.fotos) ? parsed.fotos : [], pdf: parsed.pdf || null };
+      } catch (_) { /* não era o JSON novo — cai pro tratamento legado abaixo */ }
+    }
+    // Formato ANTIGO: valor único, OU era foto OU era PDF.
+    if (raw.startsWith('pdfgz:') || raw.startsWith('data:application/pdf') || raw.startsWith('PDF:')) {
+      return { fotos: [], pdf: raw };
+    }
+    return { fotos: [raw], pdf: null };
+  }
+
+  // Monta de volta o valor a salvar em foto_operador/foto_tecnico a
+  // partir das fotos (array) + PDF (valor único, já no mesmo formato de
+  // sempre) — string vazia quando não há nada, pra manter o mesmo
+  // `if (m.fotoOperador)` que o resto do código já usa.
+  function _manSerializarAnexo(fotos, pdf) {
+    if ((!fotos || !fotos.length) && !pdf) return '';
+    return JSON.stringify({ fotos: fotos || [], pdf: pdf || null });
+  }
+
   // ============================================================
   // 2. NAVEGAÇÃO
   // ============================================================
@@ -169,6 +205,14 @@
   // ============================================================
   let prioridadeSelecionada = '';
   let tiposSelecionados = [];
+
+  // Fotos (múltiplas) do chamado atualmente aberto no formulário —
+  // 'operador' (Seção 1, abertura/problema) e 'tecnico' (Seção 3,
+  // execução/serviço). O PDF de cada etapa continua um anexo único e
+  // separado, tratado pelos inputs/preview de sempre (man-manFotoOperador/
+  // man-manFotoTecnico + previewArquivo/removerArquivo, abaixo) — nunca
+  // entra neste array.
+  let _manFotos = { operador: [], tecnico: [] };
 
   // ── Novo fluxo de aceite de chamado / pedido de peça (ver conversa que
   // motivou isso) ────────────────────────────────────────────────────────
@@ -612,6 +656,178 @@
     document.getElementById(btnId).style.display = 'none';
   }
 
+  // ── Fotos do chamado (múltiplas) — MESMA lógica de galeria/carrossel
+  // usada pelas fotos de defeito do Setor de Qualidade (ver
+  // _garantirInputsFoto/_abrirGerenciadorFoto/_abrirVisorCarrossel,
+  // setor-qualidade.js): dois <input type="file"> ocultos e
+  // reaproveitados (câmera traseira / galeria com seleção múltipla),
+  // compressão de cada foto antes de guardar (reaproveita compressImage,
+  // acima — já usada pelo PDF/foto legado deste mesmo arquivo) e um
+  // visor em tela cheia com setas/teclado quando há mais de 1 foto.
+  let _manInputCameraFoto = null;
+  let _manInputGaleriaFoto = null;
+  let _manFotoCampoAlvo = null; // 'operador' ou 'tecnico' — pra qual campo o input foi aberto
+
+  function _manIdGridFoto(campo) {
+    return campo === 'tecnico' ? 'man-fotosTecnicoGrid' : 'man-fotosOperadorGrid';
+  }
+
+  function _manGarantirInputsFoto() {
+    if (_manInputCameraFoto) return;
+    _manInputCameraFoto = document.createElement('input');
+    _manInputCameraFoto.type = 'file';
+    _manInputCameraFoto.accept = 'image/*';
+    _manInputCameraFoto.capture = 'environment'; // abre a câmera traseira direto, em vez da galeria
+    _manInputCameraFoto.style.display = 'none';
+    document.body.appendChild(_manInputCameraFoto);
+
+    _manInputGaleriaFoto = document.createElement('input');
+    _manInputGaleriaFoto.type = 'file';
+    _manInputGaleriaFoto.accept = 'image/*';
+    _manInputGaleriaFoto.multiple = true; // várias fotos de uma vez, escolhendo da galeria
+    _manInputGaleriaFoto.style.display = 'none';
+    document.body.appendChild(_manInputGaleriaFoto);
+
+    const tratarSelecao = async (input) => {
+      const arquivos = Array.from(input.files || []);
+      input.value = ''; // permite escolher o MESMO arquivo de novo depois (senão 'change' não dispara de novo)
+      if (!arquivos.length || !_manFotoCampoAlvo) return;
+      const campo = _manFotoCampoAlvo;
+      try {
+        const comprimidas = await Promise.all(arquivos.map(compressImage));
+        _manFotos[campo] = [...(_manFotos[campo] || []), ...comprimidas];
+        _manRenderFotosGrid(campo);
+      } catch (err) {
+        console.error('Falha ao processar foto do chamado:', err);
+        toast(err.message || 'Não consegui processar a foto.', 'error');
+      }
+    };
+    _manInputCameraFoto.addEventListener('change', () => tratarSelecao(_manInputCameraFoto));
+    _manInputGaleriaFoto.addEventListener('change', () => tratarSelecao(_manInputGaleriaFoto));
+  }
+
+  function _manAbrirCameraFoto(campo) {
+    _manGarantirInputsFoto();
+    _manFotoCampoAlvo = campo;
+    _manInputCameraFoto.click();
+  }
+
+  function _manAbrirGaleriaFoto(campo) {
+    _manGarantirInputsFoto();
+    _manFotoCampoAlvo = campo;
+    _manInputGaleriaFoto.click();
+  }
+
+  // Redesenha a grade de miniaturas de um campo ('operador'/'tecnico') a
+  // partir de _manFotos[campo] — chamada toda vez que uma foto é
+  // adicionada/removida, e ao abrir um chamado existente para edição.
+  function _manRenderFotosGrid(campo) {
+    const grid = document.getElementById(_manIdGridFoto(campo));
+    if (!grid) return;
+    const fotos = _manFotos[campo] || [];
+    if (!fotos.length) {
+      grid.innerHTML = '<div class="man-foto-vazio">Nenhuma foto ainda.</div>';
+      return;
+    }
+    grid.innerHTML = '';
+    fotos.forEach((dataUri, indice) => {
+      const item = document.createElement('div');
+      item.className = 'man-foto-item';
+      const img = document.createElement('img');
+      img.src = dataUri;
+      img.addEventListener('click', () => _manAbrirVisorCarrossel(fotos, indice));
+      item.appendChild(img);
+      const remover = document.createElement('span');
+      remover.className = 'man-foto-item-remover';
+      remover.textContent = '✕';
+      remover.title = 'Remover esta foto';
+      remover.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _manFotos[campo].splice(indice, 1);
+        _manRenderFotosGrid(campo);
+      });
+      item.appendChild(remover);
+      grid.appendChild(item);
+    });
+  }
+
+  // Visor em tela cheia, em modo CARROSSEL, pra navegar entre as fotos de
+  // UM campo (setas + teclado, com wrap-around) — MESMO comportamento de
+  // _abrirVisorCarrossel em setor-qualidade.js, usado tanto pela galeria
+  // do formulário (fotos ainda editáveis) quanto pela trajetória do
+  // chamado, somente leitura (ver exibirImagem/abrirHistorico, abaixo).
+  // @param {string[]} fotos - data URIs da galeria ATUAL.
+  // @param {number} indiceInicial - índice da foto clicada.
+  function _manAbrirVisorCarrossel(fotos, indiceInicial) {
+    document.querySelector('.man-foto-viewer-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+
+    let indice = indiceInicial;
+
+    const visor = document.createElement('div');
+    visor.className = 'man-foto-viewer-overlay';
+
+    const fecharVisor = () => {
+      document.removeEventListener('keydown', aoTeclar);
+      visor.remove();
+    };
+
+    const img = document.createElement('img');
+    visor.appendChild(img);
+
+    const contador = document.createElement('div');
+    contador.className = 'man-foto-viewer-contador';
+
+    const atualizar = () => {
+      img.src = fotos[indice];
+      contador.textContent = `${indice + 1} / ${fotos.length}`;
+    };
+
+    // % dá resultado negativo pra índice negativo em JS — daí o
+    // "+ fotos.length" antes do módulo, garantindo sempre voltar pro
+    // outro extremo em vez de "travar"/dar índice inválido.
+    const irPara = (delta) => { indice = (indice + delta + fotos.length) % fotos.length; atualizar(); };
+
+    if (fotos.length > 1) {
+      const controles = document.createElement('div');
+      controles.className = 'man-foto-viewer-controles';
+      controles.addEventListener('click', (e) => e.stopPropagation());
+
+      const setaEsq = document.createElement('button');
+      setaEsq.type = 'button';
+      setaEsq.className = 'man-foto-viewer-seta';
+      setaEsq.textContent = '‹';
+      setaEsq.setAttribute('aria-label', 'Foto anterior');
+      setaEsq.addEventListener('click', () => irPara(-1));
+
+      const setaDir = document.createElement('button');
+      setaDir.type = 'button';
+      setaDir.className = 'man-foto-viewer-seta';
+      setaDir.textContent = '›';
+      setaDir.setAttribute('aria-label', 'Próxima foto');
+      setaDir.addEventListener('click', () => irPara(1));
+
+      controles.appendChild(setaEsq);
+      controles.appendChild(contador);
+      controles.appendChild(setaDir);
+      visor.appendChild(controles);
+    }
+
+    const aoTeclar = (e) => {
+      if (e.key === 'Escape') fecharVisor();
+      else if (fotos.length > 1 && e.key === 'ArrowLeft') irPara(-1);
+      else if (fotos.length > 1 && e.key === 'ArrowRight') irPara(1);
+    };
+    document.addEventListener('keydown', aoTeclar);
+
+    // Clique no fundo OU na própria imagem fecha — a barra de controles,
+    // acima, já dá stopPropagation, então um clique nela nunca chega até
+    // aqui.
+    visor.addEventListener('click', fecharVisor);
+
+    atualizar();
+    document.body.appendChild(visor);
+  }
+
   function toggleEmpresaExterna() {
     const el = document.getElementById('man-manTipoExecucao');
     if (el) {
@@ -679,6 +895,15 @@
     document.getElementById('man-manEmpresaExternaRow').style.display = 'none';
     document.getElementById('man-manTipoEtiqueta').value = 'Azul';
     prioridadeSelecionada = ''; tiposSelecionados = [];
+
+    // Galeria de fotos (problema/serviço) e PDFs — chamado novo começa
+    // sempre sem nenhum anexo, mesmo que o formulário ainda tivesse
+    // algo em memória de uma edição anterior.
+    _manFotos = { operador: [], tecnico: [] };
+    _manRenderFotosGrid('operador');
+    _manRenderFotosGrid('tecnico');
+    removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp');
+    removerArquivo('man-manFotoTecnico', 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec');
     document.querySelectorAll('.man-prioridade-btn').forEach(el => { el.classList.remove('active'); el.style.background = ''; });
     document.querySelectorAll('.man-tag-anomalia').forEach(el => el.classList.remove('active'));
 
@@ -835,23 +1060,29 @@
         return;
       }
 
+      // PDF de cada etapa — MESMA leitura de sempre, a partir do preview
+      // do input único de PDF (previewArquivo, acima); nunca mistura com
+      // as fotos (_manFotos), que são anexadas à parte.
       const fotoOperadorPreview = document.getElementById('man-fotoOperadorPreview');
-      let fotoOperador = '';
+      let pdfOperador = null;
       if (fotoOperadorPreview.style.display !== 'none') {
-        const img = fotoOperadorPreview.querySelector('img');
-        if (img) fotoOperador = img.src;
-        else if (fotoOperadorPreview.dataset.base64) fotoOperador = fotoOperadorPreview.dataset.base64;
-        else if (fotoOperadorPreview.dataset.filename) fotoOperador = 'PDF: ' + fotoOperadorPreview.dataset.filename;
+        if (fotoOperadorPreview.dataset.base64) pdfOperador = fotoOperadorPreview.dataset.base64;
+        else if (fotoOperadorPreview.dataset.filename) pdfOperador = 'PDF: ' + fotoOperadorPreview.dataset.filename;
       }
 
       const fotoTecnicoPreview = document.getElementById('man-fotoTecnicoPreview');
-      let fotoTecnico = '';
+      let pdfTecnico = null;
       if (fotoTecnicoPreview.style.display !== 'none') {
-        const img = fotoTecnicoPreview.querySelector('img');
-        if (img) fotoTecnico = img.src;
-        else if (fotoTecnicoPreview.dataset.base64) fotoTecnico = fotoTecnicoPreview.dataset.base64;
-        else if (fotoTecnicoPreview.dataset.filename) fotoTecnico = 'PDF: ' + fotoTecnicoPreview.dataset.filename;
+        if (fotoTecnicoPreview.dataset.base64) pdfTecnico = fotoTecnicoPreview.dataset.base64;
+        else if (fotoTecnicoPreview.dataset.filename) pdfTecnico = 'PDF: ' + fotoTecnicoPreview.dataset.filename;
       }
+
+      // fotoOperador/fotoTecnico viajam pro servidor como JSON
+      // `{fotos:[...], pdf:...}` — ver _manSerializarAnexo/_manParseAnexo,
+      // no topo do arquivo (schema do banco não muda: ainda é 1 coluna
+      // TEXT por campo).
+      const fotoOperador = _manSerializarAnexo(_manFotos.operador, pdfOperador);
+      const fotoTecnico = _manSerializarAnexo(_manFotos.tecnico, pdfTecnico);
 
       const obj = {
         id: document.getElementById('man-manId')?.value || gerarId(),
@@ -1225,37 +1456,53 @@
     const progressoEl = document.getElementById('man-progressoChamado');
     if (progressoEl) progressoEl.innerHTML = _renderizarTrajetoria(_construirPassosTrajetoria(chamado));
 
-    function exibirImagem(src, titulo) {
-      if (!src || src === '' || src === 'null' || src === 'undefined') {
+    // Nome global único por chamado+campo, pra achar de volta o array de
+    // fotos certo quando a miniatura for clicada (o HTML vira uma string
+    // estática — não dá pra fechar sobre a variável `fotos` diretamente,
+    // então guardamos no próprio objeto `window` e lemos pelo nome no
+    // onclick, ver abaixo).
+    window._manFotosTrajetoria = window._manFotosTrajetoria || {};
+
+    function exibirImagem(srcBruto, titulo, chaveGaleria) {
+      const anexo = _manParseAnexo(srcBruto);
+      const partes = [];
+
+      if (anexo.pdf) {
+        if (anexo.pdf.startsWith('pdfgz:')) {
+          const decompressedBase64 = decompressPDF(anexo.pdf);
+          partes.push(`<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
+            <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
+            <span>PDF anexado</span>
+            <a href="${decompressedBase64}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+          </div>`);
+        } else if (anexo.pdf.startsWith('data:application/pdf;base64,')) {
+          partes.push(`<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
+            <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
+            <span>PDF anexado</span>
+            <a href="${anexo.pdf}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
+          </div>`);
+        } else if (anexo.pdf.startsWith('PDF:')) {
+          partes.push(`<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);"><i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i> ${esc(anexo.pdf.replace('PDF: ', ''))}</div>`);
+        }
+      }
+
+      if (anexo.fotos.length) {
+        window._manFotosTrajetoria[chaveGaleria] = anexo.fotos;
+        const miniaturas = anexo.fotos.map((_, indice) =>
+          `<div class="man-foto-item" onclick="_manAbrirVisorCarrossel(window._manFotosTrajetoria['${chaveGaleria}'], ${indice})"><img src="${anexo.fotos[indice]}"></div>`
+        ).join('');
+        partes.push(`
+          <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:12px; color:var(--text-2);">${titulo}:</span>
+            <div class="man-foto-grid">${miniaturas}</div>
+          </div>
+        `);
+      }
+
+      if (!partes.length) {
         return `<div style="margin-top:4px; font-size:12px; color:var(--text-2); opacity:0.6;">Nenhum anexo.</div>`;
       }
-      
-      // Verifica se é um PDF comprimido (legado) ou normal
-      if (src.startsWith('pdfgz:')) {
-        const decompressedBase64 = decompressPDF(src);
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
-          <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
-          <span>PDF anexado</span>
-          <a href="${decompressedBase64}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
-        </div>`;
-      }
-      // Verifica se é um PDF Base64 padrão
-      if (src.startsWith('data:application/pdf;base64,')) {
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);">
-          <i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i>
-          <span>PDF anexado</span>
-          <a href="${src}" target="_blank" style="color:var(--blue); text-decoration:underline; margin-left:8px;">Abrir PDF</a>
-        </div>`;
-      }
-      if (src.startsWith('PDF:')) {
-        return `<div style="margin-top:4px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);"><i class="fas fa-file-pdf" style="color:var(--red); font-size:20px;"></i> ${esc(src.replace('PDF: ', ''))}</div>`;
-      }
-      return `
-        <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-          <span style="font-size:12px; color:var(--text-2);">${titulo}:</span>
-          <img src="${src}" style="max-width:100%; max-height:150px; object-fit:cover; border-radius:6px; border:1px solid var(--border); cursor:pointer;" onclick="window.open(this.src, '_blank')">
-        </div>
-      `;
+      return partes.join('');
     }
 
     let html = `
@@ -1275,7 +1522,7 @@
           </div>
           <div style="color:var(--text);"><strong>${esc(chamado.observador)}</strong> - ${esc(chamado.anomalia)}</div>
           <div style="font-size:12px; color:var(--text-2); margin-top:2px;">Prioridade: <span style="color:${_corPrioridade(chamado.prioridade)}; font-weight:600;">${esc(chamado.prioridade)}</span> | Etiqueta: ${esc(chamado.tipoEtiqueta)} | Turno: <strong>${esc(chamado.turno)}</strong></div>
-          ${exibirImagem(chamado.fotoOperador, 'Anexo do problema')}
+          ${exibirImagem(chamado.fotoOperador, 'Fotos do problema', 'op-' + chamado.id)}
         </div>
 
         <div style="background:var(--accent-dim); border-left:4px solid var(--accent); padding:12px; border-radius:6px;">
@@ -1295,7 +1542,7 @@
             <strong>Custo Mão de Obra:</strong> R$ ${chamado.custoMaoObra ? chamado.custoMaoObra.toFixed(2) : '0,00'}<br>
             <strong style="color:var(--accent);">Custo Total:</strong> <span style="color:var(--accent); font-weight:600;">R$ ${(chamado.custoPecas + chamado.custoMaoObra).toFixed(2)}</span>
           </div>
-          ${exibirImagem(chamado.fotoTecnico, 'Anexo do serviço')}
+          ${exibirImagem(chamado.fotoTecnico, 'Fotos do serviço', 'tec-' + chamado.id)}
         </div>
 
         <div style="background:var(--blue-dim); border-left:4px solid var(--blue); padding:12px; border-radius:6px;">
@@ -1807,32 +2054,42 @@
       // digitado e salvo.
       document.getElementById('man-manResponsavel').value = m.responsavel || (m.aceito === 'Sim' ? (m.aceitoPor || '') : '');
       
-      if (m.fotoOperador) {
+      // fotoOperador/fotoTecnico podem estar no formato NOVO
+      // (`{fotos:[...], pdf:...}`) ou em qualquer um dos formatos
+      // antigos (foto única ou PDF único) — _manParseAnexo cobre os
+      // dois. As fotos alimentam a galeria (_manFotos/_manRenderFotosGrid,
+      // com carrossel ao clicar); o PDF, se houver, continua no preview
+      // de sempre.
+      const anexoOperador = _manParseAnexo(m.fotoOperador);
+      _manFotos.operador = anexoOperador.fotos;
+      _manRenderFotosGrid('operador');
+      removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp');
+      if (anexoOperador.pdf) {
           const preview = document.getElementById('man-fotoOperadorPreview');
           preview.style.display = 'block';
-          if (m.fotoOperador.startsWith('pdfgz:') || m.fotoOperador.startsWith('data:application/pdf')) {
+          if (anexoOperador.pdf.startsWith('pdfgz:') || anexoOperador.pdf.startsWith('data:application/pdf')) {
               preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
-              preview.dataset.base64 = m.fotoOperador;
-          } else if (m.fotoOperador.startsWith('PDF:')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoOperador.replace('PDF: ', ''))}</span></div>`;
-              preview.dataset.filename = m.fotoOperador.replace('PDF: ', '');
-          } else {
-              preview.innerHTML = `<img src="${m.fotoOperador}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--border); object-fit:cover;">`;
+              preview.dataset.base64 = anexoOperador.pdf;
+          } else if (anexoOperador.pdf.startsWith('PDF:')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(anexoOperador.pdf.replace('PDF: ', ''))}</span></div>`;
+              preview.dataset.filename = anexoOperador.pdf.replace('PDF: ', '');
           }
           document.getElementById('man-btnRemoverFotoOp').style.display = 'inline';
       }
-      
-      if (m.fotoTecnico) {
+
+      const anexoTecnico = _manParseAnexo(m.fotoTecnico);
+      _manFotos.tecnico = anexoTecnico.fotos;
+      _manRenderFotosGrid('tecnico');
+      removerArquivo('man-manFotoTecnico', 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec');
+      if (anexoTecnico.pdf) {
           const preview = document.getElementById('man-fotoTecnicoPreview');
           preview.style.display = 'block';
-          if (m.fotoTecnico.startsWith('pdfgz:') || m.fotoTecnico.startsWith('data:application/pdf')) {
+          if (anexoTecnico.pdf.startsWith('pdfgz:') || anexoTecnico.pdf.startsWith('data:application/pdf')) {
               preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">PDF anexado</span></div>`;
-              preview.dataset.base64 = m.fotoTecnico;
-          } else if (m.fotoTecnico.startsWith('PDF:')) {
-              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(m.fotoTecnico.replace('PDF: ', ''))}</span></div>`;
-              preview.dataset.filename = m.fotoTecnico.replace('PDF: ', '');
-          } else {
-              preview.innerHTML = `<img src="${m.fotoTecnico}" style="max-width:60px; max-height:60px; border-radius:4px; border:1px solid var(--border); object-fit:cover;">`;
+              preview.dataset.base64 = anexoTecnico.pdf;
+          } else if (anexoTecnico.pdf.startsWith('PDF:')) {
+              preview.innerHTML = `<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; border:1px solid var(--accent); border-radius:4px;"><i class="fas fa-file-pdf" style="color:var(--red); font-size:24px;"></i><span style="font-size:12px;">${esc(anexoTecnico.pdf.replace('PDF: ', ''))}</span></div>`;
+              preview.dataset.filename = anexoTecnico.pdf.replace('PDF: ', '');
           }
           document.getElementById('man-btnRemoverFotoTec').style.display = 'inline';
       }
@@ -2959,6 +3216,9 @@
   window._manToggleFase = _manToggleFase;
   window._manToggleListaCorretiva = _manToggleListaCorretiva;
   window._manToggleListaProgramada = _manToggleListaProgramada;
+  window._manAbrirCameraFoto = _manAbrirCameraFoto;
+  window._manAbrirGaleriaFoto = _manAbrirGaleriaFoto;
+  window._manAbrirVisorCarrossel = _manAbrirVisorCarrossel;
   window.abrirModalFechamento = MAN.abrirModalFechamento;
   window.abrirModalFinalizar = MAN.abrirModalFinalizar;
   window.abrirModalInicio = MAN.abrirModalInicio;
