@@ -1666,6 +1666,70 @@
     document.body.appendChild(overlay);
   }
 
+  // Visualizador de fotos SOMENTE LEITURA do Espelho — MESMO padrão visual
+  // de _abrirGerenciadorFoto (acima), mas lê as fotos da avaliação já
+  // REGISTRADA que está aberta no Espelho (dashboardEvals[mirrorIndex].
+  // palletFotos, ver evalObj.palletFotos em registerEvaluation), não do
+  // `palletFotos` global (esse é só da avaliação em EDIÇÃO na tela
+  // principal — usar o global aqui misturaria fotos de avaliações
+  // diferentes). Nunca oferece Câmera/Galeria/remover — é consulta de
+  // um registro histórico, igual ao "viewMode" de _abrirGerenciadorFoto,
+  // só que sem depender daquela variável (o Espelho pode estar aberto
+  // com viewMode=false, ex.: olhando o Espelho antes de começar uma
+  // avaliação nova).
+  function _abrirFotosMirror(sid) {
+    document.querySelector('.sq-foto-modal-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+
+    const item  = dashboardEvals[mirrorIndex];
+    const fotos = item?.palletFotos?.[sid] || [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sq-foto-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.className = 'sq-foto-modal';
+    overlay.appendChild(modal);
+
+    const titulo = document.createElement('div');
+    titulo.className = 'sq-foto-modal-titulo';
+    titulo.innerHTML = `<span>📷 Fotos do defeito — ${sid.replace('stack', 'Pallet ')}</span>`;
+    const fechar = document.createElement('span');
+    fechar.textContent = '✕';
+    fechar.style.cursor = 'pointer';
+    fechar.addEventListener('click', () => overlay.remove());
+    titulo.appendChild(fechar);
+    modal.appendChild(titulo);
+
+    if (!fotos.length) {
+      const vazio = document.createElement('div');
+      vazio.className = 'sq-foto-modal-vazio';
+      vazio.textContent = 'Nenhuma foto ainda.';
+      modal.appendChild(vazio);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'sq-foto-modal-grid';
+      fotos.forEach((dataUri) => {
+        const item = document.createElement('div');
+        item.className = 'sq-foto-modal-item';
+        const img = document.createElement('img');
+        img.src = dataUri;
+        img.addEventListener('click', () => {
+          const visor = document.createElement('div');
+          visor.className = 'sq-foto-viewer-overlay';
+          visor.innerHTML = `<img src="${dataUri}">`;
+          visor.addEventListener('click', () => visor.remove());
+          document.body.appendChild(visor);
+        });
+        item.appendChild(img);
+        grid.appendChild(item);
+      });
+      modal.appendChild(grid);
+    }
+
+    document.body.appendChild(overlay);
+  }
+
   function renderMarks(slabEl, marks) {
     const c = slabEl.querySelector('.sq-slab-marks');
     c.innerHTML = '';
@@ -3842,7 +3906,24 @@
     // número de sempre.
     [2, 1, 3, 4].forEach(p => {
       const n = _totalPorPalletMirror(panels, p); // cada palete com a contagem DELE, não uma média/fixo compartilhado
-      html += `<div class="sq-mini-pallet"><div class="sq-mini-pallet-header">P${p}</div>`;
+      const sidMirror = `stack${p}`;
+      // Fotos do defeito deste pallet, já salvas junto da avaliação (ver
+      // evalObj.palletFotos em registerEvaluation) — botão fica sempre
+      // visível no cabeçalho do mini-pallet, mesmo sem foto nenhuma
+      // (mesmo padrão do ícone da grade principal, ver
+      // _renderIconeFotoPallet), só pra abrir o visualizador somente-
+      // leitura (_abrirFotosMirror, abaixo).
+      const fotosMirror = item.palletFotos?.[sidMirror] || [];
+      // IMPORTANTE: sem texto de verdade dentro do botão (nem "📷", nem a
+      // contagem) — o ícone/contador entram via CSS (::before/::after,
+      // ver .sq-mini-pallet-foto no CSS), que NÃO conta pra
+      // `element.textContent`. O parser de testes do Espelho lê
+      // `.sq-mini-pallet-header.textContent` pra extrair o número do
+      // pallet ("P1" → "1", ver setor-qualidade-espelho-paineis-a-
+      // menos.test.js) — texto de verdade aqui dentro contaminaria esse
+      // parse.
+      const btnFotoMirror = `<button type="button" class="sq-mini-pallet-foto${fotosMirror.length ? ' tem-foto' : ''}" data-contagem="${fotosMirror.length || ''}" onclick="SQ.abrirFotosMirror('${sidMirror}')" title="${fotosMirror.length ? `${fotosMirror.length} foto${fotosMirror.length > 1 ? 's' : ''} do defeito neste pallet` : 'Nenhuma foto do defeito neste pallet'}"></button>`;
+      html += `<div class="sq-mini-pallet"><div class="sq-mini-pallet-header"><span>P${p}</span>${btnFotoMirror}</div>`;
       for (let i = 1; i <= n; i++) {
         const panel = panels.find(pa => pa.pallet===p && pa.posicao===i);
         // Placa sem marca individual (a imensa maioria — só quem tem
@@ -5085,6 +5166,7 @@
     toggleIndicadorAtivo,
     selectAllPallet, clearPallet,
     abrirFotosPallet: _abrirGerenciadorFoto,
+    abrirFotosMirror: _abrirFotosMirror,
     toggleCollapsible,
     togglePopover,
     undoLastAction, clearAllMarks,

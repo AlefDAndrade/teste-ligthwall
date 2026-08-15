@@ -715,6 +715,64 @@
   border-bottom: 1px solid var(--border);
   padding-bottom: 3px;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Botão de fotos do defeito no cabeçalho do mini-pallet do Espelho —
+   MESMO padrão visual do ícone da grade principal (.sq-pallet-foto,
+   abaixo), só que sempre visível (é consulta de um registro já
+   fechado, não faz sentido esconder) e ancorado à direita do rótulo
+   "P1"/"P2"/etc, sem empurrar o texto do centro. */
+/* Ícone (📷) e contador vêm de CSS puro (::before/::after), NUNCA de
+   texto de verdade dentro do <button> — o parser de testes do Espelho lê
+   `.sq-mini-pallet-header.textContent` pra extrair o número do pallet
+   ("P1" → "1", ver setor-qualidade-espelho-paineis-a-menos.test.js) e
+   texto de verdade aqui dentro contaminaria esse parse. Conteúdo gerado
+   por ::before/::after não entra em `element.textContent`, por isso é
+   seguro usar aqui mesmo estando dentro do cabeçalho. */
+.sq-mini-pallet-foto {
+  position: absolute;
+  right: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: .58rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: .55;
+  text-transform: none;
+  transition: border-color .15s, color .15s, opacity .15s;
+}
+
+.sq-mini-pallet-foto::before {
+  content: '📷';
+}
+
+.sq-mini-pallet-foto[data-contagem]:not([data-contagem=""])::after {
+  content: attr(data-contagem);
+  font-weight: 700;
+}
+
+.sq-mini-pallet-foto:hover {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sq-mini-pallet-foto.tem-foto {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .sq-mini-slab {
