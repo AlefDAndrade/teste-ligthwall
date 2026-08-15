@@ -1382,6 +1382,16 @@ td.mono {
   font-weight: 700;
   font-size: .85rem;
   margin-bottom: 8px;
+  position: relative;
+}
+/* Agrupa o badge de tipo de montagem + o botão de fotos no lado direito
+   do cabeçalho — mantém .af-pallet-header com só 2 filhos (rótulo à
+   esquerda, este grupo à direita), pra continuar funcionando certinho
+   com justify-content:space-between mesmo com um elemento novo. */
+.af-pallet-header-direita {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 /* "Tipo de montagem no cantinho" — badge discreto no canto do card do
    pallet, não em cada painel individual. */
@@ -1392,6 +1402,51 @@ td.mono {
   color: var(--text-3);
   padding: 2px 8px;
   border-radius: 999px;
+}
+/* Botão de fotos do defeito no cabeçalho do card do pallet, na Análise
+   Focada — MESMO espírito visual do ícone do Setor de Qualidade (ver
+   .sq-pallet-foto, setor-qualidade.css), mas sempre visível (aqui é
+   sempre consulta de um registro já fechado, nunca faz sentido
+   esconder). Ícone (📷) e contador vêm de CSS puro (::before/::after,
+   abaixo) — NUNCA como texto de verdade dentro do <button>, mesmo
+   cuidado tomado no Espelho (ver comentário de _renderIconeFotoPallet/
+   renderMirror, setor-qualidade.js) pra não arriscar contaminar algum
+   parse de textContent do cabeçalho no futuro.
+   Abre _abrirFotosPalletFocada (analise-focada.js) — visualizador
+   somente-leitura, nunca oferece tirar/apagar foto aqui. */
+.af-pallet-foto {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: .58rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: .55;
+  transition: border-color .15s, color .15s, opacity .15s;
+}
+.af-pallet-foto::before {
+  content: '📷';
+}
+.af-pallet-foto[data-contagem]:not([data-contagem=""])::after {
+  content: attr(data-contagem);
+  font-weight: 700;
+}
+.af-pallet-foto:hover {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.af-pallet-foto.tem-foto {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .af-pallet-slabs {
   display: flex;
@@ -1417,6 +1472,85 @@ td.mono {
 .af-slab-resultado {
   font-weight: 700;
   text-align: right;
+}
+
+/* Modal de fotos do defeito (Análise Focada) — mesmíssimo padrão visual
+   do modal do Setor de Qualidade (ver .sq-foto-modal-*,
+   setor-qualidade.css), com classes próprias (af-*) pra Análise Focada
+   não depender do CSS de outra tela. Nunca tem "acoes" (botões de
+   Câmera/Galeria) nem botão de remover — é sempre consulta. */
+.af-foto-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .6);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeInDown .15s ease;
+}
+.af-foto-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  width: 380px;
+  max-width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
+}
+.af-foto-modal-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.af-foto-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.af-foto-modal-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.af-foto-modal-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+.af-foto-modal-vazio {
+  font-size: .7rem;
+  color: var(--text-3);
+  font-style: italic;
+  text-align: center;
+  padding: 10px 0 14px;
+}
+.af-foto-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .9);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  cursor: zoom-out;
+}
+.af-foto-viewer-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius);
 }
 
 /* Linha visual extra de um traço reaproveitado, no Relatório de Injeção —

@@ -932,7 +932,24 @@
       // próprio card do pallet, não em cada painel individual.
       const tipoMontPallet = montagem['pallet' + p] || '—';
       const totalPorPallet = _totalPorPallet(paineis, p); // cada palete com a contagem DELE, não uma média/fixo compartilhado
-      html += `<div class="af-pallet"><div class="af-pallet-header"><span>Pallet ${p}</span><span class="af-pallet-tipo">${LW.escaparHtml(tipoMontPallet)}</span></div><div class="af-pallet-slabs">`;
+      const sidFoco = `stack${p}`;
+      // Fotos do defeito deste pallet, já salvas junto da avaliação no
+      // Setor de Qualidade (ver evalObj.palletFotos, setor-qualidade.js)
+      // — botão SEMPRE visível no cabeçalho do card, mesmo sem foto
+      // nenhuma (mesmo padrão do Espelho, ver renderMirror em
+      // setor-qualidade.js), só pra abrir o visualizador somente-leitura
+      // (_abrirFotosPalletFocada, abaixo). Não oferece tirar/apagar foto
+      // aqui — a Análise Focada é sempre consulta de um registro já
+      // fechado, nunca edição.
+      const fotosFoco = avaliacao.palletFotos?.[sidFoco] || [];
+      // Ícone/contador entram via CSS (::before/::after, ver
+      // .af-pallet-foto em styles.css), NUNCA como texto de verdade
+      // dentro do <button> — mesmo cuidado tomado no Espelho (ver
+      // _renderIconeFotoPallet/renderMirror, setor-qualidade.js), pra
+      // não arriscar contaminar algum parse futuro de textContent do
+      // cabeçalho.
+      const btnFotoFoco = `<button type="button" class="af-pallet-foto${fotosFoco.length ? ' tem-foto' : ''}" data-contagem="${fotosFoco.length || ''}" onclick="LWFocada.abrirFotosPallet('${sidFoco}')" title="${fotosFoco.length ? `${fotosFoco.length} foto${fotosFoco.length > 1 ? 's' : ''} do defeito neste pallet` : 'Nenhuma foto do defeito neste pallet'}"></button>`;
+      html += `<div class="af-pallet"><div class="af-pallet-header"><span>Pallet ${p}</span><span class="af-pallet-header-direita"><span class="af-pallet-tipo">${LW.escaparHtml(tipoMontPallet)}</span>${btnFotoFoco}</span></div><div class="af-pallet-slabs">`;
       for (let i = 1; i <= totalPorPallet; i++) {
         const painel = paineis.find(pp => pp.pallet === p && pp.posicao === i);
         const cor = _corPainel(painel);
@@ -946,6 +963,66 @@
     });
     html += '</div>';
     el.innerHTML = html;
+  }
+
+  // Visualizador de fotos SOMENTE LEITURA do pallet, na Análise Focada —
+  // MESMO espírito do visualizador do Espelho (ver _abrirFotosMirror,
+  // setor-qualidade.js), mas lendo a avaliação do detalhe da OPERAÇÃO
+  // atual (_ultimoDetalhe.avaliacao, preenchido por render()/pelo bloco
+  // standalone do export — ver comentário de _ultimoDetalhe ali) em vez
+  // do array de avaliações do dashboard. Nunca oferece Câmera/Galeria/
+  // remover — a Análise Focada não tem fluxo de edição de avaliação,
+  // só consulta.
+  function _abrirFotosPalletFocada(sid) {
+    document.querySelector('.af-foto-modal-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+
+    const fotos = _ultimoDetalhe?.avaliacao?.palletFotos?.[sid] || [];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'af-foto-modal-overlay';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const modal = document.createElement('div');
+    modal.className = 'af-foto-modal';
+    overlay.appendChild(modal);
+
+    const titulo = document.createElement('div');
+    titulo.className = 'af-foto-modal-titulo';
+    titulo.innerHTML = `<span>📷 Fotos do defeito — ${sid.replace('stack', 'Pallet ')}</span>`;
+    const fechar = document.createElement('span');
+    fechar.textContent = '✕';
+    fechar.style.cursor = 'pointer';
+    fechar.addEventListener('click', () => overlay.remove());
+    titulo.appendChild(fechar);
+    modal.appendChild(titulo);
+
+    if (!fotos.length) {
+      const vazio = document.createElement('div');
+      vazio.className = 'af-foto-modal-vazio';
+      vazio.textContent = 'Nenhuma foto ainda.';
+      modal.appendChild(vazio);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'af-foto-modal-grid';
+      fotos.forEach((dataUri) => {
+        const item = document.createElement('div');
+        item.className = 'af-foto-modal-item';
+        const img = document.createElement('img');
+        img.src = dataUri;
+        img.addEventListener('click', () => {
+          const visor = document.createElement('div');
+          visor.className = 'af-foto-viewer-overlay';
+          visor.innerHTML = `<img src="${dataUri}">`;
+          visor.addEventListener('click', () => visor.remove());
+          document.body.appendChild(visor);
+        });
+        item.appendChild(img);
+        grid.appendChild(item);
+      });
+      modal.appendChild(grid);
+    }
+
+    document.body.appendChild(overlay);
   }
 
   // ── Render principal ─────────────────────────────────────────
@@ -1496,12 +1573,26 @@
   .af-traco-origem-linha { margin-top:10px; font-size:.8rem; color:var(--text-2); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .af-paineis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
   .af-pallet { border:1px solid var(--border); border-radius:var(--radius-lg); padding:10px 12px; background:var(--bg-1); }
-  .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; }
+  .af-pallet-header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:.85rem; margin-bottom:8px; position:relative; }
+  .af-pallet-header-direita { display:flex; align-items:center; gap:6px; }
   .af-pallet-tipo { font-size:.66rem; font-weight:600; background:var(--border); color:var(--text-3); padding:2px 8px; border-radius:999px; }
+  .af-pallet-foto { background:transparent; border:1px solid var(--border); color:var(--text-3); min-width:20px; height:18px; padding:0 4px; border-radius:9px; cursor:pointer; font-size:.58rem; display:flex; align-items:center; justify-content:center; gap:2px; opacity:.55; transition:border-color .15s, color .15s, opacity .15s; }
+  .af-pallet-foto::before { content:'📷'; }
+  .af-pallet-foto[data-contagem]:not([data-contagem=""])::after { content:attr(data-contagem); font-weight:700; }
+  .af-pallet-foto:hover, .af-pallet-foto.tem-foto { opacity:1; border-color:var(--accent); color:var(--accent); }
   .af-pallet-slabs { display:flex; flex-direction:column; gap:4px; }
   .af-slab { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:5px 8px; border:1px solid var(--border); border-left-width:3px; border-radius:4px; font-size:.78rem; background:var(--bg-card); }
   .af-slab-num { color:var(--text-3); font-family:var(--font-mono); }
   .af-slab-resultado { font-weight:700; text-align:right; }
+  .af-foto-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:999; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .af-foto-modal { background:var(--bg-card); border:1px solid var(--border-2); border-radius:var(--radius-lg); padding:14px; width:380px; max-width:100%; max-height:85vh; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,.6); }
+  .af-foto-modal-titulo { display:flex; align-items:center; justify-content:space-between; font-size:.82rem; font-weight:700; color:var(--text); margin-bottom:10px; }
+  .af-foto-modal-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .af-foto-modal-item { position:relative; aspect-ratio:1; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); background:var(--bg-2); }
+  .af-foto-modal-item img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; }
+  .af-foto-modal-vazio { font-size:.7rem; color:var(--text-3); font-style:italic; text-align:center; padding:10px 0 14px; }
+  .af-foto-viewer-overlay { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:1001; display:flex; align-items:center; justify-content:center; padding:20px; cursor:zoom-out; }
+  .af-foto-viewer-overlay img { max-width:100%; max-height:100%; border-radius:var(--radius); }
   .ba-grid { display:flex; flex-direction:row-reverse; flex-wrap:nowrap; justify-content:center; gap:4px; }
   .ba-celula { display:flex; flex-direction:column; align-items:center; justify-content:space-between; flex:1 1 0; min-width:0; padding:6px 2px; border-radius:var(--radius); }
   .ba-numero { text-align:center; white-space:nowrap; font-size:.72rem; }
@@ -1622,6 +1713,7 @@
   ${_corPainel}
   ${_totalPorPallet}
   ${_renderAvaliacao}
+  ${_abrirFotosPalletFocada}
   ${_afCapacidadeConfigurada}
   ${_afPaletePorMetadeELado}
   ${_afPaleteDoBerco}
@@ -1635,7 +1727,7 @@
   // ao vivo (LWFocada.abrirDetalhesBerco) — é isso que faz _renderBercos
   // (acima) tratar as células como clicáveis (podeAbrirDetalhes = typeof
   // LWFocada !== 'undefined') e o onclick inline de cada célula resolver.
-  window.LWFocada = { abrirDetalhesBerco };
+  window.LWFocada = { abrirDetalhesBerco, abrirFotosPallet: _abrirFotosPalletFocada };
 
   _renderCabecalho(DETALHE.operacao || {});
   _renderBercos(DETALHE.bercosVisuais, DETALHE.operacao);
@@ -1758,5 +1850,5 @@
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, exportarPDF, abrirDetalhesBerco, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
+  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, exportarPDF, abrirDetalhesBerco, abrirFotosPallet: _abrirFotosPalletFocada, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
 })();
