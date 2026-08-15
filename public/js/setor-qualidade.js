@@ -1574,6 +1574,96 @@
     _inputGaleria.addEventListener('change', () => tratarSelecao(_inputGaleria));
   }
 
+  // Visor em tela cheia, em modo CARROSSEL, pra navegar entre as fotos de
+  // UM pallet (setas + teclado, com wrap-around: da última foto "próxima"
+  // volta pra primeira, e vice-versa). Compartilhado por
+  // _abrirGerenciadorFoto (edição) e _abrirFotosMirror (Espelho, só
+  // leitura, abaixo) — MESMA lógica nos dois, só muda de onde vêm as
+  // fotos. Setas/contador só aparecem com mais de 1 foto (uma foto
+  // sozinha não tem "próxima"/"anterior" pra ir), numa única barra fixa
+  // sempre embaixo da imagem (ver .sq-foto-viewer-controles,
+  // setor-qualidade.css) — não se move conforme o tamanho/proporção da
+  // foto.
+  // @param {string[]} fotos - data URIs da galeria ATUAL (mesmo array que já monta o grid de miniaturas).
+  // @param {number} indiceInicial - índice da foto clicada, pra já abrir nela.
+  function _abrirVisorCarrossel(fotos, indiceInicial) {
+    document.querySelector('.sq-foto-viewer-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+
+    let indice = indiceInicial;
+
+    const visor = document.createElement('div');
+    visor.className = 'sq-foto-viewer-overlay';
+
+    const fecharVisor = () => {
+      document.removeEventListener('keydown', aoTeclar);
+      visor.remove();
+    };
+
+    const img = document.createElement('img');
+    visor.appendChild(img);
+
+    const contador = document.createElement('div');
+    contador.className = 'sq-foto-viewer-contador';
+
+    const atualizar = () => {
+      img.src = fotos[indice];
+      contador.textContent = `${indice + 1} / ${fotos.length}`;
+    };
+
+    // % dá resultado negativo pra índice negativo em JS (ex: -1 % 5 = -1,
+    // não 4) — daí o "+ fotos.length" antes do módulo, garantindo sempre
+    // voltar pro outro extremo em vez de "travar"/dar índice inválido.
+    const irPara = (delta) => { indice = (indice + delta + fotos.length) % fotos.length; atualizar(); };
+
+    if (fotos.length > 1) {
+      const controles = document.createElement('div');
+      controles.className = 'sq-foto-viewer-controles';
+      // Clique na pílula em si (o respiro entre os botões, por exemplo)
+      // não deve fechar o visor — só o fundo escuro ao redor conta como
+      // "clicar fora".
+      controles.addEventListener('click', (e) => e.stopPropagation());
+
+      const setaEsq = document.createElement('button');
+      setaEsq.type = 'button';
+      setaEsq.className = 'sq-foto-viewer-seta';
+      setaEsq.textContent = '‹';
+      setaEsq.setAttribute('aria-label', 'Foto anterior');
+      setaEsq.addEventListener('click', () => irPara(-1));
+
+      const setaDir = document.createElement('button');
+      setaDir.type = 'button';
+      setaDir.className = 'sq-foto-viewer-seta';
+      setaDir.textContent = '›';
+      setaDir.setAttribute('aria-label', 'Próxima foto');
+      setaDir.addEventListener('click', () => irPara(1));
+
+      controles.appendChild(setaEsq);
+      controles.appendChild(contador);
+      controles.appendChild(setaDir);
+      visor.appendChild(controles);
+    }
+
+    // Setas do teclado navegam, Esc fecha — mesmo espírito de atalho dos
+    // outros modais desta tela. Listener SEMPRE removido em fecharVisor
+    // (clique fora, Esc, ou clique na própria imagem/fundo) — sem isso,
+    // ficaria escutando pra sempre, mesmo depois do visor fechado.
+    const aoTeclar = (e) => {
+      if (e.key === 'Escape') fecharVisor();
+      else if (fotos.length > 1 && e.key === 'ArrowLeft') irPara(-1);
+      else if (fotos.length > 1 && e.key === 'ArrowRight') irPara(1);
+    };
+    document.addEventListener('keydown', aoTeclar);
+
+    // Clique no fundo OU na própria imagem fecha (mesmo comportamento de
+    // antes: "clicar em qualquer lugar fecha") — a barra de controles,
+    // acima, já dá stopPropagation, então um clique nela nunca chega até
+    // aqui.
+    visor.addEventListener('click', fecharVisor);
+
+    atualizar();
+    document.body.appendChild(visor);
+  }
+
   // Modal de fotos do defeito de um PALLET — mostra a galeria já tirada
   // (com opção de remover cada uma e de ver em tela cheia) + botões pra
   // tirar mais fotos (câmera) ou importar da galeria do aparelho. Chamado
@@ -1636,13 +1726,7 @@
         item.className = 'sq-foto-modal-item';
         const img = document.createElement('img');
         img.src = dataUri;
-        img.addEventListener('click', () => {
-          const visor = document.createElement('div');
-          visor.className = 'sq-foto-viewer-overlay';
-          visor.innerHTML = `<img src="${dataUri}">`;
-          visor.addEventListener('click', () => visor.remove());
-          document.body.appendChild(visor);
-        });
+        img.addEventListener('click', () => _abrirVisorCarrossel(fotos, indice));
         item.appendChild(img);
         if (!viewMode) {
           const remover = document.createElement('span');
@@ -1709,18 +1793,12 @@
     } else {
       const grid = document.createElement('div');
       grid.className = 'sq-foto-modal-grid';
-      fotos.forEach((dataUri) => {
+      fotos.forEach((dataUri, indice) => {
         const item = document.createElement('div');
         item.className = 'sq-foto-modal-item';
         const img = document.createElement('img');
         img.src = dataUri;
-        img.addEventListener('click', () => {
-          const visor = document.createElement('div');
-          visor.className = 'sq-foto-viewer-overlay';
-          visor.innerHTML = `<img src="${dataUri}">`;
-          visor.addEventListener('click', () => visor.remove());
-          document.body.appendChild(visor);
-        });
+        img.addEventListener('click', () => _abrirVisorCarrossel(fotos, indice));
         item.appendChild(img);
         grid.appendChild(item);
       });

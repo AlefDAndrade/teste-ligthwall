@@ -1013,20 +1013,111 @@
       vazio.textContent = 'Nenhuma foto ainda.';
       modal.appendChild(vazio);
     } else {
+      // Visor em carrossel — clicar numa miniatura abre ESSA foto em tela
+      // cheia, já com setas pra andar entre TODAS as fotos deste mesmo
+      // pallet. Navegação é circular: da última foto, "próxima" volta pra
+      // primeira, e de "anterior" na primeira volta pra última — nunca
+      // trava numa ponta (pedido: "ao chegar na última volta para a
+      // primeira"). Tudo dentro desta mesma função de propósito — ela é
+      // reembutida via toString() no export interativo (ver
+      // _gerarHtmlAfStandalone, mais abaixo), então uma função auxiliar
+      // separada não viajaria junto pro arquivo exportado.
+      const abrirVisor = (indiceInicial) => {
+        document.querySelector('.af-foto-viewer-overlay')?.remove(); // fecha um anterior, se sobrou aberto
+
+        let indice = indiceInicial;
+
+        const visor = document.createElement('div');
+        visor.className = 'af-foto-viewer-overlay';
+
+        const fecharVisor = () => {
+          document.removeEventListener('keydown', aoTeclar);
+          visor.remove();
+        };
+
+        const img = document.createElement('img');
+        visor.appendChild(img);
+
+        const contador = document.createElement('div');
+        contador.className = 'af-foto-viewer-contador';
+
+        const atualizar = () => {
+          img.src = fotos[indice];
+          contador.textContent = `${indice + 1} / ${fotos.length}`;
+        };
+
+        // % dá resultado negativo pra índice negativo em JS (ex: -1 % 5 =
+        // -1, não 4) — daí o "+ fotos.length" antes do módulo, garantindo
+        // sempre voltar pro outro extremo em vez de "travar"/dar índice
+        // inválido.
+        const irPara = (delta) => { indice = (indice + delta + fotos.length) % fotos.length; atualizar(); };
+
+        // Setas/contador só fazem sentido com mais de 1 foto — uma foto
+        // sozinha não tem "próxima"/"anterior" pra ir. Ficam juntas numa
+        // ÚNICA barra (.af-foto-viewer-controles, "pílula" abaixo da
+        // foto — ver CSS) em vez de soltas nos cantos da tela: assim a
+        // posição da barra nunca muda conforme o tamanho/proporção da
+        // foto (o pedido original — fotos verticais/horizontais não
+        // "empurram" as setas de lugar, elas ficam sempre no mesmo lugar,
+        // fixas embaixo).
+        if (fotos.length > 1) {
+          const controles = document.createElement('div');
+          controles.className = 'af-foto-viewer-controles';
+          // Clique na pílula em si (o respiro entre os botões, por
+          // exemplo) não deve fechar o visor — só o fundo escuro ao
+          // redor conta como "clicar fora".
+          controles.addEventListener('click', (e) => e.stopPropagation());
+
+          const setaEsq = document.createElement('button');
+          setaEsq.type = 'button';
+          setaEsq.className = 'af-foto-viewer-seta';
+          setaEsq.textContent = '‹';
+          setaEsq.setAttribute('aria-label', 'Foto anterior');
+          setaEsq.addEventListener('click', () => irPara(-1));
+
+          const setaDir = document.createElement('button');
+          setaDir.type = 'button';
+          setaDir.className = 'af-foto-viewer-seta';
+          setaDir.textContent = '›';
+          setaDir.setAttribute('aria-label', 'Próxima foto');
+          setaDir.addEventListener('click', () => irPara(1));
+
+          controles.appendChild(setaEsq);
+          controles.appendChild(contador);
+          controles.appendChild(setaDir);
+          visor.appendChild(controles);
+        }
+
+        // Setas do teclado navegam, Esc fecha — mesmo espírito de atalho
+        // dos outros modais desta tela (ex: Esc fechando "Detalhes do
+        // Berço"). Listener SEMPRE removido em fecharVisor (clique fora,
+        // Esc, ou clique na própria imagem/fundo) — sem isso, ficaria
+        // escutando pra sempre, mesmo depois do visor fechado.
+        const aoTeclar = (e) => {
+          if (e.key === 'Escape') fecharVisor();
+          else if (fotos.length > 1 && e.key === 'ArrowLeft') irPara(-1);
+          else if (fotos.length > 1 && e.key === 'ArrowRight') irPara(1);
+        };
+        document.addEventListener('keydown', aoTeclar);
+
+        // Clique no fundo OU na própria imagem fecha (mesmo comportamento
+        // de antes: "clicar em qualquer lugar fecha") — as setas, acima,
+        // já dão stopPropagation, então um clique nelas nunca chega até
+        // aqui.
+        visor.addEventListener('click', fecharVisor);
+
+        atualizar();
+        document.body.appendChild(visor);
+      };
+
       const grid = document.createElement('div');
       grid.className = 'af-foto-modal-grid';
-      fotos.forEach((dataUri) => {
+      fotos.forEach((dataUri, i) => {
         const item = document.createElement('div');
         item.className = 'af-foto-modal-item';
         const img = document.createElement('img');
         img.src = dataUri;
-        img.addEventListener('click', () => {
-          const visor = document.createElement('div');
-          visor.className = 'af-foto-viewer-overlay';
-          visor.innerHTML = `<img src="${dataUri}">`;
-          visor.addEventListener('click', () => visor.remove());
-          document.body.appendChild(visor);
-        });
+        img.addEventListener('click', () => abrirVisor(i));
         item.appendChild(img);
         grid.appendChild(item);
       });
@@ -1632,8 +1723,19 @@
   .af-foto-modal-item { position:relative; aspect-ratio:1; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); background:var(--bg-2); }
   .af-foto-modal-item img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; }
   .af-foto-modal-vazio { font-size:.7rem; color:var(--text-3); font-style:italic; text-align:center; padding:10px 0 14px; }
-  .af-foto-viewer-overlay { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:1001; display:flex; align-items:center; justify-content:center; padding:20px; cursor:zoom-out; }
-  .af-foto-viewer-overlay img { max-width:100%; max-height:100%; border-radius:var(--radius); }
+  .af-foto-viewer-overlay { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:1001; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:20px; cursor:zoom-out; }
+  .af-foto-viewer-overlay img { max-width:100%; max-height:75vh; border-radius:var(--radius); box-shadow:0 12px 50px rgba(0,0,0,.5); cursor:zoom-out; }
+  /* Barra de controles — SEMPRE embaixo da foto, num lugar fixo (não
+     "gruda" na borda da imagem nem se move conforme o tamanho dela, ver
+     .af-foto-viewer-overlay img acima: max-height:75vh deixa uma faixa
+     de respiro por baixo pra essa barra caber sem sobrepor nada, mesmo
+     numa foto beeem vertical). Pílula com leve blur — bem mais discreta
+     que 2 botões soltos boiando em cima da imagem (como era antes). */
+  .af-foto-viewer-controles { display:flex; align-items:center; gap:16px; background:rgba(255,255,255,.08); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.14); border-radius:999px; padding:8px 18px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
+  .af-foto-viewer-seta { background:rgba(255,255,255,.12); color:#fff; border:none; width:38px; height:38px; border-radius:50%; font-size:1.4rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, transform .1s; }
+  .af-foto-viewer-seta:hover { background:rgba(255,255,255,.28); }
+  .af-foto-viewer-seta:active { transform:scale(.9); }
+  .af-foto-viewer-contador { color:#fff; font-size:.8rem; font-weight:700; letter-spacing:.03em; min-width:42px; text-align:center; }
   .ba-grid { display:flex; flex-direction:row-reverse; flex-wrap:nowrap; justify-content:center; gap:4px; }
   .ba-celula { display:flex; flex-direction:column; align-items:center; justify-content:space-between; flex:1 1 0; min-width:0; padding:6px 2px; border-radius:var(--radius); }
   .ba-numero { text-align:center; white-space:nowrap; font-size:.72rem; }

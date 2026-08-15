@@ -2176,23 +2176,79 @@
 
 /* Visualizador em tela cheia ao clicar numa miniatura — reaproveita o
    overlay acima (z-index maior pra ficar por cima do próprio modal de
-   galeria). */
+   galeria). Com mais de 1 foto, vira um carrossel: setas + contador numa
+   ÚNICA barra "pílula" (.sq-foto-viewer-controles) SEMPRE embaixo da foto,
+   em posição fixa (nunca presa nas bordas da imagem) — o
+   max-height:75vh abaixo garante uma faixa de respiro por baixo pra essa
+   barra caber sem sobrepor nada, mesmo numa foto bem vertical. Navegação
+   é circular: da última foto, "próxima" volta pra primeira, e vice-versa
+   (ver _abrirVisorCarrossel, setor-qualidade.js). */
 .sq-foto-viewer-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, .9);
   z-index: 1001;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 18px;
   padding: 20px;
   cursor: zoom-out;
 }
 
 .sq-foto-viewer-overlay img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 75vh;
   border-radius: var(--radius);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, .5);
+  cursor: zoom-out;
+}
+
+.sq-foto-viewer-controles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, .08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  padding: 8px 18px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+}
+
+.sq-foto-viewer-seta {
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, transform .1s;
+}
+
+.sq-foto-viewer-seta:hover {
+  background: rgba(255, 255, 255, .28);
+}
+
+.sq-foto-viewer-seta:active {
+  transform: scale(.9);
+}
+
+.sq-foto-viewer-contador {
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  min-width: 42px;
+  text-align: center;
 }
 
 /* ── Responsivo ───────────────────────────────────────────── */
