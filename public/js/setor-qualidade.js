@@ -1468,15 +1468,12 @@
     }
   }
 
-  // Mostra/esconde o ícone de câmera (📷) no CABEÇALHO do pallet e
-  // atualiza a contagem de fotos já tiradas — MESMO padrão de
-  // _renderBadgeMotivo (acima), só que aplicado ao PALLET inteiro em vez
-  // de placa por placa: chamado sempre que uma marca muda e ao
-  // (re)renderizar as placas do zero (renderStacks). Aparece quando
-  // QUALQUER placa do pallet exige motivo (2ª linha/reprovada, mesmo
-  // critério do badge) OU o pallet já tem alguma foto salva (não esconde
-  // foto já tirada mesmo se a marca depois mudar — ver comentário de
-  // palletFotos, no topo do arquivo).
+  // Mostra o ícone de câmera (📷) no CABEÇALHO do pallet e atualiza a
+  // contagem de fotos já tiradas — chamado sempre que uma marca muda e
+  // ao (re)renderizar as placas do zero (renderStacks). O ícone fica
+  // SEMPRE visível, disponível para adicionar foto a qualquer momento,
+  // independente de alguma placa do pallet exigir motivo (2ª linha/
+  // reprovada) ou não — antes ficava escondido nesse caso.
   //
   // Aceita tanto um id de PALLET ("stack1") quanto um id de PLACA
   // ("stack1-3") — extrai o pallet do id recebido — pra não precisar
@@ -1486,16 +1483,7 @@
     const sid = idOuSid.split('-')[0];
     const icone = document.getElementById(sid)?.closest('.sq-pallet-col')?.querySelector('.sq-pallet-foto');
     if (!icone) return;
-    const n = stackCounts[sid] || 0;
-    let exigeMotivo = false;
-    for (let i = 1; i <= n && !exigeMotivo; i++) {
-      exigeMotivo = (slabState[`${sid}-${i}`] || []).some(_marcaExigeMotivo);
-    }
     const fotos = palletFotos[sid] || [];
-    if (!exigeMotivo && !fotos.length) {
-      icone.style.display = 'none';
-      return;
-    }
     icone.style.display = 'flex';
     icone.classList.toggle('tem-foto', fotos.length > 0);
     icone.innerHTML = fotos.length > 1
@@ -5006,7 +4994,7 @@
       palletFotos = {}; // toda marca sumiu — sem defeito classificado, as fotos ficariam sem contexto
       document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
       document.querySelectorAll('.sq-slab-motivo').forEach(b => { b.textContent = ''; b.style.display = 'none'; });
-      document.querySelectorAll('.sq-pallet-foto').forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
+      document.querySelectorAll('.sq-pallet-foto').forEach(f => { f.classList.remove('tem-foto'); });
       validateAllSlabs();
     });
   }

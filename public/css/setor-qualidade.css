@@ -1994,7 +1994,7 @@
   border-radius: 11px;
   cursor: pointer;
   font-size: .62rem;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
