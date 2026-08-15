@@ -81,23 +81,26 @@
   // limpar, carregar avaliação existente) trata este objeto exatamente
   // igual a slabMotivo, sempre em paralelo, mesma chave.
   let slabMotivoDescricao = {};
-  // Fotos do defeito por placa — array de data-URIs (JPEG já
-  // redimensionado/comprimido, ver _comprimirFotoDefeito) por id de placa,
-  // mesmo espírito PARALELO de slabMotivo (chave "stack{pallet}-{posicao}",
-  // nunca dentro de uma marca — o conjunto de fotos é do PAINEL, uma placa
-  // pode ter mais de uma). Ícone de câmera (📷, ver _renderIconeFoto)
-  // aparece na placa assim que ela exige motivo (2ª linha azul ou
-  // reprovada vermelho — mesmo critério de _marcaExigeMotivo), igual o
-  // badge de motivo — e continua visível mesmo se a marca depois voltar a
-  // não exigir motivo, CASO já existam fotos tiradas (não apaga foto
-  // sozinho — só a pessoa apaga, ver _renderIconeFoto/_removerFotoPlaca).
-  // Precisa ser resetado/restaurado em todo lugar que mexe em slabState —
-  // MESMA lista de slabMotivo (ver comentário acima), com 1 exceção
-  // deliberada: NÃO entra no snapshot de pushState/undo (ver pushState,
-  // abaixo) — fotos em base64 são pesadas demais pra duplicar a cada
-  // marca/desmarca (até 30 vezes no histórico); desfazer uma marcação não
-  // desfaz fotos já tiradas, só a pessoa remove pelo visualizador.
-  let slabFotos = {};
+  // Fotos do defeito por PALLET — array de data-URIs (JPEG já
+  // redimensionado/comprimido, ver _comprimirFotoDefeito) por id de
+  // pallet ("stack{n}", SEM posição — o vínculo é do pallet inteiro, não
+  // de uma placa específica: um defeito costuma valer pro pallet todo, e
+  // tirar 1 foto por placa duplicava trabalho à toa). Ícone de câmera
+  // (📷, ver _renderIconeFotoPallet) aparece no CABEÇALHO do pallet assim
+  // que alguma placa dele exige motivo (2ª linha azul ou reprovada
+  // vermelho — mesmo critério de _marcaExigeMotivo), igual o badge de
+  // motivo (por placa) já fazia — e continua visível mesmo se nenhuma
+  // placa exigir motivo mais, CASO já existam fotos tiradas (não apaga
+  // foto sozinho — só a pessoa apaga, ver _renderIconeFotoPallet/
+  // _abrirGerenciadorFoto). Precisa ser resetado/restaurado em todo lugar
+  // que mexe em slabState, mas SEM entrar em _limparPlacasForaDoEscopo
+  // (chave não tem "-", não é por placa) — limpeza é por pallet inteiro,
+  // ver _removerPalletExtra. NÃO entra no snapshot de pushState/undo (ver
+  // pushState, abaixo) — fotos em base64 são pesadas demais pra duplicar
+  // a cada marca/desmarca (até 30 vezes no histórico); desfazer uma
+  // marcação não desfaz fotos já tiradas, só a pessoa remove pelo
+  // visualizador.
+  let palletFotos = {};
   let actionHistory  = [];
   let currentDraftId = null;
   let viewMode       = false;
@@ -883,7 +886,7 @@
       const n = stackCounts[sid] || 0;
       for (let i = 1; i <= n; i++) validos.add(`${sid}-${i}`);
     });
-    [slabState, slabMotivo, slabMotivoDescricao, slabConfig, slabFotos].forEach(dict => {
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
       Object.keys(dict).forEach(id => {
         if (id.includes('-') && !validos.has(id)) delete dict[id];
       });
@@ -1008,6 +1011,7 @@
         <span class="sq-pallet-label">PALLET ${n}</span>
         <div class="sq-pallet-actions">
           <button class="sq-btn-select-all" onclick="SQ.selectAllPallet('${sid}')">⚡ Todas</button>
+          <button class="sq-pallet-foto" onclick="SQ.abrirFotosPallet('${sid}')" title="Fotos do defeito deste pallet">📷</button>
           <button class="sq-btn-clear-pallet" onclick="SQ.clearPallet('${sid}')" title="Limpar marcações deste pallet"><i class="fas fa-trash-alt"></i></button>
           <button class="sq-btn-remove-pallet" onclick="SQ.removerPalletExtra(${n})" title="Excluir este pallet">✕</button>
         </div>
@@ -1073,6 +1077,7 @@
       pushState();
       extraStacks = extraStacks.filter(x => x !== n);
       delete stackCounts[sid];
+      delete palletFotos[sid]; // pallet excluído — fotos dele não fazem mais sentido (era o vínculo delas)
       _limparPlacasForaDoEscopo();
       _sincronizarColunasExtras();
       renderStacks();
@@ -1167,7 +1172,7 @@
   function _trocarPlacas(idA, idB) {
     if (viewMode || idA === idB) return;
     pushState();
-    [slabState, slabMotivo, slabMotivoDescricao, slabConfig, slabFotos].forEach(dict => {
+    [slabState, slabMotivo, slabMotivoDescricao, slabConfig].forEach(dict => {
       const a = dict[idA], b = dict[idB];
       if (b !== undefined) dict[idA] = b; else delete dict[idA];
       if (a !== undefined) dict[idB] = a; else delete dict[idB];
@@ -1193,21 +1198,18 @@
     if (!_stackIds().includes(origStack) || !_stackIds().includes(destStackId)) return;
 
     pushState(); // vira uma ação desfazível, igual marcar/desmarcar uma placa
-    // NOTA: fotos (slabFotos) viajam com a placa aqui embaixo, mas NÃO
-    // fazem parte do snapshot de pushState (ver comentário lá — decisão
-    // deliberada por memória). Desfazer um arraste que moveu uma placa
-    // COM foto volta marca/motivo pro lugar certo, mas a foto fica onde
-    // o arraste a deixou (caso raro: arrastar placa com foto e depois
-    // desfazer). Aceitável — corrigir manualmente pelo próprio 📷 se
-    // acontecer é mais barato que duplicar fotos em cada uma das até 30
-    // ações do histórico.
+    // NOTA: fotos (palletFotos) NÃO viajam mais com a placa — o vínculo
+    // agora é do PALLET (ver comentário de palletFotos, topo do arquivo),
+    // então mover uma placa de um pallet pra outro nunca mexe em fotos:
+    // elas continuam plantadas no pallet de origem, mesmo que ele fique
+    // sem nenhuma placa que ainda exija motivo (ver critério em
+    // _renderIconeFotoPallet — foto já tirada nunca some sozinha).
 
     const tipoFixado = getExpectedType(origemId);
     const registro = {
       marks:           slabState[origemId] ? [...slabState[origemId]] : null,
       motivo:          slabMotivo[origemId] || null,
       motivoDescricao: slabMotivoDescricao[origemId] || null,
-      fotos:           slabFotos[origemId] ? [...slabFotos[origemId]] : null,
     };
 
     // ── Remove da origem, deslocando quem ficou pra trás uma posição
@@ -1219,13 +1221,11 @@
       if (slabMotivo[de] !== undefined) slabMotivo[para] = slabMotivo[de]; else delete slabMotivo[para];
       if (slabMotivoDescricao[de] !== undefined) slabMotivoDescricao[para] = slabMotivoDescricao[de]; else delete slabMotivoDescricao[para];
       if (slabConfig[de] !== undefined) slabConfig[para] = slabConfig[de]; else delete slabConfig[para];
-      if (slabFotos[de] !== undefined) slabFotos[para] = slabFotos[de]; else delete slabFotos[para];
     }
     delete slabState[`${origStack}-${nOrigem}`];
     delete slabMotivo[`${origStack}-${nOrigem}`];
     delete slabMotivoDescricao[`${origStack}-${nOrigem}`];
     delete slabConfig[`${origStack}-${nOrigem}`];
-    delete slabFotos[`${origStack}-${nOrigem}`];
     stackCounts[origStack] = nOrigem - 1;
 
     // ── Adiciona no fim do destino ───────────────────────────────────
@@ -1236,7 +1236,6 @@
     if (registro.motivo)          slabMotivo[novoId] = registro.motivo;
     if (registro.motivoDescricao) slabMotivoDescricao[novoId] = registro.motivoDescricao;
     if (tipoFixado)                slabConfig[novoId] = tipoFixado;
-    if (registro.fotos)            slabFotos[novoId] = registro.fotos;
 
     renderStacks();
     validateAllSlabs();
@@ -1335,6 +1334,7 @@
       if (!stack) return;
       _ativarDropZone(stack, sid); // liga o "soltar" — idempotente, ver função
       stack.innerHTML = '';
+      _renderIconeFotoPallet(sid); // ícone de fotos no CABEÇALHO do pallet, 1x por pallet (não por placa)
       const total = stackCounts[sid] || 0;
       for (let i = 1; i <= total; i++) {
         const slab = document.createElement('div');
@@ -1399,22 +1399,6 @@
         canto.appendChild(tp);
         slab.appendChild(canto);
 
-        // Ícone de câmera (fotos do defeito) — canto SUPERIOR direito,
-        // único canto livre da placa (número ocupa o superior-esquerdo,
-        // motivo+tipo ocupam o inferior-direito, ver "canto" acima). Só
-        // aparece quando a placa exige motivo (2ª linha/reprovada) ou já
-        // tem foto salva — ver _renderIconeFoto, chamada mais abaixo e
-        // toda vez que uma marca muda (mesmos pontos que chamam
-        // _renderBadgeMotivo).
-        const fo = document.createElement('span');
-        fo.className = 'sq-slab-foto';
-        fo.title = 'Fotos do defeito';
-        fo.addEventListener('click', (e) => {
-          e.stopPropagation();
-          _abrirGerenciadorFoto(id);
-        });
-        slab.appendChild(fo);
-
         if (slabState[id]) renderMarks(slab, slabState[id]);
         slab.addEventListener('click', () => toggleMark(slab));
         _ligarGestoApagar(slab);
@@ -1438,7 +1422,6 @@
         // "solto" (não anexado), não encontrava nada e saía sem aplicar
         // o display inicial (bug: badge ficava sem display definido).
         _renderBadgeMotivo(id);
-        _renderIconeFoto(id);
       }
     });
     validateAllSlabs();
@@ -1485,31 +1468,42 @@
     }
   }
 
-  // Mostra/esconde o ícone de câmera (📷) na placa e atualiza a contagem
-  // de fotos já tiradas — MESMO padrão de _renderBadgeMotivo (acima):
-  // chamado sempre que uma marca muda e ao (re)renderizar a placa do
-  // zero (renderStacks). Aparece quando a placa exige motivo (2ª
-  // linha/reprovada, mesmo critério do badge) OU já tem alguma foto
-  // salva (não esconde foto já tirada mesmo se a marca depois mudar —
-  // ver comentário de slabFotos, no topo do arquivo).
-  function _renderIconeFoto(id) {
-    const slab = document.querySelector(`.sq-slab[data-id="${id}"]`);
-    const icone = slab?.querySelector('.sq-slab-foto');
+  // Mostra/esconde o ícone de câmera (📷) no CABEÇALHO do pallet e
+  // atualiza a contagem de fotos já tiradas — MESMO padrão de
+  // _renderBadgeMotivo (acima), só que aplicado ao PALLET inteiro em vez
+  // de placa por placa: chamado sempre que uma marca muda e ao
+  // (re)renderizar as placas do zero (renderStacks). Aparece quando
+  // QUALQUER placa do pallet exige motivo (2ª linha/reprovada, mesmo
+  // critério do badge) OU o pallet já tem alguma foto salva (não esconde
+  // foto já tirada mesmo se a marca depois mudar — ver comentário de
+  // palletFotos, no topo do arquivo).
+  //
+  // Aceita tanto um id de PALLET ("stack1") quanto um id de PLACA
+  // ("stack1-3") — extrai o pallet do id recebido — pra não precisar
+  // trocar toda chamada existente (marcar/desmarcar etc já tinham o id
+  // da placa em mãos) por um lookup extra de sid.
+  function _renderIconeFotoPallet(idOuSid) {
+    const sid = idOuSid.split('-')[0];
+    const icone = document.getElementById(sid)?.closest('.sq-pallet-col')?.querySelector('.sq-pallet-foto');
     if (!icone) return;
-    const exigeMotivo = (slabState[id] || []).some(_marcaExigeMotivo);
-    const fotos = slabFotos[id] || [];
+    const n = stackCounts[sid] || 0;
+    let exigeMotivo = false;
+    for (let i = 1; i <= n && !exigeMotivo; i++) {
+      exigeMotivo = (slabState[`${sid}-${i}`] || []).some(_marcaExigeMotivo);
+    }
+    const fotos = palletFotos[sid] || [];
     if (!exigeMotivo && !fotos.length) {
       icone.style.display = 'none';
       return;
     }
-    icone.style.display = 'block';
+    icone.style.display = 'flex';
     icone.classList.toggle('tem-foto', fotos.length > 0);
     icone.innerHTML = fotos.length > 1
-      ? `📷<span class="sq-slab-foto-contagem">${fotos.length}</span>`
+      ? `📷<span class="sq-pallet-foto-contagem">${fotos.length}</span>`
       : '📷';
     icone.title = fotos.length
-      ? `${fotos.length} foto${fotos.length > 1 ? 's' : ''} do defeito — clique para ver/adicionar`
-      : 'Adicionar foto do defeito';
+      ? `${fotos.length} foto${fotos.length > 1 ? 's' : ''} do defeito neste pallet — clique para ver/adicionar`
+      : 'Adicionar foto do defeito deste pallet';
   }
 
   // Redimensiona/comprime uma foto antes de guardar — MESMO padrão já
@@ -1548,14 +1542,14 @@
     });
   }
 
-  // Inputs de arquivo ocultos, reaproveitados por TODAS as placas —
+  // Inputs de arquivo ocultos, reaproveitados por TODOS os pallets —
   // criados uma única vez (lazy, na primeira chamada) em vez de 1 par por
-  // placa, pra não acumular centenas de <input> escondidos no DOM à toa
-  // numa avaliação com muitos pallets. `_fotoIdAlvo` guarda pra qual
-  // placa o input foi aberto, lido no 'change' (abaixo).
+  // pallet, pra não acumular vários <input> escondidos no DOM à toa numa
+  // avaliação com muitos pallets extras. `_fotoSidAlvo` guarda pra qual
+  // pallet o input foi aberto, lido no 'change' (abaixo).
   let _inputCamera = null;
   let _inputGaleria = null;
-  let _fotoIdAlvo = null;
+  let _fotoSidAlvo = null;
 
   function _garantirInputsFoto() {
     if (_inputCamera) return;
@@ -1576,13 +1570,13 @@
     const tratarSelecao = async (input) => {
       const arquivos = Array.from(input.files || []);
       input.value = ''; // permite escolher o MESMO arquivo de novo depois (senão 'change' não dispara de novo)
-      if (!arquivos.length || !_fotoIdAlvo) return;
-      const id = _fotoIdAlvo;
+      if (!arquivos.length || !_fotoSidAlvo) return;
+      const sid = _fotoSidAlvo;
       try {
         const comprimidas = await Promise.all(arquivos.map(_comprimirFotoDefeito));
-        slabFotos[id] = [...(slabFotos[id] || []), ...comprimidas];
-        _renderIconeFoto(id);
-        _abrirGerenciadorFoto(id); // reabre/atualiza a galeria já com as novas fotos
+        palletFotos[sid] = [...(palletFotos[sid] || []), ...comprimidas];
+        _renderIconeFotoPallet(sid);
+        _abrirGerenciadorFoto(sid); // reabre/atualiza a galeria já com as novas fotos
       } catch (err) {
         console.error('Falha ao processar foto do defeito:', err);
         if (LW.mostrarAlerta) LW.mostrarAlerta(err.message || 'Não consegui processar a foto.', { tipo: 'erro' });
@@ -1592,17 +1586,18 @@
     _inputGaleria.addEventListener('change', () => tratarSelecao(_inputGaleria));
   }
 
-  // Modal de fotos do defeito de uma placa — mostra a galeria já tirada
+  // Modal de fotos do defeito de um PALLET — mostra a galeria já tirada
   // (com opção de remover cada uma e de ver em tela cheia) + botões pra
   // tirar mais fotos (câmera) ou importar da galeria do aparelho. Chamado
-  // ao clicar no ícone 📷 da placa (ver renderStacks) — funciona tanto
-  // pra ADICIONAR a primeira foto quanto pra gerenciar as que já existem
-  // (mesmo modal, o conteúdo só muda conforme slabFotos[id]).
-  function _abrirGerenciadorFoto(id) {
+  // ao clicar no ícone 📷 do cabeçalho do pallet (ver renderStacks/
+  // _criarColunaPallet) — funciona tanto pra ADICIONAR a primeira foto
+  // quanto pra gerenciar as que já existem (mesmo modal, o conteúdo só
+  // muda conforme palletFotos[sid]).
+  function _abrirGerenciadorFoto(sid) {
     document.querySelector('.sq-foto-modal-overlay')?.remove(); // fecha um anterior, se sobrou aberto
     _garantirInputsFoto();
 
-    const fotos = slabFotos[id] || [];
+    const fotos = palletFotos[sid] || [];
     const overlay = document.createElement('div');
     overlay.className = 'sq-foto-modal-overlay';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -1613,7 +1608,7 @@
 
     const titulo = document.createElement('div');
     titulo.className = 'sq-foto-modal-titulo';
-    titulo.innerHTML = `<span>📷 Fotos do defeito — Placa ${id.split('-').pop()}</span>`;
+    titulo.innerHTML = `<span>📷 Fotos do defeito — ${sid.replace('stack', 'Pallet ')}</span>`;
     const fechar = document.createElement('span');
     fechar.textContent = '✕';
     fechar.style.cursor = 'pointer';
@@ -1630,11 +1625,11 @@
       const btnCamera = document.createElement('button');
       btnCamera.className = 'btn btn-outline-accent btn-sm';
       btnCamera.textContent = '📷 Câmera';
-      btnCamera.addEventListener('click', () => { _fotoIdAlvo = id; _inputCamera.click(); });
+      btnCamera.addEventListener('click', () => { _fotoSidAlvo = sid; _inputCamera.click(); });
       const btnGaleria = document.createElement('button');
       btnGaleria.className = 'btn btn-outline-accent btn-sm';
       btnGaleria.textContent = '🖼️ Galeria';
-      btnGaleria.addEventListener('click', () => { _fotoIdAlvo = id; _inputGaleria.click(); });
+      btnGaleria.addEventListener('click', () => { _fotoSidAlvo = sid; _inputGaleria.click(); });
       acoes.appendChild(btnCamera);
       acoes.appendChild(btnGaleria);
       modal.appendChild(acoes);
@@ -1668,10 +1663,10 @@
           remover.title = 'Remover esta foto';
           remover.addEventListener('click', (e) => {
             e.stopPropagation();
-            slabFotos[id].splice(indice, 1);
-            if (!slabFotos[id].length) delete slabFotos[id];
-            _renderIconeFoto(id);
-            _abrirGerenciadorFoto(id); // reabre atualizado, sem a foto removida
+            palletFotos[sid].splice(indice, 1);
+            if (!palletFotos[sid].length) delete palletFotos[sid];
+            _renderIconeFotoPallet(sid);
+            _abrirGerenciadorFoto(sid); // reabre atualizado, sem a foto removida
           });
           item.appendChild(remover);
         }
@@ -1738,7 +1733,7 @@
       renderMarks(el, slabState[id]);
       validateAllSlabs();
       _renderBadgeMotivo(id);
-      _renderIconeFoto(id);
+      _renderIconeFotoPallet(id);
       return;
     }
 
@@ -1789,7 +1784,7 @@
     renderMarks(el, slabState[id]);
     validateAllSlabs();
     _renderBadgeMotivo(id); // mostra o "?" pendente na hora, antes mesmo do popover abrir
-    _renderIconeFoto(id);
+    _renderIconeFotoPallet(id);
     // Motivo obrigatório só quando é a marca de STATUS (indicador) —
     // marca de identidade nunca exige, mesmo se a cor escolhida "por
     // acaso" for azul/vermelho (ver _corExigeMotivo).
@@ -1873,10 +1868,10 @@
     const aindaExigeMotivo = (slabState[id] || []).some(_marcaExigeMotivo);
     if (!aindaExigeMotivo) { delete slabMotivo[id]; delete slabMotivoDescricao[id]; }
     // Fotos NÃO são apagadas aqui de propósito (ver comentário de
-    // slabFotos, topo do arquivo) — só o ícone pode sumir, se não sobrou
+    // palletFotos, topo do arquivo) — só o ícone pode sumir, se não sobrou
     // nem motivo pendente nem foto nenhuma.
     _renderBadgeMotivo(id);
-    _renderIconeFoto(id);
+    _renderIconeFotoPallet(id);
   }
 
   // Seletor de motivo — popover flutuante com os 14 códigos (ver
@@ -2090,8 +2085,8 @@
       }
       renderMarks(slab, slabState[id]);
       _renderBadgeMotivo(id);
-      _renderIconeFoto(id);
     });
+    _renderIconeFotoPallet(stackId); // 1x só, fora do loop — ícone é do pallet inteiro, não de cada placa
     validateAllSlabs();
     // 1 seletor só pro pallet inteiro (não 1 por placa) — quem marca em
     // lote normalmente está registrando o MESMO defeito pra todas
@@ -2120,11 +2115,11 @@
         delete slabState[id];
         delete slabMotivo[id];
         delete slabMotivoDescricao[id];
-        delete slabFotos[id]; // pallet inteiro sendo limpo — sem marca, o defeito documentado nas fotos deixa de existir
         renderMarks(slab, []);
       });
+      delete palletFotos[sid]; // pallet inteiro sendo limpo — sem marca, o defeito documentado nas fotos deixa de existir
       document.querySelectorAll(`#${sid} .sq-slab-motivo`).forEach(b => { b.textContent = ''; b.style.display = 'none'; });
-      document.querySelectorAll(`#${sid} .sq-slab-foto`).forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
+      _renderIconeFotoPallet(sid);
       validateAllSlabs();
     });
   }
@@ -2595,13 +2590,15 @@
       if (slabMotivo[de] !== undefined) slabMotivo[para] = slabMotivo[de]; else delete slabMotivo[para];
       if (slabMotivoDescricao[de] !== undefined) slabMotivoDescricao[para] = slabMotivoDescricao[de]; else delete slabMotivoDescricao[para];
       if (slabConfig[de] !== undefined) slabConfig[para] = slabConfig[de]; else delete slabConfig[para];
-      if (slabFotos[de] !== undefined) slabFotos[para] = slabFotos[de]; else delete slabFotos[para];
     }
     delete slabState[`${sid}-${n}`];
     delete slabMotivo[`${sid}-${n}`];
     delete slabMotivoDescricao[`${sid}-${n}`];
     delete slabConfig[`${sid}-${n}`];
-    delete slabFotos[`${sid}-${n}`];
+    // palletFotos NÃO entra aqui — é chaveado por pallet (sid), não por
+    // posição, então deslocar/remover UMA placa dentro do mesmo pallet
+    // nunca precisa mexer nele (ver comentário de palletFotos, topo do
+    // arquivo).
     stackCounts[sid] = n - 1;
   }
 
@@ -3100,7 +3097,7 @@
       slabState,
       slabMotivo,
       slabMotivoDescricao,
-      slabFotos,
+      palletFotos,
       palletInfos: {}
     };
     [1, 2, 3, 4, ...extraStacks].forEach(p => {
@@ -3124,7 +3121,7 @@
     } catch (err) {
       console.error('Falha ao salvar rascunho com fotos:', err);
       try {
-        localStorage.setItem(`sq_draft_${id}`, JSON.stringify({ ...data, slabFotos: {} }));
+        localStorage.setItem(`sq_draft_${id}`, JSON.stringify({ ...data, palletFotos: {} }));
         currentDraftId = id;
         showAlert('Salvo com aviso', 'O rascunho foi salvo, mas as fotos não couberam no armazenamento do navegador (não caberia recarregar a página com elas). Elas continuam nesta aba — registre a avaliação logo para não perdê-las.');
       } catch (err2) {
@@ -3298,17 +3295,21 @@
       // preenchido pra placa aprovada 1ª linha, ver _corExigeMotivo).
       // "motivoDescricao" só existe quando motivo === 'OT' — descrição
       // livre digitada na hora (ver showPrompt em _abrirSeletorMotivo).
-      // "fotos" — array de data-URIs (pode vir vazio) das fotos do
-      // defeito tiradas/importadas nesta placa (ver slabFotos, topo do
-      // arquivo, e _comprimirFotoDefeito) — flui direto pro banco dentro
-      // do JSON da avaliação (dados: JSON.stringify(avaliacao), ver
-      // db.salvarAvaliacaoQualidade), sem precisar de coluna nova.
       evalObj.paineis = Object.entries(slabState).map(([id, marks]) => {
         const parts = id.split('-');
         const info  = getClassifiedInfo(marks);
-        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null, fotos: slabFotos[id] || [] };
+        return { avaliacaoId: evId, pallet: parseInt(parts[0].replace('stack','')), posicao: parseInt(parts[1]), tipoEsperado: getExpectedType(id), tipoObtido: info.tipoObtido, resultado: info.resultado, linha: info.linha, marcas: marks, motivo: slabMotivo[id] || null, motivoDescricao: slabMotivoDescricao[id] || null };
       });
       evalObj.montagem = _montagemDoRegistro(evalObj.paineis);
+      // "palletFotos" — objeto { "stack1": [dataUri, ...], ... } com as
+      // fotos do defeito tiradas/importadas POR PALLET (ver palletFotos,
+      // topo do arquivo, e _comprimirFotoDefeito) — campo NOVO no topo da
+      // avaliação (não mais dentro de cada painel), flui direto pro banco
+      // dentro do JSON da avaliação (dados: JSON.stringify(avaliacao), ver
+      // db.salvarAvaliacaoQualidade), sem precisar de coluna nova. Só
+      // entra o que tiver pelo menos 1 foto — pallet sem foto nenhuma nem
+      // aparece na chave.
+      evalObj.palletFotos = { ...palletFotos };
 
       const btnRegistrar = document.getElementById('sq-btn-register');
       if (btnRegistrar) btnRegistrar.disabled = true;
@@ -3435,21 +3436,23 @@
     // (tipo "fixado" na placa, não no pallet — ver _moverPainel) mostraria
     // o tipo errado até a pessoa mexer em algo que force um re-render.
     const paineisDaAvaliacao = d.paineis.filter(p => p.avaliacaoId === item.id);
-    const ns = {}, nm = {}, nd = {}, nf = {}, novoSlabConfig = {}, novasContagens = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
+    const ns = {}, nm = {}, nd = {}, novoSlabConfig = {}, novasContagens = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 };
     paineisDaAvaliacao.forEach(p => {
       const sid = `stack${p.pallet}`;
       const id  = `${sid}-${p.posicao}`;
       ns[id] = p.marcas;
       if (p.motivo) nm[id] = p.motivo;
       if (p.motivo === 'OT' && p.motivoDescricao) nd[id] = p.motivoDescricao;
-      if (Array.isArray(p.fotos) && p.fotos.length) nf[id] = p.fotos;
       if (p.tipoEsperado) novoSlabConfig[id] = p.tipoEsperado;
       novasContagens[sid] = Math.max(novasContagens[sid] || 0, p.posicao);
     });
     slabState     = ns;
     slabMotivo    = nm;
     slabMotivoDescricao = nd;
-    slabFotos     = nf;
+    // "palletFotos" mora no TOPO da avaliação (não mais em cada painel,
+    // ver evalObj.palletFotos em registerEvaluation) — copiado direto,
+    // sem precisar recompor a partir dos painéis.
+    palletFotos   = item.palletFotos ? { ...item.palletFotos } : {};
     slabConfig    = novoSlabConfig;
     stackCounts   = novasContagens;
     extraStacks   = Object.keys(novasContagens)
@@ -4739,7 +4742,7 @@
     slabMotivo    = d.slabMotivo || {};
     slabMotivoDescricao = d.slabMotivoDescricao || {};
     slabConfig    = d.slabConfig || {};
-    slabFotos     = d.slabFotos || {};
+    palletFotos   = d.palletFotos || {};
     actionHistory = [];
     renderStacks();
     validateAllSlabs();
@@ -4804,7 +4807,7 @@
 
   function clearForm() {
     slabState = {}; slabMotivo = {}; slabMotivoDescricao = {}; actionHistory = []; palletTypes = ['','','','']; slabConfig = {};
-    slabFotos = {};
+    palletFotos = {};
     extraStacks = []; stackCounts = { stack1: 0, stack2: 0, stack3: 0, stack4: 0 }; proximoNumeroPalletExtra = 5;
     linkedOperacaoId = null;
     dimensaoOperacaoAtual = null;
@@ -5000,10 +5003,10 @@
       slabState = {};
       slabMotivo = {};
       slabMotivoDescricao = {};
-      slabFotos = {}; // toda marca sumiu — sem defeito classificado, as fotos ficariam sem contexto
+      palletFotos = {}; // toda marca sumiu — sem defeito classificado, as fotos ficariam sem contexto
       document.querySelectorAll('.sq-slab-marks').forEach(c => { c.innerHTML = ''; });
       document.querySelectorAll('.sq-slab-motivo').forEach(b => { b.textContent = ''; b.style.display = 'none'; });
-      document.querySelectorAll('.sq-slab-foto').forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
+      document.querySelectorAll('.sq-pallet-foto').forEach(f => { f.style.display = 'none'; f.classList.remove('tem-foto'); });
       validateAllSlabs();
     });
   }
@@ -5093,6 +5096,7 @@
     selectColor, selectShape,
     toggleIndicadorAtivo,
     selectAllPallet, clearPallet,
+    abrirFotosPallet: _abrirGerenciadorFoto,
     toggleCollapsible,
     togglePopover,
     undoLastAction, clearAllMarks,

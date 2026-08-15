@@ -1973,45 +1973,54 @@
   line-height: 1.25;
 }
 
-/* ── Ícone de câmera na placa (fotos do defeito) ──────────────────────
-   Fica no canto SUPERIOR-DIREITO da placa — o único canto livre (número
-   ocupa o superior-esquerdo, motivo+tipo ocupam o inferior-direito, ver
-   .sq-slab-number/.sq-slab-canto-info acima). Some por padrão
-   (display:none) — só aparece via JS (_renderIconeFoto, setor-
-   qualidade.js) quando a placa exige motivo (2ª linha/reprovada) OU já
-   tem alguma foto tirada (mesmo depois de desmarcada — não perde acesso a
-   foto já tirada, ver comentário de slabFotos no JS). */
-.sq-slab-foto {
-  position: absolute;
-  top: 1px;
-  right: 2px;
-  font-size: .62rem;
-  line-height: 1;
+/* ── Ícone de câmera no cabeçalho do pallet (fotos do defeito) ────────
+   Vive dentro de .sq-pallet-actions, ao lado de "⚡ Todas"/🗑️/✕ (ver
+   .sq-pallet-header, mais acima, e _criarColunaPallet/renderStacks,
+   setor-qualidade.js) — MESMO botão redondo de .sq-btn-clear-pallet/
+   .sq-btn-remove-pallet, só que com o emoji 📷 no lugar do ícone.
+   O vínculo da foto agora é do PALLET inteiro, não de uma placa — 1 só
+   ícone por pallet, não mais 1 por placa. Some por padrão (display:none)
+   — só aparece via JS (_renderIconeFotoPallet, setor-qualidade.js)
+   quando alguma placa do pallet exige motivo (2ª linha/reprovada) OU o
+   pallet já tem alguma foto tirada (mesmo depois de desmarcada — não
+   perde acesso a foto já tirada, ver comentário de palletFotos no JS). */
+.sq-pallet-foto {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 11px;
   cursor: pointer;
-  z-index: 1;
-  user-select: none;
-  opacity: .55;
+  font-size: .62rem;
   display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: .55;
+  transition: border-color .15s, color .15s, background .15s, opacity .15s;
 }
 
-.sq-slab-foto:hover {
+.sq-pallet-foto:hover {
   opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* Já tem pelo menos 1 foto — deixa de ficar "apagado" (opacity .55, acima)
-   pra indicar visualmente que o defeito já está documentado. */
-.sq-slab-foto.tem-foto {
+/* Já tem pelo menos 1 foto — deixa de ficar "apagado" (opacity .55,
+   acima) pra indicar visualmente que o pallet já tem defeito
+   documentado. */
+.sq-pallet-foto.tem-foto {
   opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* Contador pequeno ao lado do 📷 quando há mais de 1 foto — texto puro
-   (não é um <span> à parte) pra não precisar de outro elemento no DOM já
-   apertado da placa (30px de altura, ver .sq-slab). */
-.sq-slab-foto-contagem {
+/* Contador ao lado do 📷 quando há mais de 1 foto no pallet. */
+.sq-pallet-foto-contagem {
   font-size: .58rem;
   font-weight: 700;
-  color: var(--accent);
-  vertical-align: top;
 }
 
 /* Modal de fotos do defeito — MESMO padrão visual do popover de motivo
