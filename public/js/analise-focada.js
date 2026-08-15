@@ -197,8 +197,13 @@
   }
 
   // ── Cabeçalho: identificação da operação ─────────────────────
-  function _renderCabecalho(op) {
-    const el = document.getElementById('af-cabecalho');
+  // @param {HTMLElement} [elOverride] - quando informado, renderiza AQUI em
+  // vez de buscar '#af-cabecalho' no documento ao vivo. Usado pelo export
+  // estático de PDF (ver _gerarSecoesEstaticasAf, mais abaixo), que precisa
+  // do MESMO markup produzido aqui mas capturado num elemento solto (fora da
+  // tela), sem tocar no DOM real da página.
+  function _renderCabecalho(op, elOverride) {
+    const el = elOverride || document.getElementById('af-cabecalho');
     if (!el) return;
     const atrasoHtml = op.houve_atraso === 'SIM'
       ? `<span style="color:var(--red)">⚠ Sim${op.motivo_atraso ? ' — ' + LW.escaparHtml(op.motivo_atraso) : ''}</span>`
@@ -523,8 +528,9 @@
   // "📋 Detalhes do Berço" em modo SÓ LEITURA (ver abrirDetalhesBerco,
   // acima); no HTML exportado standalone (ver _gerarHtmlAfStandalone,
   // mais abaixo — LWFocada não existe lá) continua só visual, sem clique.
-  function _renderBercos(bercosVisuais, op) {
-    const el = document.getElementById('af-bercos');
+  // @param {HTMLElement} [elOverride] - ver comentário de _renderCabecalho.
+  function _renderBercos(bercosVisuais, op, elOverride) {
+    const el = elOverride || document.getElementById('af-bercos');
     if (!el) return;
     if (!bercosVisuais || !bercosVisuais.length) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Berços visuais ainda não registrados para esta operação.</div>`;
@@ -703,8 +709,9 @@
   }
 
   // ── Receita utilizada (traços + ajustes) ─────────────────────
-  function _renderReceita(tracos, bercosVisuais) {
-    const el = document.getElementById('af-receita');
+  // @param {HTMLElement} [elOverride] - ver comentário de _renderCabecalho.
+  function _renderReceita(tracos, bercosVisuais, elOverride) {
+    const el = elOverride || document.getElementById('af-receita');
     if (!el) return;
     if (!tracos || !tracos.length) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Nenhum traço vinculado a esta operação.</div>`;
@@ -808,12 +815,14 @@
     }).sort((a, b) => new Date(a.inicio) - new Date(b.inicio));
   }
 
-  function _renderParadas(paradas) {
-    const el = document.getElementById('af-paradas');
+  // @param {HTMLElement} [elOverride] - ver comentário de _renderCabecalho.
+  // @param {HTMLElement} [elContagemOverride] - mesma ideia, pro contador ao lado do título.
+  function _renderParadas(paradas, elOverride, elContagemOverride) {
+    const el = elOverride || document.getElementById('af-paradas');
     if (!el) return;
     // Contador ao lado do título — visível mesmo com o <details> fechado,
     // pra dar uma pista do que tem lá dentro sem precisar expandir.
-    const contagem = document.getElementById('af-paradas-contagem');
+    const contagem = elContagemOverride || document.getElementById('af-paradas-contagem');
     if (contagem) contagem.textContent = paradas.length ? `(${paradas.length})` : '(nenhuma)';
     if (!paradas.length) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Nenhuma parada registrada durante esta operação.</div>`;
@@ -905,8 +914,9 @@
     return posicoes.length ? Math.max(...posicoes) : 0;
   }
 
-  function _renderAvaliacao(avaliacao) {
-    const el = document.getElementById('af-avaliacao');
+  // @param {HTMLElement} [elOverride] - ver comentário de _renderCabecalho.
+  function _renderAvaliacao(avaliacao, elOverride) {
+    const el = elOverride || document.getElementById('af-avaliacao');
     if (!el) return;
     if (!avaliacao) {
       el.innerHTML = `<div class="sq-empty-af"><i class="fas fa-inbox"></i> Bateria sem avaliação.</div>`;
@@ -948,7 +958,8 @@
       // _renderIconeFotoPallet/renderMirror, setor-qualidade.js), pra
       // não arriscar contaminar algum parse futuro de textContent do
       // cabeçalho.
-      const btnFotoFoco = `<button type="button" class="af-pallet-foto${fotosFoco.length ? ' tem-foto' : ''}" data-contagem="${fotosFoco.length || ''}" onclick="LWFocada.abrirFotosPallet('${sidFoco}')" title="${fotosFoco.length ? `${fotosFoco.length} foto${fotosFoco.length > 1 ? 's' : ''} do defeito neste pallet` : 'Nenhuma foto do defeito neste pallet'}"></button>`;
+      const cliqueFoto = typeof LWFocada !== 'undefined' ? ` onclick="LWFocada.abrirFotosPallet('${sidFoco}')"` : '';
+      const btnFotoFoco = `<button type="button" class="af-pallet-foto${fotosFoco.length ? ' tem-foto' : ''}" data-contagem="${fotosFoco.length || ''}"${cliqueFoto} title="${fotosFoco.length ? `${fotosFoco.length} foto${fotosFoco.length > 1 ? 's' : ''} do defeito neste pallet` : 'Nenhuma foto do defeito neste pallet'}"></button>`;
       html += `<div class="af-pallet"><div class="af-pallet-header"><span>Pallet ${p}</span><span class="af-pallet-header-direita"><span class="af-pallet-tipo">${LW.escaparHtml(tipoMontPallet)}</span>${btnFotoFoco}</span></div><div class="af-pallet-slabs">`;
       for (let i = 1; i <= totalPorPallet; i++) {
         const painel = paineis.find(pp => pp.pallet === p && pp.posicao === i);
@@ -1193,7 +1204,13 @@
       if (!detalhe) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados desta operação.', { tipo: 'erro' }); return; }
       _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
       const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
-      const html = _gerarHtmlAfStandalone(detalhe, paradasDaJanela);
+      // PDF: gerador ESTÁTICO (leve — ver _gerarHtmlAfEstaticoPdf, sem
+      // <script>/JSON embutido, mais rápido pro Chromium do servidor
+      // converter). HTML interativo: o standalone de sempre, com clique
+      // nos berços e navegação entre operações.
+      const html = formato === 'pdf'
+        ? _gerarHtmlAfEstaticoPdf(detalhe, paradasDaJanela)
+        : _gerarHtmlAfStandalone(detalhe, paradasDaJanela);
       await _finalizarExportacao(
         formato,
         `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
@@ -1380,21 +1397,35 @@
         return { op, detalhe };
       }));
 
+      // pdf: cada item carrega as SEÇÕES já renderizadas (leve, sem
+      // <iframe>/<script> — ver _gerarHtmlAfMultiplasEstaticoPdf); html:
+      // cada item carrega o standalone interativo de sempre (vira um
+      // <iframe srcdoc> na casca, ver _gerarHtmlAfMultiplas).
       const itens = detalhesDetalhados
         .filter(({ detalhe }) => !!detalhe)
         .map(({ op, detalhe }) => {
           _anotarOrigemEReaproveitamento(detalhe.tracos, op.id);
           const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
-          return {
+          const base = {
             id: detalhe.operacao?.id || op.id,
             label: `${detalhe.operacao?.id_bateria || '—'} · ${_fmtHora(detalhe.operacao?.inicio)} — ${_fmtHora(detalhe.operacao?.fim)} · ${detalhe.operacao?.turno || '—'}`,
-            html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela),
           };
+          return formato === 'pdf'
+            ? { ...base, secoes: _gerarSecoesEstaticasAf(detalhe, paradasDaJanela) }
+            : { ...base, html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela) };
         });
 
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste dia.', { tipo: 'erro' }); return; }
 
-      const html = _gerarHtmlAfDoDia(dataAlvo, itens);
+      const dataFmt = _fmtData(dataAlvo);
+      const html = formato === 'pdf'
+        ? _gerarHtmlAfMultiplasEstaticoPdf(
+            `Análise Focada — Dia ${dataFmt} — Exportado`,
+            `🔎 Análise Focada — Todas as Operações do Dia ${LW.escaparHtml(dataFmt)}`,
+            `${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste dia`,
+            itens
+          )
+        : _gerarHtmlAfDoDia(dataAlvo, itens);
       await _finalizarExportacao(
         formato,
         `analise_focada_dia_${String(dataAlvo || 'data').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
@@ -1443,16 +1474,28 @@
         .map(({ op, detalhe }) => {
           _anotarOrigemEReaproveitamento(detalhe.tracos, op.id);
           const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
-          return {
+          const base = {
             id: detalhe.operacao?.id || op.id,
             label: `${_fmtData(detalhe.operacao?.data)} · ${detalhe.operacao?.id_bateria || '—'} · ${_fmtHora(detalhe.operacao?.inicio)} — ${_fmtHora(detalhe.operacao?.fim)} · ${detalhe.operacao?.turno || '—'}`,
-            html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela),
           };
+          return formato === 'pdf'
+            ? { ...base, secoes: _gerarSecoesEstaticasAf(detalhe, paradasDaJanela) }
+            : { ...base, html: _gerarHtmlAfStandalone(detalhe, paradasDaJanela) };
         });
 
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste período.', { tipo: 'erro' }); return; }
 
-      const html = _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens);
+      const fmtIni = _fmtData(dataInicio);
+      const fmtFim = _fmtData(dataFim);
+      const periodoLabel = dataInicio === dataFim ? fmtIni : `${fmtIni} a ${fmtFim}`;
+      const html = formato === 'pdf'
+        ? _gerarHtmlAfMultiplasEstaticoPdf(
+            `Análise Focada — ${periodoLabel} — Exportado`,
+            `🔎 Análise Focada — Operações de ${LW.escaparHtml(periodoLabel)}`,
+            `${itens.length} operaç${itens.length === 1 ? 'ão' : 'ões'} neste período`,
+            itens
+          )
+        : _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens);
       await _finalizarExportacao(
         formato,
         `analise_focada_${String(dataInicio).replace(/[^a-zA-Z0-9_-]/g, '_')}_a_${String(dataFim).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
@@ -1546,17 +1589,15 @@
     return { ..._afCorCssDoHex(hex), hibrida: false };
   }
 
-  function _gerarHtmlAfStandalone(detalhe, paradasDaJanela = []) {
-    const detalheJson = JSON.stringify(detalhe).replace(/<\/script/gi, '<\\/script');
-    const paradasJson = JSON.stringify(paradasDaJanela).replace(/<\/script/gi, '<\\/script');
-
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Análise Focada — ${LW.escaparHtml(String(detalhe.operacao?.id || ''))} — Exportado</title>
-<style>${LW.gerarCssExportPadrao()}
+  // CSS específico da Análise Focada, compartilhado por TODOS os exports
+  // (interativo E o estático de PDF, ver _gerarHtmlAfEstaticoPdf mais
+  // abaixo) — extraído pra função pra não duplicar ~90 linhas de CSS entre
+  // os dois templates (e evitar que um ganhe um ajuste visual e o outro
+  // fique pra trás). Sempre usado em cima de LW.gerarCssExportPadrao()
+  // (data.js), que traz a paleta de cores/tema e o layout base
+  // (.chart-box, h1, .sub etc.) compartilhado com os outros dashboards.
+  function _afCssComum() {
+    return `
   .af-cabecalho-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; }
   .af-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:4px; }
   .af-valor { font-size:.95rem; color:var(--text); font-weight:600; }
@@ -1643,8 +1684,63 @@
   .form-label { font-size:.67rem; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); }
   .btn { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; border-radius:var(--radius); font-family:var(--font-display, inherit); font-size:.88rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; border:none; transition:all .15s; white-space:nowrap; }
   .btn-ghost { background:transparent; color:var(--text-2); border:1px solid var(--border-2); }
-  .btn-ghost:hover { background:var(--bg-3, var(--bg-card)); color:var(--text); }
-</style>
+  .btn-ghost:hover { background:var(--bg-3, var(--bg-card)); color:var(--text); }`;
+  }
+
+  // ── CSS de paginação/A4 do export ESTÁTICO de PDF (ver
+  // _gerarHtmlAfEstaticoPdf, mais abaixo) — NÃO usado pelo export
+  // interativo (que é pra tela, sem preocupação de página impressa).
+  // Duas responsabilidades:
+  //  1) Largura de conteúdo ~= área útil de uma A4 (210mm - 2×margem do
+  //     Chromium em lib/rotas/exportar-pdf.js, hoje 10mm cada lado = 190mm),
+  //     pra grids "auto-fit" (.af-cabecalho-grid, .af-receita-grid,
+  //     .af-paineis-grid, .ba-grid) quebrarem em colunas do MESMO jeito
+  //     que vão sair no papel, em vez de se basearem numa viewport de tela
+  //     bem mais larga.
+  //  2) `break-inside:avoid` (+ prefixo `page-break-inside` pra engines
+  //     mais antigas) em cada "unidade visual" (card de traço, card de
+  //     pallet, célula de berço, linha de ajuste, bloco de parada) — sem
+  //     isso, o Chromium corta o card no meio bem na borda da página
+  //     sempre que ele não cabe inteiro no espaço que sobrou, deixando a
+  //     metade de baixo pra próxima folha (pedido que motivou este ajuste:
+  //     "sem ficar cortando section"). `break-inside:avoid` funciona
+  //     independente de @media print/screen — é a paginação em si do
+  //     `page.pdf()` que respeita, não a resolução de estilo — mas mantém
+  //     também dentro de um bloco @media print pra este MESMO arquivo
+  //     continuar se comportando bem se alguém abrir e imprimir direto
+  //     pelo navegador (Ctrl+P), fora do Puppeteer.
+  function _afCssImpressaoPdf() {
+    const regras = `
+  html, body { background:var(--bg-1); }
+  body { max-width:190mm; margin:0 auto; padding:0; }
+  .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula, .af-op-pagina, .af-pdf-foto-palete { break-inside:avoid; page-break-inside:avoid; }
+  h1, h4, .af-op-titulo, .af-pdf-foto-palete-titulo { break-after:avoid; page-break-after:avoid; }
+  .af-op-pagina + .af-op-pagina { break-before:page; page-break-before:always; margin-top:0; }
+  .af-pdf-foto-palete { margin-bottom:14px; }
+  .af-pdf-foto-palete:last-child { margin-bottom:0; }
+  .af-pdf-foto-palete-titulo { font-size:.85rem; font-weight:700; color:var(--text); margin-bottom:8px; }
+  /* No PDF, "Paradas Nesta Janela" já sai sempre ABERTO (sem <details>
+     retrátil — não faz sentido um "clique para expandir" num documento
+     impresso, ver _gerarHtmlAfEstaticoPdf) — mas a regra de
+     details.chart-box em _afCssComum() continua definida (ambos os
+     templates compartilham o mesmo CSS base) sem efeito aqui. */`;
+    return `
+  @media print {${regras}
+  }
+${regras}`;
+  }
+
+  function _gerarHtmlAfStandalone(detalhe, paradasDaJanela = []) {
+    const detalheJson = JSON.stringify(detalhe).replace(/<\/script/gi, '<\\/script');
+    const paradasJson = JSON.stringify(paradasDaJanela).replace(/<\/script/gi, '<\\/script');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise Focada — ${LW.escaparHtml(String(detalhe.operacao?.id || ''))} — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}${_afCssComum()}</style>
 </head>
 <body>
   <h1>🔎 Análise Focada — Operação ${LW.escaparHtml(String(detalhe.operacao?.id || ''))}</h1>
@@ -1736,6 +1832,198 @@
   _renderAvaliacao(DETALHE.avaliacao);
 })();
 </script>
+</body>
+</html>`;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  Export ESTÁTICO — só para PDF (ver exportarPDF()/_finalizarExportacao)
+  // ══════════════════════════════════════════════════════════════════════
+  //
+  // O QUE MUDA em relação a _gerarHtmlAfStandalone (acima): aquele gera um
+  // HTML "vivo" — dados brutos em JSON + todas as funções de render
+  // reembutidas via toString() + um <script> que roda tudo isso de novo
+  // pra montar o DOM. Isso é o formato certo pro "🌐 Exportar Interativo"
+  // (o arquivo precisa se virar sozinho, aberto direto no navegador de
+  // alguém, com os cards de berço clicáveis). Mas pro PDF, o servidor
+  // (lib/rotas/exportar-pdf.js) manda esse MESMO arquivo pesado pro
+  // Chromium headless só pra ele reexecutar o script, montar o DOM e
+  // imprimir — trabalho puro perdido, já que ninguém vai clicar em nada
+  // num PDF. Os geradores abaixo fazem a MESMA renderização (reaproveitando
+  // as mesmas funções _renderCabecalho/_renderBercos/etc., sem duplicar
+  // lógica) só que AGORA, no navegador que já está com os dados carregados
+  // — e mandam pro servidor só o resultado final: HTML puro, sem <script>,
+  // sem JSON, só o markup + CSS. O Chromium do servidor não precisa
+  // executar nada, só faz o "print" de um documento já pronto — bem mais
+  // rápido, e mais leve na resposta enviada de volta.
+  //
+  // Interatividade (clique no berço, abrir fotos, badge de origem clicável
+  // levando a outra operação): _renderBercos/_badgeOperacao/o botão de foto
+  // já checam `typeof LWFocada !== 'undefined'` pra decidir se desenham a
+  // versão clicável ou só o texto/visual equivalente (ver comentários
+  // originais dessas funções) — como aqui rodamos DENTRO da própria tela
+  // ao vivo, `LWFocada` SEMPRE existe (é este módulo). _gerarSecoesEstaticasAf,
+  // abaixo, desliga `window.LWFocada` só durante a captura (repõe depois,
+  // mesmo se algo lançar) pra essas funções caírem naturalmente na
+  // variante não-clicável — sem precisar de nenhum parâmetro extra nelas.
+  //
+  // Seção "🖼️ Fotos Paletes" — SÓ existe no export estático de PDF (a tela
+  // ao vivo e o export interativo já mostram foto sob demanda, via o botão
+  // 📷 de cada pallet que abre _abrirFotosPalletFocada em modal — não faz
+  // sentido duplicar isso ali). No PDF, como não tem "clicar pra ver", as
+  // fotos que existirem já saem impressas direto, uma seção por pallet que
+  // realmente tiver alguma (Palete 01, 02, 03, 04 — pula os que não têm
+  // nenhuma foto registrada, silenciosamente, pra não empilhar títulos
+  // vazios). Mesma fonte de dados que o botão 📷 já usa:
+  // avaliacao.palletFotos['stackN'] (ver _renderAvaliacao, comentário
+  // "Fotos do defeito deste pallet"). Reaproveita as classes
+  // .af-foto-modal-grid/.af-foto-modal-item (já definidas em _afCssComum
+  // pro modal de fotos) pra montar a mesma grade de miniaturas, só que
+  // impressa direto na página em vez de dentro de um overlay clicável.
+  // @returns {string} HTML pronto (pode vir vazio, se avaliação não existe
+  //   ou nenhum pallet tem foto — nesse caso a seção inteira some, ver
+  //   _blocoOperacaoEstaticoPdf).
+  function _renderFotosPaletesPdf(avaliacao) {
+    if (!avaliacao) return '';
+    const blocos = [];
+    [1, 2, 3, 4].forEach(p => {
+      const fotos = avaliacao.palletFotos?.[`stack${p}`] || [];
+      if (!fotos.length) return;
+      const numFmt = String(p).padStart(2, '0');
+      const grid = fotos.map(dataUri => `<div class="af-foto-modal-item"><img src="${String(dataUri).replace(/"/g, '&quot;')}" alt="Foto do defeito — Palete ${numFmt}"></div>`).join('');
+      blocos.push(`<div class="af-pdf-foto-palete"><div class="af-pdf-foto-palete-titulo">Palete ${numFmt}</div><div class="af-foto-modal-grid">${grid}</div></div>`);
+    });
+    return blocos.join('');
+  }
+
+  // Renderiza as 5 seções da Análise Focada (Identificação/Berços/Receita/
+  // Paradas/Avaliação) em elementos DESANEXADOS do documento (nunca tocam
+  // a tela real) e devolve o innerHTML resultante de cada uma, pronto pra
+  // colar num template estático.
+  // @returns {{cabecalho:string, bercos:string, receita:string, paradas:string, paradasContagem:string, avaliacao:string, fotosPaletes:string}}
+  function _gerarSecoesEstaticasAf(detalhe, paradasDaJanela) {
+    const backupLWFocada = window.LWFocada;
+    try {
+      // Some com LWFocada só durante a captura — é o que faz _renderBercos/
+      // _badgeOperacao/o botão de foto (ver comentário acima) desenharem a
+      // versão SEM onclick, igual já fariam se este HTML fosse aberto fora
+      // da tela ao vivo.
+      delete window.LWFocada;
+
+      const elCabecalho = document.createElement('div');
+      const elBercos = document.createElement('div');
+      const elReceita = document.createElement('div');
+      const elParadas = document.createElement('div');
+      const elParadasContagem = document.createElement('span');
+      const elAvaliacao = document.createElement('div');
+
+      _renderCabecalho(detalhe.operacao || {}, elCabecalho);
+      _renderBercos(detalhe.bercosVisuais, detalhe.operacao, elBercos);
+      _renderReceita(detalhe.tracos, detalhe.bercosVisuais, elReceita);
+      _renderParadas(paradasDaJanela, elParadas, elParadasContagem);
+      _renderAvaliacao(detalhe.avaliacao, elAvaliacao);
+
+      return {
+        cabecalho: elCabecalho.innerHTML,
+        bercos: elBercos.innerHTML,
+        receita: elReceita.innerHTML,
+        paradas: elParadas.innerHTML,
+        paradasContagem: elParadasContagem.textContent || '(nenhuma)',
+        avaliacao: elAvaliacao.innerHTML,
+        // Não passa por _render* (não precisa de LWFocada ligado/desligado
+        // — não tem nenhum elemento clicável) — computada direto aqui.
+        fotosPaletes: _renderFotosPaletesPdf(detalhe.avaliacao),
+      };
+    } finally {
+      // SEMPRE repõe, mesmo se alguma _render* acima lançar — nunca pode
+      // sair desta função com a tela ao vivo sem LWFocada (quebraria todo
+      // clique de berço/foto/navegação enquanto a pessoa continuar usando
+      // a página).
+      if (backupLWFocada !== undefined) window.LWFocada = backupLWFocada;
+    }
+  }
+
+  // Bloco de UMA operação dentro do documento estático de PDF — mesmas 5
+  // seções de sempre (Identificação/Berços/Receita/Paradas/Avaliação),
+  // já renderizadas em HTML puro. `paradas` aqui NUNCA fica dentro de um
+  // <details> retrátil (ao contrário da tela ao vivo e do export
+  // interativo): num PDF impresso não existe "clicar pra expandir", então
+  // sai sempre visível — quem quiser ignorar as paradas de uma operação
+  // sem incidentes já vê "(nenhuma)" no título e pode passar os olhos
+  // direto pra próxima seção.
+  // @param {{cabecalho,bercos,receita,paradas,paradasContagem,avaliacao,fotosPaletes}} secoes - ver _gerarSecoesEstaticasAf.
+  function _blocoOperacaoEstaticoPdf(secoes) {
+    // "Fotos Paletes" só entra se sobrou algum <div> real de
+    // _renderFotosPaletesPdf (ou seja: existe avaliação E pelo menos um
+    // pallet tem foto) — sem isso, nenhuma seção extra aparece, pedido
+    // original: "logo abaixo da avaliação, se houver avaliação".
+    const secaoFotos = secoes.fotosPaletes
+      ? `<div class="chart-box"><h4>🖼️ Fotos Paletes</h4><div>${secoes.fotosPaletes}</div></div>`
+      : '';
+    return `
+      <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div class="af-cabecalho-grid">${secoes.cabecalho}</div></div>
+      <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div>${secoes.bercos}</div></div>
+      <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div>${secoes.receita}</div></div>
+      <div class="chart-box" style="margin-bottom:14px"><h4>🛑 Paradas Nesta Janela <span style="text-transform:none;letter-spacing:normal;font-weight:400">${secoes.paradasContagem}</span></h4><div>${secoes.paradas}</div></div>
+      <div class="chart-box"${secaoFotos ? ' style="margin-bottom:14px"' : ''}><h4>✅ Avaliação de Qualidade</h4><div>${secoes.avaliacao}</div></div>
+      ${secaoFotos}`;
+  }
+
+  // ── Exportação Simples em PDF — documento estático de 1 operação só. ──
+  // Mesmo cabeçalho/rodapé visual de _gerarHtmlAfStandalone, mas sem
+  // <script> nem dados embutidos (ver comentário no topo desta seção).
+  function _gerarHtmlAfEstaticoPdf(detalhe, paradasDaJanela = []) {
+    const secoes = _gerarSecoesEstaticasAf(detalhe, paradasDaJanela);
+    const idOperacao = LW.escaparHtml(String(detalhe.operacao?.id || ''));
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise Focada — ${idOperacao} — Exportado</title>
+<style>${LW.gerarCssExportPadrao()}${_afCssComum()}${_afCssImpressaoPdf()}</style>
+</head>
+<body>
+  <h1>🔎 Análise Focada — Operação ${idOperacao}</h1>
+  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  ${_blocoOperacaoEstaticoPdf(secoes)}
+  <div class="rodape">Exportado da Análise Focada — Lightwall SC · versão estática para impressão em PDF.</div>
+</body>
+</html>`;
+  }
+
+  // ── Exportação "Do Dia"/"Personalizada" em PDF — MESMA ideia que
+  // _gerarHtmlAfMultiplas (abaixo, usada pelo formato HTML interativo),
+  // só que empilhando os blocos ESTÁTICOS de cada operação direto na
+  // página (sem <iframe>, sem <script> de auto-ajuste de altura — aqui não
+  // tem altura pra ajustar, é tudo HTML puro no mesmo documento). Cada
+  // operação começa numa página nova (`break-before:page`, ver
+  // _afCssImpressaoPdf) — assim uma operação nunca fica "colada" na
+  // anterior nem corta no meio virando a folha.
+  // @param {string} tituloPagina - vai na <title>.
+  // @param {string} tituloH1 - cabeçalho grande no topo.
+  // @param {string} subLabel - linha pequena abaixo do H1.
+  // @param {Array<{id, label, secoes}>} itens - uma entrada por operação, `secoes` já vinda de _gerarSecoesEstaticasAf.
+  function _gerarHtmlAfMultiplasEstaticoPdf(tituloPagina, tituloH1, subLabel, itens) {
+    const blocos = itens.map((it, i) => `
+      <div class="af-op-pagina">
+        <div class="af-op-titulo" style="font-size:.78rem;color:var(--text-3);margin-bottom:8px">Operação ${i + 1} de ${itens.length} · ${LW.escaparHtml(it.label)}</div>
+        ${_blocoOperacaoEstaticoPdf(it.secoes)}
+      </div>`).join('');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${LW.escaparHtml(tituloPagina)}</title>
+<style>${LW.gerarCssExportPadrao()}${_afCssComum()}${_afCssImpressaoPdf()}</style>
+</head>
+<body>
+  <h1>${tituloH1}</h1>
+  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${LW.escaparHtml(subLabel)}</div>
+  ${blocos}
+  <div class="rodape">Exportado da Análise Focada — Lightwall SC · versão estática para impressão em PDF.</div>
 </body>
 </html>`;
   }
