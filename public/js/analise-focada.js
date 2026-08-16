@@ -1244,7 +1244,7 @@
       // como ponto de partida pros DOIS campos (De/Até) — quem só quer 1
       // dia específico não precisa mexer em nada além de trocar o "Até".
       const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
-      const periodo = await _escolherRangeDatas(dataSugerida);
+      const periodo = await _escolherRangeDatas(dataSugerida, formato);
       if (!periodo) return;
       await _exportarPersonalizado(periodo.inicio, periodo.fim, formato);
       return;
@@ -1253,7 +1253,7 @@
     // atualmente aberta (_ultimoDetalhe, preenchido por render()), mas o
     // usuário pode trocar livremente pelo calendário do <input type="date">.
     const dataSugerida = _ultimoDetalhe?.operacao?.data || '';
-    const dataEscolhida = await _escolherDataDoDia(dataSugerida);
+    const dataEscolhida = await _escolherDataDoDia(dataSugerida, formato);
     if (!dataEscolhida) return;
     await _exportarDoDia(dataEscolhida, formato);
   }
@@ -1453,6 +1453,23 @@
     return n === 1 ? 'Você vai exportar 1 análise.' : `Você vai exportar ${n} análises.`;
   }
 
+  // ── Aviso de "processo pode demorar" (Fase 4 do plano — mesmo
+  // modal/fluxo da Fase 1, só populando um aviso a mais quando a
+  // contagem passa de um limiar). 15 análises: número redondo dentro da
+  // faixa "15-20" sugerida no README — folgado o bastante pra não
+  // incomodar exportações do dia a dia (poucas operações), mas cedo o
+  // bastante pra avisar ANTES de alguém escolher sem querer um período
+  // de um mês inteiro e só descobrir que ia demorar depois de clicar em
+  // Exportar. Puramente informativo — não bloqueia nem exige confirmação
+  // extra, é só texto condicional em cima do número que a Fase 1 já
+  // calcula (_contarOperacoesDoDia/_contarOperacoesDoPeriodo, acima).
+  const _LIMIAR_AVISO_DEMORA_PDF = 15;
+  function _textoAvisoDemora(n) {
+    return n >= _LIMIAR_AVISO_DEMORA_PDF
+      ? '⚠️ Processo pode demorar bastante com esse volume de análises.'
+      : '';
+  }
+
   // ── Modal de escolha de data pra Exportação "Do Dia" — um <input
   // type="date"> nativo (mesmo padrão de campo de data já usado no resto
   // do app — ver page-registro.html, page-oee.html etc.), que abre o
@@ -1460,10 +1477,14 @@
   // (a data da operação que estava aberta), mas 100% editável. Mostra,
   // logo abaixo do campo, quantas operações entram no arquivo pra data
   // selecionada — recalculado a cada troca de data (Fase 1 do plano de
-  // Exportação em PDF, ver README).
+  // Exportação em PDF, ver README) — e, se `formato` for 'pdf' e a
+  // contagem passar do limiar, um aviso de que o processo pode demorar
+  // (Fase 4). Formato 'html' nunca mostra o aviso: não faz round-trip com
+  // o servidor, então não corre o risco do timeout do Chromium.
   // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
+  // @param {'html'|'pdf'} [formato='html']
   // @returns {Promise<string|null>} 'YYYY-MM-DD' escolhida, ou null se cancelado (Cancelar, Esc ou clique fora).
-  async function _escolherDataDoDia(dataSugerida) {
+  async function _escolherDataDoDia(dataSugerida, formato = 'html') {
     await _carregarCaches();
     return new Promise(resolve => {
       const anterior = document.getElementById('modal-af-data-dia');
@@ -1483,8 +1504,11 @@
           <p style="color:var(--text-2);text-align:center;margin-bottom:16px;line-height:1.5">Escolha a data — todas as operações feitas nela entram no arquivo.</p>
           <input type="date" id="af-data-dia-input" class="form-input" value="${LW.escaparHtml(dataSugerida)}"
             style="width:100%;text-align:center;font-size:1rem;padding:10px">
-          <p id="af-data-dia-contagem" style="color:var(--text-2);text-align:center;margin:10px 0 24px;font-size:.85rem">
+          <p id="af-data-dia-contagem" style="color:var(--text-2);text-align:center;margin:10px 0 6px;font-size:.85rem">
             ${LW.escaparHtml(_textoContagemAnalises(_contarOperacoesDoDia(dataSugerida)))}
+          </p>
+          <p id="af-data-dia-aviso" style="color:#f59e0b;text-align:center;margin:0 0 24px;font-size:.8rem;display:${formato === 'pdf' && _textoAvisoDemora(_contarOperacoesDoDia(dataSugerida)) ? 'block' : 'none'}">
+            ${LW.escaparHtml(_textoAvisoDemora(_contarOperacoesDoDia(dataSugerida)))}
           </p>
           <div style="display:flex;gap:12px">
             <button id="af-data-dia-confirmar"
@@ -1503,6 +1527,7 @@
       document.body.appendChild(modal);
       const input = document.getElementById('af-data-dia-input');
       const contagemEl = document.getElementById('af-data-dia-contagem');
+      const avisoEl = document.getElementById('af-data-dia-aviso');
 
       const fechar = (resultado) => {
         modal.remove();
@@ -1514,7 +1539,11 @@
         if (e.key === 'Enter') fechar(input.value || null);
       };
       const atualizarContagem = () => {
-        contagemEl.textContent = _textoContagemAnalises(_contarOperacoesDoDia(input.value));
+        const n = _contarOperacoesDoDia(input.value);
+        contagemEl.textContent = _textoContagemAnalises(n);
+        const aviso = formato === 'pdf' ? _textoAvisoDemora(n) : '';
+        avisoEl.textContent = aviso;
+        avisoEl.style.display = aviso ? 'block' : 'none';
       };
 
       document.getElementById('af-data-dia-confirmar').addEventListener('click', () => fechar(input.value || null));
@@ -1534,10 +1563,13 @@
   // 1 dia específico só troca o "Até" (ou nem mexe, se já for hoje).
   // Mostra, logo abaixo dos campos, quantas operações entram no arquivo
   // pro período selecionado — recalculado a cada troca de De/Até (Fase 1
-  // do plano de Exportação em PDF, ver README).
+  // do plano de Exportação em PDF, ver README) — e, se `formato` for
+  // 'pdf' e a contagem passar do limiar, um aviso de que o processo pode
+  // demorar (Fase 4). Formato 'html' nunca mostra o aviso.
   // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
+  // @param {'html'|'pdf'} [formato='html']
   // @returns {Promise<{inicio:string,fim:string}|null>} - null se cancelado (Cancelar, Esc ou clique fora).
-  async function _escolherRangeDatas(dataSugerida) {
+  async function _escolherRangeDatas(dataSugerida, formato = 'html') {
     await _carregarCaches();
     return new Promise(resolve => {
       const anterior = document.getElementById('modal-af-range-datas');
@@ -1567,8 +1599,11 @@
                 style="width:100%;text-align:center;font-size:1rem;padding:10px">
             </div>
           </div>
-          <p id="af-range-contagem" style="color:var(--text-2);text-align:center;margin:-8px 0 24px;font-size:.85rem">
+          <p id="af-range-contagem" style="color:var(--text-2);text-align:center;margin:-8px 0 6px;font-size:.85rem">
             ${LW.escaparHtml(_textoContagemAnalises(_contarOperacoesDoPeriodo(dataSugerida, dataSugerida)))}
+          </p>
+          <p id="af-range-aviso" style="color:#f59e0b;text-align:center;margin:0 0 24px;font-size:.8rem;display:${formato === 'pdf' && _textoAvisoDemora(_contarOperacoesDoPeriodo(dataSugerida, dataSugerida)) ? 'block' : 'none'}">
+            ${LW.escaparHtml(_textoAvisoDemora(_contarOperacoesDoPeriodo(dataSugerida, dataSugerida)))}
           </p>
           <div style="display:flex;gap:12px">
             <button id="af-range-confirmar"
@@ -1588,6 +1623,7 @@
       const inputIni = document.getElementById('af-range-inicio-input');
       const inputFim = document.getElementById('af-range-fim-input');
       const contagemEl = document.getElementById('af-range-contagem');
+      const avisoEl = document.getElementById('af-range-aviso');
 
       const fechar = (resultado) => {
         modal.remove();
@@ -1608,7 +1644,11 @@
         if (e.key === 'Enter') confirmar();
       };
       const atualizarContagem = () => {
-        contagemEl.textContent = _textoContagemAnalises(_contarOperacoesDoPeriodo(inputIni.value, inputFim.value));
+        const n = _contarOperacoesDoPeriodo(inputIni.value, inputFim.value);
+        contagemEl.textContent = _textoContagemAnalises(n);
+        const aviso = formato === 'pdf' ? _textoAvisoDemora(n) : '';
+        avisoEl.textContent = aviso;
+        avisoEl.style.display = aviso ? 'block' : 'none';
       };
 
       document.getElementById('af-range-confirmar').addEventListener('click', confirmar);
