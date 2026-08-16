@@ -2242,14 +2242,17 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  * já gere seu HTML interativo do mesmo jeito).
  * @param {string} nomeArquivoPdf - já com a extensão ".pdf".
  * @param {string} html - o documento autossuficiente já gerado.
- * @param {{signal?: AbortSignal, onProgresso?: (fase: string, feito: number, total: number) => void}} [opts]
+ * @param {{signal?: AbortSignal, onProgresso?: (fase: string, feito: number, total: number, segundosRestantes?: number|null) => void}} [opts]
  *   `signal` cancela a exportação em andamento (botão Cancelar da barra de
  *   progresso) — diferente da Fase 2, agora um abort manda
  *   `POST /exportar-pdf/cancelar/:jobId` pro servidor, que fecha a `page`
  *   do Puppeteer no MEIO do processo, não só o acompanhamento do lado do
  *   cliente. `onProgresso` é chamado a cada evento 'progresso' recebido
  *   por SSE (fases: 'carregando', 'ajustando', 'imprimindo' — ver
- *   lib/rotas/exportar-pdf.js).
+ *   lib/rotas/exportar-pdf.js). `segundosRestantes` só vem preenchido na
+ *   fase 'imprimindo' (estimativa baseada no histórico do servidor — ver
+ *   `_iniciarTickerImpressao`, exportar-pdf.js); `null`/`undefined` nas
+ *   demais fases.
  * @returns {Promise<void>}
  */
 async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgresso } = {}) {
@@ -2306,7 +2309,7 @@ async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgress
       if (terminado) return;
       try {
         const dados = JSON.parse(ev.data);
-        if (onProgresso) onProgresso(dados.fase, dados.feito, dados.total);
+        if (onProgresso) onProgresso(dados.fase, dados.feito, dados.total, dados.segundosRestantes);
       } catch (_) { /* evento mal formado — ignora, próximo evento corrige */ }
     });
     eventos.addEventListener('concluido', () => {

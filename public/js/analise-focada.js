@@ -1384,36 +1384,59 @@
   // Ocupa a faixa 85%-100% da barra (a faixa 0%-85% já foi usada pelas
   // fases 1/2, que rodam no CLIENTE antes de mandar o HTML pro servidor —
   // ver _progressoAtualizar/_progressoMontagem, acima). 3 sub-fases
-  // possíveis, cada uma reportada pelo servidor com um `fase` diferente:
+  // possíveis, cada uma reportada pelo servidor com um `fase` diferente —
+  // e cada uma some com a FATIA da barra que já usou antes de passar pra
+  // próxima, então a barra sempre avança, nunca volta:
   //   'carregando'  — o Chromium terminou de montar o DOM do HTML
   //                   recebido (page.setContent) — feito/total sempre 0/1
-  //                   ou 1/1, não tem granularidade real aqui.
+  //                   ou 1/1, não tem granularidade real aqui. 85%-88%.
   //   'ajustando'   — só em "Do Dia"/Personalizada: o script de ajuste de
   //                   escala (_afScriptAjustePaginaUnica) está encolhendo
   //                   cada operação pra caber numa página — feito/total
   //                   AQUI é progresso real (quantas operações já foram
-  //                   ajustadas de quantas no total).
-  //   'imprimindo'  — Chromium gerando o PDF de verdade (page.pdf()) — sem
-  //                   granularidade nenhuma do lado do servidor também
-  //                   (total 0), então pulsa como antes.
-  function _progressoServidor(fase, feito, total) {
+  //                   ajustadas de quantas no total). 88%-92%.
+  //   'imprimindo'  — Chromium gerando o PDF de verdade (page.pdf()) — a
+  //                   etapa que MAIS demora num export grande, e a única
+  //                   sem NENHUM progresso real disponível (Puppeteer não
+  //                   expõe callback nenhum aqui). O servidor estima com
+  //                   base no histórico (média móvel de ms/operação nos
+  //                   últimos jobs — ver `_iniciarTickerImpressao`,
+  //                   exportar-pdf.js) e manda `feito` como uma
+  //                   PORCENTAGEM estimada (0-95, nunca 100 — só o
+  //                   'concluido' de verdade fecha em 100%) junto com
+  //                   `segundosRestantes`. 92%-100%, com texto de ETA.
+  function _progressoServidor(fase, feito, total, segundosRestantes) {
     const { texto, barra } = _progressoEls();
     if (!texto || !barra) return;
     if (fase === 'carregando') {
       barra.classList.remove('af-progresso-indeterminada');
       texto.textContent = 'Servidor carregando o conteúdo…';
-      barra.style.width = `${total > 0 ? 85 + Math.round((feito / total) * 5) : 85}%`; // 85%-90%
+      barra.style.width = `${total > 0 ? 85 + Math.round((feito / total) * 3) : 85}%`; // 85%-88%
       return;
     }
     if (fase === 'ajustando') {
       barra.classList.remove('af-progresso-indeterminada');
       texto.textContent = total > 0 ? `Ajustando o layout do PDF (${feito} de ${total})…` : 'Ajustando o layout do PDF…';
-      barra.style.width = `${total > 0 ? 90 + Math.round((feito / total) * 10) : 90}%`; // 90%-100%
+      barra.style.width = `${total > 0 ? 88 + Math.round((feito / total) * 4) : 88}%`; // 88%-92%
       return;
     }
-    // 'imprimindo' (ou qualquer fase futura desconhecida) — sem
-    // granularidade, volta a pulsar como na Fase 2.
-    texto.textContent = 'Imprimindo o PDF…';
+    if (fase === 'imprimindo') {
+      // Estimativa, não medição real — o texto deixa isso implícito
+      // ("~Xs restantes", não "Xs restantes") pra não prometer uma
+      // precisão que a barra não tem. `feito` aqui já vem em PORCENTAGEM
+      // (0-95), não em contagem — ver comentário acima e
+      // `_iniciarTickerImpressao` em exportar-pdf.js.
+      barra.classList.remove('af-progresso-indeterminada');
+      const percentualImpressao = Math.max(0, Math.min(95, feito));
+      barra.style.width = `${92 + Math.round((percentualImpressao / 95) * 8)}%`; // 92%-100%
+      texto.textContent = (typeof segundosRestantes === 'number' && segundosRestantes > 0)
+        ? `Imprimindo o PDF… (~${segundosRestantes}s restantes)`
+        : 'Imprimindo o PDF…';
+      return;
+    }
+    // Fase futura desconhecida — sem granularidade, volta a pulsar (mesmo
+    // fallback de segurança que existia desde a Fase 2).
+    texto.textContent = 'Processando…';
     barra.classList.add('af-progresso-indeterminada');
   }
 
