@@ -2099,11 +2099,15 @@ ${regras}`;
   // vivo ou o export interativo (botão 📷 de cada pallet, que abre
   // _abrirFotosPalletFocada em modal).
 
-  // Renderiza as 5 seções da Análise Focada (Identificação/Berços/Receita/
-  // Paradas/Avaliação) em elementos DESANEXADOS do documento (nunca tocam
-  // a tela real) e devolve o innerHTML resultante de cada uma, pronto pra
-  // colar num template estático.
-  // @returns {{cabecalho:string, bercos:string, receita:string, paradas:string, paradasContagem:string, avaliacao:string, fotosPaletes:string}}
+  // Renderiza as 4 seções da Análise Focada que entram no PDF
+  // (Identificação/Berços/Receita/Avaliação) em elementos DESANEXADOS do
+  // documento (nunca tocam a tela real) e devolve o innerHTML resultante
+  // de cada uma, pronto pra colar num template estático. "Paradas" NÃO
+  // entra mais no PDF (pedido: "quero um diff para tirar a section de
+  // paradas nessa seção, isso também pode ficar de fora do pdf") — quem
+  // quiser ver as paradas de uma operação usa a tela ao vivo ou o export
+  // interativo, que continuam mostrando normalmente.
+  // @returns {{cabecalho:string, bercos:string, receita:string, avaliacao:string, fotosPaletes:string}}
   function _gerarSecoesEstaticasAf(detalhe, paradasDaJanela) {
     const backupLWFocada = window.LWFocada;
     try {
@@ -2116,22 +2120,17 @@ ${regras}`;
       const elCabecalho = document.createElement('div');
       const elBercos = document.createElement('div');
       const elReceita = document.createElement('div');
-      const elParadas = document.createElement('div');
-      const elParadasContagem = document.createElement('span');
       const elAvaliacao = document.createElement('div');
 
       _renderCabecalho(detalhe.operacao || {}, elCabecalho);
       _renderBercos(detalhe.bercosVisuais, detalhe.operacao, elBercos);
       _renderReceita(detalhe.tracos, detalhe.bercosVisuais, elReceita);
-      _renderParadas(paradasDaJanela, elParadas, elParadasContagem);
       _renderAvaliacao(detalhe.avaliacao, elAvaliacao);
 
       return {
         cabecalho: elCabecalho.innerHTML,
         bercos: elBercos.innerHTML,
         receita: elReceita.innerHTML,
-        paradas: elParadas.innerHTML,
-        paradasContagem: elParadasContagem.textContent || '(nenhuma)',
         avaliacao: elAvaliacao.innerHTML,
         // Fotos dos paletes NÃO entram no PDF (pedido: "não quero que as
         // fotos sejam exportadas para o pdf, [...] tanto nas simples como
@@ -2149,26 +2148,22 @@ ${regras}`;
     }
   }
 
-  // Bloco de UMA operação dentro do documento estático de PDF — mesmas 5
-  // seções de sempre (Identificação/Berços/Receita/Paradas/Avaliação),
-  // já renderizadas em HTML puro. `paradas` aqui NUNCA fica dentro de um
-  // <details> retrátil (ao contrário da tela ao vivo e do export
-  // interativo): num PDF impresso não existe "clicar pra expandir", então
-  // sai sempre visível — quem quiser ignorar as paradas de uma operação
-  // sem incidentes já vê "(nenhuma)" no título e pode passar os olhos
-  // direto pra próxima seção.
-  // @param {{cabecalho,bercos,receita,paradas,paradasContagem,avaliacao,fotosPaletes}} secoes - ver _gerarSecoesEstaticasAf.
+  // Bloco de UMA operação dentro do documento estático de PDF —
+  // Identificação/Berços/Receita/Avaliação, já renderizadas em HTML puro.
+  // @param {{cabecalho,bercos,receita,avaliacao,fotosPaletes}} secoes - ver _gerarSecoesEstaticasAf.
   function _blocoOperacaoEstaticoPdf(secoes) {
     // Seção "🖼️ Fotos Paletes" REMOVIDA do PDF (pedido: "não quero que as
     // fotos sejam exportadas para o pdf, pode deixar somente a avaliação
     // mesmo, sem colocar as fotos, tanto nas simples como na do dia e
     // personalizada") — a avaliação de qualidade em texto continua normal,
     // só as fotos em si (base64, pesadas) que somem do documento impresso.
+    // Seção "🛑 Paradas Nesta Janela" TAMBÉM removida do PDF (mesmo
+    // pedido, estendido às paradas) — segue disponível na tela ao vivo e
+    // no export interativo.
     return `
       <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div class="af-cabecalho-grid">${secoes.cabecalho}</div></div>
       <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div>${secoes.bercos}</div></div>
       <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div>${secoes.receita}</div></div>
-      <div class="chart-box" style="margin-bottom:14px"><h4>🛑 Paradas Nesta Janela <span style="text-transform:none;letter-spacing:normal;font-weight:400">${secoes.paradasContagem}</span></h4><div>${secoes.paradas}</div></div>
       <div class="chart-box"><h4>✅ Avaliação de Qualidade</h4><div>${secoes.avaliacao}</div></div>`;
   }
 
