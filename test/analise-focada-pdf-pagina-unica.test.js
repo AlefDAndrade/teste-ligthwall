@@ -55,7 +55,7 @@ function secoesFalsas(rotulo) {
 
 // ── 1) Matemática do ajuste de escala ───────────────────────────────────
 
-test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaço realmente disponível', () => {
+test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaço realmente disponível — convergindo em múltiplas passadas se precisar', () => {
   const window = montarJanela();
   const doc = window.document;
 
@@ -68,19 +68,27 @@ test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaç
   const conteudo = doc.querySelector('.af-op-conteudo-escala');
 
   // Página "cabe" 600px de altura útil; o título consome 20px antes do
-  // conteúdo começar (offsetTop) — logo, sobra 580px pro conteúdo.
+  // conteúdo começar (offsetTop) — logo, sobra 580px pro conteúdo (menos
+  // o FATOR_SEGURANCA de 3%, ver abaixo).
   Object.defineProperty(pagina, 'clientHeight', { value: 600, configurable: true });
   Object.defineProperty(conteudo, 'offsetTop', { value: 20, configurable: true });
 
-  // scrollHeight simula DUAS leituras diferentes (1ª: no tamanho normal,
-  // 900px — bem maior que os 580px disponíveis; 2ª: depois que o script
-  // alarga a caixa pra compensar o scale, um grid reorganiza colunas e o
-  // conteúdo "encolhe" naturalmente pra 850px) — exercita a correção de
-  // 2ª passada descrita no comentário de _afScriptAjustePaginaUnica.
+  // scrollHeight simula TRÊS leituras diferentes — pedido que motivou
+  // trocar as antigas "2 passadas fixas" por um LOOP convergente (ver
+  // MAX_PASSADAS/comentário grande em _afScriptAjustePaginaUnica):
+  // "cortando mais ainda" numa operação com bastante conteúdo, onde 2
+  // passadas não eram suficientes pra o grid (.af-paineis-grid, auto-fit)
+  // terminar de se reorganizar. Aqui: 1ª leitura no tamanho normal
+  // (900px, bem maior que o disponível), 2ª depois da 1ª correção (850px
+  // — grid ainda reorganizando, ainda maior que o disponível, precisa de
+  // MAIS uma correção — isto é o que a versão de 2 passadas fixas NÃO
+  // cobria), 3ª depois da 2ª correção (500px — layout finalmente
+  // estabilizou e já cabe, loop converge e para).
   let leituras = 0;
+  const alturasSimuladas = [900, 850, 500];
   Object.defineProperty(conteudo, 'scrollHeight', {
     configurable: true,
-    get() { leituras += 1; return leituras === 1 ? 900 : 850; },
+    get() { const v = alturasSimuladas[Math.min(leituras, alturasSimuladas.length - 1)]; leituras += 1; return v; },
   });
 
   // Mesma ordem do documento real: flag inicial (no <head>) primeiro,
@@ -95,17 +103,15 @@ test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaç
   window.dispatchEvent(new window.Event('load'));
 
   assert.equal(window.__afAjustePaginaConcluido, true, 'depois do load, a flag deve virar true (libera o Puppeteer pra imprimir)');
-  assert.equal(leituras, 2, 'deveria medir a altura 2 vezes (1ª no tamanho natural, 2ª depois de alargar pra compensar o scale)');
+  assert.equal(leituras, 3, 'deveria medir a altura 3 vezes (2 correções + 1 leitura final confirmando que já cabe)');
 
-  // 2ª leitura (850) é a que efetivamente decide a escala final, porque é
-  // MAIOR que a estimativa da 1ª passada corrigida. O "disponível" já sai
-  // com o FATOR_SEGURANCA de 3% aplicado (580 * 0.97 = 562.6) antes de
-  // dividir pela altura natural — ver comentário de FATOR_SEGURANCA em
-  // _afScriptAjustePaginaUnica (pedido: "o último painel da avaliação
-  // ainda fica cortado", precisa de uma folga extra além do cálculo
-  // exato) — logo: 562.6/850 ≈ 0.66188.
+  // Escala final = produto das DUAS correções (900→850) aplicadas em
+  // cima uma da outra (não recalculadas do zero a cada passada) — ver
+  // comentário do loop em _afScriptAjustePaginaUnica. "disponível" já sai
+  // com o FATOR_SEGURANCA de 3% aplicado (580 * 0.97 = 562.6).
   const disponivelComFolga = 580 * 0.97;
-  const escalaEsperada = disponivelComFolga / 850;
+  const escala1 = disponivelComFolga / 900;
+  const escalaEsperada = escala1 * (disponivelComFolga / 850);
   const match = conteudo.style.transform.match(/scale\(([\d.]+)\)/);
   assert.ok(match, `esperava um transform:scale(...), veio "${conteudo.style.transform}"`);
   assert.ok(Math.abs(parseFloat(match[1]) - escalaEsperada) < 0.0005, `escala aplicada (${match[1]}) deveria ser ~${escalaEsperada.toFixed(5)}`);
@@ -116,6 +122,48 @@ test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaç
   const matchLargura = conteudo.style.width.match(/([\d.]+)%/);
   assert.ok(matchLargura, `esperava uma largura em %, veio "${conteudo.style.width}"`);
   assert.ok(Math.abs(parseFloat(matchLargura[1]) - larguraEsperada) < 0.05, `largura aplicada (${matchLargura[1]}%) deveria ser ~${larguraEsperada.toFixed(2)}%`);
+});
+
+test('ajuste de escala tem um teto de passadas — nunca trava o Puppeteer mesmo se o layout nunca convergir', () => {
+  const window = montarJanela();
+  const doc = window.document;
+
+  doc.body.innerHTML = `
+    <div class="af-op-pagina">
+      <div class="af-op-titulo">Operação 1 de 1</div>
+      <div class="af-op-conteudo-escala">conteúdo teimoso</div>
+    </div>`;
+  const pagina = doc.querySelector('.af-op-pagina');
+  const conteudo = doc.querySelector('.af-op-conteudo-escala');
+
+  Object.defineProperty(pagina, 'clientHeight', { value: 600, configurable: true });
+  Object.defineProperty(conteudo, 'offsetTop', { value: 20, configurable: true });
+
+  // scrollHeight SEMPRE retorna um valor bem maior que o disponível,
+  // simulando um layout patológico que nunca estabiliza (ex.: algum
+  // conteúdo com altura mínima fixa que o scale não consegue reduzir o
+  // bastante) — sem um teto de passadas, isto faria o loop de
+  // ajustarParaCaberNumaPagina rodar pra sempre, travando o handler de
+  // 'load' e, por consequência, o __afAjustePaginaConcluido nunca viraria
+  // true (o Puppeteer ficaria preso esperando até o timeout do servidor).
+  let leituras = 0;
+  Object.defineProperty(conteudo, 'scrollHeight', {
+    configurable: true,
+    get() { leituras += 1; return 5000; },
+  });
+
+  window.eval(window.LWFocada.scriptFlagInicial().replace(/^<script>/, '').replace(/<\/script>$/, ''));
+  const scriptHtml = window.LWFocada.scriptAjustePaginaUnica();
+  const corpoScript = scriptHtml.replace(/^<script>/, '').replace(/<\/script>$/, '');
+  window.eval(corpoScript);
+  window.dispatchEvent(new window.Event('load'));
+
+  // O importante: mesmo sem NUNCA convergir, o handler de 'load' precisa
+  // terminar (não travar) e liberar a flag pro Puppeteer imprimir com o
+  // melhor esforço que conseguiu, em vez de ficar preso.
+  assert.equal(window.__afAjustePaginaConcluido, true, 'a flag precisa virar true mesmo se o layout nunca convergir — nunca pode travar o Puppeteer');
+  assert.ok(leituras <= 6, `deveria ter parado depois de no máximo 6 passadas, mas fez ${leituras} leituras`);
+  assert.match(conteudo.style.transform, /scale\(/, 'ainda assim deveria ter aplicado ALGUMA escala (melhor esforço), em vez de deixar o conteúdo em tamanho normal e sujeito a corte seco');
 });
 
 test('ajuste de escala NÃO mexe em nada quando o conteúdo já cabe na página', () => {

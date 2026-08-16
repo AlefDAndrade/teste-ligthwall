@@ -1936,6 +1936,18 @@ ${regras}`;
   // sem ficar perceptível a olho nu.
   var FATOR_SEGURANCA = 0.97;
 
+  // Teto de passadas de correção — ver comentário grande dentro do loop,
+  // abaixo, sobre por que 2 passadas fixas (versão anterior) não bastavam
+  // pra operações com MUITO conteúdo na Avaliação de Qualidade (vários
+  // traços com ajustes + 4 pallets cheios de painéis): "o último painel
+  // ainda fica cortado" evoluiu pra "cortando bem mais" justamente numa
+  // operação assim — o conteúdo real não estava recebendo NENHUM
+  // encolhimento (o texto saía em tamanho normal, só cortado seco pelo
+  // overflow:hidden de .af-op-pagina), porque a 2ª passada nem sempre é
+  // suficiente pra a grade (.af-paineis-grid, auto-fit) terminar de se
+  // reorganizar e estabilizar numa altura definitiva.
+  var MAX_PASSADAS = 6;
+
   function ajustarParaCaberNumaPagina(pagina) {
     var conteudo = pagina.querySelector('.af-op-conteudo-escala');
     if (!conteudo) return;
@@ -1951,27 +1963,50 @@ ${regras}`;
     // a mesma folga — senão um conteúdo bem no limite passaria batido
     // sem nenhum encolhimento e voltaria a correr risco de corte.
     var disponivel = (pagina.clientHeight - conteudo.offsetTop) * FATOR_SEGURANCA;
-    var alturaNatural = conteudo.scrollHeight;
-    if (disponivel <= 0 || alturaNatural <= disponivel) return; // já cabe (com folga) — não mexe em nada
+    if (disponivel <= 0) return;
 
-    var escala = disponivel / alturaNatural;
-    conteudo.style.width = (100 / escala) + '%';
-    conteudo.style.transform = 'scale(' + escala + ')';
+    // LOOP CONVERGENTE (substitui as antigas "2 passadas fixas"): mede,
+    // corrige, remede — cada passada aplica um fator corretivo EM CIMA da
+    // escala já acumulada (não recalcula do zero), então cada rodada só
+    // precisa fechar a diferença que sobrou da rodada anterior. Alargar a
+    // caixa pra compensar um scale() pode reorganizar grids
+    // (.af-cabecalho-grid, .af-paineis-grid etc.) em mais colunas — às
+    // vezes isso estabiliza numa passada só, às vezes leva 2-3 até o
+    // layout parar de mudar de verdade (ex.: operação com muitos traços +
+    // 4 pallets cheios de painéis, ver PDF que motivou este loop). Sem
+    // loop (a versão de "2 passadas fixas" anterior), quando o conteúdo
+    // era grande o bastante pra não estabilizar em só 2 rodadas, a função
+    // terminava tendo aplicado uma escala AINDA insuficiente — e o
+    // overflow:hidden de .af-op-pagina cortava o resto seco, sem
+    // nenhuma redução visível de tamanho (foi exatamente o sintoma
+    // reportado: texto em tamanho normal, corte seco no meio da
+    // Avaliação de Qualidade). Teto de MAX_PASSADAS (6) passadas só pra
+    // garantir que isto NUNCA trave o Puppeteer esperando um layout que
+    // nunca estabiliza — na prática, layouts reais convergem bem antes
+    // disso.
+    var escalaAtual = 1;
+    for (var passada = 0; passada < MAX_PASSADAS; passada++) {
+      var alturaAtual = conteudo.scrollHeight;
+      if (alturaAtual <= disponivel) return; // convergiu (com folga) — não mexe mais em nada
 
-    // 2ª passada: alargar a caixa pra compensar o scale pode reorganizar
-    // grids (.af-cabecalho-grid, .af-paineis-grid etc.) em mais colunas
-    // e mudar a altura natural — remede uma vez só (sem loop, pra nunca
-    // travar) e corrige a escala se ainda sobrar conteúdo pra fora.
-    var alturaRemedida = conteudo.scrollHeight;
-    if (alturaRemedida > disponivel) {
-      var escalaCorrigida = disponivel / alturaRemedida;
-      conteudo.style.width = (100 / escalaCorrigida) + '%';
-      conteudo.style.transform = 'scale(' + escalaCorrigida + ')';
+      var fatorCorretivo = disponivel / alturaAtual;
+      escalaAtual = escalaAtual * fatorCorretivo;
+      conteudo.style.width = (100 / escalaAtual) + '%';
+      conteudo.style.transform = 'scale(' + escalaAtual + ')';
     }
   }
 
   window.addEventListener('load', function () {
-    document.querySelectorAll('.af-op-pagina').forEach(ajustarParaCaberNumaPagina);
+    // Nunca deixar UMA operação com layout problemático (exceção
+    // inesperada dentro de ajustarParaCaberNumaPagina) impedir as OUTRAS
+    // de serem ajustadas, nem travar a flag em \`false\` pra sempre — sem
+    // este try/catch, uma exceção no meio do forEach interromperia o
+    // loop inteiro e a linha que marca __afAjustePaginaConcluido nunca
+    // seria alcançada, forçando o Puppeteer a esperar o timeout inteiro
+    // e imprimir tudo SEM NENHUM ajuste (pior ainda que o bug original).
+    document.querySelectorAll('.af-op-pagina').forEach(function (pagina) {
+      try { ajustarParaCaberNumaPagina(pagina); } catch (e) { /* segue pras próximas páginas mesmo assim */ }
+    });
     window.__afAjustePaginaConcluido = true; // libera o Puppeteer pra imprimir (ver _afScriptFlagInicial)
   });
 })();
