@@ -1811,13 +1811,42 @@
   //     também dentro de um bloco @media print pra este MESMO arquivo
   //     continuar se comportando bem se alguém abrir e imprimir direto
   //     pelo navegador (Ctrl+P), fora do Puppeteer.
+  // Altura útil de UMA página A4 impressa pelo Chromium: 297mm de altura
+  // total menos as margens top+bottom que lib/rotas/exportar-pdf.js pede
+  // no `page.pdf({ margin: { top:'10mm', bottom:'10mm', ... } })` — ou
+  // seja, 297 - 10 - 10 = 277mm de área realmente disponível pro
+  // conteúdo. Se esse valor de margem mudar um dia em exportar-pdf.js,
+  // precisa mudar aqui também (os dois lados dessa conta vivem em
+  // arquivos diferentes por necessidade — um é CSS de cliente, o outro é
+  // opção do Puppeteer no servidor — não dá pra compartilhar a constante
+  // literalmente, mas o comentário nos dois lados aponta um pro outro).
+  const _AF_PDF_ALTURA_PAGINA_MM = 277;
+
   function _afCssImpressaoPdf() {
     const regras = `
   html, body { background:var(--bg-1); }
   body { max-width:190mm; margin:0 auto; padding:0; }
-  .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula, .af-op-pagina, .af-pdf-foto-palete { break-inside:avoid; page-break-inside:avoid; }
+  .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula, .af-pdf-foto-palete { break-inside:avoid; page-break-inside:avoid; }
   h1, h4, .af-op-titulo, .af-pdf-foto-palete-titulo { break-after:avoid; page-break-after:avoid; }
+  /* .af-op-pagina — usada só no export "Do Dia"/"Personalizada" (várias
+     operações no mesmo PDF, ver _gerarHtmlAfMultiplasEstaticoPdf): cada
+     bloco recebe a altura EXATA de uma página A4 útil (ver
+     _AF_PDF_ALTURA_PAGINA_MM, acima) e "overflow:hidden" — junto com o
+     "break-before:page" logo abaixo, isso faz cada operação abrir numa
+     folha nova E nunca vazar pra próxima, porque o conteúdo de dentro
+     (.af-op-conteudo-escala) é encolhido via JS (ver o <script> no fim
+     do documento gerado por _gerarHtmlAfMultiplasEstaticoPdf) pra caber
+     inteiro nessa altura antes do Puppeteer imprimir — overflow:hidden
+     aqui é só uma rede de segurança caso aquele cálculo erre por
+     alguma fração de pixel, não o mecanismo principal de ajuste. */
+  .af-op-pagina { height:${_AF_PDF_ALTURA_PAGINA_MM}mm; overflow:hidden; position:relative; break-inside:avoid; page-break-inside:avoid; }
   .af-op-pagina + .af-op-pagina { break-before:page; page-break-before:always; margin-top:0; }
+  /* transform-origin:top left é o que faz o scale() (aplicado via JS,
+     ver comentário acima) encolher a partir do canto superior esquerdo
+     — sem isso o navegador encolhe a partir do CENTRO por padrão, o que
+     deixaria uma faixa de espaço vazio em cima do conteúdo em vez de
+     ficar coladinho no topo da página. */
+  .af-op-conteudo-escala { transform-origin:top left; }
   .af-pdf-foto-palete { margin-bottom:14px; }
   .af-pdf-foto-palete:last-child { margin-bottom:0; }
   .af-pdf-foto-palete-titulo { font-size:.85rem; font-weight:700; color:var(--text); margin-bottom:8px; }
@@ -1830,6 +1859,100 @@
   @media print {${regras}
   }
 ${regras}`;
+  }
+
+  // ── Script que encolhe cada .af-op-conteudo-escala pra caber inteira
+  // dentro da página A4 de .af-op-pagina (ver comentário em
+  // _afCssImpressaoPdf, acima) — só entra no export "Do Dia"/
+  // "Personalizada" (_gerarHtmlAfMultiplasEstaticoPdf), o único que
+  // empilha mais de uma operação no mesmo PDF.
+  //
+  // POR QUE ISSO PRECISA DE JAVASCRIPT (e não dá pra fazer só com CSS):
+  // não existe nenhuma propriedade CSS que diga "encolha isto até caber
+  // na altura disponível" — só sabemos a altura REAL do conteúdo depois
+  // de ele já estar renderizado (varia MUITO: uma operação com poucos
+  // berços e nenhuma foto de defeito cabe fácil, outra com 20 paradas e
+  // fotos de vários paletes pode passar de 2-3 páginas do jeito natural).
+  // Então o fluxo é: 1) deixa o navegador renderizar tudo no tamanho
+  // normal; 2) mede quanto "sobrou" (scrollHeight) contra quanto cabe
+  // (a altura da página, ${_AF_PDF_ALTURA_PAGINA_MM}mm); 3) se não
+  // coube, calcula a escala necessária e aplica um transform:scale() —
+  // 2 passadas (a 2ª remede depois do transform, porque alargar a caixa
+  // pra compensar a largura perdida no scale pode reorganizar grids e
+  // mudar a altura de novo; ver comentário dentro da função).
+  //
+  // QUANDO RODA: só depois do evento `load` da janela (não
+  // DOMContentLoaded) — precisamos que TODAS as fotos de defeito
+  // (<img src="data:...">, ver _renderFotosPaletesPdf) já tenham
+  // dimensão conhecida antes de medir scrollHeight, senão a conta sai
+  // errada com o layout ainda "murcho" tentando reservar espaço pra uma
+  // imagem que ainda não tem altura calculada.
+  //
+  // POR QUE É SEGURO rodar isto de forma síncrona dentro do próprio
+  // Chromium do servidor (lib/rotas/exportar-pdf.js espera
+  // `waitUntil:'networkidle0'` antes de chamar `page.pdf()`): o evento
+  // `load` sempre dispara ANTES de a rede ficar "idle" (que exige mais
+  // 500ms sem requisições depois do load) — como este script não faz
+  // NENHUMA requisição de rede (só mede/mexe em elementos já no DOM) e
+  // roda 100% síncrono (sem await/setTimeout), ele termina de executar
+  // dentro do próprio ciclo do evento `load`, bem antes do Puppeteer
+  // sequer considerar a rede ociosa e mandar imprimir.
+  // `window.__afAjustePaginaConcluido` — sinalizador simples de
+  // "terminei de encolher tudo que precisava" (ver função abaixo). O
+  // servidor (lib/rotas/exportar-pdf.js) espera esse sinal virar `true`
+  // ANTES de chamar `page.pdf()` (via `page.waitForFunction`), em vez de
+  // confiar só no `waitUntil:'networkidle0'` do `page.setContent` —
+  // networkidle0 só olha requisições de REDE, e este documento não faz
+  // nenhuma (fotos são `data:` URI embutidas, ver _renderFotosPaletesPdf),
+  // então "a rede está ociosa" pode virar verdade ANTES mesmo do evento
+  // `load` disparar e o ajuste de escala rodar — sem esse sinal explícito
+  // o Puppeteer poderia imprimir cedo demais, com o conteúdo ainda no
+  // tamanho grande. Fica `false` desde o `<head>` (ver
+  // _gerarHtmlAfMultiplasEstaticoPdf) até o `load` terminar de ajustar
+  // todas as páginas.
+  function _afScriptFlagInicial() {
+    return `<script>window.__afAjustePaginaConcluido = false;</script>`;
+  }
+
+  function _afScriptAjustePaginaUnica() {
+    return `<script>
+(function () {
+  function ajustarParaCaberNumaPagina(pagina) {
+    var conteudo = pagina.querySelector('.af-op-conteudo-escala');
+    if (!conteudo) return;
+    conteudo.style.transform = 'none';
+    conteudo.style.width = '100%';
+
+    // Espaço realmente livre = altura total da página menos o quanto já
+    // foi consumido ACIMA do conteúdo (o rótulo "Operação X de Y…", ver
+    // .af-op-titulo) — offsetTop é relativo a .af-op-pagina porque ela
+    // tem position:relative (ver _afCssImpressaoPdf).
+    var disponivel = pagina.clientHeight - conteudo.offsetTop;
+    var alturaNatural = conteudo.scrollHeight;
+    if (disponivel <= 0 || alturaNatural <= disponivel) return; // já cabe — não mexe em nada
+
+    var escala = disponivel / alturaNatural;
+    conteudo.style.width = (100 / escala) + '%';
+    conteudo.style.transform = 'scale(' + escala + ')';
+
+    // 2ª passada: alargar a caixa pra compensar o scale pode reorganizar
+    // grids (.af-cabecalho-grid, .af-paineis-grid etc.) em mais colunas
+    // e mudar a altura natural — remede uma vez só (sem loop, pra nunca
+    // travar) e corrige a escala se ainda sobrar conteúdo pra fora.
+    var alturaRemedida = conteudo.scrollHeight;
+    if (alturaRemedida > disponivel) {
+      var escalaCorrigida = disponivel / alturaRemedida;
+      conteudo.style.width = (100 / escalaCorrigida) + '%';
+      conteudo.style.transform = 'scale(' + escalaCorrigida + ')';
+    }
+  }
+
+  window.addEventListener('load', function () {
+    document.querySelectorAll('.af-op-pagina').forEach(ajustarParaCaberNumaPagina);
+    window.__afAjustePaginaConcluido = true; // libera o Puppeteer pra imprimir (ver _afScriptFlagInicial)
+  });
+})();
+</script>`;
   }
 
   function _gerarHtmlAfStandalone(detalhe, paradasDaJanela = []) {
@@ -2097,11 +2220,11 @@ ${regras}`;
   // ── Exportação "Do Dia"/"Personalizada" em PDF — MESMA ideia que
   // _gerarHtmlAfMultiplas (abaixo, usada pelo formato HTML interativo),
   // só que empilhando os blocos ESTÁTICOS de cada operação direto na
-  // página (sem <iframe>, sem <script> de auto-ajuste de altura — aqui não
-  // tem altura pra ajustar, é tudo HTML puro no mesmo documento). Cada
-  // operação começa numa página nova (`break-before:page`, ver
-  // _afCssImpressaoPdf) — assim uma operação nunca fica "colada" na
-  // anterior nem corta no meio virando a folha.
+  // página (sem <iframe> — mas COM um <script> pequeno de auto-ajuste de
+  // ESCALA, ver _afScriptAjustePaginaUnica: cada operação não só começa
+  // numa página nova (`break-before:page`, ver _afCssImpressaoPdf), como
+  // é ENCOLHIDA o quanto for preciso pra caber inteira nessa página só,
+  // sem vazar pro início da próxima).
   // @param {string} tituloPagina - vai na <title>.
   // @param {string} tituloH1 - cabeçalho grande no topo.
   // @param {string} subLabel - linha pequena abaixo do H1.
@@ -2110,7 +2233,9 @@ ${regras}`;
     const blocos = itens.map((it, i) => `
       <div class="af-op-pagina">
         <div class="af-op-titulo" style="font-size:.78rem;color:var(--text-3);margin-bottom:8px">Operação ${i + 1} de ${itens.length} · ${LW.escaparHtml(it.label)}</div>
-        ${_blocoOperacaoEstaticoPdf(it.secoes)}
+        <div class="af-op-conteudo-escala">
+          ${_blocoOperacaoEstaticoPdf(it.secoes)}
+        </div>
       </div>`).join('');
 
     return `<!DOCTYPE html>
@@ -2120,12 +2245,14 @@ ${regras}`;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${LW.escaparHtml(tituloPagina)}</title>
 <style>${LW.gerarCssExportPadrao()}${_afCssComum()}${_afCssImpressaoPdf()}</style>
+${_afScriptFlagInicial()}
 </head>
 <body>
   <h1>${tituloH1}</h1>
   <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${LW.escaparHtml(subLabel)}</div>
   ${blocos}
   <div class="rodape">Exportado da Análise Focada — Lightwall SC · versão estática para impressão em PDF.</div>
+${_afScriptAjustePaginaUnica()}
 </body>
 </html>`;
   }
@@ -2240,5 +2367,19 @@ ${regras}`;
     render();
   }
 
-  window.LWFocada = { abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, exportarPDF, abrirDetalhesBerco, abrirFotosPallet: _abrirFotosPalletFocada, fmtHora: _fmtHora, totalPorPallet: _totalPorPallet };
+  window.LWFocada = {
+    abrir, abrirBusca, buscar, voltar, init, render, exportarInterativo, exportarPDF,
+    abrirDetalhesBerco, abrirFotosPallet: _abrirFotosPalletFocada,
+    fmtHora: _fmtHora, totalPorPallet: _totalPorPallet,
+    // Expostos só pra teste (ver test/analise-focada-pdf-pagina-unica.test.js)
+    // — o mecanismo de "cada análise cabe em 1 página só" no PDF de
+    // "Do Dia"/"Personalizada" (_gerarHtmlAfMultiplasEstaticoPdf,
+    // _afScriptAjustePaginaUnica) não tem nenhuma outra forma de ser
+    // verificado automaticamente sem um Chromium real rodando (ver
+    // comentário no topo desses arquivos), então testamos a lógica de
+    // escala e a estrutura do HTML gerado diretamente.
+    gerarHtmlMultiplasPdf: _gerarHtmlAfMultiplasEstaticoPdf,
+    scriptAjustePaginaUnica: _afScriptAjustePaginaUnica,
+    scriptFlagInicial: _afScriptFlagInicial,
+  };
 })();

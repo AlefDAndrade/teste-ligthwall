@@ -1,0 +1,209 @@
+// ─── test/analise-focada-pdf-pagina-unica.test.js ───────────────────────────
+// Cobre o pedido: "na exportação em PDF Do Dia/Personalizada da Análise
+// Focada, cada operação deve caber INTEIRA em 1 página, mesmo que o
+// conteúdo seja grande" (ver _afCssImpressaoPdf/_afScriptAjustePaginaUnica/
+// _gerarHtmlAfMultiplasEstaticoPdf em public/js/analise-focada.js, e o
+// `page.waitForFunction` correspondente em lib/rotas/exportar-pdf.js).
+//
+// Não dá pra testar isso de ponta a ponta (abrir o PDF de verdade e medir
+// páginas) sem um Chromium real via Puppeteer — este ambiente de teste não
+// tem um instalado (ver comentário de _encontrarExecutavelChromium em
+// lib/rotas/exportar-pdf.js: precisa ser instalado no SISTEMA operacional,
+// não é uma dependência npm baixável). Em vez disso, testamos as DUAS
+// peças que, juntas, garantem o resultado:
+//   1) A MATEMÁTICA do ajuste de escala (ajustarParaCaberNumaPagina, dentro
+//      do script gerado por _afScriptAjustePaginaUnica) — simulando um DOM
+//      com métricas de layout controladas (jsdom não calcula layout de
+//      verdade, então fingimos clientHeight/scrollHeight/offsetTop via
+//      Object.defineProperty, um padrão comum em testes com jsdom).
+//   2) A ESTRUTURA do HTML final (_gerarHtmlAfMultiplasEstaticoPdf) — cada
+//      operação dentro de .af-op-pagina > .af-op-conteudo-escala, a altura
+//      de página em CSS batendo com a margem que o Puppeteer usa no
+//      servidor, e o sinalizador de conclusão presente.
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { JSDOM } = require('jsdom');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const CODIGO_FOCADA = fs.readFileSync(path.join(__dirname, '..', 'public/js/analise-focada.js'), 'utf8');
+const CODIGO_EXPORTAR_PDF = fs.readFileSync(path.join(__dirname, '..', 'lib/rotas/exportar-pdf.js'), 'utf8');
+
+function montarJanela() {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'dangerously' });
+  const { window } = dom;
+  window.LW = {
+    escaparHtml: (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    gerarCssExportPadrao: () => '', // stub — não testamos a paleta de tema aqui
+  };
+  window.eval(CODIGO_FOCADA);
+  return window;
+}
+
+function secoesFalsas(rotulo) {
+  return {
+    cabecalho: `<div>cabecalho-${rotulo}</div>`,
+    bercos: `<div>bercos-${rotulo}</div>`,
+    receita: `<div>receita-${rotulo}</div>`,
+    paradas: `<div>paradas-${rotulo}</div>`,
+    paradasContagem: '0',
+    avaliacao: `<div>avaliacao-${rotulo}</div>`,
+    fotosPaletes: '',
+  };
+}
+
+// ── 1) Matemática do ajuste de escala ───────────────────────────────────
+
+test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaço realmente disponível', () => {
+  const window = montarJanela();
+  const doc = window.document;
+
+  doc.body.innerHTML = `
+    <div class="af-op-pagina">
+      <div class="af-op-titulo">Operação 1 de 2</div>
+      <div class="af-op-conteudo-escala">conteúdo grande</div>
+    </div>`;
+  const pagina = doc.querySelector('.af-op-pagina');
+  const conteudo = doc.querySelector('.af-op-conteudo-escala');
+
+  // Página "cabe" 600px de altura útil; o título consome 20px antes do
+  // conteúdo começar (offsetTop) — logo, sobra 580px pro conteúdo.
+  Object.defineProperty(pagina, 'clientHeight', { value: 600, configurable: true });
+  Object.defineProperty(conteudo, 'offsetTop', { value: 20, configurable: true });
+
+  // scrollHeight simula DUAS leituras diferentes (1ª: no tamanho normal,
+  // 900px — bem maior que os 580px disponíveis; 2ª: depois que o script
+  // alarga a caixa pra compensar o scale, um grid reorganiza colunas e o
+  // conteúdo "encolhe" naturalmente pra 850px) — exercita a correção de
+  // 2ª passada descrita no comentário de _afScriptAjustePaginaUnica.
+  let leituras = 0;
+  Object.defineProperty(conteudo, 'scrollHeight', {
+    configurable: true,
+    get() { leituras += 1; return leituras === 1 ? 900 : 850; },
+  });
+
+  // Mesma ordem do documento real: flag inicial (no <head>) primeiro,
+  // script de ajuste (fim do <body>) depois.
+  window.eval(window.LWFocada.scriptFlagInicial().replace(/^<script>/, '').replace(/<\/script>$/, ''));
+  const scriptHtml = window.LWFocada.scriptAjustePaginaUnica();
+  const corpoScript = scriptHtml.replace(/^<script>/, '').replace(/<\/script>$/, '');
+  window.eval(corpoScript);
+
+  assert.equal(window.__afAjustePaginaConcluido, false, 'antes do load, a flag deve estar false (servidor ainda não pode imprimir)');
+
+  window.dispatchEvent(new window.Event('load'));
+
+  assert.equal(window.__afAjustePaginaConcluido, true, 'depois do load, a flag deve virar true (libera o Puppeteer pra imprimir)');
+  assert.equal(leituras, 2, 'deveria medir a altura 2 vezes (1ª no tamanho natural, 2ª depois de alargar pra compensar o scale)');
+
+  // 2ª leitura (850) é a que efetivamente decide a escala final, porque é
+  // MAIOR que a estimativa da 1ª passada corrigida — 580/850 ≈ 0.68235.
+  const escalaEsperada = 580 / 850;
+  const match = conteudo.style.transform.match(/scale\(([\d.]+)\)/);
+  assert.ok(match, `esperava um transform:scale(...), veio "${conteudo.style.transform}"`);
+  assert.ok(Math.abs(parseFloat(match[1]) - escalaEsperada) < 0.0005, `escala aplicada (${match[1]}) deveria ser ~${escalaEsperada.toFixed(5)}`);
+
+  // width também precisa ter sido alargado na mesma proporção inversa da
+  // escala final, senão o conteúdo fica com uma faixa vazia à direita.
+  const larguraEsperada = 100 / escalaEsperada;
+  const matchLargura = conteudo.style.width.match(/([\d.]+)%/);
+  assert.ok(matchLargura, `esperava uma largura em %, veio "${conteudo.style.width}"`);
+  assert.ok(Math.abs(parseFloat(matchLargura[1]) - larguraEsperada) < 0.05, `largura aplicada (${matchLargura[1]}%) deveria ser ~${larguraEsperada.toFixed(2)}%`);
+});
+
+test('ajuste de escala NÃO mexe em nada quando o conteúdo já cabe na página', () => {
+  const window = montarJanela();
+  const doc = window.document;
+
+  doc.body.innerHTML = `
+    <div class="af-op-pagina">
+      <div class="af-op-titulo">Operação 1 de 1</div>
+      <div class="af-op-conteudo-escala">conteúdo pequeno</div>
+    </div>`;
+  const pagina = doc.querySelector('.af-op-pagina');
+  const conteudo = doc.querySelector('.af-op-conteudo-escala');
+
+  Object.defineProperty(pagina, 'clientHeight', { value: 600, configurable: true });
+  Object.defineProperty(conteudo, 'offsetTop', { value: 20, configurable: true });
+  Object.defineProperty(conteudo, 'scrollHeight', { value: 300, configurable: true }); // cabe fácil nos 580 disponíveis
+
+  window.eval(window.LWFocada.scriptFlagInicial().replace(/^<script>/, '').replace(/<\/script>$/, ''));
+  const scriptHtml = window.LWFocada.scriptAjustePaginaUnica();
+  const corpoScript = scriptHtml.replace(/^<script>/, '').replace(/<\/script>$/, '');
+  window.eval(corpoScript);
+  window.dispatchEvent(new window.Event('load'));
+
+  assert.equal(window.__afAjustePaginaConcluido, true);
+  assert.equal(conteudo.style.transform, 'none', 'não deveria aplicar nenhum scale quando já cabe');
+  assert.equal(conteudo.style.width, '100%', 'largura deveria continuar 100% quando já cabe');
+});
+
+// ── 2) Estrutura do HTML gerado (múltiplas operações) ───────────────────
+
+test('PDF "Do Dia"/"Personalizada": cada operação vira um .af-op-pagina com .af-op-conteudo-escala próprio', () => {
+  const window = montarJanela();
+  const itens = [
+    { id: 1, label: 'Operação A', secoes: secoesFalsas('A') },
+    { id: 2, label: 'Operação B', secoes: secoesFalsas('B') },
+    { id: 3, label: 'Operação C', secoes: secoesFalsas('C') },
+  ];
+
+  const html = window.LWFocada.gerarHtmlMultiplasPdf('Título da Página', 'Título H1', 'sub-label', itens);
+
+  const qtdPaginas = (html.match(/class="af-op-pagina"/g) || []).length;
+  assert.equal(qtdPaginas, 3, 'deveria criar um .af-op-pagina por operação');
+
+  const qtdConteudos = (html.match(/class="af-op-conteudo-escala"/g) || []).length;
+  assert.equal(qtdConteudos, 3, 'cada .af-op-pagina precisa do wrapper .af-op-conteudo-escala (é o que o script escala)');
+
+  // A ordem importa: cada .af-op-conteudo-escala precisa estar DENTRO do
+  // .af-op-pagina correspondente (não soltos fora da estrutura).
+  const blocos = html.split('class="af-op-pagina"').slice(1);
+  assert.equal(blocos.length, 3);
+  blocos.forEach((bloco, i) => {
+    assert.match(bloco.slice(0, 400), /af-op-conteudo-escala/, `bloco ${i + 1} deveria conter o wrapper de escala logo no início`);
+  });
+
+  // O sinalizador de conclusão precisa existir nos dois pontos: iniciado
+  // como false cedo no <head> (pro Puppeteer não achar que já terminou
+  // por padrão) e marcado como true dentro do handler de 'load'.
+  assert.match(html, /window\.__afAjustePaginaConcluido = false;/);
+  assert.match(html, /window\.__afAjustePaginaConcluido = true;/);
+
+  // A flag "false" tem que vir ANTES do script de ajuste no documento —
+  // senão o script de ajuste rodaria e o flag inicial reapareceria por
+  // cima, deixando a flag presa em `false` pra sempre.
+  const posFlagFalse = html.indexOf('window.__afAjustePaginaConcluido = false;');
+  const posFlagTrue = html.indexOf('window.__afAjustePaginaConcluido = true;');
+  assert.ok(posFlagFalse >= 0 && posFlagTrue > posFlagFalse, 'a flag "false" precisa vir antes da "true" no documento');
+});
+
+test('altura de página em CSS (277mm) bate com as margens que o Puppeteer usa no servidor (A4 = 297mm - 10mm - 10mm)', () => {
+  const window = montarJanela();
+  const html = window.LWFocada.gerarHtmlMultiplasPdf('t', 'h1', 'sub', [{ id: 1, label: 'x', secoes: secoesFalsas('x') }]);
+
+  assert.match(html, /\.af-op-pagina\s*\{[^}]*height:277mm/, 'a altura de .af-op-pagina no CSS deveria ser 277mm');
+
+  // Confirma que 277mm realmente corresponde às margens configuradas em
+  // lib/rotas/exportar-pdf.js — se algum dia alguém mudar as margens lá
+  // sem lembrar de atualizar aqui, este teste quebra e avisa.
+  const margemTop = CODIGO_EXPORTAR_PDF.match(/top:\s*'(\d+)mm'/);
+  const margemBottom = CODIGO_EXPORTAR_PDF.match(/bottom:\s*'(\d+)mm'/);
+  assert.ok(margemTop && margemBottom, 'não encontrei as margens configuradas em exportar-pdf.js');
+  const alturaUtilEsperada = 297 - Number(margemTop[1]) - Number(margemBottom[1]);
+  assert.equal(alturaUtilEsperada, 277, 'a conta 297 - margens deveria bater com os 277mm usados em .af-op-pagina');
+});
+
+test('lib/rotas/exportar-pdf.js espera window.__afAjustePaginaConcluido antes de chamar page.pdf()', () => {
+  // Regressão estrutural: garante que ninguém remova o waitForFunction que
+  // evita imprimir o PDF antes do JS de ajuste de escala terminar (ver
+  // comentário no topo deste arquivo de teste).
+  assert.match(CODIGO_EXPORTAR_PDF, /waitForFunction/);
+  assert.match(CODIGO_EXPORTAR_PDF, /__afAjustePaginaConcluido/);
+  // A chamada de waitForFunction precisa vir ANTES de page.pdf(), senão
+  // não adianta nada.
+  const posWait = CODIGO_EXPORTAR_PDF.indexOf('waitForFunction');
+  const posPdf = CODIGO_EXPORTAR_PDF.indexOf('page.pdf(');
+  assert.ok(posWait > 0 && posPdf > posWait, 'waitForFunction precisa vir antes de page.pdf()');
+});
