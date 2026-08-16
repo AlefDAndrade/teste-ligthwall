@@ -1315,14 +1315,40 @@
     }
   }
 
+  // ── Contagem de análises ANTES de exportar (Fase 1 do plano — ver
+  // README "Exportação em PDF (Análise Focada) — Contagem, Progresso e
+  // Cancelamento"). Lê só o que já está em _cacheHistorico (nenhuma
+  // chamada extra ao servidor) — por isso o chamador precisa garantir
+  // que _carregarCaches() já rodou antes de usar estas funções.
+  // "Simples" não passa por aqui: é sempre 1 análise (a operação atual),
+  // texto fixo, sem cálculo.
+  function _contarOperacoesDoDia(data) {
+    if (!data || !_cacheHistorico) return 0;
+    return _cacheHistorico.filter(op => op.data === data).length;
+  }
+  function _contarOperacoesDoPeriodo(dataInicio, dataFim) {
+    if (!dataInicio || !dataFim || !_cacheHistorico) return 0;
+    const [ini, fim] = dataInicio <= dataFim ? [dataInicio, dataFim] : [dataFim, dataInicio];
+    return _cacheHistorico.filter(op => op.data >= ini && op.data <= fim).length;
+  }
+  // "Você vai exportar X análises" (singular "1 análise") — mesmo texto
+  // pros 2 modais abaixo (Do Dia e Personalizada).
+  function _textoContagemAnalises(n) {
+    return n === 1 ? 'Você vai exportar 1 análise.' : `Você vai exportar ${n} análises.`;
+  }
+
   // ── Modal de escolha de data pra Exportação "Do Dia" — um <input
   // type="date"> nativo (mesmo padrão de campo de data já usado no resto
   // do app — ver page-registro.html, page-oee.html etc.), que abre o
   // calendário do próprio navegador/SO. Pré-preenchido com `dataSugerida`
-  // (a data da operação que estava aberta), mas 100% editável.
+  // (a data da operação que estava aberta), mas 100% editável. Mostra,
+  // logo abaixo do campo, quantas operações entram no arquivo pra data
+  // selecionada — recalculado a cada troca de data (Fase 1 do plano de
+  // Exportação em PDF, ver README).
   // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
   // @returns {Promise<string|null>} 'YYYY-MM-DD' escolhida, ou null se cancelado (Cancelar, Esc ou clique fora).
-  function _escolherDataDoDia(dataSugerida) {
+  async function _escolherDataDoDia(dataSugerida) {
+    await _carregarCaches();
     return new Promise(resolve => {
       const anterior = document.getElementById('modal-af-data-dia');
       if (anterior) anterior.remove();
@@ -1340,7 +1366,10 @@
           </div>
           <p style="color:var(--text-2);text-align:center;margin-bottom:16px;line-height:1.5">Escolha a data — todas as operações feitas nela entram no arquivo.</p>
           <input type="date" id="af-data-dia-input" class="form-input" value="${LW.escaparHtml(dataSugerida)}"
-            style="width:100%;margin-bottom:24px;text-align:center;font-size:1rem;padding:10px">
+            style="width:100%;text-align:center;font-size:1rem;padding:10px">
+          <p id="af-data-dia-contagem" style="color:var(--text-2);text-align:center;margin:10px 0 24px;font-size:.85rem">
+            ${LW.escaparHtml(_textoContagemAnalises(_contarOperacoesDoDia(dataSugerida)))}
+          </p>
           <div style="display:flex;gap:12px">
             <button id="af-data-dia-confirmar"
               style="flex:1;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
@@ -1357,6 +1386,7 @@
 
       document.body.appendChild(modal);
       const input = document.getElementById('af-data-dia-input');
+      const contagemEl = document.getElementById('af-data-dia-contagem');
 
       const fechar = (resultado) => {
         modal.remove();
@@ -1367,11 +1397,16 @@
         if (e.key === 'Escape') fechar(null);
         if (e.key === 'Enter') fechar(input.value || null);
       };
+      const atualizarContagem = () => {
+        contagemEl.textContent = _textoContagemAnalises(_contarOperacoesDoDia(input.value));
+      };
 
       document.getElementById('af-data-dia-confirmar').addEventListener('click', () => fechar(input.value || null));
       document.getElementById('af-data-dia-cancelar').addEventListener('click', () => fechar(null));
       modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
       document.addEventListener('keydown', onKeydown);
+      input.addEventListener('input', atualizarContagem);
+      input.addEventListener('change', atualizarContagem);
       input.focus();
     });
   }
@@ -1381,9 +1416,13 @@
   // type="date"> lado a lado em vez de 1. Os dois vêm pré-preenchidos com
   // `dataSugerida` (a data da operação que estava aberta) — quem só quer
   // 1 dia específico só troca o "Até" (ou nem mexe, se já for hoje).
+  // Mostra, logo abaixo dos campos, quantas operações entram no arquivo
+  // pro período selecionado — recalculado a cada troca de De/Até (Fase 1
+  // do plano de Exportação em PDF, ver README).
   // @param {string} dataSugerida - 'YYYY-MM-DD' ou '' se não houver uma óbvia.
   // @returns {Promise<{inicio:string,fim:string}|null>} - null se cancelado (Cancelar, Esc ou clique fora).
-  function _escolherRangeDatas(dataSugerida) {
+  async function _escolherRangeDatas(dataSugerida) {
+    await _carregarCaches();
     return new Promise(resolve => {
       const anterior = document.getElementById('modal-af-range-datas');
       if (anterior) anterior.remove();
@@ -1412,6 +1451,9 @@
                 style="width:100%;text-align:center;font-size:1rem;padding:10px">
             </div>
           </div>
+          <p id="af-range-contagem" style="color:var(--text-2);text-align:center;margin:-8px 0 24px;font-size:.85rem">
+            ${LW.escaparHtml(_textoContagemAnalises(_contarOperacoesDoPeriodo(dataSugerida, dataSugerida)))}
+          </p>
           <div style="display:flex;gap:12px">
             <button id="af-range-confirmar"
               style="flex:1;padding:12px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);
@@ -1429,6 +1471,7 @@
       document.body.appendChild(modal);
       const inputIni = document.getElementById('af-range-inicio-input');
       const inputFim = document.getElementById('af-range-fim-input');
+      const contagemEl = document.getElementById('af-range-contagem');
 
       const fechar = (resultado) => {
         modal.remove();
@@ -1448,11 +1491,18 @@
         if (e.key === 'Escape') fechar(null);
         if (e.key === 'Enter') confirmar();
       };
+      const atualizarContagem = () => {
+        contagemEl.textContent = _textoContagemAnalises(_contarOperacoesDoPeriodo(inputIni.value, inputFim.value));
+      };
 
       document.getElementById('af-range-confirmar').addEventListener('click', confirmar);
       document.getElementById('af-range-cancelar').addEventListener('click', () => fechar(null));
       modal.addEventListener('click', (e) => { if (e.target === modal) fechar(null); });
       document.addEventListener('keydown', onKeydown);
+      inputIni.addEventListener('input', atualizarContagem);
+      inputIni.addEventListener('change', atualizarContagem);
+      inputFim.addEventListener('input', atualizarContagem);
+      inputFim.addEventListener('change', atualizarContagem);
       inputIni.focus();
     });
   }
