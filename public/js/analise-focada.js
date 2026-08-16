@@ -1826,19 +1826,23 @@
     const regras = `
   html, body { background:var(--bg-1); }
   body { max-width:190mm; margin:0 auto; padding:0; }
-  .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula, .af-pdf-foto-palete { break-inside:avoid; page-break-inside:avoid; }
-  h1, h4, .af-op-titulo, .af-pdf-foto-palete-titulo { break-after:avoid; page-break-after:avoid; }
-  /* .af-op-pagina — usada só no export "Do Dia"/"Personalizada" (várias
-     operações no mesmo PDF, ver _gerarHtmlAfMultiplasEstaticoPdf): cada
-     bloco recebe a altura EXATA de uma página A4 útil (ver
+  .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula { break-inside:avoid; page-break-inside:avoid; }
+  h1, h4, .af-op-titulo { break-after:avoid; page-break-after:avoid; }
+  /* .af-op-pagina — usada em TODO export estático de PDF da Análise
+     Focada: tanto Simples (1 operação só, ver _gerarHtmlAfEstaticoPdf)
+     quanto "Do Dia"/"Personalizada" (várias operações, uma por
+     .af-op-pagina, ver _gerarHtmlAfMultiplasEstaticoPdf). Cada bloco
+     recebe a altura EXATA de uma página A4 útil (ver
      _AF_PDF_ALTURA_PAGINA_MM, acima) e "overflow:hidden" — junto com o
-     "break-before:page" logo abaixo, isso faz cada operação abrir numa
-     folha nova E nunca vazar pra próxima, porque o conteúdo de dentro
-     (.af-op-conteudo-escala) é encolhido via JS (ver o <script> no fim
-     do documento gerado por _gerarHtmlAfMultiplasEstaticoPdf) pra caber
-     inteiro nessa altura antes do Puppeteer imprimir — overflow:hidden
-     aqui é só uma rede de segurança caso aquele cálculo erre por
-     alguma fração de pixel, não o mecanismo principal de ajuste. */
+     "break-before:page" logo abaixo (só entra em jogo quando há mais de
+     uma .af-op-pagina, isto é, no "Do Dia"/"Personalizada"), isso faz
+     cada operação abrir numa folha nova E nunca vazar pra próxima, porque
+     o conteúdo de dentro (.af-op-conteudo-escala) é encolhido via JS (ver
+     _afScriptAjustePaginaUnica, chamado nos dois tipos de export) pra
+     caber inteiro nessa altura antes do Puppeteer imprimir —
+     overflow:hidden aqui é só uma rede de segurança caso aquele cálculo
+     erre por alguma fração de pixel, não o mecanismo principal de
+     ajuste. */
   .af-op-pagina { height:${_AF_PDF_ALTURA_PAGINA_MM}mm; overflow:hidden; position:relative; break-inside:avoid; page-break-inside:avoid; }
   .af-op-pagina + .af-op-pagina { break-before:page; page-break-before:always; margin-top:0; }
   /* transform-origin:top left é o que faz o scale() (aplicado via JS,
@@ -1847,9 +1851,6 @@
      deixaria uma faixa de espaço vazio em cima do conteúdo em vez de
      ficar coladinho no topo da página. */
   .af-op-conteudo-escala { transform-origin:top left; }
-  .af-pdf-foto-palete { margin-bottom:14px; }
-  .af-pdf-foto-palete:last-child { margin-bottom:0; }
-  .af-pdf-foto-palete-titulo { font-size:.85rem; font-weight:700; color:var(--text); margin-bottom:8px; }
   /* No PDF, "Paradas Nesta Janela" já sai sempre ABERTO (sem <details>
      retrátil — não faz sentido um "clique para expandir" num documento
      impresso, ver _gerarHtmlAfEstaticoPdf) — mas a regra de
@@ -1863,9 +1864,10 @@ ${regras}`;
 
   // ── Script que encolhe cada .af-op-conteudo-escala pra caber inteira
   // dentro da página A4 de .af-op-pagina (ver comentário em
-  // _afCssImpressaoPdf, acima) — só entra no export "Do Dia"/
-  // "Personalizada" (_gerarHtmlAfMultiplasEstaticoPdf), o único que
-  // empilha mais de uma operação no mesmo PDF.
+  // _afCssImpressaoPdf, acima) — entra em TODO export estático de PDF da
+  // Análise Focada: Simples (_gerarHtmlAfEstaticoPdf, 1 única
+  // .af-op-pagina) e "Do Dia"/"Personalizada"
+  // (_gerarHtmlAfMultiplasEstaticoPdf, uma .af-op-pagina por operação).
   //
   // POR QUE ISSO PRECISA DE JAVASCRIPT (e não dá pra fazer só com CSS):
   // não existe nenhuma propriedade CSS que diga "encolha isto até caber
@@ -1882,11 +1884,9 @@ ${regras}`;
   // mudar a altura de novo; ver comentário dentro da função).
   //
   // QUANDO RODA: só depois do evento `load` da janela (não
-  // DOMContentLoaded) — precisamos que TODAS as fotos de defeito
-  // (<img src="data:...">, ver _renderFotosPaletesPdf) já tenham
-  // dimensão conhecida antes de medir scrollHeight, senão a conta sai
-  // errada com o layout ainda "murcho" tentando reservar espaço pra uma
-  // imagem que ainda não tem altura calculada.
+  // DOMContentLoaded) — garante que todo o conteúdo (grids, cards,
+  // fontes) já tenha layout final calculado antes de medir scrollHeight,
+  // senão a conta sai errada com o layout ainda "murcho".
   //
   // POR QUE É SEGURO rodar isto de forma síncrona dentro do próprio
   // Chromium do servidor (lib/rotas/exportar-pdf.js espera
@@ -1903,8 +1903,7 @@ ${regras}`;
   // ANTES de chamar `page.pdf()` (via `page.waitForFunction`), em vez de
   // confiar só no `waitUntil:'networkidle0'` do `page.setContent` —
   // networkidle0 só olha requisições de REDE, e este documento não faz
-  // nenhuma (fotos são `data:` URI embutidas, ver _renderFotosPaletesPdf),
-  // então "a rede está ociosa" pode virar verdade ANTES mesmo do evento
+  // nenhuma, então "a rede está ociosa" pode virar verdade ANTES mesmo do evento
   // `load` disparar e o ajuste de escala rodar — sem esse sinal explícito
   // o Puppeteer poderia imprimir cedo demais, com o conteúdo ainda no
   // tamanho grande. Fica `false` desde o `<head>` (ver
@@ -2092,34 +2091,13 @@ ${regras}`;
   // mesmo se algo lançar) pra essas funções caírem naturalmente na
   // variante não-clicável — sem precisar de nenhum parâmetro extra nelas.
   //
-  // Seção "🖼️ Fotos Paletes" — SÓ existe no export estático de PDF (a tela
-  // ao vivo e o export interativo já mostram foto sob demanda, via o botão
-  // 📷 de cada pallet que abre _abrirFotosPalletFocada em modal — não faz
-  // sentido duplicar isso ali). No PDF, como não tem "clicar pra ver", as
-  // fotos que existirem já saem impressas direto, uma seção por pallet que
-  // realmente tiver alguma (Palete 01, 02, 03, 04 — pula os que não têm
-  // nenhuma foto registrada, silenciosamente, pra não empilhar títulos
-  // vazios). Mesma fonte de dados que o botão 📷 já usa:
-  // avaliacao.palletFotos['stackN'] (ver _renderAvaliacao, comentário
-  // "Fotos do defeito deste pallet"). Reaproveita as classes
-  // .af-foto-modal-grid/.af-foto-modal-item (já definidas em _afCssComum
-  // pro modal de fotos) pra montar a mesma grade de miniaturas, só que
-  // impressa direto na página em vez de dentro de um overlay clicável.
-  // @returns {string} HTML pronto (pode vir vazio, se avaliação não existe
-  //   ou nenhum pallet tem foto — nesse caso a seção inteira some, ver
-  //   _blocoOperacaoEstaticoPdf).
-  function _renderFotosPaletesPdf(avaliacao) {
-    if (!avaliacao) return '';
-    const blocos = [];
-    [1, 2, 3, 4].forEach(p => {
-      const fotos = avaliacao.palletFotos?.[`stack${p}`] || [];
-      if (!fotos.length) return;
-      const numFmt = String(p).padStart(2, '0');
-      const grid = fotos.map(dataUri => `<div class="af-foto-modal-item"><img src="${String(dataUri).replace(/"/g, '&quot;')}" alt="Foto do defeito — Palete ${numFmt}"></div>`).join('');
-      blocos.push(`<div class="af-pdf-foto-palete"><div class="af-pdf-foto-palete-titulo">Palete ${numFmt}</div><div class="af-foto-modal-grid">${grid}</div></div>`);
-    });
-    return blocos.join('');
-  }
+  // Seção "🖼️ Fotos Paletes" — REMOVIDA do export estático de PDF (pedido:
+  // "não quero que as fotos sejam exportadas para o pdf [...] tanto nas
+  // simples como na do dia e personalizada"). A avaliação de qualidade em
+  // TEXTO continua saindo normalmente no PDF; só as imagens em si (base64,
+  // pesadas) que não entram mais — quem quiser ver as fotos usa a tela ao
+  // vivo ou o export interativo (botão 📷 de cada pallet, que abre
+  // _abrirFotosPalletFocada em modal).
 
   // Renderiza as 5 seções da Análise Focada (Identificação/Berços/Receita/
   // Paradas/Avaliação) em elementos DESANEXADOS do documento (nunca tocam
@@ -2155,9 +2133,12 @@ ${regras}`;
         paradas: elParadas.innerHTML,
         paradasContagem: elParadasContagem.textContent || '(nenhuma)',
         avaliacao: elAvaliacao.innerHTML,
-        // Não passa por _render* (não precisa de LWFocada ligado/desligado
-        // — não tem nenhum elemento clicável) — computada direto aqui.
-        fotosPaletes: _renderFotosPaletesPdf(detalhe.avaliacao),
+        // Fotos dos paletes NÃO entram no PDF (pedido: "não quero que as
+        // fotos sejam exportadas para o pdf, [...] tanto nas simples como
+        // na do dia e personalizada") — mantém o campo (sempre string
+        // vazia) só pra não quebrar o formato do objeto que
+        // _blocoOperacaoEstaticoPdf/os testes esperam.
+        fotosPaletes: '',
       };
     } finally {
       // SEMPRE repõe, mesmo se alguma _render* acima lançar — nunca pode
@@ -2178,25 +2159,32 @@ ${regras}`;
   // direto pra próxima seção.
   // @param {{cabecalho,bercos,receita,paradas,paradasContagem,avaliacao,fotosPaletes}} secoes - ver _gerarSecoesEstaticasAf.
   function _blocoOperacaoEstaticoPdf(secoes) {
-    // "Fotos Paletes" só entra se sobrou algum <div> real de
-    // _renderFotosPaletesPdf (ou seja: existe avaliação E pelo menos um
-    // pallet tem foto) — sem isso, nenhuma seção extra aparece, pedido
-    // original: "logo abaixo da avaliação, se houver avaliação".
-    const secaoFotos = secoes.fotosPaletes
-      ? `<div class="chart-box"><h4>🖼️ Fotos Paletes</h4><div>${secoes.fotosPaletes}</div></div>`
-      : '';
+    // Seção "🖼️ Fotos Paletes" REMOVIDA do PDF (pedido: "não quero que as
+    // fotos sejam exportadas para o pdf, pode deixar somente a avaliação
+    // mesmo, sem colocar as fotos, tanto nas simples como na do dia e
+    // personalizada") — a avaliação de qualidade em texto continua normal,
+    // só as fotos em si (base64, pesadas) que somem do documento impresso.
     return `
       <div class="chart-box" style="margin-bottom:14px"><h4>Identificação</h4><div class="af-cabecalho-grid">${secoes.cabecalho}</div></div>
       <div class="chart-box" style="margin-bottom:14px"><h4>📍 Berços</h4><div>${secoes.bercos}</div></div>
       <div class="chart-box" style="margin-bottom:14px"><h4>🧪 Receita Utilizada</h4><div>${secoes.receita}</div></div>
       <div class="chart-box" style="margin-bottom:14px"><h4>🛑 Paradas Nesta Janela <span style="text-transform:none;letter-spacing:normal;font-weight:400">${secoes.paradasContagem}</span></h4><div>${secoes.paradas}</div></div>
-      <div class="chart-box"${secaoFotos ? ' style="margin-bottom:14px"' : ''}><h4>✅ Avaliação de Qualidade</h4><div>${secoes.avaliacao}</div></div>
-      ${secaoFotos}`;
+      <div class="chart-box"><h4>✅ Avaliação de Qualidade</h4><div>${secoes.avaliacao}</div></div>`;
   }
 
   // ── Exportação Simples em PDF — documento estático de 1 operação só. ──
-  // Mesmo cabeçalho/rodapé visual de _gerarHtmlAfStandalone, mas sem
-  // <script> nem dados embutidos (ver comentário no topo desta seção).
+  // Mesmo cabeçalho/rodapé visual de _gerarHtmlAfStandalone, mas sem dados
+  // embutidos (ver comentário no topo desta seção). Também precisa caber
+  // inteira numa página só (mesmo pedido que já valia pro "Do Dia"/
+  // "Personalizada": "eu quero que funcione para a simples também. A
+  // simples também deve ficar apenas em uma página") — por isso reaproveita
+  // o MESMO mecanismo de _gerarHtmlAfMultiplasEstaticoPdf
+  // (.af-op-pagina/.af-op-conteudo-escala + _afScriptAjustePaginaUnica),
+  // só que com o H1/sub (cabeçalho da própria página, não repetido por
+  // operação) DENTRO de .af-op-pagina — e não fora, como no "Do Dia"/
+  // "Personalizada" — pra tudo (cabeçalho + conteúdo) contar no cálculo
+  // de espaço disponível e ficar garantidamente numa página física só, em
+  // vez de o cabeçalho "empurrar" o conteúdo pra uma segunda folha.
   function _gerarHtmlAfEstaticoPdf(detalhe, paradasDaJanela = []) {
     const secoes = _gerarSecoesEstaticasAf(detalhe, paradasDaJanela);
     const idOperacao = LW.escaparHtml(String(detalhe.operacao?.id || ''));
@@ -2207,12 +2195,18 @@ ${regras}`;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Análise Focada — ${idOperacao} — Exportado</title>
 <style>${LW.gerarCssExportPadrao()}${_afCssComum()}${_afCssImpressaoPdf()}</style>
+${_afScriptFlagInicial()}
 </head>
 <body>
-  <h1>🔎 Análise Focada — Operação ${idOperacao}</h1>
-  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
-  ${_blocoOperacaoEstaticoPdf(secoes)}
+  <div class="af-op-pagina">
+    <h1>🔎 Análise Focada — Operação ${idOperacao}</h1>
+    <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+    <div class="af-op-conteudo-escala">
+      ${_blocoOperacaoEstaticoPdf(secoes)}
+    </div>
+  </div>
   <div class="rodape">Exportado da Análise Focada — Lightwall SC · versão estática para impressão em PDF.</div>
+${_afScriptAjustePaginaUnica()}
 </body>
 </html>`;
   }
