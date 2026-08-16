@@ -179,20 +179,20 @@ test('PDF "Do Dia"/"Personalizada": cada operação vira um .af-op-pagina com .a
   assert.ok(posFlagFalse >= 0 && posFlagTrue > posFlagFalse, 'a flag "false" precisa vir antes da "true" no documento');
 });
 
-test('altura de página em CSS (277mm) bate com as margens que o Puppeteer usa no servidor (A4 = 297mm - 10mm - 10mm)', () => {
+test('altura de página em CSS (287mm) bate com as margens que o Puppeteer usa no servidor (A4 = 297mm - 5mm - 5mm)', () => {
   const window = montarJanela();
   const html = window.LWFocada.gerarHtmlMultiplasPdf('t', 'h1', 'sub', [{ id: 1, label: 'x', secoes: secoesFalsas('x') }]);
 
-  assert.match(html, /\.af-op-pagina\s*\{[^}]*height:277mm/, 'a altura de .af-op-pagina no CSS deveria ser 277mm');
+  assert.match(html, /\.af-op-pagina\s*\{[^}]*height:287mm/, 'a altura de .af-op-pagina no CSS deveria ser 287mm');
 
-  // Confirma que 277mm realmente corresponde às margens configuradas em
+  // Confirma que 287mm realmente corresponde às margens configuradas em
   // lib/rotas/exportar-pdf.js — se algum dia alguém mudar as margens lá
   // sem lembrar de atualizar aqui, este teste quebra e avisa.
   const margemTop = CODIGO_EXPORTAR_PDF.match(/top:\s*'(\d+)mm'/);
   const margemBottom = CODIGO_EXPORTAR_PDF.match(/bottom:\s*'(\d+)mm'/);
   assert.ok(margemTop && margemBottom, 'não encontrei as margens configuradas em exportar-pdf.js');
   const alturaUtilEsperada = 297 - Number(margemTop[1]) - Number(margemBottom[1]);
-  assert.equal(alturaUtilEsperada, 277, 'a conta 297 - margens deveria bater com os 277mm usados em .af-op-pagina');
+  assert.equal(alturaUtilEsperada, 287, 'a conta 297 - margens deveria bater com os 287mm usados em .af-op-pagina');
 });
 
 test('lib/rotas/exportar-pdf.js espera window.__afAjustePaginaConcluido antes de chamar page.pdf()', () => {

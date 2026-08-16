@@ -1794,7 +1794,7 @@
   // interativo (que é pra tela, sem preocupação de página impressa).
   // Duas responsabilidades:
   //  1) Largura de conteúdo ~= área útil de uma A4 (210mm - 2×margem do
-  //     Chromium em lib/rotas/exportar-pdf.js, hoje 10mm cada lado = 190mm),
+  //     Chromium em lib/rotas/exportar-pdf.js, hoje 5mm cada lado = 200mm),
   //     pra grids "auto-fit" (.af-cabecalho-grid, .af-receita-grid,
   //     .af-paineis-grid, .ba-grid) quebrarem em colunas do MESMO jeito
   //     que vão sair no papel, em vez de se basearem numa viewport de tela
@@ -1813,19 +1813,26 @@
   //     pelo navegador (Ctrl+P), fora do Puppeteer.
   // Altura útil de UMA página A4 impressa pelo Chromium: 297mm de altura
   // total menos as margens top+bottom que lib/rotas/exportar-pdf.js pede
-  // no `page.pdf({ margin: { top:'10mm', bottom:'10mm', ... } })` — ou
-  // seja, 297 - 10 - 10 = 277mm de área realmente disponível pro
-  // conteúdo. Se esse valor de margem mudar um dia em exportar-pdf.js,
+  // no `page.pdf({ margin: { top:'5mm', bottom:'5mm', ... } })` — ou
+  // seja, 297 - 5 - 5 = 287mm de área realmente disponível pro
+  // conteúdo. Margens reduzidas de 10mm pra 5mm (pedido: "consegue tirar
+  // a margem que fica na a4, ainda fica uma margem branca [...] pode
+  // diminuir um poquinho mais") — 5mm é o menor valor que ainda evita
+  // qualquer risco de corte em impressoras/leitores de PDF mais
+  // sensíveis nas bordas, mas já libera bastante espaço extra (10mm a
+  // mais de altura e de largura úteis) pra reduzir a chance de a seção
+  // de Avaliação de Qualidade ficar cortada embaixo quando o conteúdo é
+  // grande. Se esse valor de margem mudar um dia em exportar-pdf.js,
   // precisa mudar aqui também (os dois lados dessa conta vivem em
   // arquivos diferentes por necessidade — um é CSS de cliente, o outro é
   // opção do Puppeteer no servidor — não dá pra compartilhar a constante
   // literalmente, mas o comentário nos dois lados aponta um pro outro).
-  const _AF_PDF_ALTURA_PAGINA_MM = 277;
+  const _AF_PDF_ALTURA_PAGINA_MM = 287;
 
   function _afCssImpressaoPdf() {
     const regras = `
   html, body { background:var(--bg-1); }
-  body { max-width:190mm; margin:0 auto; padding:0; }
+  body { max-width:200mm; margin:0 auto; padding:0; }
   .chart-box, .af-traco-card, .af-pallet, .af-ajuste-linha, .ba-celula { break-inside:avoid; page-break-inside:avoid; }
   h1, h4, .af-op-titulo { break-after:avoid; page-break-after:avoid; }
   /* .af-op-pagina — usada em TODO export estático de PDF da Análise
