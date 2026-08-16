@@ -1923,6 +1923,19 @@ ${regras}`;
   function _afScriptAjustePaginaUnica() {
     return `<script>
 (function () {
+  // Fator de segurança aplicado em cima do espaço "realmente livre" (ver
+  // \`disponivel\`, abaixo) — pedido: "o último painel da avaliação ainda
+  // fica cortado" mesmo com a escala calculada pra caber exatamente no
+  // espaço medido. O cálculo em si está correto, mas ele mede o layout
+  // renderizado NA TELA (clientHeight/scrollHeight, antes do Puppeteer
+  // imprimir) — a impressão em si pode arredondar frações de pixel de
+  // forma um pouco diferente (fontes, subpixel, motor de paginação do
+  // Chromium), então uma escala calculada pra caber "raspando" o limite
+  // pode vazar alguns pixels na hora de imprimir de verdade. Encolher um
+  // pouquinho A MAIS do que o estritamente necessário (3%) dá essa folga
+  // sem ficar perceptível a olho nu.
+  var FATOR_SEGURANCA = 0.97;
+
   function ajustarParaCaberNumaPagina(pagina) {
     var conteudo = pagina.querySelector('.af-op-conteudo-escala');
     if (!conteudo) return;
@@ -1932,10 +1945,14 @@ ${regras}`;
     // Espaço realmente livre = altura total da página menos o quanto já
     // foi consumido ACIMA do conteúdo (o rótulo "Operação X de Y…", ver
     // .af-op-titulo) — offsetTop é relativo a .af-op-pagina porque ela
-    // tem position:relative (ver _afCssImpressaoPdf).
-    var disponivel = pagina.clientHeight - conteudo.offsetTop;
+    // tem position:relative (ver _afCssImpressaoPdf). Aplica o
+    // FATOR_SEGURANCA aqui (e não só no cálculo da escala) pra também
+    // fazer o teste de "já cabe, não mexe em nada" logo abaixo respeitar
+    // a mesma folga — senão um conteúdo bem no limite passaria batido
+    // sem nenhum encolhimento e voltaria a correr risco de corte.
+    var disponivel = (pagina.clientHeight - conteudo.offsetTop) * FATOR_SEGURANCA;
     var alturaNatural = conteudo.scrollHeight;
-    if (disponivel <= 0 || alturaNatural <= disponivel) return; // já cabe — não mexe em nada
+    if (disponivel <= 0 || alturaNatural <= disponivel) return; // já cabe (com folga) — não mexe em nada
 
     var escala = disponivel / alturaNatural;
     conteudo.style.width = (100 / escala) + '%';

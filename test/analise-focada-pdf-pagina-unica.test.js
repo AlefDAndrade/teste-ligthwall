@@ -98,8 +98,14 @@ test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaç
   assert.equal(leituras, 2, 'deveria medir a altura 2 vezes (1ª no tamanho natural, 2ª depois de alargar pra compensar o scale)');
 
   // 2ª leitura (850) é a que efetivamente decide a escala final, porque é
-  // MAIOR que a estimativa da 1ª passada corrigida — 580/850 ≈ 0.68235.
-  const escalaEsperada = 580 / 850;
+  // MAIOR que a estimativa da 1ª passada corrigida. O "disponível" já sai
+  // com o FATOR_SEGURANCA de 3% aplicado (580 * 0.97 = 562.6) antes de
+  // dividir pela altura natural — ver comentário de FATOR_SEGURANCA em
+  // _afScriptAjustePaginaUnica (pedido: "o último painel da avaliação
+  // ainda fica cortado", precisa de uma folga extra além do cálculo
+  // exato) — logo: 562.6/850 ≈ 0.66188.
+  const disponivelComFolga = 580 * 0.97;
+  const escalaEsperada = disponivelComFolga / 850;
   const match = conteudo.style.transform.match(/scale\(([\d.]+)\)/);
   assert.ok(match, `esperava um transform:scale(...), veio "${conteudo.style.transform}"`);
   assert.ok(Math.abs(parseFloat(match[1]) - escalaEsperada) < 0.0005, `escala aplicada (${match[1]}) deveria ser ~${escalaEsperada.toFixed(5)}`);
