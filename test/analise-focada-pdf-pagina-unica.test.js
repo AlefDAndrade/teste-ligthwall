@@ -105,13 +105,18 @@ test('ajuste de escala encolhe o conteúdo que não cabe, proporcional ao espaç
   assert.equal(window.__afAjustePaginaConcluido, true, 'depois do load, a flag deve virar true (libera o Puppeteer pra imprimir)');
   assert.equal(leituras, 3, 'deveria medir a altura 3 vezes (2 correções + 1 leitura final confirmando que já cabe)');
 
-  // Escala final = produto das DUAS correções (900→850) aplicadas em
-  // cima uma da outra (não recalculadas do zero a cada passada) — ver
-  // comentário do loop em _afScriptAjustePaginaUnica. "disponível" já sai
-  // com o FATOR_SEGURANCA de 3% aplicado (580 * 0.97 = 562.6).
+  // Escala final = disponível/altura da ÚLTIMA passada que ainda
+  // precisou de correção (850, a 2ª leitura) — recalculada do zero, NÃO
+  // é o produto acumulado das correções anteriores. Isto é o próprio bug
+  // que motivou esta reescrita: uma versão intermediária deste loop
+  // multiplicava a escala nova em cima da escala já aplicada
+  // (escalaAtual = escalaAtual * fatorCorretivo), o que compõe o
+  // encolhimento exponencialmente a cada passada — sintoma visto na
+  // prática: conteúdo minúsculo e página quase toda vazia embaixo. O
+  // "disponível" já sai com o FATOR_SEGURANCA de 3% aplicado
+  // (580 * 0.97 = 562.6).
   const disponivelComFolga = 580 * 0.97;
-  const escala1 = disponivelComFolga / 900;
-  const escalaEsperada = escala1 * (disponivelComFolga / 850);
+  const escalaEsperada = disponivelComFolga / 850;
   const match = conteudo.style.transform.match(/scale\(([\d.]+)\)/);
   assert.ok(match, `esperava um transform:scale(...), veio "${conteudo.style.transform}"`);
   assert.ok(Math.abs(parseFloat(match[1]) - escalaEsperada) < 0.0005, `escala aplicada (${match[1]}) deveria ser ~${escalaEsperada.toFixed(5)}`);

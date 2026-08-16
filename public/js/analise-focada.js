@@ -1966,31 +1966,32 @@ ${regras}`;
     if (disponivel <= 0) return;
 
     // LOOP CONVERGENTE (substitui as antigas "2 passadas fixas"): mede,
-    // corrige, remede — cada passada aplica um fator corretivo EM CIMA da
-    // escala já acumulada (não recalcula do zero), então cada rodada só
-    // precisa fechar a diferença que sobrou da rodada anterior. Alargar a
-    // caixa pra compensar um scale() pode reorganizar grids
-    // (.af-cabecalho-grid, .af-paineis-grid etc.) em mais colunas — às
-    // vezes isso estabiliza numa passada só, às vezes leva 2-3 até o
-    // layout parar de mudar de verdade (ex.: operação com muitos traços +
-    // 4 pallets cheios de painéis, ver PDF que motivou este loop). Sem
-    // loop (a versão de "2 passadas fixas" anterior), quando o conteúdo
-    // era grande o bastante pra não estabilizar em só 2 rodadas, a função
-    // terminava tendo aplicado uma escala AINDA insuficiente — e o
-    // overflow:hidden de .af-op-pagina cortava o resto seco, sem
-    // nenhuma redução visível de tamanho (foi exatamente o sintoma
-    // reportado: texto em tamanho normal, corte seco no meio da
-    // Avaliação de Qualidade). Teto de MAX_PASSADAS (6) passadas só pra
-    // garantir que isto NUNCA trave o Puppeteer esperando um layout que
-    // nunca estabiliza — na prática, layouts reais convergem bem antes
-    // disso.
+    // corrige, remede — cada passada RECALCULA a escala total a partir da
+    // altura atual (disponivel / alturaAtual), como um "chute" novo pra
+    // convergência de ponto fixo — NÃO multiplica em cima da escala da
+    // passada anterior. (Nas primeiras versões deste loop, um bug bem
+    // sutil compunha as correções — escalaAtual = escalaAtual *
+    // fatorCorretivo — o que faz o encolhimento crescer
+    // EXPONENCIALMENTE a cada passada, já que a altura remedida na
+    // passada 2 já reflete a largura ajustada pela passada 1: compor de
+    // novo em cima disso encolhe MUITO mais do que o necessário. Sintoma
+    // visto na prática: conteúdo minúsculo, espremido lá no topo da
+    // página, com a página quase toda vazia embaixo — bem diferente do
+    // "sem nenhum encolhimento" que motivou trocar de 2 passadas fixas
+    // pra este loop.) Alargar a caixa pra compensar um scale() pode
+    // reorganizar grids (.af-cabecalho-grid, .af-paineis-grid etc.) em
+    // mais colunas — às vezes isso estabiliza numa passada só, às vezes
+    // leva 2-3 até o layout parar de mudar de verdade (ex.: operação com
+    // muitos traços + 4 pallets cheios de painéis). Teto de MAX_PASSADAS
+    // (6) passadas só pra garantir que isto NUNCA trave o Puppeteer
+    // esperando um layout que nunca estabiliza — na prática, layouts
+    // reais convergem bem antes disso.
     var escalaAtual = 1;
     for (var passada = 0; passada < MAX_PASSADAS; passada++) {
       var alturaAtual = conteudo.scrollHeight;
       if (alturaAtual <= disponivel) return; // convergiu (com folga) — não mexe mais em nada
 
-      var fatorCorretivo = disponivel / alturaAtual;
-      escalaAtual = escalaAtual * fatorCorretivo;
+      escalaAtual = disponivel / alturaAtual; // recalcula do zero, não compõe com a passada anterior
       conteudo.style.width = (100 / escalaAtual) + '%';
       conteudo.style.transform = 'scale(' + escalaAtual + ')';
     }
