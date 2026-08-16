@@ -2227,40 +2227,129 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  * exportDashboardPDF em setor-qualidade.js, que faz isso), este HTML já
  * pronto é mandado pro SERVIDOR, que usa um Chromium headless (via
  * Puppeteer) pra "imprimir" ele de verdade em PDF — ver
- * lib/rotas/exportar-pdf.js. Mesmo mecanismo de download (Blob + <a>
- * temporário) de baixarArquivoTexto(), só que o conteúdo do Blob vem da
- * RESPOSTA do servidor, não do HTML original.
+ * lib/rotas/exportar-pdf.js.
+ *
+ * Fase 3 do plano de Exportação em PDF (ver README): a rota virou
+ * assíncrona/stateful, então isto aqui não é mais um único fetch — são 3
+ * passos: (1) `POST /exportar-pdf/iniciar` devolve um `jobId` na hora, sem
+ * esperar o PDF ficar pronto; (2) acompanha o progresso REAL por
+ * Server-Sent Events (`GET /exportar-pdf/eventos/:jobId`) até um evento
+ * terminal ('concluido'/'erro'/'cancelado'); (3) só então baixa o arquivo
+ * pronto (`GET /exportar-pdf/arquivo/:jobId`), com o mesmo mecanismo de
+ * download (Blob + <a> temporário) de baixarArquivoTexto().
  * Usado pelos botões "📕 Exportar PDF" (Análise Focada — ver
  * public/js/analise-focada.js — e, no futuro, qualquer outro dashboard que
  * já gere seu HTML interativo do mesmo jeito).
  * @param {string} nomeArquivoPdf - já com a extensão ".pdf".
  * @param {string} html - o documento autossuficiente já gerado.
- * @param {{signal?: AbortSignal}} [opts] - `signal` cancela o fetch em
- *   andamento (Fase 2 do plano de Exportação em PDF, ver README — botão
- *   Cancelar da barra de progresso). Sem `signal`, comportamento igual a
- *   antes. Um abort aqui só interrompe o ACOMPANHAMENTO do lado do
- *   cliente: o Chromium no servidor pode continuar gerando o PDF até
- *   terminar sozinho, mas ninguém mais está esperando o resultado.
+ * @param {{signal?: AbortSignal, onProgresso?: (fase: string, feito: number, total: number) => void}} [opts]
+ *   `signal` cancela a exportação em andamento (botão Cancelar da barra de
+ *   progresso) — diferente da Fase 2, agora um abort manda
+ *   `POST /exportar-pdf/cancelar/:jobId` pro servidor, que fecha a `page`
+ *   do Puppeteer no MEIO do processo, não só o acompanhamento do lado do
+ *   cliente. `onProgresso` é chamado a cada evento 'progresso' recebido
+ *   por SSE (fases: 'carregando', 'ajustando', 'imprimindo' — ver
+ *   lib/rotas/exportar-pdf.js).
  * @returns {Promise<void>}
  */
-async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal } = {}) {
-  const resposta = await fetch('/exportar-pdf', {
+async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgresso } = {}) {
+  const respostaInicio = await fetch('/exportar-pdf/iniciar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ html, filename: nomeArquivoPdf }),
     signal,
   });
 
-  if (!resposta.ok) {
+  if (!respostaInicio.ok) {
     let mensagem = 'Não consegui gerar o PDF agora.';
     try {
-      const erro = await resposta.json();
+      const erro = await respostaInicio.json();
       if (erro && erro.erro) mensagem = erro.erro;
     } catch (_) { /* resposta de erro não veio em JSON — usa a mensagem padrão */ }
     throw new Error(mensagem);
   }
 
-  const blob = await resposta.blob();
+  const { jobId } = await respostaInicio.json();
+
+  // Acompanha por SSE até um evento terminal — resolve/rejeita a Promise
+  // conforme o que chegar, e SEMPRE fecha a conexão (`encerrar()`) antes,
+  // pra não deixar um EventSource pendurado depois que já sabemos o
+  // resultado.
+  await new Promise((resolve, reject) => {
+    const eventos = new EventSource(`/exportar-pdf/eventos/${jobId}`);
+    let terminado = false;
+
+    function encerrar() {
+      terminado = true;
+      eventos.close();
+      if (signal) signal.removeEventListener('abort', aoAbortar);
+    }
+
+    function aoAbortar() {
+      if (terminado) return;
+      encerrar();
+      // "Dispara e esquece" — o cancelamento do lado do usuário não deve
+      // esperar confirmação do servidor pra já liberar a UI; se a
+      // requisição falhar (ex.: já tinha terminado sozinho), não há nada
+      // útil a fazer com o erro aqui.
+      fetch(`/exportar-pdf/cancelar/${jobId}`, { method: 'POST' }).catch(() => {});
+      const erroCancelado = new Error('Exportação cancelada.');
+      erroCancelado.name = 'AbortError';
+      reject(erroCancelado);
+    }
+    if (signal) {
+      if (signal.aborted) { aoAbortar(); return; }
+      signal.addEventListener('abort', aoAbortar);
+    }
+
+    eventos.addEventListener('progresso', (ev) => {
+      if (terminado) return;
+      try {
+        const dados = JSON.parse(ev.data);
+        if (onProgresso) onProgresso(dados.fase, dados.feito, dados.total);
+      } catch (_) { /* evento mal formado — ignora, próximo evento corrige */ }
+    });
+    eventos.addEventListener('concluido', () => {
+      if (terminado) return;
+      encerrar();
+      resolve();
+    });
+    eventos.addEventListener('erro', (ev) => {
+      if (terminado) return;
+      encerrar();
+      let mensagem = 'Não consegui gerar o PDF agora.';
+      try { mensagem = JSON.parse(ev.data).erro || mensagem; } catch (_) { /* usa a mensagem padrão */ }
+      reject(new Error(mensagem));
+    });
+    eventos.addEventListener('cancelado', () => {
+      if (terminado) return;
+      encerrar();
+      const erroCancelado = new Error('Exportação cancelada.');
+      erroCancelado.name = 'AbortError';
+      reject(erroCancelado);
+    });
+    // A conexão pode cair por um motivo que não é nenhum dos eventos
+    // acima (rede, proxy, servidor reiniciado no meio) — sem isto, o
+    // cliente ficaria esperando pra sempre um evento que nunca vai chegar.
+    eventos.onerror = () => {
+      if (terminado) return;
+      encerrar();
+      reject(new Error('Conexão com o servidor caiu durante a geração do PDF.'));
+    };
+  });
+
+  // Job concluído no servidor — busca o arquivo pronto.
+  const respostaArquivo = await fetch(`/exportar-pdf/arquivo/${jobId}`, { signal });
+  if (!respostaArquivo.ok) {
+    let mensagem = 'PDF gerado, mas não consegui baixar o arquivo.';
+    try {
+      const erro = await respostaArquivo.json();
+      if (erro && erro.erro) mensagem = erro.erro;
+    } catch (_) { /* resposta de erro não veio em JSON — usa a mensagem padrão */ }
+    throw new Error(mensagem);
+  }
+
+  const blob = await respostaArquivo.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

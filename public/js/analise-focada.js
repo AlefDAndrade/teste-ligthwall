@@ -1264,17 +1264,19 @@
   // 'pdf' — ver lib/rotas/exportar-pdf.js e LW.baixarPdfApartirDeHtml,
   // data.js). `nomeBase` vem SEM extensão (cada chamador já monta o nome
   // sanitizado, sem ".html"/".pdf" — esta função completa a extensão certa).
-  // `signal` (Fase 2 do plano de Exportação em PDF, ver README) é o
+  // `signal` (Fase 2/3 do plano de Exportação em PDF, ver README) é o
   // AbortSignal do botão Cancelar da barra de progresso — só importa pro
-  // formato 'pdf' (é a única exportação que faz um fetch pro servidor);
-  // undefined é seguro de passar pro fetch (equivale a "sem sinal").
+  // formato 'pdf' (é a única exportação que fala com o servidor); undefined
+  // é seguro de passar adiante (equivale a "sem sinal"). A partir da Fase
+  // 3, `onProgresso` (ver `_progressoServidor`, abaixo) recebe progresso
+  // REAL do servidor via SSE — não é mais só um "enviando…" indeterminado.
   // @param {'html'|'pdf'} formato
   // @param {string} nomeBase - nome do arquivo, sem extensão.
   // @param {string} html - o documento autossuficiente já gerado.
-  // @param {AbortSignal} [signal] - cancela o fetch de geração do PDF.
+  // @param {AbortSignal} [signal] - cancela a exportação em andamento.
   async function _finalizarExportacao(formato, nomeBase, html, signal) {
     if (formato === 'pdf') {
-      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html, { signal });
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html, { signal, onProgresso: _progressoServidor });
       return;
     }
     LW.baixarArquivoTexto(`${nomeBase}.html`, html);
@@ -1365,13 +1367,53 @@
     barra.style.width = '85%';
   }
 
-  // Fase 3 — indeterminada (ver .af-progresso-indeterminada, styles.css):
-  // a barra pulsa em vez de avançar, porque o cliente não tem como saber
-  // quanto falta pro Chromium do servidor terminar.
+  // Fase 3 — chamada uma vez, assim que o job é criado no servidor, antes
+  // do primeiro evento de progresso chegar por SSE (`_progressoServidor`,
+  // abaixo, assume a partir daí). Fica pulsando (indeterminada) só nesse
+  // intervalo curtíssimo entre "mandei o HTML" e "o servidor confirmou que
+  // começou a processar".
   function _progressoEnviando() {
     const { texto, barra } = _progressoEls();
     if (!texto || !barra) return;
     texto.textContent = 'Enviando para o servidor…';
+    barra.classList.add('af-progresso-indeterminada');
+  }
+
+  // Fase 3 — progresso REAL vindo do SERVIDOR por Server-Sent Events (ver
+  // lib/rotas/exportar-pdf.js, LW.baixarPdfApartirDeHtml em data.js).
+  // Ocupa a faixa 85%-100% da barra (a faixa 0%-85% já foi usada pelas
+  // fases 1/2, que rodam no CLIENTE antes de mandar o HTML pro servidor —
+  // ver _progressoAtualizar/_progressoMontagem, acima). 3 sub-fases
+  // possíveis, cada uma reportada pelo servidor com um `fase` diferente:
+  //   'carregando'  — o Chromium terminou de montar o DOM do HTML
+  //                   recebido (page.setContent) — feito/total sempre 0/1
+  //                   ou 1/1, não tem granularidade real aqui.
+  //   'ajustando'   — só em "Do Dia"/Personalizada: o script de ajuste de
+  //                   escala (_afScriptAjustePaginaUnica) está encolhendo
+  //                   cada operação pra caber numa página — feito/total
+  //                   AQUI é progresso real (quantas operações já foram
+  //                   ajustadas de quantas no total).
+  //   'imprimindo'  — Chromium gerando o PDF de verdade (page.pdf()) — sem
+  //                   granularidade nenhuma do lado do servidor também
+  //                   (total 0), então pulsa como antes.
+  function _progressoServidor(fase, feito, total) {
+    const { texto, barra } = _progressoEls();
+    if (!texto || !barra) return;
+    if (fase === 'carregando') {
+      barra.classList.remove('af-progresso-indeterminada');
+      texto.textContent = 'Servidor carregando o conteúdo…';
+      barra.style.width = `${total > 0 ? 85 + Math.round((feito / total) * 5) : 85}%`; // 85%-90%
+      return;
+    }
+    if (fase === 'ajustando') {
+      barra.classList.remove('af-progresso-indeterminada');
+      texto.textContent = total > 0 ? `Ajustando o layout do PDF (${feito} de ${total})…` : 'Ajustando o layout do PDF…';
+      barra.style.width = `${total > 0 ? 90 + Math.round((feito / total) * 10) : 90}%`; // 90%-100%
+      return;
+    }
+    // 'imprimindo' (ou qualquer fase futura desconhecida) — sem
+    // granularidade, volta a pulsar como na Fase 2.
+    texto.textContent = 'Imprimindo o PDF…';
     barra.classList.add('af-progresso-indeterminada');
   }
 
@@ -2245,8 +2287,19 @@ ${regras}`;
     // loop inteiro e a linha que marca __afAjustePaginaConcluido nunca
     // seria alcançada, forçando o Puppeteer a esperar o timeout inteiro
     // e imprimir tudo SEM NENHUM ajuste (pior ainda que o bug original).
-    document.querySelectorAll('.af-op-pagina').forEach(function (pagina) {
+    var paginas = document.querySelectorAll('.af-op-pagina');
+    paginas.forEach(function (pagina, indice) {
       try { ajustarParaCaberNumaPagina(pagina); } catch (e) { /* segue pras próximas páginas mesmo assim */ }
+      // \`window.__afReportarProgresso\` (Fase 3 do plano de Exportação em
+      // PDF, ver README) só existe quando este HTML está rodando dentro
+      // do Chromium headless do servidor (ver page.exposeFunction em
+      // lib/rotas/exportar-pdf.js) — vira progresso REAL na barra do
+      // cliente. Quando este mesmo HTML é aberto direto no navegador
+      // (ex.: alguém salvou o "Exportar Interativo" antes e abriu depois),
+      // a função não existe e este \`if\` simplesmente não faz nada.
+      if (typeof window.__afReportarProgresso === 'function') {
+        window.__afReportarProgresso(indice + 1, paginas.length);
+      }
     });
     window.__afAjustePaginaConcluido = true; // libera o Puppeteer pra imprimir (ver _afScriptFlagInicial)
   });
