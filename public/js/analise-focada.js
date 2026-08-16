@@ -1264,12 +1264,17 @@
   // 'pdf' — ver lib/rotas/exportar-pdf.js e LW.baixarPdfApartirDeHtml,
   // data.js). `nomeBase` vem SEM extensão (cada chamador já monta o nome
   // sanitizado, sem ".html"/".pdf" — esta função completa a extensão certa).
+  // `signal` (Fase 2 do plano de Exportação em PDF, ver README) é o
+  // AbortSignal do botão Cancelar da barra de progresso — só importa pro
+  // formato 'pdf' (é a única exportação que faz um fetch pro servidor);
+  // undefined é seguro de passar pro fetch (equivale a "sem sinal").
   // @param {'html'|'pdf'} formato
   // @param {string} nomeBase - nome do arquivo, sem extensão.
   // @param {string} html - o documento autossuficiente já gerado.
-  async function _finalizarExportacao(formato, nomeBase, html) {
+  // @param {AbortSignal} [signal] - cancela o fetch de geração do PDF.
+  async function _finalizarExportacao(formato, nomeBase, html, signal) {
     if (formato === 'pdf') {
-      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html);
+      await LW.baixarPdfApartirDeHtml(`${nomeBase}.pdf`, html, { signal });
       return;
     }
     LW.baixarArquivoTexto(`${nomeBase}.html`, html);
@@ -1284,14 +1289,115 @@
       : { id: 'btn-af-exportar', textoRepouso: '🌐 Exportar Interativo' };
   }
 
+  // ── Barra de progresso + cancelar (Fase 2 do plano de Exportação em
+  // PDF, ver README "Exportação em PDF (Análise Focada) — Contagem,
+  // Progresso e Cancelamento") — controla o card #af-progresso inserido
+  // entre os botões de exportação e a busca (ver
+  // page-analise-focada.html). 3 fases visíveis, cada uma chamando a
+  // função correspondente abaixo:
+  //   1. Carregando dados de cada operação — progresso REAL (já é um
+  //      Promise.all por operação, então dá pra contar quantas
+  //      resolveram) — _progressoAtualizar(texto, feito, total).
+  //   2. Montando o HTML — rápido/quase instantâneo, sem granularidade
+  //      real pra medir — _progressoMontagem() só avança a barra.
+  //   3. Enviando/aguardando o servidor (só formato 'pdf' — HTML não faz
+  //      round-trip nenhum) — duração desconhecida do lado do cliente,
+  //      então pulsa em vez de avançar — _progressoEnviando().
+  // Cancelar aqui interrompe o ACOMPANHAMENTO do lado do cliente: aborta
+  // o fetch em andamento (se já estiver na fase 3) via AbortController, e
+  // faz as fases 1/2 pararem no próximo ponto de checagem
+  // (_progressoCancelado) sem seguir pra próxima etapa nem mostrar erro.
+  // O Chromium no servidor pode continuar rodando até terminar sozinho
+  // mesmo depois do abort — só o resultado é descartado (ninguém baixa).
+  let _progressoAbort = null;
+  let _progressoCancelado = false;
+
+  function _progressoEls() {
+    return {
+      card: document.getElementById('af-progresso'),
+      texto: document.getElementById('af-progresso-texto'),
+      barra: document.getElementById('af-progresso-barra'),
+      cancelar: document.getElementById('af-progresso-cancelar'),
+    };
+  }
+
+  // Chamado no início de CADA exportação (Simples/Do Dia/Personalizada,
+  // HTML ou PDF) — zera a barra, mostra o card e liga o botão Cancelar.
+  // @returns {AbortSignal} o signal desta exportação (repassado pro fetch
+  //   do PDF em _finalizarExportacao — undefined não quebra o fetch, mas
+  //   aqui sempre existe porque cada exportação cria seu próprio controller).
+  function _progressoIniciar() {
+    _progressoCancelado = false;
+    _progressoAbort = new AbortController();
+    const { card, texto, barra, cancelar } = _progressoEls();
+    if (card) {
+      card.style.display = '';
+      barra.classList.remove('af-progresso-indeterminada');
+      barra.style.width = '0%';
+      texto.textContent = 'Preparando…';
+      cancelar.disabled = false;
+      cancelar.onclick = () => {
+        _progressoCancelado = true;
+        cancelar.disabled = true;
+        texto.textContent = 'Cancelando…';
+        if (_progressoAbort) _progressoAbort.abort();
+      };
+    }
+    return _progressoAbort.signal;
+  }
+
+  // Fase 1 — progresso REAL: `feito`/`total` são contagens de operações
+  // já carregadas, não porcentagem. Esta fase ocupa até 70% da barra
+  // (o resto fica pras fases 2 e 3, que não têm como medir quanto falta).
+  function _progressoAtualizar(textoBase, feito, total) {
+    const { texto, barra } = _progressoEls();
+    if (!texto || !barra) return;
+    texto.textContent = total > 1 ? `${textoBase} (${feito} de ${total})` : textoBase;
+    barra.style.width = `${total > 0 ? Math.round((feito / total) * 70) : 0}%`;
+  }
+
+  // Fase 2 — sem granularidade real (é síncrono e rápido), só sinaliza
+  // visualmente que passou da fase 1.
+  function _progressoMontagem() {
+    const { texto, barra } = _progressoEls();
+    if (!texto || !barra) return;
+    texto.textContent = 'Montando o arquivo…';
+    barra.style.width = '85%';
+  }
+
+  // Fase 3 — indeterminada (ver .af-progresso-indeterminada, styles.css):
+  // a barra pulsa em vez de avançar, porque o cliente não tem como saber
+  // quanto falta pro Chromium do servidor terminar.
+  function _progressoEnviando() {
+    const { texto, barra } = _progressoEls();
+    if (!texto || !barra) return;
+    texto.textContent = 'Enviando para o servidor…';
+    barra.classList.add('af-progresso-indeterminada');
+  }
+
+  // Fim — sucesso, erro OU cancelamento: sempre esconde o card, pra não
+  // deixar uma barra travada em 40% se algo falhar no meio. Chamado no
+  // `finally` de cada uma das 3 exportações.
+  function _progressoFinalizar() {
+    const { card, barra } = _progressoEls();
+    if (barra) barra.classList.remove('af-progresso-indeterminada');
+    if (card) card.style.display = 'none';
+    _progressoAbort = null;
+  }
+
+
   // ── Exportação Simples — comportamento original: só a operação atual. ──
   // @param {'html'|'pdf'} formato
   async function _exportarSimples(formato = 'html') {
     const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    const signal = _progressoIniciar();
     try {
+      _progressoAtualizar('Carregando dados da operação…', 0, 1);
       const [detalhe] = await Promise.all([LW.getDetalheOperacao(_idAtual), _carregarCaches()]);
+      _progressoAtualizar('Carregando dados da operação…', 1, 1);
+      if (_progressoCancelado) return;
       if (!detalhe) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados desta operação.', { tipo: 'erro' }); return; }
       _anotarOrigemEReaproveitamento(detalhe.tracos, _idAtual);
       const paradasDaJanela = _paradasNaJanela(_cacheParadas, detalhe.operacao?.inicio, detalhe.operacao?.fim);
@@ -1299,19 +1405,29 @@
       // <script>/JSON embutido, mais rápido pro Chromium do servidor
       // converter). HTML interativo: o standalone de sempre, com clique
       // nos berços e navegação entre operações.
+      _progressoMontagem();
       const html = formato === 'pdf'
         ? _gerarHtmlAfEstaticoPdf(detalhe, paradasDaJanela)
         : _gerarHtmlAfStandalone(detalhe, paradasDaJanela);
+      if (_progressoCancelado) return;
+      if (formato === 'pdf') _progressoEnviando();
       await _finalizarExportacao(
         formato,
         `analise_focada_${LW.escaparHtml(String(detalhe.operacao?.id || _idAtual)).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-        html
+        html,
+        signal
       );
     } catch (err) {
-      console.error('Falha ao exportar Análise Focada:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (err && err.name === 'AbortError') {
+        // Cancelado pelo usuário — já visível pelo texto "Cancelando…" da
+        // barra, sem precisar de mais um alerta de erro por cima.
+      } else {
+        console.error('Falha ao exportar Análise Focada:', err);
+        if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      }
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
+      _progressoFinalizar();
     }
   }
 
@@ -1524,8 +1640,10 @@
     const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    const signal = _progressoIniciar();
     try {
       await _carregarCaches();
+      if (_progressoCancelado) return;
 
       const opsDoDia = _cacheHistorico
         .filter(op => op.data === dataAlvo)
@@ -1533,10 +1651,15 @@
 
       if (!opsDoDia.length) { if (LW.mostrarAlerta) LW.mostrarAlerta(`Não encontrei nenhuma operação em ${_fmtData(dataAlvo)}.`, { tipo: 'erro' }); return; }
 
+      let _feitos = 0;
+      _progressoAtualizar('Carregando dados das operações…', 0, opsDoDia.length);
       const detalhesDetalhados = await Promise.all(opsDoDia.map(async op => {
         const detalhe = await LW.getDetalheOperacao(op.id);
+        _feitos++;
+        _progressoAtualizar('Carregando dados das operações…', _feitos, opsDoDia.length);
         return { op, detalhe };
       }));
+      if (_progressoCancelado) return;
 
       // pdf: cada item carrega as SEÇÕES já renderizadas (leve, sem
       // <iframe>/<script> — ver _gerarHtmlAfMultiplasEstaticoPdf); html:
@@ -1558,6 +1681,7 @@
 
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste dia.', { tipo: 'erro' }); return; }
 
+      _progressoMontagem();
       const dataFmt = _fmtData(dataAlvo);
       const html = formato === 'pdf'
         ? _gerarHtmlAfMultiplasEstaticoPdf(
@@ -1567,16 +1691,25 @@
             itens
           )
         : _gerarHtmlAfDoDia(dataAlvo, itens);
+      if (_progressoCancelado) return;
+      if (formato === 'pdf') _progressoEnviando();
       await _finalizarExportacao(
         formato,
         `analise_focada_dia_${String(dataAlvo || 'data').replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-        html
+        html,
+        signal
       );
     } catch (err) {
-      console.error('Falha ao exportar Análise Focada do Dia:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (err && err.name === 'AbortError') {
+        // Cancelado pelo usuário — já visível pelo texto "Cancelando…" da
+        // barra, sem precisar de mais um alerta de erro por cima.
+      } else {
+        console.error('Falha ao exportar Análise Focada do Dia:', err);
+        if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      }
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
+      _progressoFinalizar();
     }
   }
 
@@ -1596,8 +1729,10 @@
     const { id: btnId, textoRepouso } = _botaoDoFormato(formato);
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+    const signal = _progressoIniciar();
     try {
       await _carregarCaches();
+      if (_progressoCancelado) return;
 
       const opsDoPeriodo = _cacheHistorico
         .filter(op => op.data >= dataInicio && op.data <= dataFim)
@@ -1605,10 +1740,15 @@
 
       if (!opsDoPeriodo.length) { if (LW.mostrarAlerta) LW.mostrarAlerta(`Não encontrei nenhuma operação entre ${_fmtData(dataInicio)} e ${_fmtData(dataFim)}.`, { tipo: 'erro' }); return; }
 
+      let _feitos = 0;
+      _progressoAtualizar('Carregando dados das operações…', 0, opsDoPeriodo.length);
       const detalhesDetalhados = await Promise.all(opsDoPeriodo.map(async op => {
         const detalhe = await LW.getDetalheOperacao(op.id);
+        _feitos++;
+        _progressoAtualizar('Carregando dados das operações…', _feitos, opsDoPeriodo.length);
         return { op, detalhe };
       }));
+      if (_progressoCancelado) return;
 
       const itens = detalhesDetalhados
         .filter(({ detalhe }) => !!detalhe)
@@ -1626,6 +1766,7 @@
 
       if (!itens.length) { if (LW.mostrarAlerta) LW.mostrarAlerta('Não consegui carregar os dados das operações deste período.', { tipo: 'erro' }); return; }
 
+      _progressoMontagem();
       const fmtIni = _fmtData(dataInicio);
       const fmtFim = _fmtData(dataFim);
       const periodoLabel = dataInicio === dataFim ? fmtIni : `${fmtIni} a ${fmtFim}`;
@@ -1637,16 +1778,25 @@
             itens
           )
         : _gerarHtmlAfPersonalizado(dataInicio, dataFim, itens);
+      if (_progressoCancelado) return;
+      if (formato === 'pdf') _progressoEnviando();
       await _finalizarExportacao(
         formato,
         `analise_focada_${String(dataInicio).replace(/[^a-zA-Z0-9_-]/g, '_')}_a_${String(dataFim).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-        html
+        html,
+        signal
       );
     } catch (err) {
-      console.error('Falha ao exportar Análise Focada Personalizada:', err);
-      if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      if (err && err.name === 'AbortError') {
+        // Cancelado pelo usuário — já visível pelo texto "Cancelando…" da
+        // barra, sem precisar de mais um alerta de erro por cima.
+      } else {
+        console.error('Falha ao exportar Análise Focada Personalizada:', err);
+        if (LW.mostrarAlerta) LW.mostrarAlerta(err && err.message ? err.message : 'Não consegui gerar o arquivo agora.', { tipo: 'erro' });
+      }
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = textoRepouso; }
+      _progressoFinalizar();
     }
   }
 

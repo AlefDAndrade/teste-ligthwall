@@ -2235,13 +2235,20 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  * já gere seu HTML interativo do mesmo jeito).
  * @param {string} nomeArquivoPdf - já com a extensão ".pdf".
  * @param {string} html - o documento autossuficiente já gerado.
+ * @param {{signal?: AbortSignal}} [opts] - `signal` cancela o fetch em
+ *   andamento (Fase 2 do plano de Exportação em PDF, ver README — botão
+ *   Cancelar da barra de progresso). Sem `signal`, comportamento igual a
+ *   antes. Um abort aqui só interrompe o ACOMPANHAMENTO do lado do
+ *   cliente: o Chromium no servidor pode continuar gerando o PDF até
+ *   terminar sozinho, mas ninguém mais está esperando o resultado.
  * @returns {Promise<void>}
  */
-async function baixarPdfApartirDeHtml(nomeArquivoPdf, html) {
+async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal } = {}) {
   const resposta = await fetch('/exportar-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ html, filename: nomeArquivoPdf }),
+    signal,
   });
 
   if (!resposta.ok) {
