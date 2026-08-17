@@ -1237,6 +1237,7 @@ const {
   marcarExportacaoPdfErro,
   marcarExportacaoPdfCancelada,
   obterExportacaoPdf,
+  obterExportacaoPdfAtivaDoUsuario,
   apagarExportacaoPdf,
   listarExportacoesPdfExpiradas,
   corrigirExportacoesPdfOrfasNaSubida,
@@ -1247,6 +1248,7 @@ module.exports.marcarExportacaoPdfConcluida = marcarExportacaoPdfConcluida;
 module.exports.marcarExportacaoPdfErro = marcarExportacaoPdfErro;
 module.exports.marcarExportacaoPdfCancelada = marcarExportacaoPdfCancelada;
 module.exports.obterExportacaoPdf = obterExportacaoPdf;
+module.exports.obterExportacaoPdfAtivaDoUsuario = obterExportacaoPdfAtivaDoUsuario;
 module.exports.apagarExportacaoPdf = apagarExportacaoPdf;
 module.exports.listarExportacoesPdfExpiradas = listarExportacoesPdfExpiradas;
 module.exports.corrigirExportacoesPdfOrfasNaSubida = corrigirExportacoesPdfOrfasNaSubida;
