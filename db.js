@@ -729,6 +729,41 @@ db.exec(`
     primeira_em   INTEGER NOT NULL, -- epoch ms — início da janela atual
     bloqueado_ate INTEGER           -- epoch ms, ou NULL se ainda não bloqueado
   );
+
+  -- ============================================================
+  --  EXPORTAÇÕES DE PDF — Etapa 3 do plano "PDF sobrevive a fechar a aba"
+  --  (ver README)
+  --
+  --  Espelha, em disco/SQLite, o que lib/rotas/exportar-pdf.js mantém em
+  --  memória (o Map "_jobs") enquanto o job está "vivo" pro acompanhamento
+  --  via Server-Sent Events — mas ISTO aqui sobrevive a um restart do
+  --  processo E ao TTL de limpeza da memória (JOB_TTL_MS, 10 min): o
+  --  arquivo do PDF pronto (ver caminho_arquivo, guardado em
+  --  private/pdfs-pendentes/, nunca dentro de public/ — mesmo motivo de
+  --  security.json, ver lib/security-json.js) continua disponível pra
+  --  download mesmo que a aba/processo que pediu o export tenha caído no
+  --  meio do caminho, ou que o usuário só volte a acessar minutos/horas
+  --  depois.
+  --
+  --  "status": 'processando' | 'concluido' | 'erro' | 'cancelado'.
+  --
+  --  "usuario_id" fica NULLABLE de propósito nesta etapa — a Etapa 1 do
+  --  plano (vincular o job a quem gerou, via lib/sessao-usuario.js) ainda
+  --  não foi feita; a coluna já existe agora pra não exigir outra
+  --  migração de schema quando aquela etapa chegar.
+  CREATE TABLE IF NOT EXISTS exportacoes_pdf (
+    job_id          TEXT PRIMARY KEY,
+    usuario_id      TEXT,
+    nome_arquivo    TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    caminho_arquivo TEXT,             -- só preenchido quando status = 'concluido'
+    tamanho_bytes   INTEGER,
+    erro            TEXT,             -- só preenchido quando status = 'erro'
+    criado_em       INTEGER NOT NULL, -- epoch ms
+    concluido_em    INTEGER           -- epoch ms
+  );
+  CREATE INDEX IF NOT EXISTS idx_exportacoes_pdf_status ON exportacoes_pdf(status);
+  CREATE INDEX IF NOT EXISTS idx_exportacoes_pdf_usuario ON exportacoes_pdf(usuario_id);
 `);
 
 
@@ -1186,3 +1221,30 @@ module.exports.criarSessaoUsuario = criarSessaoUsuario;
 module.exports.dadosSessaoUsuario = dadosSessaoUsuario;
 module.exports.destruirSessaoUsuario = destruirSessaoUsuario;
 module.exports.limparSessoesUsuarioExpiradas = limparSessoesUsuarioExpiradas;
+
+// ============================================================
+//  EXPORTAÇÕES DE PDF — ver CREATE TABLE exportacoes_pdf, acima.
+//  Etapa 3 do plano "PDF sobrevive a fechar a aba" (ver README) —
+//  extraído pra lib/db/exportacoes-pdf.js, mesmo padrão de
+//  lib/db/sessoes.js, logo acima.
+// ============================================================
+
+const {
+  criarRegistroExportacaoPdf,
+  marcarExportacaoPdfConcluida,
+  marcarExportacaoPdfErro,
+  marcarExportacaoPdfCancelada,
+  obterExportacaoPdf,
+  apagarExportacaoPdf,
+  listarExportacoesPdfExpiradas,
+  corrigirExportacoesPdfOrfasNaSubida,
+} = require('./lib/db/exportacoes-pdf.js')(db);
+
+module.exports.criarRegistroExportacaoPdf = criarRegistroExportacaoPdf;
+module.exports.marcarExportacaoPdfConcluida = marcarExportacaoPdfConcluida;
+module.exports.marcarExportacaoPdfErro = marcarExportacaoPdfErro;
+module.exports.marcarExportacaoPdfCancelada = marcarExportacaoPdfCancelada;
+module.exports.obterExportacaoPdf = obterExportacaoPdf;
+module.exports.apagarExportacaoPdf = apagarExportacaoPdf;
+module.exports.listarExportacoesPdfExpiradas = listarExportacoesPdfExpiradas;
+module.exports.corrigirExportacoesPdfOrfasNaSubida = corrigirExportacoesPdfOrfasNaSubida;
