@@ -187,6 +187,19 @@
       return true;
     }
 
+    // Mesma ideia de _extrairChamadoIdDaUrl, acima, só que pro deep-link
+    // de "PDF pronto" (Etapa 6 do plano "PDF sobrevive a fechar a aba" —
+    // ver lib/notificacoes-push.js/notificarPdfPronto e
+    // public/js/exportar-pdf-status.js) — a URL vem como
+    // "/index.html?pdfPronto=jobId".
+    function _extrairPdfProntoJobIdDaUrl(urlStr) {
+      try {
+        return new URL(urlStr, window.location.origin).searchParams.get('pdfPronto');
+      } catch (e) {
+        return null;
+      }
+    }
+
     // Recebido do service worker quando a notificação é clicada com uma
     // aba do app JÁ aberta (ver 'notificationclick', service-worker.js —
     // nesse caso ele só FOCA a aba existente, sem recarregar a página, e
@@ -198,7 +211,9 @@
         const id = _extrairChamadoIdDaUrl(dados.url);
         if (id) { _abrirChamadoDeNotificacao(id); return; }
         const idProgramada = _extrairProgramadaIdDaUrl(dados.url);
-        if (idProgramada) _abrirProgramadaDeNotificacao(idProgramada);
+        if (idProgramada) { _abrirProgramadaDeNotificacao(idProgramada); return; }
+        const idPdfPronto = _extrairPdfProntoJobIdDaUrl(dados.url);
+        if (idPdfPronto && window.LWExportarPdfStatus) LWExportarPdfStatus.abrirDeNotificacao(idPdfPronto);
       });
     }
 
@@ -851,6 +866,14 @@
       // NUNCA pede permissão de notificação sozinho aqui (isso só
       // acontece no clique explícito do usuário no botão).
       if (window.LWPush) LWPush.iniciar();
+
+      // Etapa 6 do plano "PDF sobrevive a fechar a aba" (ver
+      // public/js/exportar-pdf-status.js) — checa se o usuário logado
+      // tem uma exportação de PDF pendente (processando ou pronta pra
+      // baixar), mesmo que tenha sido iniciada numa aba/dispositivo
+      // diferente. Roda em segundo plano, sem bloquear o boot — mesmo
+      // raciocínio de LWPush.iniciar() acima.
+      if (window.LWExportarPdfStatus) LWExportarPdfStatus.iniciar();
 
       // A navegação agora é uma tabbar horizontal sempre visível (ver
       // nav-tabbar.html) — não é mais um painel off-canvas que precisa

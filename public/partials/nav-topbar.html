@@ -7,6 +7,16 @@
         📡 <span id="topbar-fila-pendentes-num">0</span> pendente(s)
       </span>
 
+      <div style="position:relative;display:inline-block;margin-left:10px">
+        <button id="btn-exportar-pdf-status" class="btn btn-ghost btn-sm" onclick="LWExportarPdfStatus.toggle(event)"
+          style="display:none;align-items:center;gap:5px;font-size:.78rem" title="Exportação de PDF">
+          📄 <span id="exportar-pdf-status-label">PDF pronto</span>
+        </button>
+        <div id="popover-exportar-pdf-status" class="ao-popover" style="width:280px">
+          <div id="exportar-pdf-status-conteudo">Carregando…</div>
+        </div>
+      </div>
+
       <span id="topbar-nome-usuario"
         style="display:none;align-items:center;gap:5px;margin-left:10px;padding:4px 10px;border-radius:20px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-2);font-size:.78rem;font-weight:600;white-space:nowrap">
       </span>
