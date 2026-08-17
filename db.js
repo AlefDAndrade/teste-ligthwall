@@ -747,10 +747,12 @@ db.exec(`
   --
   --  "status": 'processando' | 'concluido' | 'erro' | 'cancelado'.
   --
-  --  "usuario_id" fica NULLABLE de propósito nesta etapa — a Etapa 1 do
-  --  plano (vincular o job a quem gerou, via lib/sessao-usuario.js) ainda
-  --  não foi feita; a coluna já existe agora pra não exigir outra
-  --  migração de schema quando aquela etapa chegar.
+  --  "usuario_id" (Etapa 1 do plano, ver README) — quem pediu o export,
+  --  via lib/sessao-usuario.js (POST /exportar-pdf/iniciar exige sessão
+  --  de usuário cadastrado a partir desta etapa). Continua NULLABLE só
+  --  por segurança de schema (linhas antigas, criadas ANTES desta etapa
+  --  existir, já têm usuario_id = NULL) — toda linha NOVA sempre vem
+  --  preenchida.
   CREATE TABLE IF NOT EXISTS exportacoes_pdf (
     job_id          TEXT PRIMARY KEY,
     usuario_id      TEXT,
