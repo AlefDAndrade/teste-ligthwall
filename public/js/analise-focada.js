@@ -1398,14 +1398,24 @@
   //   'imprimindo'  — Chromium gerando o PDF de verdade (page.pdf()) — a
   //                   etapa que MAIS demora num export grande, e a única
   //                   sem NENHUM progresso real disponível (Puppeteer não
-  //                   expõe callback nenhum aqui). O servidor estima com
-  //                   base no histórico (média móvel de ms/operação nos
-  //                   últimos jobs — ver `_iniciarTickerImpressao`,
-  //                   exportar-pdf.js) e manda `feito` como uma
-  //                   PORCENTAGEM estimada (0-95, nunca 100 — só o
-  //                   'concluido' de verdade fecha em 100%) junto com
-  //                   `segundosRestantes`. 92%-100%, com texto de ETA.
-  function _progressoServidor(fase, feito, total, segundosRestantes) {
+  //                   expõe callback nenhum aqui) — exceto na Análise
+  //                   Focada (Simples/Do Dia/Personalizada), que GARANTE
+  //                   via CSS que cada operação vira exatamente 1 página
+  //                   (ver `_afCssImpressaoPdf`, acima), permitindo ao
+  //                   servidor saber o total de páginas de antemão e
+  //                   imprimir uma por uma — nesse caso `progressoReal`
+  //                   vem `true` e `feito`/`total` são CONTAGEM real de
+  //                   páginas já impressas (Fase 5, ver README). Nos
+  //                   demais dashboards (sem esse mecanismo), o servidor
+  //                   cai de volta pra ESTIMATIVA: `progressoReal` vem
+  //                   `false`/ausente e `feito` é uma PORCENTAGEM (0-95,
+  //                   nunca 100 — só o 'concluido' de verdade fecha em
+  //                   100%) baseada no histórico (média móvel de
+  //                   ms/operação nos últimos jobs — ver
+  //                   `_iniciarTickerImpressao`, exportar-pdf.js), junto
+  //                   com `segundosRestantes`. 92%-100% em ambos os
+  //                   casos, só o texto/cálculo interno muda.
+  function _progressoServidor(fase, feito, total, segundosRestantes, progressoReal) {
     const { texto, barra } = _progressoEls();
     if (!texto || !barra) return;
     if (fase === 'carregando') {
@@ -1421,17 +1431,29 @@
       return;
     }
     if (fase === 'imprimindo') {
-      // Estimativa, não medição real — o texto deixa isso implícito
-      // ("~Xs restantes", não "Xs restantes") pra não prometer uma
-      // precisão que a barra não tem. `feito` aqui já vem em PORCENTAGEM
-      // (0-95), não em contagem — ver comentário acima e
-      // `_iniciarTickerImpressao` em exportar-pdf.js.
       barra.classList.remove('af-progresso-indeterminada');
-      const percentualImpressao = Math.max(0, Math.min(95, feito));
-      barra.style.width = `${92 + Math.round((percentualImpressao / 95) * 8)}%`; // 92%-100%
-      texto.textContent = (typeof segundosRestantes === 'number' && segundosRestantes > 0)
-        ? `Imprimindo o PDF… (~${segundosRestantes}s restantes)`
-        : 'Imprimindo o PDF…';
+      const eta = (typeof segundosRestantes === 'number' && segundosRestantes > 0)
+        ? ` (~${segundosRestantes}s restantes)`
+        : '';
+      if (progressoReal) {
+        // Contagem REAL de páginas já impressas — `feito`/`total` são
+        // números de página, não porcentagem (ver comentário acima e
+        // `_processarJob` em exportar-pdf.js).
+        const fracao = total > 0 ? feito / total : 0;
+        barra.style.width = `${92 + Math.round(fracao * 8)}%`; // 92%-100%
+        texto.textContent = total > 0
+          ? `Imprimindo o PDF (${feito} de ${total} páginas)…${eta}`
+          : `Imprimindo o PDF…${eta}`;
+      } else {
+        // Estimativa, não medição real — o texto deixa isso implícito
+        // ("~Xs restantes", não "Xs restantes") pra não prometer uma
+        // precisão que a barra não tem. `feito` aqui já vem em PORCENTAGEM
+        // (0-95), não em contagem — ver comentário acima e
+        // `_iniciarTickerImpressao` em exportar-pdf.js.
+        const percentualImpressao = Math.max(0, Math.min(95, feito));
+        barra.style.width = `${92 + Math.round((percentualImpressao / 95) * 8)}%`; // 92%-100%
+        texto.textContent = `Imprimindo o PDF…${eta}`;
+      }
       return;
     }
     // Fase futura desconhecida — sem granularidade, volta a pulsar (mesmo

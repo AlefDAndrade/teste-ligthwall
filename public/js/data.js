@@ -2242,7 +2242,7 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  * já gere seu HTML interativo do mesmo jeito).
  * @param {string} nomeArquivoPdf - já com a extensão ".pdf".
  * @param {string} html - o documento autossuficiente já gerado.
- * @param {{signal?: AbortSignal, onProgresso?: (fase: string, feito: number, total: number, segundosRestantes?: number|null) => void}} [opts]
+ * @param {{signal?: AbortSignal, onProgresso?: (fase: string, feito: number, total: number, segundosRestantes?: number|null, progressoReal?: boolean) => void}} [opts]
  *   `signal` cancela a exportação em andamento (botão Cancelar da barra de
  *   progresso) — diferente da Fase 2, agora um abort manda
  *   `POST /exportar-pdf/cancelar/:jobId` pro servidor, que fecha a `page`
@@ -2250,9 +2250,16 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  *   cliente. `onProgresso` é chamado a cada evento 'progresso' recebido
  *   por SSE (fases: 'carregando', 'ajustando', 'imprimindo' — ver
  *   lib/rotas/exportar-pdf.js). `segundosRestantes` só vem preenchido na
- *   fase 'imprimindo' (estimativa baseada no histórico do servidor — ver
- *   `_iniciarTickerImpressao`, exportar-pdf.js); `null`/`undefined` nas
- *   demais fases.
+ *   fase 'imprimindo'; `null`/`undefined` nas demais fases. `progressoReal`
+ *   (Fase 5) só importa na fase 'imprimindo': quando `true`, `feito`/`total`
+ *   são uma CONTAGEM real de páginas já impressas (Análise Focada, que
+ *   sabe o total de páginas de antemão — ver `_processarJob`,
+ *   exportar-pdf.js); quando `false` (padrão), `feito` é uma PORCENTAGEM
+ *   estimada (0-95) — caminho de fallback pra dashboards sem esse
+ *   mecanismo, baseado no histórico do servidor (`_iniciarTickerImpressao`,
+ *   exportar-pdf.js). Nas fases 'carregando'/'ajustando', `feito`/`total`
+ *   sempre foram (e continuam sendo) contagem real — `progressoReal` não
+ *   se aplica a elas.
  * @returns {Promise<void>}
  */
 async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgresso } = {}) {
@@ -2309,7 +2316,7 @@ async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgress
       if (terminado) return;
       try {
         const dados = JSON.parse(ev.data);
-        if (onProgresso) onProgresso(dados.fase, dados.feito, dados.total, dados.segundosRestantes);
+        if (onProgresso) onProgresso(dados.fase, dados.feito, dados.total, dados.segundosRestantes, dados.progressoReal);
       } catch (_) { /* evento mal formado — ignora, próximo evento corrige */ }
     });
     eventos.addEventListener('concluido', () => {
