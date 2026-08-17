@@ -2617,8 +2617,39 @@ ${_afScriptAjustePaginaUnica()}
   // @param {string} subLabel - linha pequena abaixo do H1.
   // @param {Array<{id, label, secoes}>} itens - uma entrada por operação, `secoes` já vinda de _gerarSecoesEstaticasAf.
   function _gerarHtmlAfMultiplasEstaticoPdf(tituloPagina, tituloH1, subLabel, itens) {
+    // BUG CORRIGIDO: h1/.sub viviam soltos no <body>, ANTES da primeira
+    // .af-op-pagina — fora do fluxo de paginação que o CSS controla (ver
+    // `.af-op-pagina + .af-op-pagina { break-before:page }` em
+    // _afCssImpressaoPdf: só entra em jogo entre DUAS .af-op-pagina
+    // consecutivas, nunca antes da primeira). Resultado: o cabeçalho
+    // dividia a página física 1 com a Operação 1 (que precisa dos 287mm
+    // inteiros pra caber, ver _AF_PDF_ALTURA_PAGINA_MM), empurrando-a
+    // inteira pra página física 2 — sobrando 1 página física a mais do
+    // que `.af-op-pagina` elementos no DOM. Como o total de páginas
+    // reportado ao servidor (`__afReportarProgresso`, ver
+    // _afScriptAjustePaginaUnica) conta ELEMENTOS `.af-op-pagina` (não
+    // páginas físicas), o `pageRanges` do Puppeteer (exportar-pdf.js)
+    // imprimia só as N primeiras páginas físicas — cortando a ÚLTIMA
+    // operação inteira do PDF final.
+    // CORREÇÃO: embutir o cabeçalho DENTRO da primeira .af-op-pagina (só
+    // nela), antes de .af-op-titulo. Assim ele passa a fazer parte da
+    // MESMA página física da Operação 1, sem criar uma página física
+    // extra fora da contagem — 1 .af-op-pagina continua sendo,
+    // garantidamente, 1 página física, para todas as operações,
+    // inclusive a primeira.
+    // Efeito colateral desejável: como .af-op-pagina tem
+    // position:relative e o cálculo de espaço disponível em
+    // _afScriptAjustePaginaUnica é `pagina.clientHeight -
+    // conteudo.offsetTop` (offsetTop relativo à própria .af-op-pagina),
+    // a altura ocupada pelo cabeçalho na primeira página passa a ser
+    // descontada automaticamente do espaço livre pro conteúdo da
+    // Operação 1 — sem precisar tocar em nada daquele script.
+    const cabecalhoGlobal = `
+        <h1>${tituloH1}</h1>
+        <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${LW.escaparHtml(subLabel)}</div>`;
+
     const blocos = itens.map((it, i) => `
-      <div class="af-op-pagina">
+      <div class="af-op-pagina">${i === 0 ? cabecalhoGlobal : ''}
         <div class="af-op-titulo" style="font-size:.78rem;color:var(--text-3);margin-bottom:8px">Operação ${i + 1} de ${itens.length} · ${LW.escaparHtml(it.label)}</div>
         <div class="af-op-conteudo-escala">
           ${_blocoOperacaoEstaticoPdf(it.secoes)}
@@ -2635,8 +2666,6 @@ ${_afScriptAjustePaginaUnica()}
 ${_afScriptFlagInicial()}
 </head>
 <body>
-  <h1>${tituloH1}</h1>
-  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${LW.escaparHtml(subLabel)}</div>
   ${blocos}
   <div class="rodape">Exportado da Análise Focada — Lightwall SC · versão estática para impressão em PDF.</div>
 ${_afScriptAjustePaginaUnica()}
