@@ -120,6 +120,20 @@ function novoJobIdFalso() {
   return crypto.randomBytes(16).toString('hex'); // mesmo formato de _idJobValido (32 hex)
 }
 
+// Atualiza só o `status` de uma linha já semeada — usado pra "limpar" um
+// job de teste que não deve mais contar como ativo (evita vazar entre
+// testes que reusam o MESMO usuarioId, ex.: ADMIN_MASTER_USUARIO_ID, fixo
+// e compartilhado pelo mesmo servidor/banco em todo o arquivo).
+function marcarStatusExportacaoPdf(jobId, status) {
+  const dbPath = path.join(servidor.pastaTemp, 'data', 'lightwall.sqlite');
+  const conexao = new Database(dbPath);
+  try {
+    conexao.prepare('UPDATE exportacoes_pdf SET status = ?, concluido_em = ? WHERE job_id = ?').run(status, Date.now(), jobId);
+  } finally {
+    conexao.close();
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Bloqueio: "um job ativo por usuário"
 // ═══════════════════════════════════════════════════════════════════════
@@ -191,6 +205,59 @@ test('POST /iniciar NÃO bloqueia por causa de job "erro"/"cancelado" do mesmo u
     body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'novo.pdf' }),
   });
   assert.notEqual(resp.status, 409);
+});
+
+// Etapa 8 (ver README/lib/rotas/exportar-pdf.js): Admin Master ganhou um
+// usuarioId sentinela fixo (mesmo valor de ADMIN_MASTER_USUARIO_ID em
+// lib/rotas/exportar-pdf.js) só pra este recurso — tem sua PRÓPRIA fila
+// de "um job por vez", igual qualquer usuário cadastrado.
+const ADMIN_MASTER_USUARIO_ID = '__admin_master__';
+
+test('POST /iniciar recusa (409) um segundo job enquanto o ADMIN MASTER tem um "processando" (Etapa 8)', async () => {
+  const cookieAdmin = await logarComoAdminMaster();
+  const jobIdExistente = novoJobIdFalso();
+  semearExportacaoPdf({ jobId: jobIdExistente, usuarioId: ADMIN_MASTER_USUARIO_ID, status: 'processando' });
+
+  const resp = await fetch(`${servidor.baseUrl}/exportar-pdf/iniciar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'novo.pdf' }),
+  });
+  assert.equal(resp.status, 409);
+  const corpo = await resp.json();
+  assert.equal(corpo.jobId, jobIdExistente);
+
+  // Limpa: ADMIN_MASTER_USUARIO_ID é um valor FIXO, compartilhado pelo
+  // resto deste arquivo (mesmo servidor/banco) — sem isto, este job
+  // "processando" vazaria pros próximos testes que usam o Admin Master.
+  marcarStatusExportacaoPdf(jobIdExistente, 'cancelado');
+});
+
+test('POST /iniciar do ADMIN MASTER NÃO é bloqueado por job pendente de um usuário cadastrado (Etapa 8)', async () => {
+  const cookieUsuario = await cadastrarELogar('usuario-etapa8-isolamento-a', 'Supervisao');
+  const usuarioId = await obterUsuarioId(cookieUsuario);
+  const cookieAdmin = await logarComoAdminMaster();
+
+  semearExportacaoPdf({ jobId: novoJobIdFalso(), usuarioId, status: 'processando' });
+
+  const respAdmin = await fetch(`${servidor.baseUrl}/exportar-pdf/iniciar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
+    body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'novo.pdf' }),
+  });
+  assert.notEqual(respAdmin.status, 409, 'job pendente de um usuário cadastrado não deveria bloquear o Admin Master');
+});
+
+test('POST /iniciar de um usuário cadastrado NÃO é bloqueado por job pendente do ADMIN MASTER (Etapa 8)', async () => {
+  const cookieUsuario = await cadastrarELogar('usuario-etapa8-isolamento-b', 'Supervisao');
+  semearExportacaoPdf({ jobId: novoJobIdFalso(), usuarioId: ADMIN_MASTER_USUARIO_ID, status: 'processando' });
+
+  const respUsuario = await fetch(`${servidor.baseUrl}/exportar-pdf/iniciar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookieUsuario },
+    body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'novo.pdf' }),
+  });
+  assert.notEqual(respUsuario.status, 409, 'job pendente do Admin Master não deveria bloquear um usuário cadastrado');
 });
 
 // ═══════════════════════════════════════════════════════════════════════

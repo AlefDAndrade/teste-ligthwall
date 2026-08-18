@@ -3,16 +3,25 @@
 // precisa ter um DONO (job.usuarioId) pra permitir, nas próximas etapas, o
 // bloqueio de "um job pendente por usuário" e o aviso de "PDF pronto" ao
 // voltar no site. Isso exige que POST /exportar-pdf/iniciar passe a recusar
-// requests sem sessão de usuário válida (lib/sessao-usuario.js) — antes
-// desta etapa a rota era aberta de propósito.
+// requests sem sessão válida — nem toda sessão conta, porém: ver Etapa 8,
+// abaixo.
 //
 // Não testamos aqui a geração do PDF em si (precisaria de um Chromium de
 // verdade instalado na máquina de teste, ver deploy/instalar-chromium-pdf.sh
-// — fora do escopo de CI) — só o portão de sessão: sem cookie → 403 ANTES
-// de tocar em qualquer outra validação; com cookie válido → passa direto
-// pelo portão e cai nas validações seguintes (corpo/HTML, depois
-// Chromium), nunca mais no 403. Isso já cobre o que muda nesta etapa sem
-// depender de infraestrutura externa.
+// — fora do escopo de CI) — só o portão de sessão: sem cookie nenhum → 403
+// ANTES de tocar em qualquer outra validação; com sessão válida (usuário
+// cadastrado OU, desde a Etapa 8, Admin Master) → passa direto pelo portão
+// e cai nas validações seguintes (corpo/HTML, depois Chromium), nunca mais
+// no 403. Isso já cobre o que muda nestas etapas sem depender de
+// infraestrutura externa.
+//
+// ── Etapa 8 do plano (ver README) ────────────────────────────────────────
+// Admin Master (lib/sessao.js, cookie `lw_admin_sessao`) passa a ser
+// aceito também — ele não é um "usuário cadastrado" (lib/sessao-usuario.js
+// continua sendo uma sessão totalmente diferente, ver comentário no topo
+// daquele arquivo), mas `_dadosSessaoParaPdf` (lib/rotas/exportar-pdf.js)
+// dá a ele um usuarioId sentinela fixo só pra este recurso, então o
+// portão de sessão passa a aceitar os dois tipos.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -83,18 +92,20 @@ test('POST /exportar-pdf/iniciar sem sessão de usuário → 403, sem chegar a c
   assert.match(corpo.erro, /sessão/i);
 });
 
-test('POST /exportar-pdf/iniciar com cookie de Admin Master (sessão de OUTRO tipo) continua recusando — só sessão de usuário cadastrado vale', async () => {
+test('POST /exportar-pdf/iniciar com cookie de Admin Master (Etapa 8) também passa do portão de sessão', async () => {
   const cookieAdmin = await logarComoAdminMaster();
   const resp = await fetch(`${servidor.baseUrl}/exportar-pdf/iniciar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'teste.pdf' }),
   });
-  // lib/sessao.js (Admin Master) e lib/sessao-usuario.js (usuário
-  // cadastrado) são cookies DIFERENTES e não intercambiáveis (ver
-  // comentário no topo de sessao-usuario.js) — mandar só o cookie de
-  // Admin Master não deve satisfazer sessaoUsuario.dadosDaSessao().
-  assert.equal(resp.status, 403);
+  // Etapa 8: Admin Master (lib/sessao.js) ganhou um usuarioId sentinela
+  // só pra este recurso (ver _dadosSessaoParaPdf, lib/rotas/
+  // exportar-pdf.js) — não afirmamos sucesso (200) aqui de propósito,
+  // mesmo motivo do teste de usuário cadastrado logo abaixo (a máquina
+  // de teste pode não ter Chromium instalado); o que importa é que
+  // NUNCA MAIS seja 403 com esse cookie.
+  assert.notEqual(resp.status, 403);
 });
 
 test('POST /exportar-pdf/iniciar com sessão de usuário cadastrado válida passa do portão de sessão (para de dar 403)', async () => {
