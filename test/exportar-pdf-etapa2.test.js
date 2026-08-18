@@ -311,8 +311,8 @@ test('POST /descartar/:jobId apaga o registro + arquivo em disco, e libera o usu
   assert.notEqual(respLivre.status, 409);
 });
 
-test('GET /exportar-pdf/arquivo/:jobId NÃO apaga mais o job automaticamente — baixar não é decidir (Etapa 2)', async () => {
-  const cookie = await cadastrarELogar('usuario-etapa2-baixar-nao-apaga', 'Supervisao');
+test('GET /exportar-pdf/arquivo/:jobId apaga o job automaticamente depois que o download termina por completo (Etapa 7)', async () => {
+  const cookie = await cadastrarELogar('usuario-etapa7-baixar-apaga', 'Supervisao');
   const usuarioId = await obterUsuarioId(cookie);
   const jobId = novoJobIdFalso();
   const caminhoArquivo = path.join(pastaScratch, jobId + '-baixar.pdf');
@@ -321,20 +321,25 @@ test('GET /exportar-pdf/arquivo/:jobId NÃO apaga mais o job automaticamente —
 
   const respBaixar = await fetch(`${servidor.baseUrl}/exportar-pdf/arquivo/${jobId}`);
   assert.equal(respBaixar.status, 200);
+  await respBaixar.arrayBuffer(); // garante que o corpo inteiro chegou (download "completo")
 
-  // Continua lá — nem o registro, nem o arquivo em disco, nem o
-  // bloqueio pro usuário desaparecem só porque alguém baixou.
-  assert.ok(lerExportacaoPdf(jobId), 'registro deveria continuar existindo depois do download');
-  assert.equal(fs.existsSync(caminhoArquivo), true, 'arquivo em disco deveria continuar existindo depois do download');
+  // A limpeza roda no listener `res.on('finish', ...)` do servidor —
+  // dá uma volta de I/O pra deixar esse handler terminar antes de checar.
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Baixar por completo agora RESOLVE o job sozinho: registro, arquivo
+  // em disco e o bloqueio pro usuário somem, sem precisar descartar.
+  assert.equal(lerExportacaoPdf(jobId), undefined, 'registro deveria ter sido apagado depois do download completo');
+  assert.equal(fs.existsSync(caminhoArquivo), false, 'arquivo em disco deveria ter sido apagado depois do download completo');
 
   const respIniciar = await fetch(`${servidor.baseUrl}/exportar-pdf/iniciar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ html: '<html><body>oi</body></html>', filename: 'novo.pdf' }),
   });
-  assert.equal(respIniciar.status, 409, 'baixar não deveria ter liberado o slot — só descartar libera');
+  assert.notEqual(respIniciar.status, 409, 'baixar por completo deveria ter liberado o slot, sem precisar descartar');
 
-  // Pode baixar de novo, quantas vezes quiser, até decidir descartar.
+  // Não dá mais pra baixar de novo — o job já foi resolvido.
   const respBaixarDeNovo = await fetch(`${servidor.baseUrl}/exportar-pdf/arquivo/${jobId}`);
-  assert.equal(respBaixarDeNovo.status, 200);
+  assert.equal(respBaixarDeNovo.status, 404);
 });

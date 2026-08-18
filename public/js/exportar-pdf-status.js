@@ -21,9 +21,11 @@
 //      topbar (mesmo padrão visual de #topbar-fila-pendentes, ver
 //      nav-topbar.html) — clicando nele abre um popover com o nome do
 //      arquivo e os botões Baixar/Descartar.
-//   4. `POST /exportar-pdf/descartar/:jobId` é a única forma de liberar o
-//      usuário pra gerar outro PDF (ver Etapa 2) — baixar sozinho NÃO
-//      limpa mais o job (a pessoa pode querer baixar de novo).
+//   4. Baixar (Etapa 7 — ver lib/rotas/exportar-pdf.js) volta a liberar o
+//      usuário pra gerar outro PDF sozinho, assim que o download termina
+//      por completo — sem precisar descartar depois. `POST
+//      /exportar-pdf/descartar/:jobId` continua existindo pra quem
+//      decide não baixar (ex.: gerou por engano).
 //
 // Complementado pela notificação PUSH (`notificarPdfPronto`, ver
 // lib/notificacoes-push.js, disparada por `_concluirJob` no servidor
@@ -37,7 +39,7 @@
 // step, tudo pendurado em `window.LWExportarPdfStatus`).
 
 (function () {
-  let _job = null; // { jobId, status, nomeArquivo, fase, feito, total, segundosRestantes, baixado }
+  let _job = null; // { jobId, status, nomeArquivo, fase, feito, total, segundosRestantes }
   let _eventos = null; // EventSource ativo (só existe enquanto status === 'processando')
 
   function $(id) { return document.getElementById(id); }
@@ -125,7 +127,6 @@
       <div style="font-size:.78rem;color:var(--text-2);margin-bottom:12px;word-break:break-word">
         ${_escaparHtml(_job.nomeArquivo || 'exportacao.pdf')}
       </div>
-      ${_job.baixado ? '<div style="font-size:.72rem;color:var(--green);margin-bottom:10px">✅ Baixado — pode baixar de novo se precisar.</div>' : ''}
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary btn-sm" onclick="LWExportarPdfStatus.baixar(event)" style="flex:1">⬇ Baixar</button>
         <button class="btn btn-ghost btn-sm" onclick="LWExportarPdfStatus.descartar(event)" style="flex:1">🗑 Descartar</button>
@@ -246,7 +247,6 @@
       feito: dados.job.feito,
       total: dados.job.total,
       segundosRestantes: dados.job.segundosRestantes,
-      baixado: false,
     };
     _atualizarBadge();
 
@@ -291,15 +291,23 @@
       _abrirPopover();
     },
 
+    // Etapa 7 (ver lib/rotas/exportar-pdf.js): baixar volta a "resolver"
+    // o job no servidor (apaga arquivo/registro assim que o download
+    // termina por completo) — então aqui do lado do cliente o popover
+    // fecha igual acontece em `descartar`, em vez de continuar
+    // oferecendo "baixar de novo" (o job já não existe mais lá).
     async baixar(event) {
       if (event) event.stopPropagation();
       if (!_job) return;
       const el = $('exportar-pdf-status-erro');
       if (el) el.style.display = 'none';
+      const jobId = _job.jobId;
       try {
-        await _baixarArquivo(_job.jobId, _job.nomeArquivo);
-        _job.baixado = true;
-        _renderPopover();
+        await _baixarArquivo(jobId, _job.nomeArquivo);
+        _limparSse();
+        _job = null;
+        _atualizarBadge();
+        document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
       } catch (e) {
         _mostrarErroNoPopover(e.message || 'Não consegui baixar o PDF agora.');
       }
