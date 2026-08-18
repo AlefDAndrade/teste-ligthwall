@@ -1456,6 +1456,15 @@
       }
       return;
     }
+    if (fase === 'reconectando') {
+      // EventSource caiu mas está tentando reconectar sozinho (ver
+      // eventos.onerror em data.js) — o job continua rodando no servidor
+      // normalmente, só a barra pisca avisando que a conexão está
+      // instável, sem voltar nem travar em nenhuma porcentagem.
+      barra.classList.add('af-progresso-indeterminada');
+      texto.textContent = 'Conexão instável — tentando reconectar…';
+      return;
+    }
     // Fase futura desconhecida — sem granularidade, volta a pulsar (mesmo
     // fallback de segurança que existia desde a Fase 2).
     texto.textContent = 'Processando…';

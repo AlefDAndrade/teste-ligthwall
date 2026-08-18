@@ -2249,8 +2249,12 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  *   do Puppeteer no MEIO do processo, não só o acompanhamento do lado do
  *   cliente. `onProgresso` é chamado a cada evento 'progresso' recebido
  *   por SSE (fases: 'carregando', 'ajustando', 'imprimindo' — ver
- *   lib/rotas/exportar-pdf.js). `segundosRestantes` só vem preenchido na
- *   fase 'imprimindo'; `null`/`undefined` nas demais fases. `progressoReal`
+ *   lib/rotas/exportar-pdf.js) E, também, quando a conexão SSE cai mas o
+ *   `EventSource` ainda está tentando reconectar sozinho (pseudo-fase
+ *   'reconectando', só do lado do cliente — nunca vem do servidor; ver
+ *   `eventos.onerror`, abaixo). `segundosRestantes` só vem preenchido na
+ *   fase 'imprimindo'; `null`/`undefined` nas demais fases (inclusive
+ *   'reconectando'). `progressoReal`
  *   (Fase 5) só importa na fase 'imprimindo': quando `true`, `feito`/`total`
  *   são uma CONTAGEM real de páginas já impressas (Análise Focada, que
  *   sabe o total de páginas de antemão — ver `_processarJob`,
@@ -2339,10 +2343,38 @@ async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgress
       reject(erroCancelado);
     });
     // A conexão pode cair por um motivo que não é nenhum dos eventos
-    // acima (rede, proxy, servidor reiniciado no meio) — sem isto, o
-    // cliente ficaria esperando pra sempre um evento que nunca vai chegar.
+    // acima (rede, proxy, servidor reiniciado no meio) — só que
+    // `EventSource` já tenta reconectar SOZINHO nesse caso (comportamento
+    // padrão da spec: perdeu a conexão → `readyState` vira `CONNECTING` e
+    // ele tenta de novo automaticamente, sem precisar de nada daqui), e a
+    // rota `GET /exportar-pdf/eventos/:jobId` já foi feita pra aceitar
+    // essa reconexão (manda o progresso atual assim que reconecta, ou
+    // direto o evento final se o job já tiver terminado enquanto a
+    // conexão esteve fora do ar — ver comentário lá). O job em si nunca
+    // para de rodar no servidor só porque este SSE caiu (ver
+    // `req.on('close', ...)` na mesma rota — só tira este cliente da
+    // lista de quem escuta, nunca cancela o job).
+    // ANTES: qualquer `onerror` já desistia na hora (fechava a conexão de
+    // propósito, matando a reconexão automática do navegador, e mostrava
+    // "Conexão com o servidor caiu" pro usuário) mesmo quando era só uma
+    // instabilidade passageira que se resolveria sozinha em segundos —
+    // na prática, isto pegava desproporcionalmente mais as exportações
+    // "Personalizada" (mais operações/páginas = mais TEMPO com a conexão
+    // aberta = mais chance de pegar uma oscilação no meio do caminho) do
+    // que "Do Dia" (rápida o bastante pra raramente dar chance disso
+    // acontecer) — não porque houvesse algo diferente entre as duas, só
+    // pela duração maior. Corrigido: só desiste de vez quando o PRÓPRIO
+    // navegador desiste (`readyState === CLOSED` — esgotou as tentativas,
+    // ou o servidor respondeu com algo que o EventSource considera fatal,
+    // ex.: 404 se o job já tiver expirado da memória); enquanto o
+    // navegador ainda está tentando (`CONNECTING`), só avisa visualmente
+    // via `onProgresso('reconectando', ...)`, sem rejeitar nada.
     eventos.onerror = () => {
       if (terminado) return;
+      if (eventos.readyState === EventSource.CONNECTING) {
+        if (onProgresso) onProgresso('reconectando', 0, 0, null, false);
+        return;
+      }
       encerrar();
       reject(new Error('Conexão com o servidor caiu durante a geração do PDF.'));
     };
