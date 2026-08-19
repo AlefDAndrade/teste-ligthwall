@@ -44,6 +44,12 @@
   let timerInterval = null;
   let expandedTracoIndex = 0; // Índice do traço aberto (acordeão exclusivo)
 
+  // Aviso de conexão AO VIVO (item 9 do plano de Registro Offline, ver
+  // README) — true enquanto o monitor abaixo considera a rede fora, pra
+  // saber quando vale a pena anunciar "conexão voltou" (e não repetir
+  // avisos de "caiu" à toa). Ver _conexaoLive_marcarCaiu/_marcarVoltou.
+  let _conexaoCaidaAoVivo = false;
+
   // ---- DOM refs ----
   const $ = id => document.getElementById(id);
 
@@ -2470,8 +2476,15 @@
    * pra avisos de conexão, porque um alert() bloqueante daria a impressão
    * de que o sistema "travou" esperando algo, exatamente o que queremos
    * evitar aqui.
+   *
+   * `opcoes.persistente` (item 9 do plano de Registro Offline, ver
+   * README): quando true, o banner fica na tela até alguém chamar de novo
+   * (sem o auto-ocultar de 8s padrão) — usado enquanto a conexão está
+   * REALMENTE fora no meio de uma operação, já que "sumir sozinho depois
+   * de 8s" daria a falsa impressão de que o problema se resolveu.
    */
-  function _mostrarAvisoConexao(mensagem, tipo) {
+  function _mostrarAvisoConexao(mensagem, tipo, opcoes) {
+    opcoes = opcoes || {};
     let el = document.getElementById('op-aviso-conexao');
     if (!el) {
       el = document.createElement('div');
@@ -2488,10 +2501,86 @@
     el.style.opacity = '1';
     el.style.display = 'block';
     clearTimeout(el._timeoutOcultar);
-    el._timeoutOcultar = setTimeout(() => {
-      el.style.opacity = '0';
-      setTimeout(() => { el.style.display = 'none'; }, 350);
-    }, 8000);
+    if (!opcoes.persistente) {
+      el._timeoutOcultar = setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => { el.style.display = 'none'; }, 350);
+      }, 8000);
+    }
+  }
+
+  // ---- Aviso de conexão AO VIVO enquanto uma operação está em andamento
+  // (item 9 do plano de Registro de Operação Offline, ver README) ----
+  //
+  // Cenário diferente do resto do plano (que é sobre registrar SEM login
+  // nem servidor): aqui a pessoa está LOGADA, controlando a operação
+  // normalmente por esta tela, e a internet cai DURANTE o preenchimento —
+  // não no clique de "Registrar". O que já protege os dados (localStorage
+  // via LW.saveOperacaoAtual, chamado a cada persistência de estado) e o
+  // que acontece se a queda ainda estiver valendo na hora de registrar
+  // (fila `lw_fila_operacoes_pendentes`, _enfileirarEContinuar acima) já
+  // existem e não mudam — isto aqui só adiciona VISIBILIDADE em tempo
+  // real de que a rede caiu, enquanto a pessoa ainda está digitando.
+
+  /**
+   * Avisa que a conexão caiu — só importa com uma operação em andamento
+   * (`status !== 'idle'`; sem isso não tem o que "salvar localmente" pra
+   * tranquilizar ninguém) e só uma vez por queda (não reabre o banner a
+   * cada checagem enquanto a rede continuar fora).
+   */
+  function _conexaoLive_marcarCaiu() {
+    if (state.status === 'idle') return;
+    if (_conexaoCaidaAoVivo) return;
+    _conexaoCaidaAoVivo = true;
+    _mostrarAvisoConexao(
+      '📡 Sem conexão. Seus dados estão salvos neste computador; pode continuar preenchendo normalmente.',
+      'aviso',
+      { persistente: true }
+    );
+  }
+
+  /**
+   * Avisa que a conexão voltou — só anuncia se este monitor tinha
+   * marcado a queda antes (`_conexaoCaidaAoVivo`); se não tinha caído do
+   * ponto de vista dele, não há nada de novo pra contar.
+   */
+  function _conexaoLive_marcarVoltou() {
+    if (!_conexaoCaidaAoVivo) return;
+    _conexaoCaidaAoVivo = false;
+    _mostrarAvisoConexao('🌐 Conexão restabelecida. Pode finalizar normalmente.', 'sucesso');
+  }
+
+  /**
+   * `navigator.onLine`/os eventos 'online'/'offline' do navegador sozinhos
+   * não são 100% confiáveis (ex.: Wi-Fi conectado mas sem internet de
+   * verdade) — mesmo raciocínio já usado em tentarSincronizarFilaPendentes
+   * (data.js) e na tela de login (item 1 deste mesmo plano). Esta checagem
+   * ativa por fetch serve de reforço/correção pros eventos abaixo.
+   */
+  async function _checarConexaoAoVivo() {
+    if (state.status === 'idle') return; // sem operação em andamento, não há por que gastar um fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    try {
+      await fetch('/minha-sessao', { method: 'GET', cache: 'no-store', signal: controller.signal });
+      _conexaoLive_marcarVoltou();
+    } catch (_) {
+      _conexaoLive_marcarCaiu();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    // Eventos do navegador — reação imediata (mesmo sendo, sozinhos,
+    // otimistas demais às vezes); a checagem periódica abaixo confirma ou
+    // corrige logo em seguida se algum dos dois estiver errado.
+    window.addEventListener('offline', _conexaoLive_marcarCaiu);
+    window.addEventListener('online', _conexaoLive_marcarVoltou);
+    // Rede de segurança, independente dos eventos — mesmo padrão de
+    // intervalo de checagem já usado em data.js pra sincronizar a fila de
+    // pendentes.
+    setInterval(_checarConexaoAoVivo, 15000);
   }
 
   // Setor de Qualidade tem sua própria fila de baterias pendentes de
@@ -2659,6 +2748,11 @@
       bercos_personalizados: null,
       bercos_dimensoes: null,
     };
+    // Sem operação em andamento, o monitor de conexão ao vivo (item 9 do
+    // plano de Registro Offline) não se aplica mais — zera pra não
+    // anunciar "conexão restabelecida" fora de propósito na próxima vez
+    // que a rede realmente cair/voltar durante uma operação nova.
+    _conexaoCaidaAoVivo = false;
   }
 
   // Mostra/escurece o botão "🔧 Configurar Berços" conforme o tipo de
