@@ -71,26 +71,35 @@ function criarWindow() {
   const window = dom.window;
   const EventSourceFalso = instalarEventSourceFalso(window);
 
-  // fetch falso — só as 2 chamadas que baixarPdfApartirDeHtml faz:
-  // POST /exportar-pdf/iniciar (devolve um jobId) e
-  // GET /exportar-pdf/arquivo/:jobId (devolve um blob qualquer, só pro
-  // download "funcionar" sem quebrar).
+  // fetch falso — só a 1 chamada que baixarPdfApartirDeHtml ainda faz via
+  // fetch: POST /exportar-pdf/iniciar (devolve um jobId). O download do
+  // PDF em si NÃO usa mais fetch/blob (ver comentário grande em
+  // baixarPdfApartirDeHtml, data.js, sobre o bug corrigido: PDFs grandes
+  // estourando memória do renderer ao montar um Blob) — agora é só um
+  // `<a download>` clicado, capturado abaixo em `cliquesDeDownload`.
   window.fetch = async (url) => {
     if (url === '/exportar-pdf/iniciar') {
       return { ok: true, json: async () => ({ jobId: 'job-teste-reconexao' }) };
     }
-    if (String(url).startsWith('/exportar-pdf/arquivo/')) {
-      return { ok: true, blob: async () => new window.Blob(['conteudo-fake-pdf']) };
-    }
     throw new Error('fetch inesperado neste teste: ' + url);
   };
-  // jsdom não implementa createObjectURL/revokeObjectURL — só precisa não
-  // quebrar, o valor devolvido não importa pra estes testes.
-  window.URL.createObjectURL = () => 'blob:fake-url';
-  window.URL.revokeObjectURL = () => {};
+
+  // jsdom NÃO entende o atributo `download` de um <a> — ele tenta navegar
+  // de VERDADE pro href (`Not implemented: navigation to another
+  // Document`), o que trava esperando uma resposta de rede que nunca
+  // chega (diferente de um navegador de verdade, que reconhece `download`
+  // e dispara um download em vez de navegar). Sobrescreve
+  // `HTMLAnchorElement.prototype.click` ANTES de `data.js` rodar, só pra
+  // este teste — captura o clique (href/download) em vez de deixar o
+  // jsdom tentar navegar, e serve de bônus pra confirmar que o link
+  // aponta pro jobId certo.
+  const cliquesDeDownload = [];
+  window.HTMLAnchorElement.prototype.click = function () {
+    cliquesDeDownload.push({ href: this.getAttribute('href'), download: this.download });
+  };
 
   window.eval(DATA_JS);
-  return { window, EventSourceFalso };
+  return { window, EventSourceFalso, cliquesDeDownload };
 }
 
 // Dá um respiro pro event loop — usado depois de chamar
@@ -102,7 +111,7 @@ async function tick(vezes = 5) {
 }
 
 test('instabilidade passageira (EventSource ainda tentando reconectar) NÃO derruba a exportação — só avisa e segue esperando', async () => {
-  const { window, EventSourceFalso } = criarWindow();
+  const { window, EventSourceFalso, cliquesDeDownload } = criarWindow();
   const fasesRecebidas = [];
   const promessa = window.LW.baixarPdfApartirDeHtml('teste.pdf', '<html></html>', {
     onProgresso: (fase) => fasesRecebidas.push(fase),
@@ -133,6 +142,9 @@ test('instabilidade passageira (EventSource ainda tentando reconectar) NÃO derr
 
   await promessa; // não deve lançar
   assert.equal(resolvida, true);
+  assert.equal(cliquesDeDownload.length, 1, 'deveria ter disparado exatamente 1 download nativo');
+  assert.equal(cliquesDeDownload[0].href, '/exportar-pdf/arquivo/job-teste-reconexao', 'o link deveria apontar pro jobId certo');
+  assert.equal(cliquesDeDownload[0].download, 'teste.pdf', 'o nome do arquivo baixado deveria ser o pedido');
 });
 
 test('quando o EventSource desiste de vez (readyState CLOSED), a exportação falha com a mensagem de conexão perdida', async () => {

@@ -451,7 +451,18 @@ const server = http.createServer((req, res) => {
   // projeto inteiro em JSON), mas ainda assim finito. Não substitui a
   // leitura de cada rota — só corta a conexão mais cedo se ela passar do
   // limite, antes de o corpo inteiro acumular em memória.
-  const MAX_BODY_BYTES = 50 * 1024 * 1024;
+  //
+  // EXCEÇÃO: POST /exportar-pdf/iniciar (lib/rotas/exportar-pdf.js) manda
+  // o HTML inteiro já renderizado no cliente — Análise Focada
+  // "Personalizada"/"Do Dia" cobrindo muitas operações (relatado em
+  // produção: 162 avaliações já estourava os 50MB, mesmo sem fotos —
+  // berços/receita/traços reaproveitados/avaliação de qualidade por
+  // operação somam bastante em texto puro quando são muitas). Só esta
+  // rota ganha um teto bem mais alto — as demais continuam em 50MB, sem
+  // motivo pra afrouxar a proteção onde ela não é necessária.
+  const MAX_BODY_BYTES_PADRAO = 50 * 1024 * 1024;
+  const MAX_BODY_BYTES_EXPORTAR_PDF = 300 * 1024 * 1024;
+  const MAX_BODY_BYTES = urlPath === '/exportar-pdf/iniciar' ? MAX_BODY_BYTES_EXPORTAR_PDF : MAX_BODY_BYTES_PADRAO;
   if (req.method === 'POST') {
     let _bytesRecebidos = 0;
     let _corpoAbortado = false;
@@ -459,11 +470,30 @@ const server = http.createServer((req, res) => {
       _bytesRecebidos += chunk.length;
       if (!_corpoAbortado && _bytesRecebidos > MAX_BODY_BYTES) {
         _corpoAbortado = true;
+        const mbLimite = Math.round(MAX_BODY_BYTES / (1024 * 1024));
+        // BUG CORRIGIDO (relatado em produção: cliente via só
+        // "TypeError: Failed to fetch", sem NENHUMA mensagem de erro
+        // legível, exatamente quando o corpo passava do limite): antes,
+        // `req.destroy()` era chamado logo depois de `res.end(...)`, sem
+        // esperar a resposta terminar de sair — como request/resposta
+        // compartilham a MESMA conexão TCP, isso podia derrubar o socket
+        // ANTES do 413 (com a mensagem de erro certinha) chegar de
+        // verdade ao navegador, que só via a conexão cair no meio, sem
+        // corpo de resposta nenhum. Agora `req.destroy()` só roda DEPOIS
+        // que `res.end()` confirma (via callback) que a resposta já foi
+        // escrita por completo — a pessoa recebe a mensagem clara
+        // primeiro, o socket só fecha depois.
         try {
           res.writeHead(413, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, erro: 'Corpo da requisição excede o limite permitido (50MB).' }));
-        } catch (_) { /* resposta pode já ter sido enviada por outra checagem — ignora */ }
-        req.destroy();
+          res.end(JSON.stringify({ ok: false, erro: `Corpo da requisição excede o limite permitido (${mbLimite}MB).` }), () => {
+            req.destroy();
+          });
+        } catch (_) {
+          // resposta pode já ter sido enviada por outra checagem — ainda
+          // assim garante que a conexão não fica presa recebendo dados à
+          // toa pra sempre.
+          req.destroy();
+        }
       }
     });
   }

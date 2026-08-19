@@ -2380,26 +2380,43 @@ async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgress
     };
   });
 
-  // Job concluído no servidor — busca o arquivo pronto.
-  const respostaArquivo = await fetch(`/exportar-pdf/arquivo/${jobId}`, { signal });
-  if (!respostaArquivo.ok) {
-    let mensagem = 'PDF gerado, mas não consegui baixar o arquivo.';
-    try {
-      const erro = await respostaArquivo.json();
-      if (erro && erro.erro) mensagem = erro.erro;
-    } catch (_) { /* resposta de erro não veio em JSON — usa a mensagem padrão */ }
-    throw new Error(mensagem);
-  }
-
-  const blob = await respostaArquivo.blob();
-  const url = URL.createObjectURL(blob);
+  // Job concluído no servidor — dispara o download.
+  //
+  // BUG CORRIGIDO (relatado: "Failed to fetch"/net::ERR_FAILED em PDFs
+  // grandes, ex.: 162 avaliações — mesmo com o servidor respondendo 200 e
+  // entregando tudo certinho): ANTES, este trecho fazia
+  // `fetch(...).blob()` — isso obriga o Chrome a montar o arquivo INTEIRO
+  // num Blob na memória do processo do navegador antes de disponibilizar
+  // o download. Pra um PDF grande o bastante, isso pode estourar limite
+  // de memória do renderer e falhar — mesmo que o servidor tenha
+  // entregado a resposta inteira sem erro nenhum (por isso o Content-
+  // Length batia e o status era 200, mas o download não completava do
+  // lado do navegador). Além disso, como o servidor considera "baixado"
+  // assim que ELE termina de escrever a resposta (evento 'finish' —
+  // ver `_apagarPdfAposDownloadCompleto`, lib/rotas/exportar-pdf.js),
+  // ele já apagava o arquivo antes até do Chrome terminar de processar o
+  // Blob, sem deixar nada pra investigar/tentar de novo depois.
+  //
+  // Agora: navegação direta via link com `download` — o PRÓPRIO Chrome
+  // baixa e escreve em disco através do mecanismo nativo dele (gerenciador
+  // de downloads), sem nunca precisar caber o arquivo inteiro na memória
+  // do JavaScript. Mais robusto pra arquivos grandes, e mais rápido (sem
+  // o passo extra de materializar um Blob só pra descartar em seguida).
+  //
+  // Troca envolvida: perde a checagem prévia de erro via
+  // `fetch(...).ok`/`.json()` que existia antes (o download nativo não dá
+  // pra "ler" a resposta do lado do JS pra checar se veio um JSON de erro
+  // em vez do PDF) — aceitável aqui porque o SSE, logo acima, JÁ confirmou
+  // que o job terminou com sucesso (evento 'concluido') antes deste ponto
+  // ser alcançado; o caminho de erro real (job não encontrado/não pronto)
+  // continua coberto pelos eventos 'erro'/'cancelado' do SSE, que rejeitam
+  // a Promise antes de chegar aqui.
   const a = document.createElement('a');
-  a.href = url;
+  a.href = `/exportar-pdf/arquivo/${jobId}`;
   a.download = nomeArquivoPdf;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 // CSS compartilhado por TODOS os exports de "Dashboard Interativo" (Setor

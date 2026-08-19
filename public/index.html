@@ -1318,6 +1318,22 @@
           </div>
         </div>
 
+        <!-- ═══ BARRA DE PROGRESSO DE EXPORTAÇÃO — oculta em repouso,
+             controlada por _progressoIniciar/_progressoAtualizar/
+             _progressoFinalizar (analise-focada.js). Fase 2 do plano de
+             Exportação em PDF, ver README. Cancelar interrompe só o
+             acompanhamento do lado do cliente — o servidor pode seguir
+             gerando o PDF em segundo plano, mas o resultado é descartado. ═══ -->
+        <div id="af-progresso" class="card mb-4" style="display:none;padding:14px 20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+            <span id="af-progresso-texto" style="font-size:.85rem;color:var(--text-2)">Preparando…</span>
+            <button class="btn btn-ghost btn-sm" id="af-progresso-cancelar" style="padding:4px 10px">Cancelar</button>
+          </div>
+          <div style="height:8px;border-radius:999px;background:var(--bg-2);overflow:hidden">
+            <div id="af-progresso-barra" style="height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .25s ease"></div>
+          </div>
+        </div>
+
         <!-- ═══ BUSCA — sempre visível, pra achar outra operação sem voltar ═══ -->
         <div class="card mb-4" style="padding:14px 20px">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
