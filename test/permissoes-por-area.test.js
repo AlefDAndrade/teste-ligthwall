@@ -185,6 +185,36 @@ test('OperadorInjetora (tem área injetora) não é recusado por permissão em P
   assert.notEqual(resp.status, 403);
 });
 
+// Edições Avançadas (início/fim/pausas — ver POST /editar-operacao-avancado,
+// lib/rotas/edicao.js) usa a MESMA checagem de área 'injetora' das rotas
+// acima — mesmos dois testes, espelhados.
+test('AssistenteQualidade (sem área injetora) é recusada em POST /editar-operacao-avancado', async () => {
+  const cookie = await cadastrarELogar('paula.qual.editar.avancado', 'AssistenteQualidade');
+  const resp = await fetch(`${servidor.baseUrl}/editar-operacao-avancado`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 'op-qualquer', inicio: '2026-01-01T08:00:00.000Z', fim: '2026-01-01T09:00:00.000Z', pausas: [], diff: [] }),
+  });
+  assert.equal(resp.status, 403);
+});
+
+test('OperadorInjetora (tem área injetora) não é recusado por permissão em POST /editar-operacao-avancado', async () => {
+  const cookie = await cadastrarELogar('otavio.editor.avancado', 'OperadorInjetora');
+  const resp = await fetch(`${servidor.baseUrl}/editar-operacao-avancado`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 'op-inexistente-otavio-avancado', inicio: '2026-01-01T08:00:00.000Z', fim: '2026-01-01T09:00:00.000Z', pausas: [], diff: [] }),
+  });
+  // Pode falhar por não achar o registro (400), mas não por permissão (403).
+  assert.notEqual(resp.status, 403);
+});
+
+test('AssistenteQualidade (sem área injetora) é recusada em GET /pausas-operacao/:id', async () => {
+  const cookie = await cadastrarELogar('paula.qual.pausas', 'AssistenteQualidade');
+  const resp = await fetch(`${servidor.baseUrl}/pausas-operacao/op-qualquer`, { headers: { Cookie: cookie } });
+  assert.equal(resp.status, 403);
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // Área 'manutencao' — hoje TODOS os perfis cadastráveis têm acesso
 // completo (chamados + programada + fechamento), EXCETO

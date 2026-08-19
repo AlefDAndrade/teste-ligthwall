@@ -4006,6 +4006,266 @@
     }
 
     // ================================================================
+    //  EDIÇÕES AVANÇADAS (início/fim/pausas de uma operação já salva)
+    // ================================================================
+    // Separado do resto de Editar Operação de propósito — ver comentário
+    // grande em POST /editar-operacao-avancado (lib/rotas/edicao.js) sobre
+    // o motivo de início/fim/pausas terem um botão à parte, mais
+    // escondido, em vez de campos soltos no formulário principal.
+    //
+    // Convenção de fuso: mesma "fake UTC = hora de Brasília" já usada em
+    // nowBrasilia()/state.inicio (operacao.js) e em fmtDTL
+    // (setor-qualidade.js) — os campos ISO de inicio/fim/pausas NÃO
+    // passam por conversão real de fuso horário aqui, só extração/
+    // remontagem direta dos dígitos (ver _fmtDTL/_eaParaIsoBrasilia,
+    // abaixo). Preview de duração (LW.diffMinutes) funciona igual
+    // independente disso, por ser sempre uma DIFERENÇA entre dois
+    // horários — o fuso assumido cancela na subtração.
+
+    // Working copy das pausas sendo editadas — cada item:
+    // { pausado_em, retomado_em } em formato datetime-local
+    // ("YYYY-MM-DDTHH:MM", já em hora de Brasília — ver acima) + motivo
+    // (string). Só vira ISO (_eaParaIsoBrasilia) na hora de montar o
+    // payload em salvarEdicoesAvancadas.
+    let _eaPausas = [];
+
+    // Converte um ISO (inicio/fim/pausado_em/retomado_em, já em hora de
+    // Brasília disfarçada de UTC — ver acima) pro formato aceito por
+    // <input type="datetime-local">. Mesmo helper de setor-qualidade.js
+    // (fmtDTL), duplicado aqui por estarem em arquivos/closures diferentes.
+    function _fmtDTL(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return isNaN(d) ? '' : d.toISOString().slice(0, 16);
+    }
+
+    // Caminho inverso de _fmtDTL — NÃO faz conversão real de fuso, só
+    // completa o valor do input (ex.: "2026-08-18T14:30") com segundos +
+    // 'Z' pra virar um ISO válido com os MESMOS dígitos de hora, tratados
+    // como já sendo Brasília — é assim que inicio/fim/pausas já são
+    // gravados no banco há muito tempo (ver nowBrasilia(), data.js).
+    function _eaParaIsoBrasilia(valorInput) {
+      if (!valorInput) return null;
+      return valorInput.length === 16 ? valorInput + ':00.000Z' : valorInput + '.000Z';
+    }
+
+    async function abrirEdicoesAvancadas() {
+      if (!_eoRegistroOriginal) return;
+      document.getElementById('ea-erro').style.display = 'none';
+      document.getElementById('ea-inicio').value = _fmtDTL(_eoRegistroOriginal.inicio);
+      document.getElementById('ea-fim').value = _fmtDTL(_eoRegistroOriginal.fim);
+
+      // Busca as pausas já gravadas pra esta operação (ex.: se esta tela já
+      // foi usada nela antes) — sempre parte do servidor, nunca de uma
+      // cópia local que pode estar desatualizada.
+      _eaPausas = [];
+      try {
+        const r = await fetch('/pausas-operacao/' + encodeURIComponent(_eoRegistroOriginal.id));
+        const json = await r.json();
+        if (json.ok && Array.isArray(json.pausas)) {
+          _eaPausas = json.pausas.map(p => ({
+            pausado_em: _fmtDTL(p.pausado_em),
+            retomado_em: _fmtDTL(p.retomado_em),
+            motivo: p.motivo || '',
+          }));
+        }
+      } catch (_) { /* começa vazio — pior caso, a pessoa adiciona de novo na mão */ }
+
+      _eaRenderPausas();
+      _eaAtualizarPreview();
+      document.getElementById('edicoes-avancadas-modal').style.display = 'flex';
+    }
+
+    function fecharEdicoesAvancadas() {
+      document.getElementById('edicoes-avancadas-modal').style.display = 'none';
+    }
+
+    function _eaAdicionarPausa() {
+      _eaPausas.push({ pausado_em: '', retomado_em: '', motivo: '' });
+      _eaRenderPausas();
+      _eaAtualizarPreview();
+    }
+
+    function _eaRemoverPausa(i) {
+      _eaPausas.splice(i, 1);
+      _eaRenderPausas();
+      _eaAtualizarPreview();
+    }
+
+    // Chamado a cada tecla digitada num campo de uma pausa — só atualiza o
+    // estado + preview, NUNCA re-renderiza a lista inteira (perderia o
+    // foco do campo que a pessoa está digitando).
+    function _eaAtualizarCampoPausa(i, campo, valor) {
+      if (!_eaPausas[i]) return;
+      _eaPausas[i][campo] = valor;
+      _eaAtualizarPreview();
+    }
+
+    // LW.escapeHtml não existe (só há um escapeHtml local, fechado dentro
+    // do closure de debriefing.js) — helper próprio, só pro atributo
+    // value="..." do campo de justificativa da pausa, abaixo, que é texto
+    // livre digitado pela pessoa (evita quebrar o HTML se alguém digitar
+    // aspas, "&", "<" etc.).
+    function _eaEscapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function _eaRenderPausas() {
+      const lista = document.getElementById('ea-pausas-lista');
+      const vazio = document.getElementById('ea-pausas-vazio');
+      vazio.style.display = _eaPausas.length ? 'none' : 'block';
+      lista.innerHTML = _eaPausas.map((p, i) => `
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" style="font-size:.72rem">Pausado em</label>
+              <input class="form-input" type="datetime-local" step="60" value="${p.pausado_em || ''}"
+                oninput="_eaAtualizarCampoPausa(${i}, 'pausado_em', this.value)">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" style="font-size:.72rem">Retomado em</label>
+              <input class="form-input" type="datetime-local" step="60" value="${p.retomado_em || ''}"
+                oninput="_eaAtualizarCampoPausa(${i}, 'retomado_em', this.value)">
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" title="Remover esta pausa"
+              onclick="_eaRemoverPausa(${i})" style="padding:8px 10px">🗑</button>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" style="font-size:.72rem">Justificativa</label>
+            <input class="form-input" placeholder="Motivo da pausa" value="${_eaEscapeHtml(p.motivo || '')}"
+              oninput="_eaAtualizarCampoPausa(${i}, 'motivo', this.value)">
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function _eaAtualizarPreview() {
+      const preview = document.getElementById('ea-preview');
+      const valInicio = document.getElementById('ea-inicio').value;
+      const valFim = document.getElementById('ea-fim').value;
+
+      if (!valInicio || !valFim) {
+        preview.innerHTML = '<div>Preencha início e fim.</div>';
+        return;
+      }
+      const minutosBruto = LW.diffMinutes(valInicio, valFim);
+      if (!(minutosBruto > 0)) {
+        preview.innerHTML = '<div style="color:var(--red)">⚠ O fim precisa ser depois do início.</div>';
+        return;
+      }
+      const minutosPausados = _eaPausas.reduce((acc, p) => {
+        if (!p.pausado_em || !p.retomado_em) return acc;
+        const d = LW.diffMinutes(p.pausado_em, p.retomado_em);
+        return acc + (d > 0 ? d : 0);
+      }, 0);
+      const minutosLiquido = minutosBruto - minutosPausados;
+      const atraso = minutosLiquido > LW.LIMITE_INJECAO_MIN;
+      preview.innerHTML = `
+        <div>Duração bruta: <strong class="mono">${LW.formatDuration(minutosBruto)}</strong></div>
+        <div>Tempo pausado: <strong class="mono">${LW.formatDuration(minutosPausados)}</strong></div>
+        <div>Duração líquida: <strong class="mono">${LW.formatDuration(minutosLiquido)}</strong></div>
+        <div>Houve atraso: <strong class="mono" style="color:${atraso ? 'var(--red)' : 'var(--green)'}">${atraso ? '⚠ SIM' : '✓ NÃO'}</strong></div>
+      `;
+    }
+
+    async function salvarEdicoesAvancadas() {
+      if (!_eoRegistroOriginal) return;
+      const erroEl = document.getElementById('ea-erro');
+      erroEl.style.display = 'none';
+
+      const valInicio = document.getElementById('ea-inicio').value;
+      const valFim = document.getElementById('ea-fim').value;
+      if (!valInicio || !valFim) {
+        erroEl.textContent = 'Preencha início e fim.';
+        erroEl.style.display = 'block';
+        return;
+      }
+      // Validação espelha a do servidor (POST /editar-operacao-avancado)
+      // — aqui é só feedback mais rápido; o servidor SEMPRE revalida tudo
+      // de novo, nunca confia só nesta checagem do navegador.
+      if (LW.diffMinutes(valInicio, valFim) <= 0) {
+        erroEl.textContent = 'O fim precisa ser depois do início.';
+        erroEl.style.display = 'block';
+        return;
+      }
+      for (let i = 0; i < _eaPausas.length; i++) {
+        const p = _eaPausas[i];
+        if (!p.pausado_em || !p.retomado_em || !p.motivo || !p.motivo.trim()) {
+          erroEl.textContent = `Pausa #${i + 1}: preencha início, fim e justificativa.`;
+          erroEl.style.display = 'block';
+          return;
+        }
+      }
+
+      const inicioIso = _eaParaIsoBrasilia(valInicio);
+      const fimIso = _eaParaIsoBrasilia(valFim);
+      const pausasIso = _eaPausas.map(p => ({
+        pausado_em: _eaParaIsoBrasilia(p.pausado_em),
+        retomado_em: _eaParaIsoBrasilia(p.retomado_em),
+        motivo: p.motivo.trim(),
+      }));
+
+      // Diff em texto legível pro log de auditoria (edicoes_operacao) —
+      // início/fim/pausas costumam mudar em conjunto numa correção deste
+      // tipo, não vale a pena separar um diff fino campo a campo aqui
+      // como salvarEdicaoOperacao faz pros campos do dia a dia.
+      const diff = [
+        { campo: 'inicio', de: _eoRegistroOriginal.inicio || null, para: inicioIso },
+        { campo: 'fim', de: _eoRegistroOriginal.fim || null, para: fimIso },
+        {
+          campo: 'pausas', de: null,
+          para: pausasIso.length
+            ? pausasIso.map(p => `${LW.formatDateTime(p.pausado_em)} → ${LW.formatDateTime(p.retomado_em)} (${p.motivo})`).join('; ')
+            : 'nenhuma',
+        },
+      ];
+
+      const confirmou = await LW.mostrarConfirmacao(
+        'Confirma a alteração de início, fim e pausas desta operação? A duração e o atraso serão recalculados.',
+        { titulo: 'Confirmar edições avançadas', textoConfirmar: 'Salvar', icon: '⚙' }
+      );
+      if (!confirmou) return;
+
+      const btn = document.getElementById('ea-btn-salvar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        const res = await fetch('/editar-operacao-avancado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: _eoRegistroOriginal.id, inicio: inicioIso, fim: fimIso, pausas: pausasIso, diff }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.erro || 'Erro ao salvar edições avançadas.');
+
+        // Atualiza a cópia local + os campos "capturados automaticamente"
+        // do modal principal, sem fechá-lo — a pessoa pode continuar
+        // editando os outros campos da mesma operação em seguida.
+        _eoRegistroOriginal.inicio = inicioIso;
+        _eoRegistroOriginal.fim = fimIso;
+        _eoRegistroOriginal.tempo_min = json.tempo_min;
+        _eoRegistroOriginal.houve_atraso = json.houve_atraso;
+        document.getElementById('eo-ro-inicio').textContent = LW.formatTime(inicioIso);
+        document.getElementById('eo-ro-fim').textContent = LW.formatTime(fimIso);
+        document.getElementById('eo-ro-duracao').textContent = LW.formatDuration(json.tempo_min);
+        document.getElementById('eo-ro-atraso').textContent = json.houve_atraso === 'SIM' ? '⚠ SIM' : '✓ NÃO';
+        document.getElementById('eo-motivo-atraso-wrap').style.display = json.houve_atraso === 'SIM' ? 'block' : 'none';
+
+        fecharEdicoesAvancadas();
+        await LWDash.initRegistro();
+        LW.mostrarAlerta('Início, fim e pausas atualizados com sucesso!', { tipo: 'sucesso' });
+      } catch (e) {
+        erroEl.textContent = e.message;
+        erroEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
+
+    // ================================================================
     //  EDITAR TRAÇO (Relatório de Injeção, admin)
     // ================================================================
     // Diferente da Edição de Operação (campo a campo, diff simples), aqui
