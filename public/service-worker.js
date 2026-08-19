@@ -8,7 +8,13 @@
 //
 // PROPOSITALMENTE não mexe em:
 //   - Qualquer coisa em /db/*.json (dado de produção — precisa ser
-//     sempre a versão mais nova, nunca uma cópia em cache)
+//     sempre a versão mais nova, nunca uma cópia em cache), COM UMA
+//     EXCEÇÃO: /db/config.json — ver _ehEstatico, abaixo, e README
+//     ("Registro de Operação Offline (PWA)", item 8): é o único dado de
+//     configuração que o formulário de registro offline precisa pra
+//     montar (baterias, tipos de montagem, capacidades), então precisa
+//     estar em cache desde a instalação. Continua network-first como
+//     qualquer estático — o cache só é fallback quando a rede cai.
 //   - Qualquer requisição POST (registrar operação, salvar config etc.)
 //   - O WebSocket de operação ao vivo (upgrade de conexão, nem passa
 //     pelo evento 'fetch')
@@ -48,6 +54,7 @@ const PRECACHE_URLS = [
   'css/login.css',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  '/db/config.json', // exceção pontual — ver _ehEstatico, abaixo, e README ("Registro de Operação Offline (PWA)", item 8): precisa estar em cache desde a 1ª instalação pro formulário offline montar sem depender de o dispositivo já ter aberto o sistema online antes.
 ];
 
 self.addEventListener('install', (event) => {
@@ -79,7 +86,8 @@ self.addEventListener('activate', (event) => {
 
 function _ehEstatico(url) {
   if (url.origin !== self.location.origin) return false; // fontes/CDN externos: deixa o navegador cuidar (têm seu próprio cache HTTP)
-  if (url.pathname.startsWith('/db/')) return false;      // NUNCA cachear dado de produção — ver cabeçalho do arquivo
+  if (url.pathname === '/db/config.json') return true;    // ÚNICA exceção a "nunca cachear /db/" — ver "Registro de Operação Offline (PWA)", item 8, README: dado necessário pro formulário offline montar (baterias, tipos de montagem, capacidades), muda raramente, e sem ele o modo offline não tem como existir. Continua network-first como qualquer outro estático (linha abaixo) — o cache só serve de fallback quando a rede cai, nunca substitui a leitura ao vivo.
+  if (url.pathname.startsWith('/db/')) return false;      // Todo o resto de /db/: NUNCA cachear dado de produção — ver cabeçalho do arquivo
   if (url.pathname.startsWith('/ws/')) return false;       // WebSocket
   if (url.pathname.startsWith('/admin/')) return false;    // rotas administrativas
   return EXTENSOES_ESTATICAS.some((ext) => url.pathname.endsWith(ext)) || url.pathname === '/';
