@@ -76,6 +76,11 @@
 
                 <button type="submit" class="btn-login-entrar" id="btn-login-entrar">Entrar</button>
             </form>
+
+            <button type="button" class="link-offline" id="link-offline" onclick="_clicouRegistrarOffline()">
+                Registrar operação offline
+            </button>
+            <div class="offline-aviso" id="offline-aviso"></div>
         </div>
 
         <div class="login-footer">Lightwall SC · Uso interno · Acesso restrito</div>
@@ -237,6 +242,60 @@
         }
 
         senhaInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') _tentarLogin(); });
+
+        // ─── Registrar operação offline — ponto de entrada ───────────────
+        // Ver README, "Registro de Operação Offline (PWA) — plano", item 1.
+        //
+        // `navigator.onLine` sozinho não basta pra confirmar que dá pra
+        // falar com o servidor (fica `true` com Wi-Fi conectado mas sem
+        // internet de verdade) — por isso confere de verdade com um fetch
+        // curto, com timeout, reaproveitando /minha-sessao (rota já
+        // existente e leve: responde `{ok:false}` mesmo sem sessão válida,
+        // então serve só como "o servidor está de pé e respondeu" — não
+        // loga nem exige nada).
+        const linkOffline = document.getElementById('link-offline');
+        const offlineAviso = document.getElementById('offline-aviso');
+        const TIMEOUT_PING_OFFLINE_MS = 2500;
+
+        async function _servidorAlcancavel() {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_PING_OFFLINE_MS);
+            try {
+                await fetch('/minha-sessao', { method: 'GET', signal: controller.signal, cache: 'no-store' });
+                return true; // respondeu algo (mesmo {ok:false}) = servidor de pé
+            } catch (e) {
+                return false; // abortou por timeout, ou fetch nem saiu (rede fora)
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        function _mostrarAvisoOffline(texto) {
+            offlineAviso.textContent = texto;
+            offlineAviso.classList.add('ativo');
+        }
+
+        async function _clicouRegistrarOffline() {
+            offlineAviso.classList.remove('ativo');
+            linkOffline.disabled = true;
+            linkOffline.textContent = 'Verificando conexão…';
+
+            const alcancavel = await _servidorAlcancavel();
+
+            linkOffline.disabled = false;
+            linkOffline.textContent = 'Registrar operação offline';
+
+            if (alcancavel) {
+                // Servidor de pé → não é pra isso que este link existe.
+                _mostrarAvisoOffline('Esse recurso é exclusivo para quando não há internet disponível — use o login normal.');
+                return;
+            }
+
+            // Servidor inalcançável → segue pra tela de registro offline
+            // (item 2 do plano — página própria, fora da SPA, ainda a
+            // implementar numa próxima fase).
+            window.location.href = 'offline.html';
+        }
 
         // Rótulos amigáveis pra tela de transição — mesmos ids internos de
         // lib/perfis.js (ROTULO_POR_PERFIL), duplicados aqui só pra exibição

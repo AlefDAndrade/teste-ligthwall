@@ -480,6 +480,56 @@ body {
    como conteúdo da tela de login em si; classes mantidas no arquivo
    por compatibilidade caso algo mais as referencie. ---- */
 
+/* ---- Registrar operação offline (link discreto, abaixo do botão Entrar) ----
+   Ver README, "Registro de Operação Offline (PWA) — plano", item 1. Propositalmente
+   apagado/pequeno — não é o fluxo principal, é uma porta lateral só pra quando
+   não há internet; não deve competir visualmente com o botão "Entrar". ---- */
+.link-offline {
+    display: block;
+    width: 100%;
+    margin-top: 18px;
+    background: none;
+    border: none;
+    padding: 4px;
+    font-family: 'Barlow', sans-serif;
+    font-size: .72rem;
+    letter-spacing: .02em;
+    color: var(--text-2);
+    opacity: .55;
+    text-align: center;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    transition: opacity .15s;
+}
+
+.link-offline:hover {
+    opacity: .85;
+}
+
+.link-offline:disabled {
+    cursor: default;
+    opacity: .35;
+    text-decoration: none;
+}
+
+.offline-aviso {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(41, 104, 255, .08);
+    border: 1px solid rgba(41, 104, 255, .25);
+    color: var(--text-2);
+    font-size: .78rem;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.offline-aviso.ativo {
+    display: block;
+}
+
 /* ---- Footer note ---- */
 .login-footer {
     margin-top: 28px;
