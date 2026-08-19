@@ -275,8 +275,31 @@
             offlineAviso.classList.add('ativo');
         }
 
+        // Item 3 do plano (README): "uma operação pendente por vez" — se já
+        // existe um rascunho offline salvo neste aparelho (e ainda não foi
+        // sincronizado), o link não oferece começar um NOVO registro — leva
+        // direto pra retomar o que já estava sendo preenchido, com ou sem
+        // conexão (a pessoa pode ter caído de novo, ou pode estar terminando
+        // depois que a rede voltou — ver item 4).
+        function _existePendenteOfflineNaoSincronizado() {
+            try {
+                const raw = localStorage.getItem('lw_operacao_offline_pendente');
+                if (!raw) return false;
+                const pendente = JSON.parse(raw);
+                return !!pendente && pendente.status !== 'sincronizado';
+            } catch (e) {
+                return false; // JSON corrompido/indisponível — trata como "não existe", cai no fluxo normal abaixo
+            }
+        }
+
         async function _clicouRegistrarOffline() {
             offlineAviso.classList.remove('ativo');
+
+            if (_existePendenteOfflineNaoSincronizado()) {
+                window.location.href = 'offline.html';
+                return;
+            }
+
             linkOffline.disabled = true;
             linkOffline.textContent = 'Verificando conexão…';
 
@@ -292,8 +315,7 @@
             }
 
             // Servidor inalcançável → segue pra tela de registro offline
-            // (item 2 do plano — página própria, fora da SPA, ainda a
-            // implementar numa próxima fase).
+            // (item 2 do plano).
             window.location.href = 'offline.html';
         }
 

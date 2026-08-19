@@ -8,7 +8,15 @@
 //
 // PROPOSITALMENTE não mexe em:
 //   - Qualquer coisa em /db/*.json (dado de produção — precisa ser
-//     sempre a versão mais nova, nunca uma cópia em cache)
+//     sempre a versão mais nova, nunca uma cópia em cache), COM UMA
+//     ÚNICA EXCEÇÃO: 'db/config.json' — ver "Registro de Operação
+//     Offline (PWA) — plano", item 8, no README. É o dado mínimo
+//     (baterias cadastradas, tipos de montagem, capacidades) que o
+//     formulário offline (public/offline.html) precisa pra existir sem
+//     rede nenhuma; muda raramente, e continua sendo atualizado
+//     normalmente pela estratégia network-first já usada por todo o
+//     resto deste arquivo (o cache só entra como FALLBACK quando a
+//     rede cai, nunca substitui a leitura ao vivo).
 //   - Qualquer requisição POST (registrar operação, salvar config etc.)
 //   - O WebSocket de operação ao vivo (upgrade de conexão, nem passa
 //     pelo evento 'fetch')
@@ -29,7 +37,7 @@
 
 'use strict';
 
-const CACHE_VERSAO = 'lightwall-shell-v1';
+const CACHE_VERSAO = 'lightwall-shell-v2'; // v2: +offline.html/offline-operacao.js/db/config.json (Registro Offline, item 8)
 
 // Extensões de arquivo ESTÁTICO que este service worker cuida — qualquer
 // coisa fora desta lista (incluindo TUDO sob /db/) passa direto pra rede,
@@ -48,6 +56,13 @@ const PRECACHE_URLS = [
   'css/login.css',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  // Registro de Operação Offline (PWA) — plano, item 2/item 8 (README):
+  // página standalone + o dado de configuração mínimo que ela precisa
+  // pra montar o formulário (baterias, tipos de montagem, capacidades)
+  // sem depender de rede nenhuma.
+  'offline.html',
+  'js/offline-operacao.js',
+  'db/config.json',
 ];
 
 self.addEventListener('install', (event) => {
@@ -79,7 +94,11 @@ self.addEventListener('activate', (event) => {
 
 function _ehEstatico(url) {
   if (url.origin !== self.location.origin) return false; // fontes/CDN externos: deixa o navegador cuidar (têm seu próprio cache HTTP)
-  if (url.pathname.startsWith('/db/')) return false;      // NUNCA cachear dado de produção — ver cabeçalho do arquivo
+  // Única exceção aberta sob /db/ — ver comentário de PRECACHE_URLS e o
+  // cabeçalho deste arquivo (plano de Registro de Operação Offline,
+  // item 8): tudo o mais sob /db/ continua NUNCA sendo cacheado.
+  if (url.pathname === '/db/config.json') return true;
+  if (url.pathname.startsWith('/db/')) return false;      // NUNCA cachear dado de produção (exceto config.json, acima) — ver cabeçalho do arquivo
   if (url.pathname.startsWith('/ws/')) return false;       // WebSocket
   if (url.pathname.startsWith('/admin/')) return false;    // rotas administrativas
   return EXTENSOES_ESTATICAS.some((ext) => url.pathname.endsWith(ext)) || url.pathname === '/';
