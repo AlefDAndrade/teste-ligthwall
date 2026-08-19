@@ -750,7 +750,7 @@ A Fase 3 deixou 2 das 3 sub-fases da barra (`carregando`, `ajustando`) com progr
 
 **Objetivo**: hoje, sem internet, ninguém consegue nem logar (`/login-usuario`, `/minha-sessao` dependem do servidor) — então, numa queda de rede no chão de fábrica, a operação simplesmente não é registrada em tempo real, fica só de memória/papel pra lançar depois. A ideia é abrir uma porta lateral, só pra esse cenário: registrar a operação **sem login**, **sem servidor**, tudo local no navegador, e mandar pra uma fila de validação assim que a conexão voltar — um humano (perfil Master) confere e só então ela vira uma operação de verdade no sistema.
 
-**Fora de escopo deste plano** (não reaproveita nem interfere): a fila `lw_fila_operacoes_pendentes` que já existe hoje (ver *FILA DE OPERAÇÕES PENDENTES*, `public/js/data.js`) — aquela é pra quando a rede cai NO MEIO de uma operação já sendo controlada por alguém LOGADO, com a tela normal de Registrar Operação aberta; reenvia automaticamente e sem revisão de ninguém, porque quem registrou já era uma pessoa autenticada e autorizada. Este plano é o oposto: ninguém está logado, a origem não é confiável até alguém confirmar — por isso passa por validação humana antes de virar uma operação real, e por isso precisa de armazenamento/rotas próprios, para não misturar as duas filas.
+**Fora de escopo deste plano** (não reaproveita nem interfere): a fila `lw_fila_operacoes_pendentes` que já existe hoje (ver *FILA DE OPERAÇÕES PENDENTES*, `public/js/data.js`) — aquela é pra quando a rede cai NO MEIO de uma operação já sendo controlada por alguém LOGADO, com a tela normal de Registrar Operação aberta; reenvia automaticamente e sem revisão de ninguém, porque quem registrou já era uma pessoa autenticada e autorizada. Este plano é o oposto: ninguém está logado, a origem não é confiável até alguém confirmar — por isso passa por validação humana antes de virar uma operação real, e por isso precisa de armazenamento/rotas próprios, para não misturar as duas filas. Esse cenário (logado, rede cai no meio) ganha um reforço de UX pelo item 9, abaixo — sem alterar o mecanismo que já existe.
 
 ### 1. Ponto de entrada — tela de login
 
@@ -829,6 +829,24 @@ Ponto crítico, porque é um contador **global e compartilhado** (`contador_trac
 - **Múltiplas abas/dispositivos offline ao mesmo tempo**: cada navegador tem seu próprio `localStorage` — nada impede 2 tablets diferentes registrando offline ao mesmo tempo, cada um com seu próprio pendente. Isso é esperado (não existe "dono" nem singleton no modo offline, diferente da operação ao vivo) — a fila do Master (`operacoes_offline_pendentes`) só precisa suportar mais de um item de uma vez, mesmo que cada DISPOSITIVO só tenha um pendente por vez (item 3).
 - **IDs**: `idTemp` (prefixo `OFF-`) nunca deve ser o `id` final da operação — na aprovação, `POST /registrar-operacao` gera/recebe o `id` real, exatamente como já faz hoje para qualquer operação nova, evitando colisão com IDs de operações reais.
 - **Expiração**: um pendente que nunca sincroniza (dispositivo trocado, `localStorage` limpo) fica preso pra sempre nesse navegador — decidir se cabe algum aviso/expiração automática, ou se fica como responsabilidade manual de quem usa o dispositivo.
+
+**Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+
+### 9. Conexão cai NO MEIO de uma operação normal (logada) — aviso ao vivo
+
+Cenário diferente do resto deste plano (ver *Fora de escopo*, no topo): a pessoa está **logada**, controlando a operação normalmente pela tela de Registrar Operação de sempre (`public/js/operacao.js`), e a internet cai **durante** o preenchimento — não no clique de "Registrar", antes dele.
+
+**O que já existe hoje, sem precisar de nada novo:**
+- O estado da operação em andamento já é salvo continuamente em `localStorage` (`lw_op_current`, `LW.saveOperacaoAtual(state)` — chamado a cada persistência de estado, `operacao.js`), **independente de conexão**. Nada do que foi preenchido se perde, mesmo numa queda de internet, aba fechada à força ou navegador travando.
+- Ao clicar em **"Registrar"**: se a conexão já caiu, a tentativa de envio falha com `TypeError` (é assim que o `fetch()` do navegador sinaliza "nem consegui chegar no servidor") e a operação cai automaticamente na fila `lw_fila_operacoes_pendentes` (`_enfileirarEContinuar`, `operacao.js`) — sincronizada sozinha assim que a conexão volta (evento `online` + checagem periódica, `tentarSincronizarFilaPendentes`, `data.js`). Se a conexão **já estiver de volta** no clique, segue o fluxo normal direto (registra na hora, sem passar pela fila). Nenhum dos dois comportamentos muda com este item — ele só adiciona visibilidade ao que já acontece.
+
+**O que falta, e este item adiciona ao plano:** hoje o aviso de "sem conexão" só aparece **depois** de tentar registrar e falhar (`_mostrarAvisoConexao`, banner de 8 segundos) — quem está preenchendo uma operação longa não tem como saber, em tempo real, que já está sem internet enquanto ainda está digitando. Proposta:
+
+- Monitorar `window.addEventListener('offline'/'online', ...)` (mesmo padrão do restante deste plano, reforçado por uma checagem ativa por `fetch`, já que o evento do navegador sozinho não é 100% confiável) **enquanto a tela de Registrar Operação estiver com uma operação em andamento** (`status !== 'idle'`).
+- Ao detectar a queda: mostra o banner já existente (`_mostrarAvisoConexao`), mas de forma **persistente** enquanto durar a queda (não os 8s padrão que ele já tem) — *"📡 Sem conexão. Seus dados estão salvos neste computador; pode continuar preenchendo normalmente."*
+- Ao detectar o retorno: troca pro aviso de sucesso já existente, com um texto confirmando que ao finalizar vai registrar direto (já que a conexão voltou ANTES do clique em Registrar, não depois) — *"🌐 Conexão restabelecida. Pode finalizar normalmente."*, some sozinho depois de alguns segundos (comportamento padrão do banner).
+
+Reaproveita 100% da UI (`_mostrarAvisoConexao`) e da lógica de fila (`enfileirarOperacaoPendente`/`tentarSincronizarFilaPendentes`) que já existem — este item é só sobre **quando** o aviso aparece (ao vivo, assim que a rede cai) em vez de só no momento de registrar.
 
 **Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
 
