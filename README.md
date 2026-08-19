@@ -746,6 +746,92 @@ A Fase 3 deixou 2 das 3 sub-fases da barra (`carregando`, `ajustando`) com progr
 
 **Status:** 5.1, 5.2, 5.3, 5.4 e 5.5 concluídas e aplicadas — falta só a 5.6 (refinamento do cancelamento entre páginas; já parcialmente coberto desde a 5.2 pela checagem de `job.status` dentro do loop, mas ainda não formalizado como passo próprio).
 
+## Registro de Operação Offline (PWA) — plano
+
+**Objetivo**: hoje, sem internet, ninguém consegue nem logar (`/login-usuario`, `/minha-sessao` dependem do servidor) — então, numa queda de rede no chão de fábrica, a operação simplesmente não é registrada em tempo real, fica só de memória/papel pra lançar depois. A ideia é abrir uma porta lateral, só pra esse cenário: registrar a operação **sem login**, **sem servidor**, tudo local no navegador, e mandar pra uma fila de validação assim que a conexão voltar — um humano (perfil Master) confere e só então ela vira uma operação de verdade no sistema.
+
+**Fora de escopo deste plano** (não reaproveita nem interfere): a fila `lw_fila_operacoes_pendentes` que já existe hoje (ver *FILA DE OPERAÇÕES PENDENTES*, `public/js/data.js`) — aquela é pra quando a rede cai NO MEIO de uma operação já sendo controlada por alguém LOGADO, com a tela normal de Registrar Operação aberta; reenvia automaticamente e sem revisão de ninguém, porque quem registrou já era uma pessoa autenticada e autorizada. Este plano é o oposto: ninguém está logado, a origem não é confiável até alguém confirmar — por isso passa por validação humana antes de virar uma operação real, e por isso precisa de armazenamento/rotas próprios, para não misturar as duas filas.
+
+### 1. Ponto de entrada — tela de login
+
+Abaixo do botão **Entrar** (`login.html`), um link discreto (fonte pequena, cor apagada, sem se misturar ao formulário principal): **"Registrar operação offline"**.
+
+Ao clicar:
+1. Confere conectividade de verdade — `navigator.onLine` sozinho não basta (fica `true` com Wi-Fi conectado mas sem internet de verdade; o próprio comentário de `_tentarAutoLogin`, acima, já lida com esse tipo de falha via `try/catch` de um `fetch` real). Faz um `fetch` curto (ex.: `HEAD /minha-sessao` ou uma rota nova e leve tipo `GET /ping`, com timeout de ~2-3s) pra confirmar.
+2. **Servidor alcançável** → mensagem: *"Esse recurso é exclusivo para quando não há internet disponível — use o login normal."* Não navega pra lugar nenhum.
+3. **Servidor inalcançável** → navega para a tela de registro offline (item 2, abaixo).
+
+### 2. Tela de registro offline — standalone, fora da SPA
+
+`public/js/operacao.js` (3041 linhas) é a tela "Registrar Operação" de verdade — mas ela está profundamente acoplada ao resto do sistema logado: WebSocket de operação ao vivo (`/ws/operacao-andamento`, singleton por fábrica — ver *Operação em Andamento*), checagens de sessão/perfil (`podeControlarOperacao`), conceito de "dono" da operação, sincronização entre abas. Nada disso faz sentido sem rede nem sem login. Por isso, em vez de tentar encaixar o modo offline dentro dela, a proposta é uma **página própria**, fora da SPA principal — mesmo padrão já usado por `tv.html` (README, *Páginas*: "fora da SPA principal... Não exige login"):
+
+- `public/offline.html` + `public/js/offline-operacao.js` (novo).
+- Reaproveita o **HTML/CSS do formulário** de Registrar Operação (tipos de montagem, berços, traços, tempos, pausas) — não a lógica de rede/sessão/WebSocket. Cronômetro roda 100% local (`Date.now()`, sem depender de nenhum broadcast).
+- **Dado de configuração necessário pra montar o formulário** (baterias cadastradas, tipos de montagem, capacidades — hoje vem de `config.json`/`GET`s diversos) precisa estar em cache ANTES de cair a rede — ver item 6 (Service Worker), abaixo. Sem isso, a tela offline abre mas não tem com o que montar o formulário na 1ª vez que o dispositivo cai de rede sem nunca ter usado o sistema antes.
+- Sem toggle de Modo de Teste (não faz sentido aqui) e sem indicação de "quem está logado" (ninguém está).
+
+### 3. Armazenamento local — uma operação pendente por vez
+
+Chave própria, separada da fila existente: `lw_operacao_offline_pendente` (objeto único, não array — igual ao padrão de `operacao_andamento.json` no servidor: no máximo uma coisa pendente por vez, nunca uma lista).
+
+```
+{
+  idTemp: "OFF-<uuid>",         // prefixo OFF- deixa óbvio, em qualquer tela/log, que essa origem é offline
+  iniciadoEm, atualizadoEm,     // timestamps locais (ver limitação de relógio, item 8)
+  formRecord: {...},            // mesmo formato de "record" que iria pra /registrar-operacao
+  tracos: [...],                // mesmo formato que iria pra /registrar-relatorio-injecao
+  pausas: [...],
+  status: "preenchendo" | "aguardando_conexao" | "sincronizado"
+}
+```
+
+Enquanto esse objeto existir e não estiver `sincronizado`, a tela de login **não oferece "Registrar operação offline" de novo** nesse dispositivo (o link soma ao aviso do item 4, não substitui) — reforça a regra de "só uma por vez" pedida.
+
+### 4. Conexão volta no meio do preenchimento
+
+Detecta via `window.addEventListener('online', ...)` + mesma checagem ativa por `fetch` do item 1 (não só o evento do navegador, que não é 100% confiável — mesmo raciocínio já documentado em `tentarSincronizarFilaPendentes`, `data.js`).
+
+- Mostra um **banner fixo, não bloqueante**: *"Conexão restabelecida. Termine este registro; depois disso, o modo offline ficará bloqueado até alguém entrar com um perfil."*
+- A pessoa **continua** preenchendo/finalizando normalmente — não é interrompida no meio.
+- Ao clicar em "Registrar" (fim do formulário offline): tenta sincronizar na hora, já que a rede está de volta (rota nova, item 5); se der certo, `status: 'sincronizado'`, remove o objeto pendente da chave local e mostra confirmação — *"Enviado para validação. Peça a alguém com perfil Administrador para revisar."*
+- **Trava pós-uso**: com o objeto pendente vazio/sincronizado, o link "Registrar operação offline" continua existindo na tela de login (é sempre visível), mas o próprio fluxo de conectividade do item 1 vai barrar de novo se a rede já estiver de volta ("exclusivo para quando não há internet") — não precisa de uma trava adicional além da checagem que já existe: a MESMA regra do item 1 cobre naturalmente "já tem internet agora, então volta pro login normal".
+
+### 5. Sincronização — rota nova, sem sessão, com fila própria no servidor
+
+Um endpoint que aceita o payload **sem exigir sessão de usuário** (não existe, é offline) nem `podeControlarOperacao` — mas não pode ficar totalmente aberto:
+
+- `POST /operacao-offline/enviar` — recebe `{ idTemp, formRecord, tracos, pausas }`. Grava numa fila própria, **separada** de `operacoes` (tabela nova, ex. `operacoes_offline_pendentes`, ou reaproveita o padrão JSON de `lib/fila-avaliacao.js`) — nunca insere direto em `operacoes`/`tracos` (isso só acontece na aprovação, item 6, reaproveitando exatamente `POST /registrar-operacao` + `/registrar-relatorio-injecao`, sem duplicar lógica).
+- **Idempotência**: `idTemp` como chave única — reenvio (ex.: a resposta HTTP se perdeu mas o POST chegou) não duplica a entrada na fila.
+- **Alguma proteção mínima**, já que a rota não tem sessão: rate limiting por IP (mesmo padrão já usado em `/verificar-senha` — ver *Autenticação e Sessão*) e um tamanho máximo de payload (já existe globalmente pra `POST`, ver *Setor de Manutenção*). Fica em aberto se também deve exigir que o `deviceId`/cookie `lw_device_id` (ver *Identidade do dispositivo*) já seja um dispositivo conhecido — não bloquearia o registro offline em si (que não tem como checar isso sem rede), mas poderia bloquear a SINCRONIZAÇÃO de um dispositivo nunca visto antes, como uma camada a mais de confiança antes de cair na fila do Master.
+
+### 6. Página do Master — "Operações a Validar"
+
+Nova página (perfil **Administrador**, cadastrado ou senha mestra, **e também Administrativo** — que já é tratado como equivalente ao master em várias outras telas, ex.: manutenção, `GET /db/usuarios.json` — ver *Perfis de usuário*) listando os itens em `operacoes_offline_pendentes`, cada um com:
+
+- Todos os dados preenchidos offline (bateria, traços, tempos, pausas), num formato de revisão — reaproveitando a UI de detalhe que já existe em telas como Registro de Baterias.
+- **Corrigir antes de aprovar**: como o relógio do dispositivo offline pode estar errado (item 8), a revisão reaproveita exatamente a tela de **Edições Avançadas** que acabamos de implementar (`POST /editar-operacao-avancado`) — mas aplicada ANTES da operação existir de verdade, direto em cima do registro pendente, não depois de já ter virado uma linha em `operacoes`.
+- **✅ Validar**: dispara, nessa ordem, o mesmo pipeline de uma operação normal — `POST /registrar-operacao` (agora com sessão de Administrador válida, então passa em `podeControlarOperacao` sem problema) → `POST /registrar-relatorio-injecao` → `POST /confirmar-tracos-hoje` (ver item 7, contador). A operação validada entra na fila de avaliação do Setor de Qualidade **normalmente** (`adicionarNaFilaNaoAvaliadas`, mesmo fluxo de sempre) — depois de validada, é indistinguível de uma operação registrada ao vivo, exceto por um campo de auditoria (`origem_offline: true`, `validado_por`, `validado_em`) guardado pra rastreabilidade, sem afetar nenhum código que já lê `operacoes`.
+- **❌ Recusar**: remove da fila (`operacoes_offline_pendentes`), sem tocar em `operacoes`/`tracos`/contador — nunca chegou a existir de verdade. Fica em aberto se guarda um log mínimo do motivo pra auditoria, ou só exclui.
+
+### 7. Contador de Traços do Dia — comportamento
+
+Ponto crítico, porque é um contador **global e compartilhado** (`contador_tracos`, uma linha por dia, incrementada por qualquer um que registre — ver *Modo de Teste* e `lib/contador-tracos-estado.js`), não algo isolado por operação:
+
+- **Enquanto pendente de validação, NÃO incrementa** — um lançamento offline não confirmado não deve inflar um número que todo mundo vê em tempo real (`GET /total-tracos-hoje`), especialmente porque pode ser recusado, ou corrigido pelo Master antes de aprovar.
+- **Incrementa só na aprovação** (`POST /confirmar-tracos-hoje`, dentro do pipeline do item 6) — com a quantidade **já revisada** pelo Master, não necessariamente a que o operador digitou offline (se ele corrigiu algo na tela de revisão antes de validar).
+- Isso espelha exatamente o que já acontece hoje no fluxo normal: o contador só sobe no `/confirmar-tracos-hoje` de verdade, no fim de uma operação — nunca antecipado. A única diferença é ONDE esse "fim" acontece: no fluxo normal é a própria pessoa que registrou; no offline, é o Master que valida.
+- **Se caiu num dia diferente do que a operação relata** (registrada offline na virada do dia, ou sincronizada/validada só no dia seguinte): o contador soma no dia de HOJE (dia real do servidor, no momento da validação — mesma regra de `todayBrasiliaServer()` já usada por `lerContadorTracosHoje`), não no dia gravado dentro do registro da operação. Fica em aberto se esse descompasso merece um aviso visual na tela de validação (ex.: "esta operação é de ontem, mas vai contar para o total de hoje").
+
+### 8. Coisas a decidir/ter em mente antes de implementar
+
+- **Relógio do dispositivo offline**: `tempo_min`/`houve_atraso` de uma operação normal são conferidos no servidor a partir de horários que o PRÓPRIO servidor viu em tempo real (WebSocket). Offline não existe isso — os horários vêm 100% do relógio local do tablet/PC, que pode estar errado (fuso, hora dessincronizada). É exatamente pra cobrir esse risco que a revisão do Master (item 6) reaproveita Edições Avançadas antes de aprovar, em vez de aceitar os horários cegamente.
+- **Cache pro formulário funcionar 100% offline** (item 2): o Service Worker (`public/service-worker.js`) hoje faz cache-first só de casca estática (html/css/js) e propositalmente NUNCA cacheia `/db/*.json` (dado de produção). O formulário offline precisa de ALGUM dado de configuração (baterias, tipos de montagem) pra funcionar sem rede na primeira vez que o dispositivo cai — precisa decidir: (a) abrir uma exceção pontual, cacheando só o `config.json` (estático o suficiente, muda raramente) via `PRECACHE_URLS`, ou (b) aceitar que o dispositivo só consegue usar o modo offline depois de ter aberto o sistema normalmente pelo menos uma vez (o que já cacheia os arquivos estáticos, mas não `config.json` hoje).
+- **Múltiplas abas/dispositivos offline ao mesmo tempo**: cada navegador tem seu próprio `localStorage` — nada impede 2 tablets diferentes registrando offline ao mesmo tempo, cada um com seu próprio pendente. Isso é esperado (não existe "dono" nem singleton no modo offline, diferente da operação ao vivo) — a fila do Master (`operacoes_offline_pendentes`) só precisa suportar mais de um item de uma vez, mesmo que cada DISPOSITIVO só tenha um pendente por vez (item 3).
+- **IDs**: `idTemp` (prefixo `OFF-`) nunca deve ser o `id` final da operação — na aprovação, `POST /registrar-operacao` gera/recebe o `id` real, exatamente como já faz hoje para qualquer operação nova, evitando colisão com IDs de operações reais.
+- **Expiração**: um pendente que nunca sincroniza (dispositivo trocado, `localStorage` limpo) fica preso pra sempre nesse navegador — decidir se cabe algum aviso/expiração automática, ou se fica como responsabilidade manual de quem usa o dispositivo.
+
+**Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+
 ## Limitações conhecidas
 
 
