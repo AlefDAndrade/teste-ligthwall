@@ -844,6 +844,55 @@ async function removerDispositivo(deviceId) {
   return data.lista;
 }
 
+/**
+ * Operações a Validar (Registro Offline) — Configurações, itens 6/7 do
+ * plano (ver README, "Registro de Operação Offline (PWA)"). As 4 funções
+ * abaixo espelham exatamente lib/rotas/operacao-offline.js — todas
+ * requerem sessão de admin válida (servidor responde 403 sem ela).
+ */
+async function listarOperacoesOfflinePendentes() {
+  const res = await fetch('/operacao-offline/pendentes');
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar as operações pendentes.');
+  return data.lista;
+}
+
+// `patch` — só os campos que devem ser sobrescritos (ex.: { formRecord: {
+// id_bateria: 'B-corrigida' } }) — PATCH parcial, não substitui o registro
+// inteiro (ver lib/fila-offline.js, atualizarNaFilaOffline).
+async function corrigirOperacaoOfflinePendente(idTemp, patch) {
+  const res = await fetch('/operacao-offline/corrigir', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idTemp, ...patch }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível corrigir o registro pendente.');
+  return data.item;
+}
+
+async function validarOperacaoOffline(idTemp) {
+  const res = await fetch('/operacao-offline/validar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idTemp }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível validar este registro.');
+  return data;
+}
+
+async function recusarOperacaoOffline(idTemp) {
+  const res = await fetch('/operacao-offline/recusar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idTemp }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível recusar este registro.');
+  return data;
+}
+
 // ============================================================
 //  OPERAÇÃO EM ANDAMENTO — sincronização ao vivo (WebSocket)
 //
@@ -2642,6 +2691,11 @@ window.LW = {
   // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
   listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
   get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
+
+  // Operações a Validar (Registro Offline — Configurações, itens 6/7 do
+  // plano, ver README)
+  listarOperacoesOfflinePendentes, corrigirOperacaoOfflinePendente,
+  validarOperacaoOffline, recusarOperacaoOffline,
 
   // Cálculos
   calcPaineis,

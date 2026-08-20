@@ -202,6 +202,27 @@ const {
   migrarFilaNaoAvaliadasSeNecessario,
 } = require('./lib/fila-avaliacao.js')({ fs, path, DB_DIR, db, logger });
 
+// ─── FILA DE REGISTRO OFFLINE (PWA) — item 5 do plano, ver README ─────────
+// adicionarNaFilaOffline (e o resto de lib/fila-offline.js) — fila
+// SEPARADA da de avaliação, acima: guarda os envios de
+// POST /operacao-offline/enviar (sem sessão, sem login) até alguém com
+// perfil Administrador aprovar (item 6 do plano — ainda não implementado).
+const { adicionarNaFilaOffline, buscarPorIdTemp, atualizarNaFilaOffline, removerDaFilaOffline, lerFilaOffline } = require('./lib/fila-offline.js')({ fs, path, DB_DIR });
+
+// Rate limiting por IP da rota acima (README, item 5: "proteção mínima, já
+// que a rota não tem sessão") — genérico (lib/rate-limit-ip.js), persistido
+// num JSON próprio em PRIVATE_DIR (sobrevive a restart do processo, mesmo
+// raciocínio de lib/auth.js pro rate limit de senha, só que sem precisar
+// de tabela SQL pra um volume de chamadas tão baixo). 20 envios em 15
+// minutos por IP é folgado pro uso legítimo (no máximo um pendente por
+// DISPOSITIVO por vez — ver README, item 3 — mas nada impede vários
+// dispositivos atrás do mesmo IP/NAT numa fábrica) e ainda barra abuso.
+const rateLimitOffline = require('./lib/rate-limit-ip.js')({
+  fs, logger, dominioLog: 'operacao-offline',
+  caminhoArquivo: path.join(PRIVATE_DIR, 'rate-limit-operacao-offline.json'),
+  maxTentativas: 20, janelaMs: 15 * 60 * 1000, bloqueioMs: 15 * 60 * 1000,
+});
+
 // ─── MODO DE TESTE + CONTADOR DE TRAÇOS DO DIA (estado) — Fase 18, ver README ──
 // dirParaModoTeste/lerContadorTracosHoje/incrementarContadorTracosHoje agora
 // vivem em lib/contador-tracos-estado.js. Precisa vir ANTES das factories
@@ -267,7 +288,16 @@ const rotasBackup = require('./lib/rotas/backup.js')({
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar];
+// Registro de Operação Offline (PWA) — itens 5, 6 e 7 do plano, ver README.
+// POST /operacao-offline/enviar é sem sessão (não tem como exigir login
+// numa rota pensada pra quando não há rede pra logar); as demais
+// (pendentes/corrigir/validar/recusar) exigem sessaoOuAdmin.
+const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
+  adicionarNaFilaOffline, buscarPorIdTemp, atualizarNaFilaOffline, removerDaFilaOffline, lerFilaOffline,
+  rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
+  adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
+});
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

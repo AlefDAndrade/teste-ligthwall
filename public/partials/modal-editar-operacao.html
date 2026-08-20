@@ -75,9 +75,78 @@
         <div id="eo-preview" style="display:flex;flex-direction:column;gap:3px"></div>
       </div>
 
+      <!-- Edições avançadas: início/fim/pausas — separado do resto porque
+           mexe em campos normalmente calculados automaticamente pelo
+           cronômetro ao vivo (ver comentário grande em
+           POST /editar-operacao-avancado, lib/rotas/edicao.js). Um botão
+           à parte, mais discreto, em vez de deixar solto junto com os
+           campos do dia a dia. -->
+      <div style="margin:16px 0;text-align:right">
+        <button type="button" class="btn btn-outline-accent btn-sm" onclick="abrirEdicoesAvancadas()">⚙
+          Edições avançadas (início, fim e pausas)</button>
+      </div>
+
       <div style="display:flex;justify-content:flex-end;gap:12px">
         <button class="btn btn-ghost" onclick="fecharEdicaoOperacao()">Cancelar</button>
         <button class="btn btn-danger" id="eo-btn-salvar" onclick="salvarEdicaoOperacao()">Salvar Alterações</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ============ MODAL: EDIÇÕES AVANÇADAS (início/fim/pausas) ============ -->
+  <div id="edicoes-avancadas-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;align-items:center;justify-content:center;padding:20px 0">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:560px;max-width:95vw;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);letter-spacing:.05em">⚙
+          EDIÇÕES AVANÇADAS</h2>
+        <button onclick="fecharEdicoesAvancadas()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+
+      <div style="margin-bottom:16px;padding:12px 16px;background:rgba(245,158,11,.08);border:1px solid var(--yellow-dim,#a16207);border-radius:var(--radius);color:var(--text-2);font-size:.82rem">
+        ⚠ Correção pontual do início, fim e pausas desta operação. Duração e
+        atraso são recalculados automaticamente ao salvar, a partir destes
+        valores.
+      </div>
+
+      <div id="ea-erro"
+        style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,.08);border:1px solid var(--red-dim);border-radius:var(--radius);color:var(--red);font-size:.85rem">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Início</label>
+          <input class="form-input" type="datetime-local" step="60" id="ea-inicio" oninput="_eaAtualizarPreview()">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Fim</label>
+          <input class="form-input" type="datetime-local" step="60" id="ea-fim" oninput="_eaAtualizarPreview()">
+        </div>
+      </div>
+
+      <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+        <label class="form-label" style="margin-bottom:0">Pausas</label>
+        <button type="button" class="btn btn-outline-accent btn-sm" onclick="_eaAdicionarPausa()">+ Adicionar
+          pausa</button>
+      </div>
+      <div id="ea-pausas-lista" style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px"></div>
+      <div id="ea-pausas-vazio" style="font-size:.8rem;color:var(--text-3);margin-bottom:16px">Nenhuma pausa
+        registrada nesta operação.</div>
+
+      <div
+        style="background:var(--bg-2);border:1px solid var(--accent-dim);border-radius:var(--radius);padding:14px;margin:16px 0;font-size:.82rem;color:var(--text-2)">
+        <div style="font-weight:700;color:var(--accent);font-size:.8rem;margin-bottom:8px">⚙ Recalculado
+          automaticamente, ao salvar</div>
+        <div id="ea-preview" style="display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:12px">
+        <button class="btn btn-ghost" onclick="fecharEdicoesAvancadas()">Cancelar</button>
+        <button class="btn btn-danger" id="ea-btn-salvar" onclick="salvarEdicoesAvancadas()">Salvar Edições
+          Avançadas</button>
       </div>
 
     </div>

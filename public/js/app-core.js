@@ -2204,7 +2204,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas') && !_paginaPermitida('config-tipos-manutencao') && !_paginaPermitida('config-prioridades')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-dispositivos') && !_paginaPermitida('config-operacoes-offline') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas') && !_paginaPermitida('config-tipos-manutencao') && !_paginaPermitida('config-prioridades')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -2243,7 +2243,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'automacao', 'sql', 'notificacoes', 'paradas', 'tipos-manutencao', 'prioridades'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos', 'operacoes-offline', 'automacao', 'sql', 'notificacoes', 'paradas', 'tipos-manutencao', 'prioridades'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2265,7 +2265,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas', 'tipos-manutencao': 'cfg-nav-tipos-manutencao', prioridades: 'cfg-nav-prioridades' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', dispositivos: 'cfg-nav-dispositivos', 'operacoes-offline': 'cfg-nav-operacoes-offline', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas', 'tipos-manutencao': 'cfg-nav-tipos-manutencao', prioridades: 'cfg-nav-prioridades' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2319,6 +2319,7 @@
       const elUsuarios = document.getElementById('cfg-secao-usuarios');
       const elAutorizados = document.getElementById('cfg-secao-autorizados');
       const elDispositivos = document.getElementById('cfg-secao-dispositivos');
+      const elOperacoesOffline = document.getElementById('cfg-secao-operacoes-offline');
       const elAutomacao = document.getElementById('cfg-secao-automacao');
       const elSql = document.getElementById('cfg-secao-sql');
       const elNotificacoes = document.getElementById('cfg-secao-notificacoes');
@@ -2331,6 +2332,7 @@
       if (elUsuarios) elUsuarios.style.display = secao === 'usuarios' ? 'block' : 'none';
       if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
       if (elDispositivos) elDispositivos.style.display = secao === 'dispositivos' ? 'block' : 'none';
+      if (elOperacoesOffline) elOperacoesOffline.style.display = secao === 'operacoes-offline' ? 'block' : 'none';
       if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
       if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
       if (elNotificacoes) elNotificacoes.style.display = secao === 'notificacoes' ? 'block' : 'none';
@@ -2346,6 +2348,7 @@
       const navUsuarios = document.getElementById('cfg-nav-usuarios');
       const navAutorizados = document.getElementById('cfg-nav-autorizados');
       const navDispositivos = document.getElementById('cfg-nav-dispositivos');
+      const navOperacoesOffline = document.getElementById('cfg-nav-operacoes-offline');
       const navAutomacao = document.getElementById('cfg-nav-automacao');
       const navSql = document.getElementById('cfg-nav-sql');
       const navNotificacoes = document.getElementById('cfg-nav-notificacoes');
@@ -2358,6 +2361,7 @@
       if (navUsuarios) navUsuarios.style.cssText = secao === 'usuarios' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navDispositivos) navDispositivos.style.cssText = secao === 'dispositivos' ? ESTILO_ATIVO : ESTILO_INATIVO;
+      if (navOperacoesOffline) navOperacoesOffline.style.cssText = secao === 'operacoes-offline' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
       if (navNotificacoes) navNotificacoes.style.cssText = secao === 'notificacoes' ? ESTILO_ATIVO : ESTILO_INATIVO;
@@ -2369,6 +2373,7 @@
       if (secao === 'usuarios') cfgRenderUsuarios();
       if (secao === 'autorizados') cfgRenderAutorizados();
       if (secao === 'dispositivos') cfgRenderDispositivos();
+      if (secao === 'operacoes-offline') cfgRenderOperacoesOffline();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
       if (secao === 'notificacoes') cfgRenderNotificacoes();
@@ -3506,6 +3511,153 @@
         await LW.removerDispositivo(deviceId);
         LW.mostrarAlerta('Dispositivo removido.', { tipo: 'sucesso' });
         cfgRenderDispositivos();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    // ─── Operações a Validar (Registro Offline) — itens 6/7 do plano, ver
+    // README, "Registro de Operação Offline (PWA)". Lista o que chegou de
+    // POST /operacao-offline/enviar (tela public/offline.html), com
+    // Validar/Corrigir/Recusar por item. ────────────────────────────────
+    let _cfgOperacoesOfflineCache = []; // guarda o último GET, pra "Corrigir" ler o formRecord atual sem precisar buscar de novo
+
+    async function cfgRenderOperacoesOffline() {
+      const container = document.getElementById('cfg-operacoes-offline-lista');
+      if (!container) return;
+      container.innerHTML = '<p style="color:var(--text-3);font-size:.8rem">Carregando…</p>';
+      try {
+        const lista = await LW.listarOperacoesOfflinePendentes();
+        _cfgOperacoesOfflineCache = lista;
+        if (!lista.length) {
+          container.innerHTML = '<p style="color:var(--text-3);font-size:.8rem">Nenhuma operação offline pendente no momento. ✅</p>';
+          return;
+        }
+        // Mais recente primeiro — quem revisa normalmente quer ver o que
+        // acabou de chegar no topo.
+        const ordenada = [...lista].sort((a, b) => (b.recebidoEm || '').localeCompare(a.recebidoEm || ''));
+        container.innerHTML = ordenada.map(item => _cfgCardOperacaoOffline(item)).join('');
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+      }
+    }
+
+    function _cfgCardOperacaoOffline(item) {
+      const f = item.formRecord || {};
+      const qtdTracos = Array.isArray(item.tracos) ? item.tracos.length : 0;
+      const recebido = item.recebidoEm ? new Date(item.recebidoEm).toLocaleString('pt-BR') : '—';
+      const inicio = f.inicio ? new Date(f.inicio).toLocaleString('pt-BR') : '—';
+      const fim = f.fim ? new Date(f.fim).toLocaleString('pt-BR') : '—';
+      const corrigidoTag = item.corrigidoEm
+        ? '<span style="font-size:.7rem;color:var(--accent);margin-left:8px">✏️ corrigido ' + new Date(item.corrigidoEm).toLocaleString('pt-BR') + '</span>'
+        : '';
+      const idSeguro = item.idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
+      return `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:var(--bg-2)">
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-weight:600;font-size:.9rem">🔋 ${f.id_bateria || '(sem bateria)'} — ${f.turno || '—'}${corrigidoTag}</div>
+              <div style="font-size:.75rem;color:var(--text-3);margin-top:2px">Recebido em ${recebido} · IP ${item.ip || '—'}</div>
+            </div>
+            <div style="font-size:.75rem;color:var(--text-2);text-align:right">
+              <div>Início: ${inicio}</div>
+              <div>Fim: ${fim}</div>
+              <div>${qtdTracos} traço(s)</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgValidarOperacaoOffline('${idSeguro}')">✅ Validar</button>
+            <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirCorrecaoOperacaoOffline('${idSeguro}')">✏️ Corrigir</button>
+            <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem;color:var(--danger)" onclick="cfgRecusarOperacaoOffline('${idSeguro}')">❌ Recusar</button>
+          </div>
+          <div id="cfg-corrigir-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
+        </div>`;
+    }
+
+    async function cfgValidarOperacaoOffline(idTemp) {
+      const confirmou = await LW.mostrarConfirmacao(
+        'Este registro vai virar uma operação de verdade, entrar na fila do Setor de Qualidade e somar no Contador de Traços do Dia.',
+        { titulo: 'Validar este registro offline?', textoConfirmar: 'Validar', icon: '✅' }
+      );
+      if (!confirmou) return;
+      try {
+        await LW.validarOperacaoOffline(idTemp);
+        LW.mostrarAlerta('Operação validada com sucesso.', { tipo: 'sucesso' });
+        cfgRenderOperacoesOffline();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    async function cfgRecusarOperacaoOffline(idTemp) {
+      const confirmou = await LW.mostrarConfirmacao(
+        'Este registro será descartado e NUNCA vai virar uma operação. Esta ação não pode ser desfeita.',
+        { titulo: 'Recusar este registro offline?', textoConfirmar: 'Recusar', tipo: 'perigo', icon: '🛑' }
+      );
+      if (!confirmou) return;
+      try {
+        await LW.recusarOperacaoOffline(idTemp);
+        LW.mostrarAlerta('Registro recusado.', { tipo: 'sucesso' });
+        cfgRenderOperacoesOffline();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    // Correção rápida inline — só os campos mais prováveis de terem vindo
+    // errado do relógio do dispositivo offline (ver README, item 8):
+    // início/fim/ID da bateria. Não é a tela completa de Edições
+    // Avançadas (que trabalha em cima de uma operação já existente em
+    // "operacoes", não de um registro ainda pendente) — um ajuste
+    // funcional mais simples, focado no que mais provavelmente precisa de
+    // correção antes de aprovar.
+    function cfgAbrirCorrecaoOperacaoOffline(idTemp) {
+      const idSeguro = idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
+      const painel = document.getElementById('cfg-corrigir-' + idSeguro);
+      if (!painel) return;
+      if (painel.style.display === 'block') { painel.style.display = 'none'; return; }
+
+      const item = _cfgOperacoesOfflineCache.find(i => i.idTemp === idTemp);
+      if (!item) return;
+      const f = item.formRecord || {};
+      const paraInputDatetime = iso => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d)) return '';
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+      painel.innerHTML = `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <label style="font-size:.75rem;color:var(--text-3)">Início
+            <input type="datetime-local" id="cfg-off-inicio-${idSeguro}" value="${paraInputDatetime(f.inicio)}"
+              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem">
+          </label>
+          <label style="font-size:.75rem;color:var(--text-3)">Fim
+            <input type="datetime-local" id="cfg-off-fim-${idSeguro}" value="${paraInputDatetime(f.fim)}"
+              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem">
+          </label>
+          <label style="font-size:.75rem;color:var(--text-3)">ID Bateria
+            <input type="text" id="cfg-off-bateria-${idSeguro}" value="${(f.id_bateria || '').replace(/"/g, '&quot;')}"
+              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem;width:120px">
+          </label>
+          <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgSalvarCorrecaoOperacaoOffline('${idSeguro}', '${idTemp.replace(/'/g, "\\'")}')">Salvar correção</button>
+        </div>`;
+      painel.style.display = 'block';
+    }
+
+    async function cfgSalvarCorrecaoOperacaoOffline(idSeguro, idTemp) {
+      const inicioEl = document.getElementById('cfg-off-inicio-' + idSeguro);
+      const fimEl = document.getElementById('cfg-off-fim-' + idSeguro);
+      const bateriaEl = document.getElementById('cfg-off-bateria-' + idSeguro);
+      const patch = { formRecord: {} };
+      if (inicioEl && inicioEl.value) patch.formRecord.inicio = new Date(inicioEl.value).toISOString();
+      if (fimEl && fimEl.value) patch.formRecord.fim = new Date(fimEl.value).toISOString();
+      if (bateriaEl && bateriaEl.value) patch.formRecord.id_bateria = bateriaEl.value.trim();
+      try {
+        await LW.corrigirOperacaoOfflinePendente(idTemp, patch);
+        LW.mostrarAlerta('Correção salva.', { tipo: 'sucesso' });
+        cfgRenderOperacoesOffline();
       } catch (e) {
         LW.mostrarAlerta(e.message, { tipo: 'erro' });
       }

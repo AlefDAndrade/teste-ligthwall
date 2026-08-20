@@ -37,6 +37,9 @@
           <button type="button" id="cfg-nav-dispositivos" onclick="cfgMostrarSecao('dispositivos')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔐 Dispositivos Autorizados</button>
+          <button type="button" id="cfg-nav-operacoes-offline" onclick="cfgMostrarSecao('operacoes-offline')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            📴 Operações a Validar</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -527,6 +530,28 @@
             <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
+
+          <!-- ========== SEÇÃO: Operações a Validar (Registro Offline) ==========
+               Itens 6/7 do plano de Registro de Operação Offline (ver
+               README) — o que chegou por POST /operacao-offline/enviar
+               (tela public/offline.html, sem sessão/rede) fica pendente
+               aqui até um Administrador aprovar (vira uma operação de
+               verdade, com auditoria origem_offline/validado_por/
+               validado_em) ou recusar (descarta). "Corrigir" existe porque
+               o relógio do dispositivo offline pode estar errado (ver
+               README, item 8) — ajusta os campos MAIS prováveis de virem
+               errados (horários e quantidade de traços) antes de validar. -->
+          <div id="cfg-secao-operacoes-offline" style="display:none">
+            <div class="card-title">📴 Operações a Validar (Registro Offline)</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Registros enviados de <strong>Registrar Operação Offline</strong> (sem rede, sem login) ficam
+              pendentes aqui até serem revisados. O relógio do dispositivo offline pode estar errado — confira
+              os horários antes de validar. Validar vira uma operação de verdade (entra na fila do Setor de
+              Qualidade e soma no Contador de Traços do Dia); Recusar descarta sem nunca criar nada.
+            </p>
+            <div id="cfg-operacoes-offline-lista" style="display:flex;flex-direction:column;gap:12px"></div>
+          </div>
+          <!-- ========== /SEÇÃO: Operações a Validar (Registro Offline) ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">

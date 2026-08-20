@@ -111,6 +111,20 @@ db.exec(`
     -- sobrevive sozinho mesmo se aquele usuário for removido do cadastro
     -- depois; é rótulo de auditoria, não uma referência viva.
     operador_nome         TEXT,
+    -- ─── Auditoria de Registro Offline (item 6/7 do plano — ver README,
+    -- "Registro de Operação Offline (PWA)") ────────────────────────────
+    -- origem_offline: 1 quando esta operação nasceu de um envio de
+    -- POST /operacao-offline/enviar, aprovado depois por um Administrador
+    -- em Configurações → Operações a Validar; 0 (padrão) pra toda operação
+    -- registrada ao vivo, do jeito de sempre. Puramente informativo — não
+    -- afeta NENHUMA regra de negócio existente (cálculo de painéis, fila
+    -- de avaliação, contador de traços, etc. tratam esta operação
+    -- exatamente igual a qualquer outra a partir do momento em que existe).
+    -- validado_por/validado_em: quem aprovou e quando — só preenchido
+    -- quando origem_offline = 1.
+    origem_offline        INTEGER NOT NULL DEFAULT 0,
+    validado_por          TEXT,
+    validado_em           TEXT,
     criado_em             TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_operacoes_data ON operacoes(data);
@@ -930,6 +944,22 @@ if (!_colunasOperacoes.includes('operador_nome')) {
 if (!_colunasOperacoes.includes('bercos_dimensoes')) {
   db.exec('ALTER TABLE operacoes ADD COLUMN bercos_dimensoes TEXT');
   console.log('[migração] Coluna "bercos_dimensoes" adicionada à tabela operacoes.');
+}
+// origem_offline/validado_por/validado_em — Registro de Operação Offline,
+// item 6/7 do plano (ver README). Mesmo padrão de migração leve das
+// demais colunas acima; default 0/NULL não muda o comportamento de
+// nenhuma operação já existente (todas nasceram ao vivo, nunca offline).
+if (!_colunasOperacoes.includes('origem_offline')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN origem_offline INTEGER NOT NULL DEFAULT 0');
+  console.log('[migração] Coluna "origem_offline" adicionada à tabela operacoes.');
+}
+if (!_colunasOperacoes.includes('validado_por')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN validado_por TEXT');
+  console.log('[migração] Coluna "validado_por" adicionada à tabela operacoes.');
+}
+if (!_colunasOperacoes.includes('validado_em')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN validado_em TEXT');
+  console.log('[migração] Coluna "validado_em" adicionada à tabela operacoes.');
 }
 const _colunasParadas = db.prepare("PRAGMA table_info(paradas)").all().map(c => c.name);
 if (!_colunasParadas.includes('operador_nome')) {

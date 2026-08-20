@@ -261,7 +261,7 @@
           <span class="nav-text">Manutenção</span>
         </button>
       </div>
-    </nav>
+    </nav>
 <!-- ============ PAGE: MENU ============ -->
     <main class="main active" id="page-menu">
       <div class="menu-page-wrap">
@@ -414,7 +414,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -1886,7 +1886,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main>
+    </main>
 <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
@@ -2252,7 +2252,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -3515,7 +3515,7 @@
 </div>
 
       </div>
-    </main>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -3613,6 +3613,9 @@
           <button type="button" id="cfg-nav-dispositivos" onclick="cfgMostrarSecao('dispositivos')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🔐 Dispositivos Autorizados</button>
+          <button type="button" id="cfg-nav-operacoes-offline" onclick="cfgMostrarSecao('operacoes-offline')"
+            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
+            📴 Operações a Validar</button>
           <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
             style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
             🤖 Automação</button>
@@ -4103,6 +4106,28 @@
             <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
+
+          <!-- ========== SEÇÃO: Operações a Validar (Registro Offline) ==========
+               Itens 6/7 do plano de Registro de Operação Offline (ver
+               README) — o que chegou por POST /operacao-offline/enviar
+               (tela public/offline.html, sem sessão/rede) fica pendente
+               aqui até um Administrador aprovar (vira uma operação de
+               verdade, com auditoria origem_offline/validado_por/
+               validado_em) ou recusar (descarta). "Corrigir" existe porque
+               o relógio do dispositivo offline pode estar errado (ver
+               README, item 8) — ajusta os campos MAIS prováveis de virem
+               errados (horários e quantidade de traços) antes de validar. -->
+          <div id="cfg-secao-operacoes-offline" style="display:none">
+            <div class="card-title">📴 Operações a Validar (Registro Offline)</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Registros enviados de <strong>Registrar Operação Offline</strong> (sem rede, sem login) ficam
+              pendentes aqui até serem revisados. O relógio do dispositivo offline pode estar errado — confira
+              os horários antes de validar. Validar vira uma operação de verdade (entra na fila do Setor de
+              Qualidade e soma no Contador de Traços do Dia); Recusar descarta sem nunca criar nada.
+            </p>
+            <div id="cfg-operacoes-offline-lista" style="display:flex;flex-direction:column;gap:12px"></div>
+          </div>
+          <!-- ========== /SEÇÃO: Operações a Validar (Registro Offline) ========== -->
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
@@ -4676,7 +4701,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -4746,7 +4771,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -4817,7 +4842,7 @@
 
     </div>
   </div>
-
+
 <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
