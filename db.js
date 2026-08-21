@@ -1023,6 +1023,36 @@ if (!_colunasManutencaoCorretiva.includes('recebimento_peca_confirmado')) {
   console.log('[migração] Colunas de confirmação de recebimento de peça adicionadas à tabela manutencao_corretiva.');
 }
 
+// ------------------------------------------------------------
+//  Migração de DADOS (não de schema): "data" da operação passa a ser a
+//  data do FIM, não a do início — ver registro-operacao.js/operacao.js
+//  (_registrarOperacaoInterna), operacao-offline.js (_aprovar) e
+//  edicao.js (/editar-operacao-avancado), que já gravam assim pra
+//  operações NOVAS a partir de agora.
+//
+//  Só isso não corrige as operações que já estavam gravadas ANTES desta
+//  mudança — a coluna "data" delas ficou "congelada" com o valor antigo
+//  (data do início). Esta migração corrige o passado: para toda operação
+//  que atravessou a meia-noite (fim é de um dia diferente de data),
+//  recalcula "data" = dia do "fim".
+//
+//  Idempotente e roda toda vez no boot (SEM check de "já rodei" — não
+//  precisa: o WHERE só pega, cada vez, as linhas que ainda estiverem
+//  divergentes; depois da 1ª vez não sobra nenhuma, então roda "no-op"
+//  para sempre). date(fim) usa o mesmo raciocínio de horaBrasilia()/
+//  dataLocal no resto do sistema: inicio/fim são gravados "disfarçados"
+//  de UTC (dígitos = hora de parede de Brasília, sem conversão real —
+//  ver comentário grande em debriefing.js, dataDoISO), então o SQLite
+//  date() aqui já extrai o dia "de parede" certo, sem precisar de
+//  timezone nenhum.
+const _opsComDataDivergente = db.prepare(`
+  UPDATE operacoes SET data = date(fim)
+  WHERE fim IS NOT NULL AND date(fim) IS NOT NULL AND data != date(fim)
+`).run();
+if (_opsComDataDivergente.changes > 0) {
+  console.log(`[migração] "data" recalculada (dia do FIM, não do início) em ${_opsComDataDivergente.changes} operação(ões) que atravessaram a meia-noite.`);
+}
+
 // ─── Operações / Berços / Avaliação de Qualidade ───────────────────────
 // Fase 9 do fatiamento de db.js (ver README, "Fatiamento de db.js
 // (plano)") — extraída pra lib/db/operacoes-qualidade.js, sem mudar
