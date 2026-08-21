@@ -2349,7 +2349,13 @@
       : LW.calcPaineis(state.tipo_montagem, bercos);
     const calc = LW.aplicarNaoEnchidosNoCalc(calcBase, state.tipo_montagem, state.bercos_personalizados, marcacoes);
 
-    const dataLocal = state.inicio.split('T')[0];
+    // Data da operação = data do FIM da injeção, não do início — uma
+    // operação pausada no dia 1 e retomada/finalizada no dia 2 precisa
+    // aparecer no Debriefing (e em qualquer relatório por data) no dia 2,
+    // que é quando ela de fato foi concluída. (state.fim sempre existe
+    // aqui: o checklist de registro já exige "Injeção finalizada" —
+    // !!state.fim — antes de liberar _registrarOperacaoInterna.)
+    const dataLocal = state.fim.split('T')[0];
 
     const opId = 'op_' + nowBrasilia().getTime();
     const fullRecord = {
