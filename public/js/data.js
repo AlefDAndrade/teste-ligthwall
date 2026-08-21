@@ -1653,6 +1653,24 @@ async function editarTracoRelatorio(payload) {
 }
 
 /**
+ * Corrige a DATA de um traço já registrado (edições avançadas — mesmo
+ * padrão de POST /editar-operacao-avancado, só que pro traço). Só mexe na
+ * coluna tracos.data; não recalcula num_traco nem toca em traco_usos/
+ * operações.
+ * @param {object} payload - { id_traco, id_operacao, data, diff }
+ */
+async function editarTracoAvancado(payload) {
+  const res = await fetch('/editar-traco-avancado', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro ao editar data do traço');
+  return json;
+}
+
+/**
  * Obtém o total de traços já CONFIRMADOS hoje (Brasília) — apenas leitura,
  * não consome/incrementa nada. Usado para calcular a numeração de PRÉVIA
  * (total+1, total+2, ...) dos traços ainda em edição na operação atual.
@@ -2750,6 +2768,7 @@ window.LW = {
   registrarAjusteTraco,
   getAjustesTracos,
   editarTracoRelatorio,
+  editarTracoAvancado,
 
   // Dados e analytics
   registrarOperacao, getStats,

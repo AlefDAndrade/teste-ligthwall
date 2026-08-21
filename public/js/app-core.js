@@ -4928,3 +4928,81 @@
         btn.textContent = textoOriginal;
       }
     }
+
+    // ================================================================
+    //  EDIÇÃO AVANÇADA DO TRAÇO (data) — mesmo padrão das Edições
+    //  Avançadas de Operação (início/fim/pausas), só que aqui o único
+    //  campo é a data. Ver comentário grande em POST /editar-traco-avancado
+    //  (lib/rotas/edicao.js) pro motivo de ser um botão à parte.
+    // ================================================================
+
+    function abrirEdicaoAvancadaTraco() {
+      if (!_etTracoOriginal) return;
+      document.getElementById('eat-erro').style.display = 'none';
+      document.getElementById('eat-data').value = _etTracoOriginal.data || '';
+      document.getElementById('edicao-avancada-traco-modal').style.display = 'flex';
+    }
+
+    function fecharEdicaoAvancadaTraco() {
+      document.getElementById('edicao-avancada-traco-modal').style.display = 'none';
+    }
+
+    async function salvarEdicaoAvancadaTraco() {
+      if (!_etTracoOriginal) return;
+      const erroEl = document.getElementById('eat-erro');
+      erroEl.style.display = 'none';
+
+      const novaData = document.getElementById('eat-data').value;
+      if (!novaData) {
+        erroEl.textContent = 'Informe a data.';
+        erroEl.style.display = 'block';
+        return;
+      }
+
+      const dataAntiga = _etTracoOriginal.data || null;
+      if (novaData === dataAntiga) {
+        LW.mostrarAlerta('Nenhuma alteração foi feita.', { tipo: 'aviso' });
+        return;
+      }
+
+      const fmtData = iso => iso ? iso.split('-').reverse().join('/') : '—';
+      const diff = [{ campo: 'data', de: dataAntiga, para: novaData }];
+
+      const confirmou = await LW.mostrarConfirmacao(
+        `Confirma a alteração da data deste traço de ${fmtData(dataAntiga)} para ${fmtData(novaData)}? ` +
+        'Isso muda o dia em que o traço aparece no Relatório de Injeção, Setor de Qualidade, Debriefing e ' +
+        'exportações em PDF.',
+        { titulo: 'Confirmar edição avançada', textoConfirmar: 'Salvar', icon: '⚙' }
+      );
+      if (!confirmou) return;
+
+      const btn = document.getElementById('eat-btn-salvar');
+      const textoOriginal = btn.textContent;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        await LW.editarTracoAvancado({
+          id_traco: _etTracoOriginal.id_traco,
+          id_operacao: _etUsoOriginal?.id_operacao,
+          data: novaData,
+          diff,
+        });
+
+        // Atualiza a cópia local + a leitura "capturada automaticamente"
+        // do modal principal, sem fechá-lo — a pessoa pode continuar
+        // editando os outros campos deste mesmo traço em seguida.
+        _etTracoOriginal.data = novaData;
+        document.getElementById('et-ro-data').textContent = fmtData(novaData);
+
+        fecharEdicaoAvancadaTraco();
+        await LWDash.initRelatorio();
+        LW.mostrarAlerta('Data do traço atualizada com sucesso!', { tipo: 'sucesso' });
+      } catch (e) {
+        erroEl.textContent = e.message;
+        erroEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+      }
+    }
