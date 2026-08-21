@@ -123,7 +123,7 @@ test('aba "Operações a Validar" lista o que foi enviado offline', async () => 
   }
 });
 
-test('clicar em "✅ Validar" aprova o registro e ele some da lista', async () => {
+test('clicar em "✅ Validar" abre a renumeração do dia; confirmar aprova o registro e ele some da lista', async () => {
   const idTemp = 'OFF-ui-validar-' + Date.now();
   await enviarOffline(payloadValido(idTemp));
 
@@ -136,11 +136,23 @@ test('clicar em "✅ Validar" aprova o registro e ele some da lista', async () =
     window.cfgMostrarSecao('operacoes-offline');
     await new Promise(r => setTimeout(r, 400));
 
-    // cfgValidarOperacaoOffline usa LW.mostrarConfirmacao — um modal
+    const idSeguro = idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
+
+    // "Validar" agora abre o painel de renumeração manual do dia (ver
+    // lib/rotas/operacao-offline.js, "RENUMERAÇÃO MANUAL DO DIA NA
+    // VALIDAÇÃO") — não aprova mais direto.
+    await window.cfgAbrirRenumeracaoOperacaoOffline(idTemp);
+    await new Promise(r => setTimeout(r, 300));
+
+    const painel = document.getElementById('cfg-renumerar-' + idSeguro);
+    assert.equal(painel.style.display, 'block', 'painel de renumeração deveria estar visível');
+    assert.ok(painel.querySelector('input[data-renum-input]'), 'painel deveria ter um campo de número editável pro traço pendente');
+
+    // cfgConfirmarRenumeracaoEValidar usa LW.mostrarConfirmacao — um modal
     // CUSTOM (não window.confirm nativo), que só resolve quando alguém
     // clica o botão de confirmar. Dispara sem esperar, espera o modal
     // aparecer, clica "Validar".
-    const promessa = window.cfgValidarOperacaoOffline(idTemp);
+    const promessa = window.cfgConfirmarRenumeracaoEValidar(idSeguro, idTemp);
     await new Promise(r => setTimeout(r, 150));
     const btnConfirmar = document.getElementById('btn-confirmacao-confirmar');
     assert.ok(btnConfirmar, 'modal de confirmação deveria estar na tela');
@@ -154,6 +166,62 @@ test('clicar em "✅ Validar" aprova o registro e ele some da lista', async () =
 
     const historico = await (await fetch(`${servidor.baseUrl}/db/historico.json`)).json();
     assert.ok(historico.some(o => o.id === 'op_off_' + idTemp.slice(4)), 'deveria ter virado uma operação de verdade');
+  } finally {
+    window.close();
+  }
+});
+
+test('na renumeração, dar o mesmo número pra dois traços trava o botão de confirmar até corrigir', async () => {
+  // 2 operações offline no MESMO dia: a 1ª é validada primeiro (vira
+  // "existente"), a 2ª fica pendente — assim a tela de renumeração tem 2
+  // linhas de verdade pra testar duplicata.
+  const idTempA = 'OFF-ui-renum-dup-A-' + Date.now();
+  const idTempB = 'OFF-ui-renum-dup-B-' + Date.now();
+  await enviarOffline(payloadValido(idTempA));
+  await enviarOffline(payloadValido(idTempB));
+
+  const dom = await abrirSpaComoAdminMaster();
+  const { window } = dom;
+  const document = window.document;
+  try {
+    window.abrirConfig();
+    await new Promise(r => setTimeout(r, 200));
+    window.cfgMostrarSecao('operacoes-offline');
+    await new Promise(r => setTimeout(r, 400));
+
+    const idSeguroA = idTempA.replace(/[^a-zA-Z0-9_-]/g, '');
+    await window.cfgAbrirRenumeracaoOperacaoOffline(idTempA);
+    await new Promise(r => setTimeout(r, 300));
+    // Os valores padrão vêm do device offline (sempre "1") — em cima de
+    // traços que já existem no dia (de testes anteriores) isso já nasce
+    // duplicado. "Preencher sequência" resolve, igual um Master faria na
+    // tela real antes de confirmar.
+    window._cfgPreencherSequenciaRenumeracao(idSeguroA);
+    const promessaA = window.cfgConfirmarRenumeracaoEValidar(idSeguroA, idTempA);
+    await new Promise(r => setTimeout(r, 150));
+    document.getElementById('btn-confirmacao-confirmar').click();
+    await promessaA;
+    await new Promise(r => setTimeout(r, 400));
+
+    const idSeguroB = idTempB.replace(/[^a-zA-Z0-9_-]/g, '');
+    await window.cfgAbrirRenumeracaoOperacaoOffline(idTempB);
+    await new Promise(r => setTimeout(r, 300));
+
+    const inputs = [...document.querySelectorAll('#cfg-renum-lista-' + idSeguroB + ' input[data-renum-input]')];
+    assert.ok(inputs.length >= 2, 'deveria ter pelo menos 1 linha pro traço já existente (A) + 1 pro pendente (B)');
+
+    // Força os dois pro mesmo número
+    inputs.forEach(input => {
+      input.value = '1';
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    const botaoConfirmar = document.getElementById('cfg-renum-confirmar-' + idSeguroB);
+    assert.equal(botaoConfirmar.disabled, true, 'botão de confirmar deveria travar com números repetidos');
+    const erro = document.getElementById('cfg-renum-erro-' + idSeguroB);
+    assert.equal(erro.style.display, 'block');
+    assert.match(erro.textContent, /repetido/i);
   } finally {
     window.close();
   }

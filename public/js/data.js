@@ -871,11 +871,26 @@ async function corrigirOperacaoOfflinePendente(idTemp, patch) {
   return data.item;
 }
 
-async function validarOperacaoOffline(idTemp) {
+// Lista TODOS os traços do dia deste registro pendente — os já gravados
+// em "tracos" (outras operações, ao vivo ou offline já validadas) + os
+// desta própria operação (ainda não gravados) — pra tela de renumeração
+// manual que precede a validação (ver lib/rotas/operacao-offline.js,
+// comentário "RENUMERAÇÃO MANUAL DO DIA NA VALIDAÇÃO").
+async function listarTracosDoDiaOffline(idTemp) {
+  const res = await fetch('/operacao-offline/tracos-do-dia?idTemp=' + encodeURIComponent(idTemp));
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os traços do dia.');
+  return data; // { data, existentes, pendentes }
+}
+
+// `renumeracao` — array [{id_traco, num_traco}, ...] cobrindo TODOS os
+// traços do dia (existentes + os desta operação) — obrigatório sempre que
+// houver pelo menos 1 traço envolvido (ver validação no servidor).
+async function validarOperacaoOffline(idTemp, renumeracao) {
   const res = await fetch('/operacao-offline/validar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idTemp }),
+    body: JSON.stringify({ idTemp, renumeracao }),
   });
   const data = await res.json();
   if (!data.ok) throw new Error(data.erro || 'Não foi possível validar este registro.');
@@ -2695,7 +2710,7 @@ window.LW = {
   // Operações a Validar (Registro Offline — Configurações, itens 6/7 do
   // plano, ver README)
   listarOperacoesOfflinePendentes, corrigirOperacaoOfflinePendente,
-  validarOperacaoOffline, recusarOperacaoOffline,
+  validarOperacaoOffline, recusarOperacaoOffline, listarTracosDoDiaOffline,
 
   // Cálculos
   calcPaineis,

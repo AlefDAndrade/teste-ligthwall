@@ -90,6 +90,44 @@ async function totalTracosHoje() {
   return corpo.total;
 }
 
+// Desde a renumeração manual do dia (ver lib/rotas/operacao-offline.js,
+// "RENUMERAÇÃO MANUAL DO DIA NA VALIDAÇÃO"), POST /validar exige uma
+// "renumeracao" cobrindo TODOS os traços do dia (existentes + os desta
+// operação) — este helper espelha o que a tela faz por padrão (mantém o
+// número dos existentes, numera os novos em sequência depois deles), pra
+// não repetir isso em cada teste.
+async function tracosDoDia(idTemp) {
+  const resp = await fetch(`${servidor.baseUrl}/operacao-offline/tracos-do-dia?idTemp=${encodeURIComponent(idTemp)}`, { headers: comAdmin() });
+  const corpo = await resp.json();
+  assert.equal(corpo.ok, true, corpo.erro);
+  return corpo;
+}
+
+function renumeracaoAutomatica(existentes, pendentes) {
+  const usados = new Set(existentes.map(t => t.num_traco));
+  let proximo = existentes.reduce((max, t) => Math.max(max, t.num_traco || 0), 0) + 1;
+  const renumeracao = existentes.map(t => ({ id_traco: t.id_traco, num_traco: t.num_traco }));
+  pendentes.forEach(t => {
+    while (usados.has(proximo)) proximo++;
+    renumeracao.push({ id_traco: t.id_traco, num_traco: proximo });
+    usados.add(proximo);
+    proximo++;
+  });
+  return renumeracao;
+}
+
+async function validar(idTemp, overrides) {
+  let renumeracao = overrides && overrides.renumeracao;
+  if (renumeracao === undefined) {
+    const { existentes, pendentes } = await tracosDoDia(idTemp);
+    renumeracao = renumeracaoAutomatica(existentes, pendentes);
+  }
+  return fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() },
+    body: JSON.stringify({ idTemp, renumeracao }),
+  });
+}
+
 test('GET /operacao-offline/pendentes sem sessão de admin é recusado (403)', async () => {
   const resp = await fetch(`${servidor.baseUrl}/operacao-offline/pendentes`);
   assert.equal(resp.status, 403);
@@ -121,9 +159,7 @@ test('validar aprovado: vira operação real com origem_offline/validado_por/val
 
   const totalAntes = await totalTracosHoje();
 
-  const respValidar = await fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() }, body: JSON.stringify({ idTemp }),
-  });
+  const respValidar = await validar(idTemp);
   assert.equal(respValidar.status, 200);
   const corpoValidar = await respValidar.json();
   assert.equal(corpoValidar.ok, true);
@@ -177,16 +213,15 @@ test('validar o mesmo idTemp 2 vezes seguidas não duplica a operação nem incr
   await enviarOffline(payloadValido(idTemp));
 
   const totalAntes = await totalTracosHoje();
-  const r1 = await fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() }, body: JSON.stringify({ idTemp }),
-  });
+  const r1 = await validar(idTemp);
   assert.equal(r1.status, 200);
   const totalDepois1 = await totalTracosHoje();
   assert.equal(totalDepois1, totalAntes + 1);
 
   // 2ª chamada: idTemp já não está mais na fila (removido na 1ª aprovação)
   // — resposta é um erro claro de "não encontrado", não um 500 nem uma
-  // duplicata silenciosa.
+  // duplicata silenciosa. (Sem renumeracao mesmo — falha antes de chegar
+  // nessa validação, já que o registro nem existe mais na fila.)
   const r2 = await fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() }, body: JSON.stringify({ idTemp }),
   });
@@ -204,6 +239,8 @@ test('validar sem id_bateria/inicio/fim/capacidade é recusado (400), sem criar 
   const idTemp = 'OFF-validar-incompleto-' + Date.now();
   await enviarOffline(payloadValido(idTemp, { id_bateria: '' })); // id_bateria vazio de propósito
 
+  // Sem renumeracao mesmo — a checagem de id_bateria/inicio/fim/capacidade
+  // acontece ANTES da checagem de renumeração, então nem chega lá.
   const resp = await fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() }, body: JSON.stringify({ idTemp }),
   });
@@ -234,9 +271,7 @@ test('corrigir aplica o patch, e depois validar usa o valor já corrigido', asyn
   assert.equal(corpoCorrigir.item.formRecord.turno, '1° TURNO');
   assert.ok(corpoCorrigir.item.corrigidoEm);
 
-  const respValidar = await fetch(`${servidor.baseUrl}/operacao-offline/validar`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() }, body: JSON.stringify({ idTemp }),
-  });
+  const respValidar = await validar(idTemp);
   assert.equal(respValidar.status, 200);
 
   const historico = await (await fetch(`${servidor.baseUrl}/db/historico.json`)).json();

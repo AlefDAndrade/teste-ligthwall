@@ -3566,22 +3566,152 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-            <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgValidarOperacaoOffline('${idSeguro}')">✅ Validar</button>
+            <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirRenumeracaoOperacaoOffline('${idSeguro}')">✅ Validar</button>
             <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirCorrecaoOperacaoOffline('${idSeguro}')">✏️ Corrigir</button>
             <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem;color:var(--danger)" onclick="cfgRecusarOperacaoOffline('${idSeguro}')">❌ Recusar</button>
           </div>
           <div id="cfg-corrigir-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
+          <div id="cfg-renumerar-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
         </div>`;
     }
 
-    async function cfgValidarOperacaoOffline(idTemp) {
+    // ─── Renumeração manual do dia, antes de validar ─────────────────────
+    // Não dá mais pra só clicar "Validar": o Master precisa decidir o
+    // número #1, #2... de CADA traço do dia (os já existentes de outras
+    // operações + os desta) — ver lib/rotas/operacao-offline.js,
+    // comentário "RENUMERAÇÃO MANUAL DO DIA NA VALIDAÇÃO", pro motivo
+    // (ex.: traços ao vivo feitos DEPOIS do envio offline mas ANTES da
+    // validação já pegaram números que deveriam ter sido dos offline).
+    async function cfgAbrirRenumeracaoOperacaoOffline(idTemp) {
+      const idSeguro = idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
+      const painel = document.getElementById('cfg-renumerar-' + idSeguro);
+      if (!painel) return;
+      if (painel.style.display === 'block') { painel.style.display = 'none'; return; }
+
+      painel.style.display = 'block';
+      painel.innerHTML = '<p style="color:var(--text-3);font-size:.8rem">Carregando traços do dia…</p>';
+      try {
+        const { data, existentes, pendentes } = await LW.listarTracosDoDiaOffline(idTemp);
+        painel.innerHTML = _cfgRenumeracaoHtml(idSeguro, idTemp, data, existentes, pendentes);
+        _cfgAtualizarValidacaoRenumeracao(idSeguro);
+      } catch (e) {
+        painel.innerHTML = '<p style="color:var(--danger);font-size:.8rem">' + e.message + '</p>';
+      }
+    }
+
+    function _cfgRenumeracaoHtml(idSeguro, idTemp, data, existentes, pendentes) {
+      // Ordem inicial: pela sugestão de número (existentes já têm o seu;
+      // pendentes usam o que o dispositivo offline mandou) — só um ponto
+      // de partida, o Master pode digitar qualquer número em qualquer campo.
+      const linhas = [...existentes, ...pendentes]
+        .sort((a, b) => (a.num_traco ?? 9999) - (b.num_traco ?? 9999));
+
+      const linhasHtml = linhas.map((t, i) => {
+        const idAttr = 'cfg-renum-' + idSeguro + '-' + i;
+        const origemBadge = t.origem === 'pendente'
+          ? '<span style="font-size:.68rem;color:var(--accent)">🆕 desta operação</span>'
+          : '<span style="font-size:.68rem;color:var(--text-3)">já no dia</span>';
+        const refBateria = t.id_bateria ? _escaparHtmlLocal(t.id_bateria) : '—';
+        return `
+          <div class="cfg-renum-linha" data-id-traco="${_escaparHtmlLocal(t.id_traco)}"
+            style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <input type="number" min="1" step="1" value="${t.num_traco ?? ''}" data-renum-input
+              id="${idAttr}" oninput="_cfgAtualizarValidacaoRenumeracao('${idSeguro}')"
+              style="width:64px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:4px 6px;font-size:.85rem;text-align:center">
+            <div style="flex:1;font-size:.78rem;color:var(--text-2)">
+              🔋 ${refBateria} ${origemBadge}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px;line-height:1.5">
+          Confira e ajuste o número de <strong>cada traço do dia ${data}</strong> (os que já existem + os desta
+          operação) antes de validar — sem número repetido e sem faltar nenhum.
+        </p>
+        <div id="cfg-renum-lista-${idSeguro}">${linhasHtml}</div>
+        <p id="cfg-renum-erro-${idSeguro}" style="font-size:.75rem;color:var(--danger);margin-top:8px;display:none"></p>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem"
+            onclick="_cfgPreencherSequenciaRenumeracao('${idSeguro}')">🔢 Preencher 1, 2, 3…</button>
+          <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" id="cfg-renum-confirmar-${idSeguro}"
+            onclick="cfgConfirmarRenumeracaoEValidar('${idSeguro}', '${idTemp.replace(/'/g, "\\'")}')">✅ Confirmar numeração e validar</button>
+        </div>`;
+    }
+
+    // Ponto de partida rápido — preenche 1..N na ordem em que as linhas já
+    // estão na tela. Só um atalho: o Master ainda pode editar qualquer
+    // campo depois, e a validação de duplicado/faltante continua valendo.
+    function _cfgPreencherSequenciaRenumeracao(idSeguro) {
+      const inputs = document.querySelectorAll('#cfg-renum-lista-' + idSeguro + ' input[data-renum-input]');
+      inputs.forEach((input, i) => { input.value = String(i + 1); });
+      _cfgAtualizarValidacaoRenumeracao(idSeguro);
+    }
+
+    // Validação client-side (espelha a do servidor, ver
+    // lib/rotas/operacao-offline.js _validarRenumeracao) — só pra dar
+    // feedback imediato na tela; o servidor sempre reconfere antes de gravar.
+    function _cfgAtualizarValidacaoRenumeracao(idSeguro) {
+      const inputs = [...document.querySelectorAll('#cfg-renum-lista-' + idSeguro + ' input[data-renum-input]')];
+      const erroEl = document.getElementById('cfg-renum-erro-' + idSeguro);
+      const botaoConfirmar = document.getElementById('cfg-renum-confirmar-' + idSeguro);
+      if (!inputs.length || !erroEl || !botaoConfirmar) return null;
+
+      const numeros = [];
+      let faltaNumero = false;
+      inputs.forEach(input => {
+        const linha = input.closest('.cfg-renum-linha');
+        linha.style.background = '';
+        const valor = input.value.trim();
+        if (!valor || Number(valor) <= 0 || !Number.isInteger(Number(valor))) { faltaNumero = true; return; }
+        numeros.push({ input, linha, num: Number(valor) });
+      });
+
+      let mensagem = '';
+      if (faltaNumero) {
+        mensagem = 'Todo traço precisa de um número (inteiro, maior que zero).';
+      } else {
+        const contagem = new Map();
+        numeros.forEach(({ num }) => contagem.set(num, (contagem.get(num) || 0) + 1));
+        const duplicados = [...contagem.entries()].filter(([, qtd]) => qtd > 1).map(([num]) => num);
+        if (duplicados.length) {
+          mensagem = 'Número(s) repetido(s): #' + duplicados.join(', #') + '. Cada traço do dia precisa de um número único.';
+          numeros.forEach(({ num, linha }) => {
+            if (duplicados.includes(num)) linha.style.background = 'rgba(220,53,69,.12)';
+          });
+        }
+      }
+
+      if (mensagem) {
+        erroEl.textContent = mensagem;
+        erroEl.style.display = 'block';
+        botaoConfirmar.disabled = true;
+        botaoConfirmar.style.opacity = '.5';
+        return null;
+      }
+      erroEl.style.display = 'none';
+      botaoConfirmar.disabled = false;
+      botaoConfirmar.style.opacity = '1';
+      return numeros;
+    }
+
+    async function cfgConfirmarRenumeracaoEValidar(idSeguro, idTemp) {
+      const numeros = _cfgAtualizarValidacaoRenumeracao(idSeguro);
+      if (!numeros) return; // inválido — mensagem já visível na tela
+
+      const renumeracao = numeros.map(({ linha, num }) => ({
+        id_traco: linha.getAttribute('data-id-traco'),
+        num_traco: num,
+      }));
+
       const confirmou = await LW.mostrarConfirmacao(
-        'Este registro vai virar uma operação de verdade, entrar na fila do Setor de Qualidade e somar no Contador de Traços do Dia.',
-        { titulo: 'Validar este registro offline?', textoConfirmar: 'Validar', icon: '✅' }
+        'Este registro vai virar uma operação de verdade, entrar na fila do Setor de Qualidade e somar no Contador de Traços do Dia — com a numeração que você acabou de definir.',
+        { titulo: 'Validar com esta numeração?', textoConfirmar: 'Validar', icon: '✅' }
       );
       if (!confirmou) return;
+
       try {
-        await LW.validarOperacaoOffline(idTemp);
+        await LW.validarOperacaoOffline(idTemp, renumeracao);
         LW.mostrarAlerta('Operação validada com sucesso.', { tipo: 'sucesso' });
         cfgRenderOperacoesOffline();
       } catch (e) {
