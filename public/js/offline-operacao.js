@@ -769,7 +769,7 @@
           Peça a alguém com perfil Administrador para revisar e validar este
           registro em "Operações a Validar".
         </p>
-        <a href="login.html" class="btn-primary" style="text-decoration:none;display:inline-block;margin-top:20px">← Voltar ao login</a>
+        <a href="login.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:20px">← Voltar ao login</a>
       </div>`;
     document.querySelector('.off-actions-bar').style.display = 'none';
   }

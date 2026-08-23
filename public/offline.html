@@ -15,30 +15,43 @@
        (README, "Páginas": "fora da SPA principal... Não exige login").
        Reaproveita o HTML/CSS do formulário de Registrar Operação
        (css/styles.css inteiro, mesmas classes .card/.form-input/
-       .traco-tab/etc.) — só NÃO reaproveita a lógica de rede/sessão/
-       WebSocket de operacao.js, que não faz sentido aqui.
+       .traco-tab/.op-layout-grid/etc. — o MESMO layout de 2 colunas,
+       cartão de status e grids usados em page-operacao.html, pra não
+       parecer uma tela "à parte" mal cuidada) — só NÃO reaproveita a
+       lógica de rede/sessão/WebSocket de operacao.js, que não faz
+       sentido aqui.
        ──────────────────────────────────────────────────────────────── */
-    body { overflow-y: auto; padding: 0; }
-    .off-wrap { max-width: 900px; margin: 0 auto; padding: 20px 20px 100px; }
+    body { overflow-y: auto; }
+
+    /* Cabeçalho fixo no topo, no mesmo espírito do .page-header da SPA
+       (título + descrição), com o botão de voltar ao login ao lado. */
     .off-topbar {
       display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; padding: 14px 20px; background: var(--bg-2);
+      gap: 16px; flex-wrap: wrap;
+      padding: 16px 32px; background: var(--bg-2);
       border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50;
     }
-    .off-topbar-title { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--accent); }
-    .off-topbar-badge { font-size: .72rem; color: var(--text-3); }
-    .off-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
-    .off-actions-bar {
-      position: sticky; bottom: 0; background: var(--bg-2); border-top: 1px solid var(--border);
-      padding: 14px 20px; display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;
-    }
+
+    .off-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 32px 110px; }
+
+    /* Grade de berços da Montagem Personalizada — não existe equivalente
+       exato no online (lá é um modal próprio, LWOp.abrirGradeMontagem),
+       mas segue o mesmo padrão visual de célula+select compacto. */
     .off-grade-personalizada { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin-top: 10px; }
     .off-grade-personalizada .form-select { padding: 4px; font-size: .72rem; text-align: center; }
     .off-grade-celula { display: flex; flex-direction: column; align-items: center; gap: 2px; }
     .off-grade-celula label { font-size: .65rem; color: var(--text-3); }
-    #off-aviso-primeira-vez {
-      background: rgba(245, 158, 11, .1); border: 1px solid var(--accent-dim, #f59e0b55);
-      border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: .82rem; color: var(--text-2); line-height: 1.5;
+
+    /* Barra de ações fixa embaixo — mesmo padrão do .page-header (borda +
+       fundo var(--bg-2)) usado no topo, agora ancorado no rodapé. */
+    .off-actions-bar {
+      position: sticky; bottom: 0; background: var(--bg-2); border-top: 1px solid var(--border);
+      padding: 14px 32px; display: flex; gap: 12px; justify-content: flex-end;
+      flex-wrap: wrap; margin-top: 24px;
+    }
+
+    @media (max-width: 700px) {
+      .off-topbar, .off-wrap, .off-actions-bar { padding-left: 16px; padding-right: 16px; }
     }
   </style>
 </head>
@@ -46,16 +59,17 @@
 
   <div class="off-topbar">
     <div>
-      <div class="off-topbar-title">📴 Registrar Operação Offline</div>
-      <div class="off-topbar-badge">Sem login · Sem rede · Salvo só neste aparelho até sincronizar</div>
+      <h1 class="page-title" style="margin:0">📴 Registro de <span>Operação Offline</span></h1>
+      <p class="page-desc" style="margin:2px 0 0;padding-bottom:0">Sem login · Sem rede · Salvo só neste aparelho até sincronizar</p>
     </div>
-    <a href="login.html" class="btn-ghost" style="text-decoration:none">← Voltar ao login</a>
+    <a href="login.html" class="btn btn-ghost btn-sm" style="text-decoration:none">← Voltar ao login</a>
   </div>
 
   <div class="off-wrap">
 
-    <div id="off-aviso-primeira-vez" style="display:none">
-      ℹ️ Este formulário só funciona 100% sem internet se o app já tiver sido
+    <div id="off-aviso-primeira-vez" class="badge badge-amber"
+      style="display:none;width:100%;box-sizing:border-box;padding:12px 16px;margin-bottom:16px;font-size:.82rem;line-height:1.5;text-transform:none;letter-spacing:normal;font-weight:400;justify-content:flex-start">
+      ℹ️&nbsp; Este formulário só funciona 100% sem internet se o app já tiver sido
       instalado e aberto pelo menos uma vez online neste aparelho (é assim que
       os dados de bateria/montagem ficam salvos aqui). Se esta é a primeira
       vez, alguns campos abaixo podem não carregar.
@@ -63,94 +77,130 @@
 
     <div id="off-status-banner" style="margin-bottom:16px"></div>
 
-    <!-- ─── Identificação ─── -->
-    <div class="card">
-      <div class="card-title">Identificação</div>
-      <div class="off-form-grid">
-        <div class="form-group">
-          <label class="form-label">Turno</label>
-          <select class="form-select" id="off-turno">
-            <option value="1º TURNO">1º Turno</option>
-            <option value="2º TURNO">2º Turno</option>
-            <option value="3º TURNO">3º Turno</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ID da Bateria <span class="required">*</span></label>
-          <select class="form-select" id="off-bateria">
-            <option value="">Selecione…</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Dimensão</label>
-          <input class="form-input auto-filled" id="off-dimensao" readonly placeholder="—">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tipo de Montagem <span class="required">*</span></label>
-          <select class="form-select" id="off-tipo-montagem">
-            <option value="">Selecione…</option>
-          </select>
-        </div>
-      </div>
-      <div id="off-grade-personalizada-wrap" style="display:none">
-        <label class="form-label" style="margin-top:14px;display:block">Montagem por berço (Personalizada) <span class="required">*</span></label>
-        <div class="off-grade-personalizada" id="off-grade-personalizada"></div>
-      </div>
-    </div>
+    <fieldset style="border:none;margin:0;padding:0">
+      <div class="op-layout-grid">
+        <!-- Coluna Esquerda: Informações Operacionais -->
+        <div class="op-info-column">
 
-    <!-- ─── Controle da Injeção ─── -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">Controle da Injeção</div>
-      <div style="text-align:center;margin-bottom:14px">
-        <div class="timer-display" id="off-timer-display">0:00:00</div>
-      </div>
-      <div class="off-form-grid">
-        <div class="form-group">
-          <label class="form-label">Início</label>
-          <input class="form-input" id="off-inicio" readonly placeholder="—">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Fim</label>
-          <input class="form-input" id="off-fim" readonly placeholder="—">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Atraso</label>
-          <div id="off-atraso">—</div>
-        </div>
-        <div class="form-group" id="off-motivo-row" style="display:none">
-          <label class="form-label">Motivo do atraso <span class="required">*</span></label>
-          <input class="form-input" id="off-motivo" placeholder="Explique o atraso…">
-        </div>
-      </div>
-      <div id="off-desemplaque-row" style="display:none;margin-top:8px;color:var(--text-2);font-size:.85rem">
-        Desemplaque previsto: <strong id="off-desemplaque"></strong>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn-primary" id="off-btn-iniciar" onclick="LWOff.iniciarInjecao()">▶ Iniciar Injeção</button>
-        <button class="btn-outline-accent" id="off-btn-pausar" style="display:none" onclick="LWOff.togglePausa()">⏸ Pausar</button>
-        <button class="btn-primary" id="off-btn-finalizar" disabled onclick="LWOff.finalizarInjecao()">⏹ Encerrar Injeção</button>
-      </div>
-    </div>
+          <!-- ─── Cartão de Status (equivalente ao .op-status-card online) ─── -->
+          <div class="card op-status-card">
+            <div class="op-status-left">
+              <span class="badge badge-gray">📴 Registro offline</span>
+              <div class="op-status-triggers">
+                <div style="position:relative">
+                  <button type="button" class="btn btn-ghost btn-sm" id="off-btn-pausar" style="display:none" onclick="LWOff.togglePausa()">⏸ Pausar</button>
+                </div>
+              </div>
+            </div>
+            <div class="op-status-timers">
+              <div>
+                <div style="font-size:.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">
+                  Tempo decorrido</div>
+                <div class="timer-display" id="off-timer-display">0:00:00</div>
+              </div>
+            </div>
+          </div>
 
-    <!-- ─── Traços ─── -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">Traços</div>
-      <div class="traco-tabs-nav" id="off-traco-tabs"></div>
-      <div id="off-traco-body"></div>
-      <button class="btn-outline-accent" style="margin-top:12px" onclick="LWOff.addTraco()">+ Adicionar Traço</button>
-    </div>
+          <!-- ─── Identificação ─── -->
+          <div class="card">
+            <div class="card-title">Identificação da Bateria</div>
+            <div class="op-grid-identificacao">
+              <div class="form-group">
+                <label class="form-label">Turno</label>
+                <select class="form-select" id="off-turno">
+                  <option value="1º TURNO">1º Turno</option>
+                  <option value="2º TURNO">2º Turno</option>
+                  <option value="3º TURNO">3º Turno</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">ID da Bateria <span class="required">*</span></label>
+                <select class="form-select" id="off-bateria">
+                  <option value="">Selecione…</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dimensão</label>
+                <input class="form-input auto-filled" id="off-dimensao" readonly placeholder="—">
+              </div>
+              <div class="form-group" style="grid-column:1 / -1">
+                <label class="form-label">Tipo de Montagem <span class="required">*</span></label>
+                <select class="form-select" id="off-tipo-montagem">
+                  <option value="">Selecione…</option>
+                </select>
+              </div>
+            </div>
+            <div id="off-grade-personalizada-wrap" style="display:none">
+              <label class="form-label" style="margin-top:14px;display:block">Montagem por berço (Personalizada) <span class="required">*</span></label>
+              <div class="off-grade-personalizada" id="off-grade-personalizada"></div>
+            </div>
+          </div>
 
-    <!-- ─── Pendências ─── -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">Pendências <span id="off-pendencia-badge-count"></span></div>
-      <div class="pendency-list" id="off-pendencia-list"></div>
-    </div>
+          <!-- ─── Controle da Injeção (mesmo grid de 4 colunas do online) ─── -->
+          <div class="card">
+            <div class="card-title">Controle de Injeção</div>
+            <div class="op-grid-controle">
+              <div class="form-group">
+                <label class="form-label">Início da Injeção</label>
+                <div style="display:flex;gap:8px">
+                  <input class="form-input auto-filled" id="off-inicio" readonly placeholder="—">
+                  <button class="btn btn-success btn-sm" id="off-btn-iniciar" title="Iniciar injeção" onclick="LWOff.iniciarInjecao()">▶</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fim da Injeção</label>
+                <div style="display:flex;gap:8px">
+                  <input class="form-input auto-filled" id="off-fim" readonly placeholder="—">
+                  <button class="btn btn-danger btn-sm" id="off-btn-finalizar" disabled title="Finalizar injeção" onclick="LWOff.finalizarInjecao()">■</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Atraso</label>
+                <div id="off-atraso" style="display:flex;align-items:center;height:38px">—</div>
+              </div>
+              <div class="form-group" id="off-motivo-row" style="display:none">
+                <label class="form-label">Motivo do atraso <span class="required">*</span></label>
+                <input class="form-input" id="off-motivo" placeholder="Explique o atraso…">
+              </div>
+            </div>
+            <div id="off-desemplaque-row" style="display:none;margin-top:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius)">
+                <span style="color:var(--text-2);font-size:.85rem">🔓 Previsão de Desemplaque</span>
+                <strong id="off-desemplaque" class="mono" style="color:var(--accent);font-size:1rem">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- ─── Pendências ─── -->
+          <div class="card">
+            <div class="card-title">Pendências <span id="off-pendencia-badge-count"></span></div>
+            <div class="pendency-list" id="off-pendencia-list"></div>
+          </div>
+
+        </div>
+
+        <!-- Coluna Direita: Traços -->
+        <div>
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between">
+              <span>Traços de Injeção</span>
+            </div>
+            <div class="traco-section">
+              <div class="traco-tabs-nav" id="off-traco-tabs"></div>
+              <div id="off-traco-body"></div>
+            </div>
+            <button class="traco-add-btn mt-4" onclick="LWOff.addTraco()">+ Adicionar Traço</button>
+          </div>
+        </div>
+
+      </div>
+    </fieldset>
 
   </div>
 
   <div class="off-actions-bar">
-    <button class="btn-ghost" onclick="LWOff.descartarPendente()">🗑 Descartar rascunho</button>
-    <button class="btn-primary" id="off-btn-registrar" disabled onclick="LWOff.registrar()">✅ Registrar</button>
+    <button class="btn btn-ghost" onclick="LWOff.descartarPendente()">🗑 Descartar rascunho</button>
+    <button class="btn btn-primary btn-lg" id="off-btn-registrar" disabled onclick="LWOff.registrar()">✅ Registrar</button>
   </div>
 
   <script src="js/offline-operacao.js"></script>
