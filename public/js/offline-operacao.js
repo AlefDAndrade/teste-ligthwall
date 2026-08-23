@@ -71,6 +71,13 @@
       status: 'idle', // idle | running | finished
       pausas: [],
       tracos: [],
+      // "🚫 Não Enchido" / vazamento (ver card Bateria Atual, abaixo) —
+      // mesmo formato usado no online (bateria-atual.js/GET
+      // /bercos-andamento): mapa esparso { 'B1': { esquerda:'baixou',
+      // direita:'nao_enchido', tipos:{esquerda:'sp',direita:'2p'} } }.
+      // Lado ausente (ou berço ausente por inteiro) = 'okay'. Só LOCAL —
+      // não existe "outro dispositivo" pra sincronizar offline.
+      bercos_marcados: {},
     };
   }
 
@@ -183,6 +190,12 @@
       houve_atraso: state.houve_atraso,
       motivo_atraso: state.motivo_atraso || '',
       qtd_tracos: state.tracos.length,
+      // Marcações de "baixou/vazou" e "🚫 Não Enchido" feitas no card
+      // Bateria Atual (ver seção BATERIA ATUAL, abaixo) — só entra no
+      // formRecord quando houver alguma, pra não poluir registros sem
+      // nenhuma marcação. Aplicadas de verdade nos totais de painéis só
+      // na hora de registrar() (ver ali) — aqui é só o rascunho salvo.
+      ...(Object.keys(state.bercos_marcados || {}).length ? { bercos_marcados: state.bercos_marcados } : {}),
     };
   }
 
@@ -215,6 +228,7 @@
       status: fr.fim ? 'finished' : (fr.inicio ? 'running' : 'idle'),
       pausas: pendente.pausas || [],
       tracos: pendente.tracos || [],
+      bercos_marcados: fr.bercos_marcados || {},
     };
     return true;
   }
@@ -326,6 +340,7 @@
     if (!Array.isArray(state.bercos_personalizados)) return;
     state.bercos_personalizados[i] = valor || null;
     persist();
+    renderBateriaAtual(); // cor/tipo do berço na grade de Bateria Atual acompanha a Personalizada
   }
 
   // ============================================================
@@ -372,6 +387,301 @@
       if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
     });
     return { total_paineis: paineis_total, m2_total: paineis_total * M2_POR_PAINEL, placas_cimenticia, paineis_por_tipo, m2_por_tipo };
+  }
+
+  // Desconta cada lado marcado "🚫 Não Enchido" (nunca "baixou/vazou" — só
+  // vazamento não tira painel nenhum, é só um alerta visual) do resultado
+  // de calcPaineis()/calcPaineisPersonalizado() — portado de
+  // aplicarNaoEnchidosNoCalc (data.js) pra funcionar 100% offline. Chamado
+  // só na hora de registrar() (ver abaixo), não a cada clique — o card
+  // Bateria Atual em si não mostra totais, só a grade de berços.
+  function aplicarNaoEnchidosNoCalc(calc, tipoMontagem, bercosPersonalizados, marcacoes) {
+    if (!marcacoes || !Object.keys(marcacoes).length) return calc;
+
+    const paineis_por_tipo = { ...(calc.paineis_por_tipo || {}) };
+
+    Object.keys(marcacoes).forEach((berco) => {
+      const bercoNum = parseInt(String(berco).replace(/^B/i, ''), 10);
+      if (!bercoNum) return;
+      const doBerco = marcacoes[berco] || {};
+      ['direita', 'esquerda'].forEach((lado) => {
+        if (doBerco[lado] !== 'nao_enchido') return;
+        // Prioriza o tipo FIXADO no instante da marcação (ver
+        // _offBaCliqueDot, abaixo) — mesma regra do online.
+        const tipoFixado = (doBerco.tipos && doBerco.tipos[lado]) || null;
+        const tipo = tipoFixado || tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado);
+        if (tipo && paineis_por_tipo[tipo] > 0) paineis_por_tipo[tipo] -= 1;
+      });
+    });
+
+    let paineis_total = 0;
+    Object.keys(paineis_por_tipo).forEach((tipo) => { paineis_total += paineis_por_tipo[tipo]; });
+
+    const m2_por_tipo = {};
+    Object.keys(paineis_por_tipo).forEach((tipo) => { m2_por_tipo[tipo] = paineis_por_tipo[tipo] * M2_POR_PAINEL; });
+
+    let placas_cimenticia = 0;
+    Object.keys(paineis_por_tipo).forEach((tipo) => {
+      const c = CIMENTICIA_POR_TIPO[tipo];
+      if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
+    });
+
+    return {
+      total_paineis: paineis_total,
+      m2_total: paineis_total * M2_POR_PAINEL,
+      placas_cimenticia,
+      paineis_por_tipo,
+      m2_por_tipo,
+    };
+  }
+
+  // Mesma convenção do online (ver _tipoDoLadoMontagem, data.js): qual
+  // TIPO de placa ('2p'/'sp'/...) um LADO específico de um berço produz —
+  // usado só pra saber de qual tipo descontar quando o lado é marcado
+  // "🚫 Não Enchido". Personalizada: tipo do berço inteiro (os 2 lados
+  // sempre batem). Simples: único tipo possível. Híbrida: 1º tipo da
+  // lista = direito, 2º = esquerdo (mesma convenção fixa do online).
+  function tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado) {
+    if (tipoMontagem === TIPO_MONTAGEM_PERSONALIZADA) {
+      const grade = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
+      return grade[bercoNum - 1] || null;
+    }
+    const opcao = (MONTAGEM_OPCOES || []).find((o) => o.label === tipoMontagem);
+    if (!opcao) return null;
+    if (opcao.modo === 'simples') return opcao.tipo || null;
+    if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos)) {
+      return lado === 'direita' ? (opcao.tipos[0] || null) : (opcao.tipos[1] || null);
+    }
+    return null;
+  }
+
+  // ============================================================
+  //  CORES POR TIPO — portado de data.js (hslParaHex/hexParaRgba/
+  //  corPorTipoSimples/corMontagemPorLabel), duplicado aqui (mesmo
+  //  padrão já usado pra calcPaineis, acima) pra não depender de data.js
+  //  nesta página standalone/offline.
+  // ============================================================
+
+  const COR_SATURACAO_SUGESTAO = 60;
+  const COR_LUMINOSIDADE_SUGESTAO = 52;
+
+  function hslParaHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const paraHex = (x) => Math.round(255 * x).toString(16).padStart(2, '0');
+    return `#${paraHex(f(0))}${paraHex(f(8))}${paraHex(f(4))}`;
+  }
+
+  function hexParaRgb(hex) {
+    let h = String(hex || '').replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    const num = parseInt(h, 16) || 0;
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+
+  function hexParaRgba(hex, alpha) {
+    const { r, g, b } = hexParaRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function corCssDoHex(hex) {
+    return { cor: hex, bg: hexParaRgba(hex, .15), borda: hexParaRgba(hex, .3) };
+  }
+
+  function corMontagemNeutra() {
+    return { cor: '#5c6475', bg: 'rgba(156, 163, 175, .1)', borda: '#2a2f3a' };
+  }
+
+  function hexDoTipoSimples(tipoOuOpcao) {
+    const op = typeof tipoOuOpcao === 'string'
+      ? (MONTAGEM_OPCOES || []).find((o) => o.modo === 'simples' && o.tipo === tipoOuOpcao)
+      : tipoOuOpcao;
+    if (!op) return null;
+    if (typeof op.cor === 'string' && op.cor) return op.cor;
+    if (typeof op.corHue === 'number') return hslParaHex(op.corHue, COR_SATURACAO_SUGESTAO, COR_LUMINOSIDADE_SUGESTAO);
+    return null;
+  }
+
+  // Cor de um tipo SIMPLES pelo código (ex: 'sp') — usado na grade de
+  // Montagem Personalizada.
+  function corPorTipoSimples(tipo) {
+    const hex = hexDoTipoSimples(tipo);
+    return hex ? corCssDoHex(hex) : corMontagemNeutra();
+  }
+
+  // Cor de um tipo de montagem pelo LABEL (ex: '2/P', 'HÍBRIDA 2p/sp') —
+  // usado pra bateria uniforme (todo berço com o mesmo tipo).
+  function corMontagemPorLabel(label) {
+    const opcao = (MONTAGEM_OPCOES || []).find((o) => o.label === label);
+    if (!opcao) return corMontagemNeutra();
+    if (opcao.modo === 'simples') {
+      const hex = hexDoTipoSimples(opcao);
+      if (hex) return corCssDoHex(hex);
+    }
+    if (opcao.modo === 'hibrida' && Array.isArray(opcao.tipos) && opcao.tipos.length === 2) {
+      const [op1, op2] = opcao.tipos.map((t) => (MONTAGEM_OPCOES || []).find((o) => o.modo === 'simples' && o.tipo === t));
+      const hex1 = hexDoTipoSimples(op1);
+      const hex2 = hexDoTipoSimples(op2);
+      if (hex1 && hex2) {
+        const c1 = corCssDoHex(hex1);
+        const c2 = corCssDoHex(hex2);
+        return { cor: c1.cor, bg: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`, borda: c1.borda };
+      }
+    }
+    return corMontagemNeutra();
+  }
+
+  function corPorTipoBerco(ehPersonalizada, tipo) {
+    if (!tipo) return null;
+    return ehPersonalizada ? corPorTipoSimples(tipo) : corMontagemPorLabel(tipo);
+  }
+
+  // ============================================================
+  //  BATERIA ATUAL — versão offline do card sempre visível de
+  //  bateria-atual.js, reaproveitando as MESMAS classes CSS (.ba-*,
+  //  ver styles.css) pra ficar visualmente idêntico ao online. Duas
+  //  diferenças de propósito em relação ao online:
+  //   1) Sem trava de "dono da operação" nem sincronização entre
+  //      dispositivos — offline não tem nenhum dos dois conceitos, os
+  //      indicadores ficam sempre clicáveis.
+  //   2) Sem o modo "📋 Detalhes do Berço" (modal com traço/receita/
+  //      posição no palete) — não pedido aqui, e boa parte dos dados que
+  //      ele mostra (traço já lançado, posição no palete configurado)
+  //      não faz tanto sentido reaproveitar nesta tela mais simples.
+  // ============================================================
+
+  // Modo "🚫 Marcar Não Enchido" — enquanto ATIVO, clicar num indicador
+  // marca aquele lado como 'nao_enchido' (✕) em vez de 'baixou' (● o
+  // vazamento de sempre). Só estado local da tela (não precisa
+  // persistir sozinho — o que importa é o que já foi marcado, guardado
+  // em state.bercos_marcados).
+  let _offModoNaoEnchido = false;
+
+  // Lista de tipos por berço — igual _baTiposPorBerco (bateria-atual.js).
+  function tiposPorBerco(capacidade) {
+    if (state.tipo_montagem === TIPO_MONTAGEM_PERSONALIZADA) {
+      const grade = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
+      return Array.from({ length: capacidade }, (_, i) => grade[i] || null);
+    }
+    return Array.from({ length: capacidade }, () => state.tipo_montagem || null);
+  }
+
+  function tituloDot(estado, lado, tipo) {
+    const ladoTxt = lado === 'direita' ? 'Direito' : 'Esquerdo';
+    const tipoTxt = tipo ? ` (${escaparHtml(String(tipo).toUpperCase())})` : '';
+    if (estado === 'nao_enchido') return `${ladoTxt}${tipoTxt} — Não enchido`;
+    if (estado === 'baixou') return `${ladoTxt}${tipoTxt} — Baixou/Vazou`;
+    return `${ladoTxt}${tipoTxt}`;
+  }
+
+  function renderBateriaAtual() {
+    const el = $('off-bateria-atual-content');
+    if (!el) return;
+
+    if (!state.id_bateria || !state.tipo_montagem) {
+      el.innerHTML = '<span class="ba-vazio">Defina a bateria e o tipo de montagem para ver a prévia aqui.</span>';
+      return;
+    }
+
+    const capacidade = state.capacidade || 0;
+    const tipos = tiposPorBerco(capacidade);
+    const ehPersonalizada = state.tipo_montagem === TIPO_MONTAGEM_PERSONALIZADA;
+    const marcacoes = state.bercos_marcados || {};
+
+    const resumo = `
+      <div class="ba-resumo">
+        <strong>Bateria ${escaparHtml(state.id_bateria || '—')}</strong> — ${escaparHtml(state.tipo_montagem || '—')}
+        ${capacidade ? ` — ${capacidade} berços` : ''}
+      </div>`;
+
+    const botaoModo = `<button type="button" id="off-ba-btn-nao-enchido" class="btn btn-sm ${_offModoNaoEnchido ? 'btn-danger' : 'btn-ghost'}">
+        ${_offModoNaoEnchido ? '✕ Marcando Não Enchido — clique p/ desligar' : '🚫 Marcar Não Enchido'}
+      </button>`;
+
+    const dica = _offModoNaoEnchido
+      ? `<div class="ba-dica ba-dica-nao-enchido">✕ Clique num indicador para marcar aquele lado como <strong>não enchido</strong> — o painel correspondente sai da grade de avaliação da Qualidade.</div>`
+      : `<div class="ba-dica">🖱️ Clique num indicador (•) para marcar que aquele lado do berço baixou ou vazou</div>`;
+
+    const grid = `<div class="ba-grid">${tipos.map((tipo, i) => {
+      const cor = corPorTipoBerco(ehPersonalizada, tipo);
+      const numero = String(i + 1).padStart(2, '0');
+      const berco = 'B' + (i + 1);
+      const bercoNum = i + 1;
+      const marcadoBerco = marcacoes[berco] || {};
+      const estadoDir = marcadoBerco.direita || null;
+      const estadoEsq = marcadoBerco.esquerda || null;
+      const dirMarcado = !!estadoDir;
+      const esqMarcado = !!estadoEsq;
+      const dirNaoEnchido = estadoDir === 'nao_enchido';
+      const esqNaoEnchido = estadoEsq === 'nao_enchido';
+      const tipoDir = (marcadoBerco.tipos && marcadoBerco.tipos.direita) || tipoDoLadoMontagem(state.tipo_montagem, state.bercos_personalizados, bercoNum, 'direita');
+      const tipoEsq = (marcadoBerco.tipos && marcadoBerco.tipos.esquerda) || tipoDoLadoMontagem(state.tipo_montagem, state.bercos_personalizados, bercoNum, 'esquerda');
+
+      return `
+        <div class="ba-celula" data-berco="${berco}"
+          style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="direita"
+            data-tooltip="${tituloDot(estadoDir, 'direita', tipoDir)}">${dirNaoEnchido ? '✕' : '•'}</span>
+          <span class="ba-numero">B${numero}</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="esquerda"
+            data-tooltip="${tituloDot(estadoEsq, 'esquerda', tipoEsq)}">${esqNaoEnchido ? '✕' : '•'}</span>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.innerHTML = resumo + `<div class="ba-botoes">${botaoModo}</div>` + dica + grid;
+
+    const btnModo = $('off-ba-btn-nao-enchido');
+    if (btnModo) {
+      btnModo.addEventListener('click', () => {
+        _offModoNaoEnchido = !_offModoNaoEnchido;
+        renderBateriaAtual(); // redesenha na hora (botão, dica e cursor dos indicadores mudam com o modo)
+      });
+    }
+
+    el.querySelectorAll('.ba-dot').forEach((dot) => {
+      dot.addEventListener('click', () => {
+        cliqueDotBateriaAtual(dot.getAttribute('data-berco'), dot.getAttribute('data-lado'), _offModoNaoEnchido ? 'nao_enchido' : 'baixou');
+      });
+    });
+  }
+
+  // Alterna (toggle) o estado de UM lado de UM berço — 100% local (sem
+  // rede, sem otimismo/desfazer, diferente do online): grava direto em
+  // state.bercos_marcados e persiste. Clique de novo no mesmo indicador
+  // (já marcado, seja como 'baixou' ou 'nao_enchido') sempre desmarca —
+  // nunca troca uma marcação por outra sem antes desmarcar, mesma regra
+  // do online.
+  function cliqueDotBateriaAtual(berco, lado, estadoDesejado) {
+    if (!berco || !lado) return;
+    const marcacoes = state.bercos_marcados || (state.bercos_marcados = {});
+    const marcadoBerco = marcacoes[berco] || {};
+    const estadoAtual = marcadoBerco[lado] || null;
+    const estavaMarcado = estadoAtual === 'baixou' || estadoAtual === 'nao_enchido';
+    const novoEstado = estavaMarcado ? null : estadoDesejado;
+
+    const bercoNum = parseInt(String(berco).replace(/^B/i, ''), 10);
+    const tipoFixado = (novoEstado === 'nao_enchido' && bercoNum)
+      ? tipoDoLadoMontagem(state.tipo_montagem, state.bercos_personalizados, bercoNum, lado)
+      : null;
+
+    const novoBerco = { ...marcadoBerco };
+    if (novoEstado) {
+      novoBerco[lado] = novoEstado;
+      if (tipoFixado) novoBerco.tipos = { ...(novoBerco.tipos || {}), [lado]: tipoFixado };
+    } else {
+      delete novoBerco[lado];
+      if (novoBerco.tipos) {
+        const { [lado]: _descartado, ...restoTipos } = novoBerco.tipos;
+        if (Object.keys(restoTipos).length) novoBerco.tipos = restoTipos; else delete novoBerco.tipos;
+      }
+    }
+    if (Object.keys(novoBerco).length) marcacoes[berco] = novoBerco;
+    else delete marcacoes[berco];
+
+    persist();
+    renderBateriaAtual();
   }
 
   // ============================================================
@@ -848,9 +1158,13 @@
 
     const bateria = BATERIA_IDS.find((b) => b.id === state.id_bateria);
     const bercos = bateria?.bercos || 0;
-    const calc = state.tipo_montagem === TIPO_MONTAGEM_PERSONALIZADA
+    const calcBruto = state.tipo_montagem === TIPO_MONTAGEM_PERSONALIZADA
       ? calcPaineisPersonalizado(state.bercos_personalizados)
       : calcPaineis(state.tipo_montagem, bercos);
+    // Desconta cada lado marcado "🚫 Não Enchido" em Bateria Atual (ver
+    // seção BATERIA ATUAL, acima) — mesma regra do online: só entra na
+    // conta final aqui, no Registrar, não durante o preenchimento.
+    const calc = aplicarNaoEnchidosNoCalc(calcBruto, state.tipo_montagem, state.bercos_personalizados, state.bercos_marcados);
 
     // Salva JÁ, no aparelho — isso é o "Registrar": não depende de rede
     // nem de servidor responder. calc (painéis/m²) entra direto no
@@ -921,6 +1235,8 @@
     // Traços e pendências
     renderTracos();
     updatePendencias();
+    _offModoNaoEnchido = false; // volta pro modo padrão (vazamento) no próximo registro
+    renderBateriaAtual();
 
     $('off-btn-registrar').textContent = '✅ Registrar';
   }
@@ -1032,15 +1348,25 @@
       state.id_bateria = e.target.value;
       atualizarDimensaoAutoFill();
       atualizarGradePersonalizada();
+      // Troca de bateria muda a quantidade/numeração dos berços — as
+      // marcações antigas de vazamento/não enchido não fazem mais
+      // sentido pro novo tamanho, então zera (mesmo espírito de
+      // `bercos_personalizados` ser reconstruído em atualizarGradePersonalizada).
+      state.bercos_marcados = {};
       persist();
       updatePendencias();
+      renderBateriaAtual();
     });
     $('off-tipo-montagem').addEventListener('change', (e) => {
       state.tipo_montagem = e.target.value;
       if (state.tipo_montagem !== TIPO_MONTAGEM_PERSONALIZADA) state.bercos_personalizados = null;
+      // Mudar o tipo de montagem muda de qual TIPO cada lado desconta —
+      // zera as marcações antigas pelo mesmo motivo da troca de bateria.
+      state.bercos_marcados = {};
       atualizarGradePersonalizada();
       persist();
       updatePendencias();
+      renderBateriaAtual();
     });
     $('off-motivo').addEventListener('input', (e) => { state.motivo_atraso = e.target.value; persist(); });
 
@@ -1064,6 +1390,7 @@
     renderTracos();
     updatePendencias();
     renderFila();
+    renderBateriaAtual(); // mostra a grade já com as marcações restauradas, se estava retomando um rascunho
 
     if (retomando) {
       mostrarBanner('↩️ Retomando um rascunho salvo neste aparelho, ainda não registrado.', 'aviso');

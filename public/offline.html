@@ -193,6 +193,20 @@
             </div>
             <button class="traco-add-btn mt-4" onclick="LWOff.addTraco()">+ Adicionar Traço</button>
           </div>
+
+          <!-- ─── Bateria Atual — mesmo cartão/grade da tela online (ver
+               public/js/bateria-atual.js), versão simplificada e 100%
+               local: sem sincronização entre dispositivos nem trava de
+               "dono da operação" (não existem offline), só o estado
+               deste formulário mesmo. ─── -->
+          <div class="card mt-4">
+            <div class="card-title" style="justify-content:space-between">
+              <span>🔋 Bateria Atual</span>
+            </div>
+            <div id="off-bateria-atual-content">
+              <span class="ba-vazio">Defina a bateria e o tipo de montagem para ver a prévia aqui.</span>
+            </div>
+          </div>
         </div>
 
       </div>
