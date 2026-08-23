@@ -173,6 +173,37 @@
             </div>
           </div>
 
+          <!-- ─── Cálculo de Painéis — mesmo cartão/grid do online (ver
+               public/js/operacao.js, recalcPaineis/op-cards-paineis) —
+               Total + cards por tipo (2/P, S/P, ...) inseridos
+               dinamicamente conforme a montagem escolhida. ─── -->
+          <div class="card">
+            <div id="off-cards-paineis" class="op-grid-paineis">
+              <div>
+                <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
+                  Total Painéis</div>
+                <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--accent)"
+                  id="off-paineis-total">—</div>
+              </div>
+              <!-- Cards de Painéis por tipo (2/P, S/P, 3/P, ...) inseridos dinamicamente aqui -->
+              <div id="off-cards-paineis-tipo" style="display:contents"></div>
+              <div>
+                <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
+                  m² Total</div>
+                <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:var(--text)"
+                  id="off-m2-total">—</div>
+              </div>
+              <!-- Cards de m² por tipo (2/P, S/P, 3/P, ...) inseridos dinamicamente aqui -->
+              <div id="off-cards-m2-tipo" style="display:contents"></div>
+              <div>
+                <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
+                  P cimentícia</div>
+                <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--green)"
+                  id="off-placas-cimenticia">—</div>
+              </div>
+            </div>
+          </div>
+
           <!-- ─── Pendências ─── -->
           <div class="card">
             <div class="card-title">Pendências <span id="off-pendencia-badge-count"></span></div>

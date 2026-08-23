@@ -341,6 +341,7 @@
     state.bercos_personalizados[i] = valor || null;
     persist();
     renderBateriaAtual(); // cor/tipo do berço na grade de Bateria Atual acompanha a Personalizada
+    renderCalculoPaineis(); // total/por tipo mudam a cada berço definido na grade
   }
 
   // ============================================================
@@ -538,6 +539,91 @@
     return ehPersonalizada ? corPorTipoSimples(tipo) : corMontagemPorLabel(tipo);
   }
 
+  // Mesmas 5 cores de fallback do online (_CORES_TIPO_FALLBACK,
+  // operacao.js) — usadas só quando o tipo não tem cor cadastrada em
+  // Configurações → Bateria e Montagem.
+  const CORES_TIPO_FALLBACK = ['var(--blue)', 'var(--green)', 'var(--accent)', 'var(--purple)', 'var(--yellow)'];
+
+  // Cor de UM tipo (código, ex: '2p'/'sp') pros cards de Painéis/m² por
+  // tipo — igual _corTipoCard (operacao.js): sempre corPorTipoSimples
+  // (as chaves de paineis_por_tipo são sempre CÓDIGOS de tipo simples,
+  // mesmo numa montagem híbrida ou personalizada), com fallback cíclico
+  // só quando o tipo não tem cor cadastrada (cai no cinza neutro).
+  function corTipoCard(tipo, i) {
+    const cor = corPorTipoSimples(tipo);
+    const ehNeutra = !cor || cor.cor === '#5c6475';
+    return ehNeutra ? CORES_TIPO_FALLBACK[i % CORES_TIPO_FALLBACK.length] : cor.cor;
+  }
+
+  // Labels amigáveis pra tipos conhecidos — igual _labelTipo (operacao.js).
+  function labelTipo(tipo) {
+    const conhecidos = { '2p': '2/P', 'sp': 'S/P', '3p': '3/P' };
+    if (conhecidos[tipo]) return conhecidos[tipo];
+    const m = tipo.match(/^(\d+)p$/i);
+    if (m) return `${m[1]}/P`;
+    return tipo.toUpperCase();
+  }
+
+  // ============================================================
+  //  CÁLCULO DE PAINÉIS (preview ao vivo) — mesmo cartão/grid do online
+  //  (ver recalcPaineis, operacao.js): Total Painéis + cards por tipo
+  //  (2/P, S/P, ...), m² Total + cards por tipo, Placas Cimentícia. Já
+  //  aplica o desconto de "🚫 Não Enchido" marcado em Bateria Atual (ver
+  //  state.bercos_marcados) — só o preview em tela; o total que de fato
+  //  é REGISTRADO é recalculado do zero em registrar() (mesma fórmula).
+  // ============================================================
+
+  function renderCalculoPaineis() {
+    const elTotal = $('off-paineis-total');
+    if (!elTotal) return; // card só existe nesta tela
+
+    const elM2Total = $('off-m2-total');
+    const elCimenticia = $('off-placas-cimenticia');
+    const elPaineisTipo = $('off-cards-paineis-tipo');
+    const elM2Tipo = $('off-cards-m2-tipo');
+
+    const bercos = state.capacidade || 0;
+    if (!bercos || !state.tipo_montagem) {
+      elTotal.textContent = '—';
+      elM2Total.textContent = '—';
+      elCimenticia.textContent = '—';
+      if (elPaineisTipo) elPaineisTipo.innerHTML = '';
+      if (elM2Tipo) elM2Tipo.innerHTML = '';
+      return;
+    }
+
+    const base = state.tipo_montagem === TIPO_MONTAGEM_PERSONALIZADA
+      ? calcPaineisPersonalizado(state.bercos_personalizados)
+      : calcPaineis(state.tipo_montagem, bercos);
+    const r = aplicarNaoEnchidosNoCalc(base, state.tipo_montagem, state.bercos_personalizados, state.bercos_marcados);
+
+    elTotal.textContent = r.total_paineis;
+    elM2Total.textContent = r.m2_total.toFixed(2) + ' m²';
+    elCimenticia.textContent = r.placas_cimenticia;
+
+    const tipos = Object.keys(r.paineis_por_tipo);
+    if (elPaineisTipo) {
+      elPaineisTipo.innerHTML = tipos.map((tipo, i) => `
+        <div>
+          <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
+            Painéis ${labelTipo(tipo)}</div>
+          <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:${corTipoCard(tipo, i)}">
+            ${r.paineis_por_tipo[tipo]}</div>
+        </div>
+      `).join('');
+    }
+    if (elM2Tipo) {
+      elM2Tipo.innerHTML = tipos.map((tipo, i) => `
+        <div>
+          <div style="font-size:.6rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">
+            m² ${labelTipo(tipo)}</div>
+          <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:${corTipoCard(tipo, i)}">
+            ${r.m2_por_tipo[tipo].toFixed(2)} m²</div>
+        </div>
+      `).join('');
+    }
+  }
+
   // ============================================================
   //  BATERIA ATUAL — versão offline do card sempre visível de
   //  bateria-atual.js, reaproveitando as MESMAS classes CSS (.ba-*,
@@ -682,6 +768,7 @@
 
     persist();
     renderBateriaAtual();
+    renderCalculoPaineis(); // "🚫 Não Enchido" desconta painéis do preview na hora (ver aplicarNaoEnchidosNoCalc)
   }
 
   // ============================================================
@@ -1237,6 +1324,7 @@
     updatePendencias();
     _offModoNaoEnchido = false; // volta pro modo padrão (vazamento) no próximo registro
     renderBateriaAtual();
+    renderCalculoPaineis(); // volta pro placeholder '—' (state novo, sem bateria/tipo definidos)
 
     $('off-btn-registrar').textContent = '✅ Registrar';
   }
@@ -1356,6 +1444,7 @@
       persist();
       updatePendencias();
       renderBateriaAtual();
+      renderCalculoPaineis();
     });
     $('off-tipo-montagem').addEventListener('change', (e) => {
       state.tipo_montagem = e.target.value;
@@ -1367,6 +1456,7 @@
       persist();
       updatePendencias();
       renderBateriaAtual();
+      renderCalculoPaineis();
     });
     $('off-motivo').addEventListener('input', (e) => { state.motivo_atraso = e.target.value; persist(); });
 
@@ -1391,6 +1481,7 @@
     updatePendencias();
     renderFila();
     renderBateriaAtual(); // mostra a grade já com as marcações restauradas, se estava retomando um rascunho
+    renderCalculoPaineis(); // idem — totais já batendo com o rascunho restaurado
 
     if (retomando) {
       mostrarBanner('↩️ Retomando um rascunho salvo neste aparelho, ainda não registrado.', 'aviso');
