@@ -1223,9 +1223,9 @@
         titulo: ehPdf ? '📕 Exportar PDF' : '🌐 Exportar Interativo',
         icon: ehPdf ? '📕' : '🌐',
         itens: [
-          { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação, do jeito que já era.' },
+          { valor: 'simples', texto: '📄 Exportação Simples', desc: 'Só esta operação' },
           { valor: 'dia', texto: '📅 Do Dia', desc: 'Escolha uma data — todas as operações feitas nela.' },
-          { valor: 'personalizada', texto: '🗓️ Personalizada', desc: 'Escolha um período — todas as operações feitas nele, uma embaixo da outra.' },
+          { valor: 'personalizada', texto: '🗓️ Personalizada', desc: 'Escolha um período — exporta todas as operações feitas nele' },
         ],
         textoCancelar: 'Cancelar',
       }

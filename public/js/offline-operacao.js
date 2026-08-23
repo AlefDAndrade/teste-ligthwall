@@ -93,15 +93,18 @@
   //  ARMAZENAMENTO LOCAL — item 3 do plano
   // ============================================================
 
-  function persist(status) {
+  let ultimoStatusPersistido = 'preenchendo';
+
+  function persist(status, extraFormRecord) {
+    ultimoStatusPersistido = status || 'preenchendo';
     const pendente = {
       idTemp,
       iniciadoEm,
       atualizadoEm: new Date().toISOString(),
-      formRecord: montarFormRecord(),
+      formRecord: { ...montarFormRecord(), ...(extraFormRecord || {}) },
       tracos: state.tracos,
       pausas: state.pausas,
-      status: status || 'preenchendo',
+      status: ultimoStatusPersistido,
     };
     try {
       localStorage.setItem(DB_KEY, JSON.stringify(pendente));
@@ -138,6 +141,7 @@
     try { pendente = JSON.parse(raw); } catch (_) { return false; }
     if (!pendente || pendente.status === 'sincronizado') return false;
 
+    ultimoStatusPersistido = pendente.status || 'preenchendo';
     idTemp = pendente.idTemp;
     iniciadoEm = pendente.iniciadoEm;
     const fr = pendente.formRecord || {};
@@ -710,9 +714,78 @@
   }
 
   // ============================================================
-  //  REGISTRAR — tenta sincronizar (item 5, rota ainda não existe);
-  //  se falhar, fica salvo localmente como "aguardando_conexao".
+  //  REGISTRAR — SALVA localmente na hora (item 3) e tenta sincronizar
+  //  em segundo plano (item 5). O usuário nunca precisa "reenviar" na
+  //  mão: enquanto houver um registro aguardando_conexao no aparelho,
+  //  checarReconexao() (evento 'online' + polling a cada 15s, mais
+  //  abaixo) tenta de novo sozinho até dar certo.
   // ============================================================
+
+  let _sincronizando = false;
+
+  // Faz de fato a chamada de rede pra um pendente já salvo (objeto no
+  // formato { idTemp, formRecord, tracos, pausas, ... }). Lança erro
+  // se não conseguir — quem chama decide o que fazer com isso.
+  async function enviarPendenteParaServidor(pendente) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch('/operacao-offline/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idTemp: pendente.idTemp,
+          formRecord: pendente.formRecord,
+          tracos: pendente.tracos,
+          pausas: pendente.pausas,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error('Servidor recusou o envio (HTTP ' + res.status + ')');
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // Lê o que está salvo no aparelho (fonte da verdade, não o `state` em
+  // memória — assim funciona igual tanto logo após clicar Registrar
+  // quanto minutos/horas depois, quando a conexão finalmente voltar) e,
+  // se houver algo "aguardando_conexao" (ou seja, já clicaram
+  // Registrar), tenta enviar. Devolve true só quando realmente
+  // sincronizou algo agora. Nunca envia um rascunho ainda em
+  // preenchimento (status "preenchendo") — só o que já foi Registrado.
+  async function tentarSincronizarAgora() {
+    if (_sincronizando) return false;
+    let raw;
+    try { raw = localStorage.getItem(DB_KEY); } catch (_) { return false; }
+    if (!raw) return false;
+    let pendente;
+    try { pendente = JSON.parse(raw); } catch (_) { return false; }
+    if (!pendente || pendente.status !== 'aguardando_conexao') return false;
+
+    _sincronizando = true;
+    try {
+      await enviarPendenteParaServidor(pendente);
+      localStorage.removeItem(DB_KEY);
+      mostrarBanner(
+        `🌐 Conexão restabelecida — o registro salvo (código ${pendente.idTemp}) foi enviado ` +
+        `automaticamente para validação! Você já pode preencher a próxima operação.`,
+        'sucesso'
+      );
+      // Só limpa a TELA se ela ainda for a mesma operação que acabou de
+      // sincronizar (é sempre o caso hoje, já que só existe 1 pendente
+      // por vez — ver README, item 3 — mas a checagem evita apagar um
+      // rascunho novo caso isso mude no futuro).
+      if (idTemp === pendente.idTemp) {
+        limparFormularioNovoRegistro();
+      }
+      return true;
+    } catch (e) {
+      return false; // ainda sem servidor disponível — tenta de novo depois
+    } finally {
+      _sincronizando = false;
+    }
+  }
 
   async function registrar() {
     if ($('off-btn-registrar').disabled) return;
@@ -724,54 +797,68 @@
       ? calcPaineisPersonalizado(state.bercos_personalizados)
       : calcPaineis(state.tipo_montagem, bercos);
 
-    const pendente = persist('preenchendo');
-    pendente.formRecord = { ...pendente.formRecord, ...calc };
+    // Salva JÁ, no aparelho — isso é o "Registrar": não depende de rede
+    // nem de servidor responder. calc (painéis/m²) entra direto no
+    // formRecord persistido, então uma sincronização automática horas
+    // depois manda os dados completos, sem precisar do state em memória.
+    persist('aguardando_conexao', calc);
+    $('off-fieldset-trava').disabled = true;
 
     $('off-btn-registrar').disabled = true;
-    $('off-btn-registrar').textContent = 'Enviando…';
+    $('off-btn-registrar').textContent = 'Salvando…';
+    mostrarBanner(
+      `💾 Registro salvo neste aparelho (código ${idTemp}). Assim que a conexão com o ` +
+      `servidor voltar, ele é enviado sozinho — não precisa fazer mais nada.`,
+      'aviso'
+    );
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch('/operacao-offline/enviar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idTemp, formRecord: pendente.formRecord, tracos: state.tracos, pausas: state.pausas }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) throw new Error('Servidor recusou o envio (HTTP ' + res.status + ')');
-
-      // Sucesso — sincronizado de verdade, remove o pendente local.
-      localStorage.removeItem(DB_KEY);
-      mostrarTelaSucesso();
-    } catch (e) {
-      // Sem rota de sincronização disponível ainda, ou sem conexão —
-      // mantém salvo localmente (status aguardando_conexao) e avisa.
-      persist('aguardando_conexao');
-      $('off-btn-registrar').disabled = false;
-      $('off-btn-registrar').textContent = '✅ Registrar';
-      mostrarBanner(
-        `📡 Não foi possível enviar agora. Seu registro está salvo NESTE APARELHO ` +
-        `(código ${idTemp}) e não será perdido — tente novamente quando a conexão ` +
-        `com o servidor estiver disponível.`,
-        'aviso'
-      );
+    // Tenta sincronizar JÁ, em segundo plano — se a conexão já estiver
+    // de volta, o aviso acima é rapidamente substituído pelo de sucesso
+    // (dentro de tentarSincronizarAgora) e o formulário libera sozinho.
+    const sincronizou = await tentarSincronizarAgora();
+    if (!sincronizou) {
+      $('off-btn-registrar').textContent = '💾 Salvo — aguardando conexão…';
     }
   }
 
-  function mostrarTelaSucesso() {
-    document.querySelector('.off-wrap').innerHTML = `
-      <div class="card" style="text-align:center;padding:40px 24px">
-        <div style="font-size:2.4rem;margin-bottom:12px">✅</div>
-        <div class="card-title" style="justify-content:center">Enviado para validação</div>
-        <p style="color:var(--text-2);margin-top:10px;line-height:1.5">
-          Peça a alguém com perfil Administrador para revisar e validar este
-          registro em "Operações a Validar".
-        </p>
-        <a href="login.html" class="btn btn-primary" style="text-decoration:none;display:inline-block;margin-top:20px">← Voltar ao login</a>
-      </div>`;
-    document.querySelector('.off-actions-bar').style.display = 'none';
+  // Reseta todo o estado/formulário depois de um registro enviado com
+  // sucesso, pra abrir espaço pra registrar outra operação sem sair
+  // desta tela (o slot local — DB_KEY — já foi liberado antes de
+  // chamar esta função, ver registrar()).
+  function limparFormularioNovoRegistro() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+
+    $('off-fieldset-trava').disabled = false;
+    idTemp = gerarIdTemp();
+    iniciadoEm = new Date().toISOString();
+    expandedTracoIndex = 0;
+    state = criarStateVazio();
+
+    // Identificação
+    $('off-turno').value = state.turno;
+    popularSelects(); // repopula ID da Bateria / Tipo de Montagem já sem seleção (state está vazio)
+
+    // Controle de Injeção
+    $('off-inicio').value = '';
+    $('off-btn-iniciar').disabled = false;
+    $('off-fim').value = '';
+    $('off-btn-finalizar').disabled = true;
+    $('off-atraso').innerHTML = '—';
+    $('off-motivo-row').style.display = 'none';
+    $('off-motivo').value = '';
+    $('off-desemplaque-row').style.display = 'none';
+    $('off-desemplaque').textContent = '—';
+    const timerEl = $('off-timer-display');
+    timerEl.textContent = '0:00:00';
+    timerEl.className = 'timer-display';
+    atualizarBtnPausar();
+
+    // Traços e pendências
+    renderTracos();
+    updatePendencias();
+
+    $('off-btn-registrar').textContent = '✅ Registrar';
   }
 
   function descartarPendente() {
@@ -793,21 +880,26 @@
     el.innerHTML = `<div style="padding:12px 16px;border-radius:8px;font-size:.85rem;line-height:1.5;${cores[tipo] || cores.aviso}">${mensagem}</div>`;
   }
 
-  // item 4 do plano: conexão volta NO MEIO do preenchimento (antes de
-  // clicar Registrar) — mesma checagem ativa por fetch usada no item 1
-  // (login.html) e no item 9 (operacao.js), já que o evento 'online' do
-  // navegador sozinho não é confiável.
+  // item 4 do plano: conexão volta a qualquer momento (durante o
+  // preenchimento OU depois de já ter clicado Registrar) — mesma
+  // checagem ativa por fetch usada no item 1 (login.html) e no item 9
+  // (operacao.js), já que o evento 'online' do navegador sozinho não é
+  // confiável. Ao detectar conexão, tenta sincronizar sozinho qualquer
+  // registro já salvo como "aguardando_conexao" (ver
+  // tentarSincronizarAgora) — só cai no aviso genérico abaixo quando
+  // NÃO havia nada pra sincronizar (ex: ainda em preenchimento).
   let _avisouReconexao = false;
   async function checarReconexao() {
-    if (state.status === 'finished' && _avisouReconexao) return; // já avisou, nada novo a dizer
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
     try {
       await fetch('/minha-sessao', { method: 'GET', cache: 'no-store', signal: controller.signal });
-      if (!_avisouReconexao) {
-        _avisouReconexao = true;
+      const primeiraVezOnline = !_avisouReconexao;
+      _avisouReconexao = true;
+      const sincronizou = await tentarSincronizarAgora();
+      if (primeiraVezOnline && !sincronizou) {
         mostrarBanner(
-          '🌐 Conexão restabelecida. Termine este registro; depois disso, o modo offline ficará bloqueado até alguém entrar com um perfil.',
+          '🌐 Conexão restabelecida. Pode continuar preenchendo — quando clicar em "Registrar", o envio é automático.',
           'sucesso'
         );
       }
@@ -871,12 +963,28 @@
     updatePendencias();
 
     if (retomando) {
-      mostrarBanner('↩️ Retomando um registro offline salvo neste aparelho, ainda não enviado.', 'aviso');
+      if (ultimoStatusPersistido === 'aguardando_conexao') {
+        // Já tinha sido Registrado antes de recarregar a página/reabrir o
+        // app — trava os campos (mesmo estado que ficam logo depois de
+        // clicar Registrar) e deixa a sincronização automática cuidar
+        // do resto.
+        $('off-fieldset-trava').disabled = true;
+        $('off-btn-registrar').disabled = true;
+        $('off-btn-registrar').textContent = '💾 Salvo — aguardando conexão…';
+        mostrarBanner(
+          `↩️ Retomando um registro já salvo neste aparelho (código ${idTemp}), ainda não enviado. ` +
+          `Será sincronizado automaticamente assim que a conexão voltar.`,
+          'aviso'
+        );
+      } else {
+        mostrarBanner('↩️ Retomando um rascunho salvo neste aparelho, ainda não registrado.', 'aviso');
+      }
     }
 
     window.addEventListener('offline', () => { _avisouReconexao = false; });
     window.addEventListener('online', checarReconexao);
     setInterval(checarReconexao, 15000);
+    checarReconexao(); // tenta sincronizar já de cara, sem esperar o primeiro polling de 15s
   }
 
   document.addEventListener('DOMContentLoaded', init);
