@@ -757,6 +757,28 @@ function _perfilTemPermissaoDeOperacao() {
 }
 
 /**
+ * Indica se quem está logado agora é o Administrador Master — sessão de
+ * senha mestra OU usuário logado com perfil Administrativo (mesma
+ * checagem usada em _perfilTemPermissaoDeOperacao, acima; 'lw_role'
+ * guarda os dois nomes internos pro mesmo conceito, ver comentário em
+ * manutencao-front.js). Usado só pra dispensar a trava de "dono da
+ * operação" (ver _bloqueadoPorAutorizacao/_aplicarTravaDeAutorizacao,
+ * operacao.js, e _podeMarcarVazamento, bateria-atual.js) — pedido
+ * explícito do usuário: o Master, NUM DISPOSITIVO AUTORIZADO, pode
+ * pausar, trocar traço, marcar berço etc. numa operação que outra
+ * pessoa/dispositivo iniciou, sem precisar "🗑️ Limpar Tudo" (que reseta
+ * tudo e tira o controle de quem estava operando). Não dispensa a
+ * autorização do DISPOSITIVO — só a disputa de "dono" entre dispositivos
+ * já autorizados. A trava de verdade é sempre no servidor (mesmo bypass
+ * em POST /salvar-operacao-andamento e /marcar-berco-andamento, ver
+ * lib/rotas/operacao-andamento.js) — isto aqui é só pra UI/UX.
+ */
+function ehMaster() {
+  const role = sessionStorage.getItem('lw_role');
+  return role === 'Administrador' || role === 'Administrativo';
+}
+
+/**
  * Indica se ESTE dispositivo (navegador/computador) está na lista de
  * autorizados (voltou — ver conversa que motivou a mudança; ver
  * DISPOSITIVOS_AUTORIZADOS, preenchida por loadConfig()). Outra metade de
@@ -2719,7 +2741,7 @@ window.LW = {
   // Log de Acesso
   getDeviceId, registrarAcesso,
   nomeDeQuemEstaLogado,
-  dispositivoEstaAutorizado, motivoBloqueioOperacao,
+  dispositivoEstaAutorizado, motivoBloqueioOperacao, ehMaster,
 
   // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
   listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,

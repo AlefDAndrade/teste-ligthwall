@@ -229,13 +229,17 @@
   // critério de _bloqueadoPorAutorizacao/_aplicarTravaDeAutorizacao
   // (operacao.js): Modo de Teste nunca trava (sandbox local, sem conceito
   // de dono); fora dele, precisa estar Autorizado E (ninguém ser dono
-  // ainda, OU o dono ser este dispositivo). A trava de verdade é sempre
-  // no servidor (ver POST /marcar-berco-andamento) — isto aqui só evita
-  // deixar os indicadores clicáveis (e o clique falhando toda vez) pra
-  // quem já sabe, de cara, que não pode marcar nada agora.
+  // ainda, OU o dono ser este dispositivo, OU quem está logado ser o
+  // Administrador Master — LW.ehMaster(), ver data.js — que nunca fica
+  // travado pela disputa de "dono", pedido explícito do usuário). A
+  // trava de verdade é sempre no servidor (ver POST
+  // /marcar-berco-andamento) — isto aqui só evita deixar os indicadores
+  // clicáveis (e o clique falhando toda vez) pra quem já sabe, de cara,
+  // que não pode marcar nada agora.
   function _podeMarcarVazamento(dados) {
     if (dados.modo_teste) return true;
     if (!LW.dispositivoEstaAutorizado()) return false;
+    if (LW.ehMaster()) return true;
     const dono = dados.donoDeviceId || null;
     return !dono || dono === LW.getDeviceId();
   }

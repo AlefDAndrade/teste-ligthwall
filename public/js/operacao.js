@@ -510,6 +510,10 @@
    * @param {object} opts
    * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
+   *
+   * Administrador Master (LW.ehMaster(), ver data.js) nunca é travado
+   * pela disputa de "dono" — só continua precisando de dispositivo
+   * autorizado (motivo 'dispositivo', acima).
    */
   function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
     // Modo de teste é um sandbox local — nunca toca o servidor (ver
@@ -531,7 +535,7 @@
       );
       return true;
     }
-    if (!ignorarDono && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
+    if (!ignorarDono && !LW.ehMaster() && state.donoDeviceId && state.donoDeviceId !== LW.getDeviceId()) {
       LW.mostrarAlerta(
         'Esta operação já está sendo controlada por outra pessoa. Espere ela terminar, ou use "🗑️ Limpar Tudo" para assumir o controle.',
         { tipo: 'erro' }
@@ -584,7 +588,7 @@
     const autorizado = LW.dispositivoEstaAutorizado();
     const motivo = LW.motivoBloqueioOperacao();
     const dono = state?.donoDeviceId || null;
-    const ehODono = !dono || dono === LW.getDeviceId();
+    const ehODono = !dono || dono === LW.getDeviceId() || LW.ehMaster();
     const podeControlar = autorizado && ehODono;
 
     if (fieldset) fieldset.disabled = !podeControlar;
