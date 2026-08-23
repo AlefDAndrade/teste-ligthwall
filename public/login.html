@@ -31,9 +31,46 @@
 <body>
 
     <script>
+        // ─── Busca automática de operação offline pendente ──────────────────
+        // Ver README, "Registro de Operação Offline (PWA) — plano". Antes,
+        // só ia pra offline.html quem clicasse no link "Registrar operação
+        // offline" — se a pessoa tinha algo salvo neste aparelho (rascunho
+        // em preenchimento OU operações já "Registradas" aguardando
+        // sincronizar, ver public/js/offline-operacao.js) e reabria o
+        // programa depois, o autologin abaixo mandava direto pro sistema
+        // normal (index.html) e esse pendente ficava esquecido no
+        // localStorage até alguém lembrar de entrar em offline.html nesse
+        // MESMO aparelho de novo. Agora a checagem é automática, sempre que
+        // o programa é aberto: se sobrou algo salvo, cai direto na tela de
+        // sincronizar (offline.html), ANTES até de tentar o autologin —
+        // ela mesma já tenta enviar sozinha assim que detectar conexão
+        // (checarReconexao, no init() de offline-operacao.js).
+        function _existePendenteOfflineNesteAparelho() {
+            try {
+                const rascunho = localStorage.getItem('lw_operacao_offline_pendente');
+                if (rascunho) return true;
+                const filaRaw = localStorage.getItem('lw_operacao_offline_fila');
+                if (filaRaw) {
+                    const fila = JSON.parse(filaRaw);
+                    if (Array.isArray(fila) && fila.length > 0) return true;
+                }
+            } catch (e) {
+                // localStorage indisponível/corrompido — trata como "não existe",
+                // cai no fluxo normal abaixo
+            }
+            return false;
+        }
+
+        if (_existePendenteOfflineNesteAparelho()) {
+            window._lwOfflinePendenteDetectado = true;
+            document.documentElement.classList.add('lw-verificando-sessao');
+            window.location.href = 'offline.html';
+        } else {
+
         // O mais cedo possível (antes do resto do body pintar) — ver
         // estilo html.lw-verificando-sessao no <head>.
         document.documentElement.classList.add('lw-verificando-sessao');
+        }
     </script>
 
     <div class="bg-grid"></div>
@@ -116,6 +153,11 @@
         // — só que agora ela é REPOPULADA aqui a partir do cookie, em vez
         // de depender só do clique manual no formulário.
         (async function _tentarAutoLogin() {
+            // Se detectamos pendente offline neste aparelho (ver script
+            // anterior), já estamos navegando pra offline.html — não faz
+            // sentido também tentar auto-login/redirecionar pro index.html
+            // por cima disso.
+            if (window._lwOfflinePendenteDetectado) return;
             try {
                 const res = await fetch('/minha-sessao');
                 const data = await res.json();

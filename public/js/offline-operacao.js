@@ -28,7 +28,8 @@
 (function () {
   'use strict';
 
-  const DB_KEY = 'lw_operacao_offline_pendente';
+  const DB_KEY = 'lw_operacao_offline_pendente'; // rascunho ÚNICO em preenchimento (autosave)
+  const FILA_KEY = 'lw_operacao_offline_fila'; // ARRAY de operações já "Registradas", aguardando sincronizar (permite mais de 1)
   const M2_POR_PAINEL = 1.83;
   const LIMITE_INJECAO_MIN = 59;
   const TEMPO_CURA_HORAS = 8;
@@ -93,18 +94,19 @@
   //  ARMAZENAMENTO LOCAL — item 3 do plano
   // ============================================================
 
-  let ultimoStatusPersistido = 'preenchendo';
-
-  function persist(status, extraFormRecord) {
-    ultimoStatusPersistido = status || 'preenchendo';
+  // Autosave do rascunho ATUAL em preenchimento (1 por vez — faz sentido,
+  // já que só existe 1 formulário na tela). Operações já "Registradas"
+  // não passam mais por aqui: vão direto pra fila (ver adicionarNaFila),
+  // que aceita várias.
+  function persist() {
     const pendente = {
       idTemp,
       iniciadoEm,
       atualizadoEm: new Date().toISOString(),
-      formRecord: { ...montarFormRecord(), ...(extraFormRecord || {}) },
+      formRecord: montarFormRecord(),
       tracos: state.tracos,
       pausas: state.pausas,
-      status: ultimoStatusPersistido,
+      status: 'preenchendo',
     };
     try {
       localStorage.setItem(DB_KEY, JSON.stringify(pendente));
@@ -112,6 +114,57 @@
       console.warn('[LWOff] Falha ao salvar localmente:', e.message);
     }
     return pendente;
+  }
+
+  // ---- Fila de operações Registradas, aguardando sincronizar ----
+  // (permite salvar mais de uma operação offline, uma atrás da outra)
+
+  function lerFila() {
+    let raw;
+    try { raw = localStorage.getItem(FILA_KEY); } catch (_) { return []; }
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (_) { return []; }
+  }
+
+  function salvarFila(fila) {
+    try {
+      localStorage.setItem(FILA_KEY, JSON.stringify(fila));
+    } catch (e) {
+      console.warn('[LWOff] Falha ao salvar fila localmente:', e.message);
+    }
+  }
+
+  function adicionarNaFila(pendente) {
+    const fila = lerFila();
+    fila.push(pendente);
+    salvarFila(fila);
+    return fila;
+  }
+
+  function removerDaFila(idTempAlvo) {
+    const fila = lerFila().filter((p) => p.idTemp !== idTempAlvo);
+    salvarFila(fila);
+    return fila;
+  }
+
+  // Compatibilidade com dados salvos ANTES desta mudança: no formato
+  // antigo, uma operação já "Registrada" ficava sozinha em DB_KEY com
+  // status "aguardando_conexao" (só existia 1 de cada vez). Se o
+  // aparelho tiver algo assim, migra pra fila na entrada, sem perder o
+  // registro.
+  function migrarPendenteAntigoSeExistir() {
+    let raw;
+    try { raw = localStorage.getItem(DB_KEY); } catch (_) { return; }
+    if (!raw) return;
+    let pendenteAntigo;
+    try { pendenteAntigo = JSON.parse(raw); } catch (_) { return; }
+    if (pendenteAntigo && pendenteAntigo.status === 'aguardando_conexao') {
+      adicionarNaFila(pendenteAntigo);
+      try { localStorage.removeItem(DB_KEY); } catch (_) { /* ignore */ }
+    }
   }
 
   function montarFormRecord() {
@@ -139,9 +192,8 @@
     if (!raw) return false;
     let pendente;
     try { pendente = JSON.parse(raw); } catch (_) { return false; }
-    if (!pendente || pendente.status === 'sincronizado') return false;
+    if (!pendente) return false;
 
-    ultimoStatusPersistido = pendente.status || 'preenchendo';
     idTemp = pendente.idTemp;
     iniciadoEm = pendente.iniciadoEm;
     const fr = pendente.formRecord || {};
@@ -747,44 +799,47 @@
     }
   }
 
-  // Lê o que está salvo no aparelho (fonte da verdade, não o `state` em
-  // memória — assim funciona igual tanto logo após clicar Registrar
-  // quanto minutos/horas depois, quando a conexão finalmente voltar) e,
-  // se houver algo "aguardando_conexao" (ou seja, já clicaram
-  // Registrar), tenta enviar. Devolve true só quando realmente
-  // sincronizou algo agora. Nunca envia um rascunho ainda em
-  // preenchimento (status "preenchendo") — só o que já foi Registrado.
+  // Percorre a FILA (0, 1 ou várias operações já "Registradas" neste
+  // aparelho) tentando enviar uma a uma, na ordem em que foram salvas.
+  // Vai removendo da fila cada uma que o servidor confirmar. Para no
+  // primeiro erro (sinal de que a rede ainda está fora) — o que já
+  // sincronizou fica sincronizado, o resto tenta de novo no próximo
+  // ciclo (evento 'online' ou polling de 15s). Devolve true só quando
+  // pelo menos 1 item foi enviado com sucesso agora.
   async function tentarSincronizarAgora() {
     if (_sincronizando) return false;
-    let raw;
-    try { raw = localStorage.getItem(DB_KEY); } catch (_) { return false; }
-    if (!raw) return false;
-    let pendente;
-    try { pendente = JSON.parse(raw); } catch (_) { return false; }
-    if (!pendente || pendente.status !== 'aguardando_conexao') return false;
+    const fila = lerFila();
+    if (!fila.length) return false;
 
     _sincronizando = true;
+    let algumSincronizou = false;
     try {
-      await enviarPendenteParaServidor(pendente);
-      localStorage.removeItem(DB_KEY);
-      mostrarBanner(
-        `🌐 Conexão restabelecida — o registro salvo (código ${pendente.idTemp}) foi enviado ` +
-        `automaticamente para validação! Você já pode preencher a próxima operação.`,
-        'sucesso'
-      );
-      // Só limpa a TELA se ela ainda for a mesma operação que acabou de
-      // sincronizar (é sempre o caso hoje, já que só existe 1 pendente
-      // por vez — ver README, item 3 — mas a checagem evita apagar um
-      // rascunho novo caso isso mude no futuro).
-      if (idTemp === pendente.idTemp) {
-        limparFormularioNovoRegistro();
+      for (const pendente of fila) {
+        try {
+          await enviarPendenteParaServidor(pendente);
+          removerDaFila(pendente.idTemp);
+          algumSincronizou = true;
+        } catch (e) {
+          break; // sem servidor disponível — o restante da fila tenta depois
+        }
       }
-      return true;
-    } catch (e) {
-      return false; // ainda sem servidor disponível — tenta de novo depois
     } finally {
       _sincronizando = false;
     }
+
+    if (algumSincronizou) {
+      const restantes = lerFila().length;
+      mostrarBanner(
+        restantes > 0
+          ? `🌐 Conexão restabelecida — registro(s) enviado(s) para validação! Ainda restam ` +
+            `${restantes} salvo(s) neste aparelho, tentando enviar os demais...`
+          : `🌐 Conexão restabelecida — todos os registros salvos neste aparelho foram enviados ` +
+            `para validação!`,
+        'sucesso'
+      );
+      renderFila();
+    }
+    return algumSincronizou;
   }
 
   async function registrar() {
@@ -799,26 +854,35 @@
 
     // Salva JÁ, no aparelho — isso é o "Registrar": não depende de rede
     // nem de servidor responder. calc (painéis/m²) entra direto no
-    // formRecord persistido, então uma sincronização automática horas
-    // depois manda os dados completos, sem precisar do state em memória.
-    persist('aguardando_conexao', calc);
-    $('off-fieldset-trava').disabled = true;
+    // formRecord salvo, então uma sincronização automática horas depois
+    // manda os dados completos, sem precisar do state em memória.
+    const pendente = {
+      idTemp,
+      iniciadoEm,
+      atualizadoEm: new Date().toISOString(),
+      formRecord: { ...montarFormRecord(), ...calc },
+      tracos: state.tracos,
+      pausas: state.pausas,
+      status: 'aguardando_conexao',
+    };
+    adicionarNaFila(pendente);
+    try { localStorage.removeItem(DB_KEY); } catch (_) { /* ignore */ } // o rascunho virou item definitivo da fila
 
-    $('off-btn-registrar').disabled = true;
-    $('off-btn-registrar').textContent = 'Salvando…';
+    const idRegistrado = idTemp;
+
+    // Libera a tela NA HORA — não espera confirmação do servidor — pra
+    // dar pra registrar outra operação em seguida, ainda offline.
+    limparFormularioNovoRegistro();
     mostrarBanner(
-      `💾 Registro salvo neste aparelho (código ${idTemp}). Assim que a conexão com o ` +
-      `servidor voltar, ele é enviado sozinho — não precisa fazer mais nada.`,
+      `💾 Registro salvo neste aparelho (código ${idRegistrado}). Você já pode preencher outra ` +
+      `operação — assim que a conexão com o servidor voltar, tudo que estiver salvo é enviado sozinho.`,
       'aviso'
     );
+    renderFila();
 
     // Tenta sincronizar JÁ, em segundo plano — se a conexão já estiver
-    // de volta, o aviso acima é rapidamente substituído pelo de sucesso
-    // (dentro de tentarSincronizarAgora) e o formulário libera sozinho.
-    const sincronizou = await tentarSincronizarAgora();
-    if (!sincronizou) {
-      $('off-btn-registrar').textContent = '💾 Salvo — aguardando conexão…';
-    }
+    // de volta, o aviso acima é rapidamente substituído pelo de sucesso.
+    await tentarSincronizarAgora();
   }
 
   // Reseta todo o estado/formulário depois de um registro enviado com
@@ -865,6 +929,42 @@
     if (!confirm('Tem certeza? Isso apaga TODOS os dados preenchidos neste rascunho offline — não tem como desfazer.')) return;
     localStorage.removeItem(DB_KEY);
     location.reload();
+  }
+
+  // ============================================================
+  //  FILA — lista visual das operações já Registradas neste aparelho,
+  //  aguardando conexão pra sincronizar (permite mais de uma)
+  // ============================================================
+
+  function renderFila() {
+    const el = $('off-fila-lista');
+    if (!el) return;
+    const fila = lerFila();
+    if (!fila.length) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+          📥 Salvos neste aparelho, aguardando envio (${fila.length})
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${fila.map((p) => {
+            const fr = p.formRecord || {};
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.82rem;flex-wrap:wrap">
+              <span>🆔 ${escaparHtml(p.idTemp)} — Bateria ${escaparHtml(fr.id_bateria || '—')} ·
+                ${escaparHtml(String(fr.qtd_tracos ?? 0))} traço(s)</span>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="LWOff.descartarDaFila('${p.idTemp}')" title="Descartar este registro">✕ Descartar</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  function descartarDaFila(idTempAlvo) {
+    if (!confirm('Tem certeza? Isso apaga esse registro salvo neste aparelho — não tem como desfazer.')) return;
+    removerDaFila(idTempAlvo);
+    renderFila();
   }
 
   // ============================================================
@@ -915,6 +1015,8 @@
   // ============================================================
 
   async function init() {
+    migrarPendenteAntigoSeExistir();
+
     const retomando = carregarPendenteExistente();
     if (!retomando) {
       idTemp = gerarIdTemp();
@@ -961,24 +1063,10 @@
     atualizarBtnPausar();
     renderTracos();
     updatePendencias();
+    renderFila();
 
     if (retomando) {
-      if (ultimoStatusPersistido === 'aguardando_conexao') {
-        // Já tinha sido Registrado antes de recarregar a página/reabrir o
-        // app — trava os campos (mesmo estado que ficam logo depois de
-        // clicar Registrar) e deixa a sincronização automática cuidar
-        // do resto.
-        $('off-fieldset-trava').disabled = true;
-        $('off-btn-registrar').disabled = true;
-        $('off-btn-registrar').textContent = '💾 Salvo — aguardando conexão…';
-        mostrarBanner(
-          `↩️ Retomando um registro já salvo neste aparelho (código ${idTemp}), ainda não enviado. ` +
-          `Será sincronizado automaticamente assim que a conexão voltar.`,
-          'aviso'
-        );
-      } else {
-        mostrarBanner('↩️ Retomando um rascunho salvo neste aparelho, ainda não registrado.', 'aviso');
-      }
+      mostrarBanner('↩️ Retomando um rascunho salvo neste aparelho, ainda não registrado.', 'aviso');
     }
 
     window.addEventListener('offline', () => { _avisouReconexao = false; });
@@ -992,6 +1080,6 @@
   window.LWOff = {
     iniciarInjecao, togglePausa, finalizarInjecao,
     addTraco, removeTraco, updateTraco, updateInsumo, updateTempoBatida, expandirTraco,
-    updateBercoPersonalizado, registrar, descartarPendente,
+    updateBercoPersonalizado, registrar, descartarPendente, descartarDaFila,
   };
 })();
