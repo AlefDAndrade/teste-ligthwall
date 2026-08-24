@@ -367,7 +367,23 @@
       const c = CIMENTICIA_POR_TIPO[tipo];
       if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
     });
-    return { total_paineis: paineis_total, m2_total: paineis_total * M2_POR_PAINEL, placas_cimenticia, paineis_por_tipo, m2_por_tipo };
+    return {
+      total_paineis: paineis_total,
+      m2_total: paineis_total * M2_POR_PAINEL,
+      placas_cimenticia,
+      paineis_por_tipo,
+      m2_por_tipo,
+      // Aliases de compatibilidade (mesmo formato de LW.calcPaineis, data.js)
+      // — usados pelas colunas fixas "Painéis 2/P"/"S/P" e "m² 2/P"/"S/P" da
+      // tabela Registro de Baterias e pelos dashboards. Sem isso aqui, a
+      // operação offline salvava total_paineis/m2_total certos mas 0 nessas
+      // colunas por tipo (ver _derivarAliasesTipo, lib/rotas/operacao-offline.js,
+      // que também cobre esse caso na validação, como segunda camada).
+      paineis_2p: paineis_por_tipo['2p'] || 0,
+      paineis_sp: paineis_por_tipo['sp'] || 0,
+      m2_2p: m2_por_tipo['2p'] || 0,
+      m2_sp: m2_por_tipo['sp'] || 0,
+    };
   }
 
   function calcPaineisPersonalizado(bercosPersonalizados) {
@@ -387,7 +403,18 @@
       const c = CIMENTICIA_POR_TIPO[tipo];
       if (c && c.leva) placas_cimenticia += paineis_por_tipo[tipo] * (c.quantidade || 0);
     });
-    return { total_paineis: paineis_total, m2_total: paineis_total * M2_POR_PAINEL, placas_cimenticia, paineis_por_tipo, m2_por_tipo };
+    return {
+      total_paineis: paineis_total,
+      m2_total: paineis_total * M2_POR_PAINEL,
+      placas_cimenticia,
+      paineis_por_tipo,
+      m2_por_tipo,
+      // Ver comentário em calcPaineis, acima.
+      paineis_2p: paineis_por_tipo['2p'] || 0,
+      paineis_sp: paineis_por_tipo['sp'] || 0,
+      m2_2p: m2_por_tipo['2p'] || 0,
+      m2_sp: m2_por_tipo['sp'] || 0,
+    };
   }
 
   // Desconta cada lado marcado "🚫 Não Enchido" (nunca "baixou/vazou" — só
@@ -433,6 +460,11 @@
       placas_cimenticia,
       paineis_por_tipo,
       m2_por_tipo,
+      // Ver comentário em calcPaineis, acima.
+      paineis_2p: paineis_por_tipo['2p'] || 0,
+      paineis_sp: paineis_por_tipo['sp'] || 0,
+      m2_2p: m2_por_tipo['2p'] || 0,
+      m2_sp: m2_por_tipo['sp'] || 0,
     };
   }
 

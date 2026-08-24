@@ -208,6 +208,58 @@ test('validar aprovado: vira operação real com origem_offline/validado_por/val
   assert.ok(!pendentesDepois.lista.some(i => i.idTemp === idTemp));
 });
 
+// Regressão: o formulário offline (public/js/offline-operacao.js) sempre
+// calculou paineis_por_tipo/m2_por_tipo certos (por isso total_paineis/
+// m2_total sempre bateram), mas nunca mandava paineis_2p/paineis_sp/m2_2p/
+// m2_sp — os "aliases de compatibilidade" que a tabela Registro de Baterias
+// e os dashboards leem diretamente (colunas fixas "Painéis 2/P"/"S/P",
+// "m² 2/P"/"S/P"). Sem esses 4 campos, a operação era gravada com 0 nessas
+// colunas mesmo tendo painéis reais daquele tipo — o total aparecia certo,
+// mas "o tipo específico" nunca aparecia. Este teste envia exatamente o
+// payload que um dispositivo offline manda (sem os aliases, só o
+// paineis_por_tipo/m2_por_tipo) e confirma que a validação (_aprovar,
+// lib/rotas/operacao-offline.js) deriva os aliases corretamente antes de
+// gravar — tanto pra uma montagem simples (1 tipo) quanto híbrida (2 tipos).
+test('validar deriva paineis_2p/paineis_sp/m2_2p/m2_sp a partir de paineis_por_tipo/m2_por_tipo quando o dispositivo offline não os manda (regressão)', async () => {
+  const idTemp = 'OFF-derivar-aliases-' + Date.now();
+  await enviarOffline(payloadValido(idTemp, {
+    tipo_montagem: 'HIBRIDA',
+    total_paineis: 12,
+    m2_total: 6,
+    // Só o formato genérico por tipo — igual ao que offline-operacao.js
+    // manda de verdade (calcPaineis local, ANTES desta correção). Note as
+    // chaves em minúsculo ('2p'/'sp'), que são as chaves de verdade usadas
+    // em produção — o payloadValido() default usa '2P' maiúsculo só pra
+    // não colidir com este teste.
+    paineis_por_tipo: { '2p': 8, 'sp': 4 },
+    m2_por_tipo: { '2p': 4, 'sp': 2 },
+    // Sem paineis_2p/paineis_sp/m2_2p/m2_sp — de propósito: é exatamente o
+    // que faltava no payload real antes da correção.
+    paineis_2p: undefined,
+    paineis_sp: undefined,
+    m2_2p: undefined,
+    m2_sp: undefined,
+  }));
+
+  const respValidar = await validar(idTemp);
+  assert.equal(respValidar.status, 200);
+  const idOperacao = (await respValidar.json()).idOperacao;
+
+  const historico = await (await fetch(`${servidor.baseUrl}/db/historico.json`)).json();
+  const op = historico.find(o => o.id === idOperacao);
+  assert.ok(op, 'operação deveria existir em historico.json');
+
+  // Total continua correto (nunca foi o problema).
+  assert.equal(op.total_paineis, 12);
+  assert.equal(op.m2_total, 6);
+
+  // Os 4 aliases, antes gravados como 0, agora batem com paineis_por_tipo/m2_por_tipo.
+  assert.equal(op.paineis_2p, 8);
+  assert.equal(op.paineis_sp, 4);
+  assert.equal(op.m2_2p, 4);
+  assert.equal(op.m2_sp, 2);
+});
+
 test('validar o mesmo idTemp 2 vezes seguidas não duplica a operação nem incrementa o contador de novo', async () => {
   const idTemp = 'OFF-validar-2x-' + Date.now();
   await enviarOffline(payloadValido(idTemp));
