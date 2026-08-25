@@ -613,6 +613,16 @@
     if (_bloqueadoPorAutorizacao()) return;
     state.inicio = nowBrasilia().toISOString();
     state.status = 'running';
+    // Identificador PRÓPRIO desta operação em andamento (diferente do
+    // opId final, gerado só no registro — ver _registrarOperacaoInterna),
+    // vai junto em todo persist() daqui em diante. Existe só pra permitir
+    // uma limpeza CONDICIONAL de operacao_andamento.json quando a conexão
+    // cai bem na hora de encerrar (ver LW.finalizarOperacaoAndamento,
+    // data.js, e POST /salvar-operacao-andamento, lib/rotas/operacao-
+    // andamento.js) — sem isso, o aviso tardio de "essa operação acabou"
+    // não teria como saber se o que está em andamento agora ainda é ELA
+    // mesma, ou se já é uma operação nova e legítima no lugar.
+    state.idAndamento = 'and_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     $('op-inicio').value = LW.formatTime(state.inicio);
     $('btn-iniciar').disabled = true;
     $('btn-finalizar').disabled = false;
@@ -2436,7 +2446,7 @@
     ])
       .then(() => {
         LW.clearOperacaoAtual();
-        LW.enviarOperacaoAndamento(null, { imediato: true });
+        LW.finalizarOperacaoAndamento(state.idAndamento);
         clearInterval(timerInterval);
         resetState();
         renderAll();
@@ -2467,10 +2477,21 @@
    * confirmado pelo servidor.
    */
   function _enfileirarEContinuar(historyRecord, fullRecord, qtdTracosNovos) {
-    LW.enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos);
+    // Guarda o idAndamento ANTES de resetState() apagar o state — é a
+    // informação que o servidor vai usar, quando a fila sincronizar de
+    // verdade (ver LW.tentarSincronizarFilaPendentes, data.js), pra saber
+    // que ESSA operação específica já terminou (ver POST
+    // /salvar-operacao-andamento, lib/rotas/operacao-andamento.js).
+    const idAndamento = state.idAndamento || null;
+    LW.enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos, idAndamento);
 
     LW.clearOperacaoAtual();
-    LW.enviarOperacaoAndamento(null, { imediato: true }); // melhor esforço — sem conexão, só não vai mesmo
+    // Tenta avisar o servidor na hora (melhor esforço — sem conexão, só não
+    // vai mesmo) E garante que isso não fica esquecido pra sempre: se
+    // falhar agora, LW.finalizarOperacaoAndamento guarda o idAndamento
+    // numa filinha própria de retry, que tenta de novo toda vez que
+    // LW.tentarSincronizarFilaPendentes rodar (quando a conexão voltar).
+    LW.finalizarOperacaoAndamento(idAndamento);
     clearInterval(timerInterval);
     resetState();
     renderAll();

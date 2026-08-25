@@ -1110,6 +1110,98 @@ async function _postOperacaoAndamento(dados, forcar = false) {
   }
 }
 
+// ── Aviso GARANTIDO de "essa operação em andamento acabou" ─────────────────
+// Cobre o caso em que a rede cai bem na hora de encerrar/registrar: o aviso
+// "melhor esforço" (enviarOperacaoAndamento(null)) falha porque não tem
+// conexão, mas a operação em si é registrada certinho quando a conexão
+// volta (ver enfileirarOperacaoPendente/tentarSincronizarFilaPendentes,
+// abaixo). Sem isso, o operacao_andamento.json do servidor (e quem estiver
+// olhando via WebSocket — outras telas, TV) fica travado mostrando a
+// operação como se ainda estivesse rodando, mesmo já tendo terminado.
+//
+// Diferente de enviarOperacaoAndamento (pensado pra digitação contínua,
+// com debounce e dedup pelo ÚLTIMO corpo mandado), esta função:
+//   - é sempre imediata, sem debounce;
+//   - manda o idAndamento da operação que está sendo encerrada, pra o
+//     servidor só limpar se o que estiver em andamento AGORA ainda for
+//     essa mesma operação (protege contra apagar por engano uma operação
+//     NOVA e legítima que já tenha começado no lugar — inclusive no mesmo
+//     dispositivo, ver POST /salvar-operacao-andamento);
+//   - se falhar por falta de rede, guarda o idAndamento numa filinha
+//     própria em localStorage e tenta de novo sempre que
+//     tentarSincronizarFilaPendentes() rodar (evento 'online', checagem
+//     periódica, ou ao carregar a página) — não fica esquecido pra sempre.
+const DB_KEY_ANDAMENTO_A_FINALIZAR = 'lw_operacoes_andamento_a_finalizar';
+
+function _lerAndamentosAFinalizar() {
+  try {
+    const raw = localStorage.getItem(DB_KEY_ANDAMENTO_A_FINALIZAR);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) { return []; }
+}
+
+function _salvarAndamentosAFinalizar(lista) {
+  try { localStorage.setItem(DB_KEY_ANDAMENTO_A_FINALIZAR, JSON.stringify(lista)); } catch (_) { /* localStorage indisponível */ }
+}
+
+function _marcarAndamentoParaFinalizarDepois(idAndamento) {
+  if (!idAndamento) return;
+  const lista = _lerAndamentosAFinalizar();
+  if (!lista.includes(idAndamento)) {
+    lista.push(idAndamento);
+    _salvarAndamentosAFinalizar(lista);
+  }
+}
+
+/**
+ * Tenta avisar o servidor, uma vez, que a operação `idAndamento` terminou.
+ * Devolve true se o pedido CHEGOU no servidor (independente do servidor
+ * ter limpado de verdade ou ter ignorado por já não ser mais a atual —
+ * dos dois jeitos, do lado do cliente não há mais nada pendente aqui) —
+ * false só em falha de REDE de verdade, pra saber se vale tentar de novo.
+ */
+async function _tentarFinalizarOperacaoAndamento(idAndamento) {
+  try {
+    await fetch(_comDeviceId('/salvar-operacao-andamento'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dados: null, idAndamento, clientId: OP_ANDAMENTO_CLIENT_ID }),
+    });
+    return true; // chegou no servidor — aceito ou ignorado, ambos "resolvidos"
+  } catch (_) {
+    return false; // sem conexão de novo — tenta depois
+  }
+}
+
+/**
+ * Ponto de entrada usado por operacao.js ao encerrar/registrar uma
+ * operação: tenta avisar o servidor na hora e, se falhar, guarda pra
+ * retry automático (ver _tentarFinalizarAndamentosPendentes, chamado por
+ * tentarSincronizarFilaPendentes). Sem idAndamento (clientes com cache
+ * antigo, ou nenhuma operação de verdade em andamento), cai no
+ * comportamento antigo — melhor esforço, sem retry, igual antes desta
+ * proteção existir.
+ */
+async function finalizarOperacaoAndamento(idAndamento) {
+  if (!idAndamento) {
+    _postOperacaoAndamento(null, false);
+    return;
+  }
+  const ok = await _tentarFinalizarOperacaoAndamento(idAndamento);
+  if (!ok) _marcarAndamentoParaFinalizarDepois(idAndamento);
+}
+
+async function _tentarFinalizarAndamentosPendentes() {
+  const lista = _lerAndamentosAFinalizar();
+  if (!lista.length) return;
+  const restantes = [];
+  for (const idAndamento of lista) {
+    const ok = await _tentarFinalizarOperacaoAndamento(idAndamento);
+    if (!ok) restantes.push(idAndamento);
+  }
+  _salvarAndamentosAFinalizar(restantes);
+}
+
 /**
  * Busca o snapshot atual da operação em andamento direto do servidor —
  * usado ao abrir a tela. Lança erro só em falha de REDE de verdade (sem
@@ -1782,11 +1874,15 @@ function tamanhoFilaPendentes() {
  * voltar. `historyRecord`/`fullRecord`/`qtdTracosNovos` são exatamente os
  * mesmos parâmetros que iriam pra registrarOperacao/registrarRelatorioInjecao
  * /confirmarTracosHoje numa tentativa normal — só ficam guardados pra tentar
- * de novo depois.
+ * de novo depois. `idAndamento` (opcional) é o id da operação em andamento
+ * correspondente (ver iniciarInjecao(), operacao.js) — guardado aqui só
+ * como registro histórico do item; quem efetivamente USA esse id pra
+ * avisar o servidor é LW.finalizarOperacaoAndamento, chamado à parte (ver
+ * _enfileirarEContinuar, operacao.js) com sua própria fila de retry.
  */
-function enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos) {
+function enfileirarOperacaoPendente(historyRecord, fullRecord, qtdTracosNovos, idAndamento) {
   const fila = _lerFilaPendentes();
-  fila.push({ historyRecord, fullRecord, qtdTracosNovos, enfileiradoEm: new Date().toISOString() });
+  fila.push({ historyRecord, fullRecord, qtdTracosNovos, idAndamento: idAndamento || null, enfileiradoEm: new Date().toISOString() });
   _salvarFilaPendentes(fila);
   _notificarFilaMudou();
 }
@@ -1817,7 +1913,15 @@ let _sincronizandoFilaPendentes = false;
 async function tentarSincronizarFilaPendentes() {
   if (_sincronizandoFilaPendentes) return;
   const fila = _lerFilaPendentes();
-  if (!fila.length) return;
+  // Mesmo sem nada na fila principal, ainda pode haver avisos de "operação
+  // terminou" pendentes de confirmação (ver finalizarOperacaoAndamento) —
+  // por exemplo, se a operação já tinha sido registrada com sucesso, mas
+  // só o aviso de encerramento falhou por uma queda de rede bem naquele
+  // instante. Tenta esses também, sempre que esta função rodar.
+  if (!fila.length) {
+    await _tentarFinalizarAndamentosPendentes();
+    return;
+  }
 
   _sincronizandoFilaPendentes = true;
   try {
@@ -1837,6 +1941,7 @@ async function tentarSincronizarFilaPendentes() {
       _notificarFilaMudou();
       if (_onOperacoesPendentesSincronizadas) _onOperacoesPendentesSincronizadas(processados);
     }
+    await _tentarFinalizarAndamentosPendentes();
   } finally {
     _sincronizandoFilaPendentes = false;
   }
@@ -2735,6 +2840,7 @@ window.LW = {
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,
+  finalizarOperacaoAndamento,
   aoReceberDadosSqlExcluidos,
   get OP_ANDAMENTO_CLIENT_ID() { return OP_ANDAMENTO_CLIENT_ID; },
 
