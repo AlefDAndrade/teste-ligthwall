@@ -37,6 +37,33 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // ---- Fuso horário: MESMA convenção "UTC falso = hora de Brasília" já
+  // usada no resto do app (ver nowBrasilia() em public/js/data.js) —
+  // devolve um Date cujos dígitos UTC representam a hora de Brasília
+  // agora, não uma conversão de fuso real. Duplicada aqui (em vez de
+  // reaproveitada de data.js) porque esta página (offline.html) é
+  // deliberadamente standalone/pré-cacheada pro Service Worker funcionar
+  // sem rede (ver comentário no topo do arquivo) e não carrega data.js.
+  // Sem isso, `new Date().toISOString()` grava o instante em UTC de
+  // verdade — que, quando aprovado e exibido pelas telas que SEGUEM a
+  // convenção "UTC falso = Brasília" (ex.: formatTime() com
+  // timeZone:'UTC' em data.js), aparece com +3h de diferença da hora que
+  // o operador efetivamente digitou/apertou (bug: "registrei 6h, na
+  // tabela apareceu 9h").
+  function nowBrasilia() {
+    const now = new Date();
+    const brFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+    const parts = brFormatter.formatToParts(now);
+    const get = type => parts.find(p => p.type === type).value;
+    const brStr = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
+    return new Date(brStr + 'Z');
+  }
+
   // ---- Config carregada de db/config.json (item 8 do plano: pré-
   // cacheada pelo Service Worker, então funciona mesmo sem rede DESDE
   // QUE o app já tenha sido instalado/aberto online pelo menos 1 vez
@@ -825,15 +852,20 @@
     return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
+  // timeZone:'UTC' forçado — os ISO aqui usam a convenção "UTC falso =
+  // hora de Brasília" (ver nowBrasilia(), acima), então os dígitos JÁ SÃO
+  // a hora de Brasília; sem forçar UTC, toLocaleTimeString converteria de
+  // novo pro fuso do navegador e desalinharia a exibição (mesmo raciocínio
+  // de LW.formatTime em data.js).
   function formatTime(iso) {
     if (!iso) return '—';
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' });
   }
 
   function formatDateTime(iso) {
     if (!iso) return '—';
     const d = new Date(iso);
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   }
 
   function calcularDesemplaque(fimISO) {
@@ -844,7 +876,7 @@
 
   function iniciarInjecao() {
     if (state.status !== 'idle') return;
-    state.inicio = new Date().toISOString();
+    state.inicio = nowBrasilia().toISOString();
     state.status = 'running';
     $('off-inicio').value = formatTime(state.inicio);
     $('off-btn-iniciar').disabled = true;
@@ -862,9 +894,9 @@
       if (!confirmou) return;
       const motivo = prompt('Explique rapidamente por que esta operação está sendo pausada:');
       if (!motivo) return;
-      state.pausas.push({ pausado_em: new Date().toISOString(), retomado_em: null, motivo });
+      state.pausas.push({ pausado_em: nowBrasilia().toISOString(), retomado_em: null, motivo });
     } else {
-      state.pausas[state.pausas.length - 1].retomado_em = new Date().toISOString();
+      state.pausas[state.pausas.length - 1].retomado_em = nowBrasilia().toISOString();
     }
     persist();
     atualizarBtnPausar();
@@ -883,7 +915,7 @@
     const confirmou = confirm('Isso vai parar o cronômetro e travar os campos de tempo desta operação. Encerrar a injeção agora?');
     if (!confirmou) return;
 
-    state.fim = new Date().toISOString();
+    state.fim = nowBrasilia().toISOString();
     state.status = 'finished';
     clearInterval(timerInterval);
     $('off-fim').value = formatTime(state.fim);
@@ -915,7 +947,7 @@
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       if (!state.inicio) return;
-      const agora = new Date().toISOString();
+      const agora = nowBrasilia().toISOString();
       const elapsed = diffMinutes(state.inicio, agora) - tempoPausadoMin(agora);
       const el = $('off-timer-display');
       el.textContent = formatDuration(elapsed);

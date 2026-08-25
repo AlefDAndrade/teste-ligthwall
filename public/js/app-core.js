@@ -3750,12 +3750,21 @@
       const item = _cfgOperacoesOfflineCache.find(i => i.idTemp === idTemp);
       if (!item) return;
       const f = item.formRecord || {};
+      // Convenção de fuso: mesma "UTC falso = hora de Brasília" usada em
+      // todo o resto do app (ver nowBrasilia()/data.js, formatTime() com
+      // timeZone:'UTC', e _fmtDTL/_eaParaIsoBrasilia mais abaixo neste
+      // arquivo, em Edições Avançadas) — os dígitos do ISO já SÃO a hora
+      // de Brasília, então lemos direto via toISOString().slice(0,16) (UTC
+      // "de verdade" no sentido do JS, mas que aqui representa Brasília
+      // por convenção), sem getHours()/getMinutes() locais — isso evitava
+      // que o resultado dependesse do fuso do navegador (bug: abria/salvava
+      // com +3h de diferença pra quem tem o navegador em horário de
+      // Brasília, por misturar as duas convenções).
       const paraInputDatetime = iso => {
         if (!iso) return '';
         const d = new Date(iso);
         if (isNaN(d)) return '';
-        const pad = n => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        return d.toISOString().slice(0, 16);
       };
       painel.innerHTML = `
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
@@ -3781,8 +3790,17 @@
       const fimEl = document.getElementById('cfg-off-fim-' + idSeguro);
       const bateriaEl = document.getElementById('cfg-off-bateria-' + idSeguro);
       const patch = { formRecord: {} };
-      if (inicioEl && inicioEl.value) patch.formRecord.inicio = new Date(inicioEl.value).toISOString();
-      if (fimEl && fimEl.value) patch.formRecord.fim = new Date(fimEl.value).toISOString();
+      // NÃO usar `new Date(valor).toISOString()` aqui — isso interpretaria
+      // o valor do <input type="datetime-local"> como hora LOCAL do
+      // navegador e faria uma conversão de fuso de verdade (ex.: 6h vira
+      // 9h pra quem está em horário de Brasília), quebrando a convenção
+      // "UTC falso = hora de Brasília" que o resto do app usa pra salvar/
+      // exibir inicio/fim (ver comentário em paraInputDatetime, acima, e
+      // _eaParaIsoBrasilia, em Edições Avançadas, mais abaixo). Mesma
+      // lógica de lá: só completa o valor do input com segundos + 'Z',
+      // preservando os mesmos dígitos de hora que o Master digitou.
+      if (inicioEl && inicioEl.value) patch.formRecord.inicio = _eaParaIsoBrasilia(inicioEl.value);
+      if (fimEl && fimEl.value) patch.formRecord.fim = _eaParaIsoBrasilia(fimEl.value);
       if (bateriaEl && bateriaEl.value) patch.formRecord.id_bateria = bateriaEl.value.trim();
       try {
         await LW.corrigirOperacaoOfflinePendente(idTemp, patch);
