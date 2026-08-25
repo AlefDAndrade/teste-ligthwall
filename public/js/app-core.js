@@ -3570,7 +3570,6 @@
             <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirCorrecaoOperacaoOffline('${idSeguro}')">✏️ Corrigir</button>
             <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem;color:var(--danger)" onclick="cfgRecusarOperacaoOffline('${idSeguro}')">❌ Recusar</button>
           </div>
-          <div id="cfg-corrigir-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
           <div id="cfg-renumerar-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
         </div>`;
     }
@@ -3734,80 +3733,279 @@
       }
     }
 
-    // Correção rápida inline — só os campos mais prováveis de terem vindo
-    // errado do relógio do dispositivo offline (ver README, item 8):
-    // início/fim/ID da bateria. Não é a tela completa de Edições
-    // Avançadas (que trabalha em cima de uma operação já existente em
-    // "operacoes", não de um registro ainda pendente) — um ajuste
-    // funcional mais simples, focado no que mais provavelmente precisa de
-    // correção antes de aprovar.
-    function cfgAbrirCorrecaoOperacaoOffline(idTemp) {
-      const idSeguro = idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
-      const painel = document.getElementById('cfg-corrigir-' + idSeguro);
-      if (!painel) return;
-      if (painel.style.display === 'block') { painel.style.display = 'none'; return; }
+    // ─── Modal "papel A4" — correção completa de um registro offline
+    // pendente, antes de validar (ver README, item 8: "o relógio do
+    // dispositivo offline pode estar errado"). Substitui o antigo painel
+    // inline (só início/fim/ID de bateria) por um formulário com TODOS os
+    // campos que vieram do dispositivo — dados gerais, horários, pausas e
+    // cada traço — no estilo de uma folha impressa preenchida à mão:
+    // fundo claro, texto escuro, campos "linha em branco", sem
+    // cards/ícones decorativos. Só 1 instância do modal existe no HTML
+    // (index.html, #offline-corrigir-modal) — o CONTEÚDO é remontado do
+    // zero a cada abertura, então os ids dos campos internos não
+    // precisam do sufixo idSeguro de outros painéis desta tela (só 1
+    // registro é corrigido de cada vez).
+    let _offCorrigirIdTemp = null; // idTemp do registro atualmente aberto no modal
 
+    // Mesma convenção de fuso "UTC falso = hora de Brasília" de
+    // paraInputDatetime/_eaParaIsoBrasilia (ver comentários ali) — só
+    // lê/escreve os dígitos do ISO diretamente, sem conversão de fuso
+    // real, pros mesmos horários digitados baterem com o que a tabela
+    // exibe depois.
+    function _offcParaInputDatetime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return isNaN(d) ? '' : d.toISOString().slice(0, 16);
+    }
+    function _offcParaIsoBrasilia(valorInput) {
+      if (!valorInput) return null;
+      return valorInput.length === 16 ? valorInput + ':00.000Z' : valorInput + '.000Z';
+    }
+
+    // Um "campo de formulário" no estilo papel: rótulo pequeno em
+    // maiúsculas em cima, linha para preencher embaixo (sem caixa/borda
+    // ao redor, só a linha inferior — mesmo visual de um formulário
+    // impresso preenchido à mão).
+    function _offcCampo(label, dataAttrs, value, opts) {
+      opts = opts || {};
+      const tipo = opts.tipo || 'text';
+      const largura = opts.largura || 'auto';
+      const step = opts.tipo === 'datetime-local' ? ' step="60"' : '';
+      return `
+        <label style="display:flex;flex-direction:column;gap:3px;${largura !== 'auto' ? `flex:0 0 ${largura};` : 'flex:1 1 160px;'}min-width:120px">
+          <span style="font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:#5a5142;font-family:'JetBrains Mono',monospace">${label}</span>
+          <input type="${tipo}"${step} ${dataAttrs} value="${_escaparHtmlLocal(value ?? '')}"
+            style="border:none;border-bottom:1px solid #8a8270;background:transparent;color:#1a1a1a;font-family:Georgia,'Times New Roman',serif;font-size:.92rem;padding:3px 2px;outline:none">
+        </label>`;
+    }
+
+    function _offcSecao(titulo) {
+      return `<div style="margin:22px 0 12px;padding-bottom:4px;border-bottom:2px solid #1a1a1a;font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#1a1a1a">${titulo}</div>`;
+    }
+
+    // Cada insumo do traço é salvo como { original, ajustes: [] } (ver
+    // criarTracoVazio, offline-operacao.js) — o formulário só edita
+    // `original` (ajustes de remedição em tempo real não existem no
+    // formulário offline, sempre chegam vazios daqui).
+    function _offcCampoInsumo(label, idxTraco, campo, insumo, opts) {
+      const valor = insumo && typeof insumo === 'object' ? insumo.original : insumo;
+      return _offcCampo(label, `data-traco-idx="${idxTraco}" data-campo="${campo}" class="offc-campo-insumo"`, valor, opts);
+    }
+
+    function _offcPausaHtml(p, idx) {
+      return `
+        <div class="offc-pausa-row" data-idx="${idx}" style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;padding:10px 0;border-bottom:1px dashed #b8b0a0">
+          ${_offcCampo('Pausada em', `data-campo="pausado_em" class="offc-campo-pausa"`, _offcParaInputDatetime(p.pausado_em), { tipo: 'datetime-local', largura: '200px' })}
+          ${_offcCampo('Retomada em', `data-campo="retomado_em" class="offc-campo-pausa"`, _offcParaInputDatetime(p.retomado_em), { tipo: 'datetime-local', largura: '200px' })}
+          ${_offcCampo('Motivo', `data-campo="motivo" class="offc-campo-pausa"`, p.motivo, {})}
+          <button type="button" onclick="_offCorrigirRemoverPausa(${idx})"
+            style="background:none;border:1px solid #8b1a1a;color:#8b1a1a;border-radius:3px;padding:5px 10px;font-size:.72rem;cursor:pointer;height:29px">remover</button>
+        </div>`;
+    }
+
+    function _offcTracoHtml(t, idx) {
+      const num = t.num ?? (idx + 1);
+      return `
+        <div class="offc-traco-row" data-idx="${idx}" style="margin-bottom:16px;padding:14px 16px;border:1px solid #b8b0a0;border-radius:3px;background:rgba(255,255,255,.35)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700;letter-spacing:.05em">TRAÇO Nº ${_escaparHtmlLocal(num)}</div>
+            <button type="button" onclick="_offCorrigirRemoverTraco(${idx})"
+              style="background:none;border:1px solid #8b1a1a;color:#8b1a1a;border-radius:3px;padding:3px 9px;font-size:.68rem;cursor:pointer">remover traço</button>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
+            ${_offcCampo('Nº do traço', `data-campo="num" class="offc-campo-traco"`, num, { tipo: 'number', largura: '90px' })}
+            ${_offcCampo('Berço início', `data-campo="berco_ini" class="offc-campo-traco"`, t.berco_ini, { tipo: 'number', largura: '110px' })}
+            ${_offcCampo('Berço fim', `data-campo="berco_fim" class="offc-campo-traco"`, t.berco_fim, { tipo: 'number', largura: '110px' })}
+            ${_offcCampo('Silo', `data-campo="silo" class="offc-campo-traco"`, t.silo, { largura: '110px' })}
+            ${_offcCampo('Expansão', `data-campo="expansao" class="offc-campo-traco"`, t.expansao, { largura: '110px' })}
+            ${_offcCampo('Densidade EPS (kg/m³)', `data-campo="densidadeEPS" class="offc-campo-traco"`, t.densidadeEPS, { tipo: 'number', largura: '140px' })}
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
+            ${_offcCampoInsumo('Cimento (kg)', idx, 'cimento_real', t.cimento_real, { tipo: 'number', largura: '110px' })}
+            ${_offcCampoInsumo('Água (kg)', idx, 'agua_real', t.agua_real, { tipo: 'number', largura: '110px' })}
+            ${_offcCampoInsumo('EPS (kg)', idx, 'eps_real', t.eps_real, { tipo: 'number', largura: '110px' })}
+            ${_offcCampoInsumo('Superplast. (kg)', idx, 'superplast_real', t.superplast_real, { tipo: 'number', largura: '110px' })}
+            ${_offcCampoInsumo('Incorp. de Ar (kg)', idx, 'incorporador_real', t.incorporador_real, { tipo: 'number', largura: '110px' })}
+            ${_offcCampoInsumo('Tempo de batida (segundos)', idx, 'tempo_batida', t.tempo_batida, { tipo: 'number', largura: '140px' })}
+            ${_offcCampoInsumo('Densidade do traço (kg/m³)', idx, 'densidade_insumo', t.densidade_insumo, { tipo: 'number', largura: '140px' })}
+            ${_offcCampoInsumo('Flow (mm)', idx, 'flow_insumo', t.flow_insumo, { tipo: 'number', largura: '110px' })}
+          </div>
+          ${_offcCampo('Observações', `data-campo="obs" class="offc-campo-traco"`, t.obs, { largura: '100%' })}
+        </div>`;
+    }
+
+    // Estado de trabalho do formulário — cópia local de pausas/tracos que
+    // o Master pode adicionar/remover linha antes de salvar (ver
+    // _offCorrigirRemoverPausa/_offCorrigirRemoverTraco/
+    // _offCorrigirAdicionarPausa). Só existe enquanto o modal está aberto.
+    let _offCorrigirPausas = [];
+    let _offCorrigirTracos = [];
+
+    function _offCorrigirRenderPausas() {
+      const container = document.getElementById('offc-pausas-lista');
+      if (!container) return;
+      container.innerHTML = _offCorrigirPausas.length
+        ? _offCorrigirPausas.map((p, i) => _offcPausaHtml(p, i)).join('')
+        : '<div style="font-size:.82rem;color:#5a5142;font-style:italic">Nenhuma pausa registrada nesta operação.</div>';
+    }
+    function _offCorrigirRenderTracos() {
+      const container = document.getElementById('offc-tracos-lista');
+      if (!container) return;
+      container.innerHTML = _offCorrigirTracos.length
+        ? _offCorrigirTracos.map((t, i) => _offcTracoHtml(t, i)).join('')
+        : '<div style="font-size:.82rem;color:#5a5142;font-style:italic">Nenhum traço registrado nesta operação.</div>';
+    }
+
+    // Lê os valores atuais dos inputs de volta pro array de trabalho —
+    // chamado antes de adicionar/remover uma linha (senão o que o Master
+    // já tinha digitado nas outras linhas se perderia no re-render) e
+    // antes de salvar.
+    function _offCorrigirColherPausasDosInputs() {
+      document.querySelectorAll('#offc-pausas-lista .offc-pausa-row').forEach(row => {
+        const idx = Number(row.dataset.idx);
+        if (!_offCorrigirPausas[idx]) return;
+        row.querySelectorAll('[data-campo]').forEach(input => {
+          const campo = input.dataset.campo;
+          const valor = input.value;
+          _offCorrigirPausas[idx][campo] = (campo === 'pausado_em' || campo === 'retomado_em')
+            ? (valor ? _offcParaIsoBrasilia(valor) : null)
+            : valor;
+        });
+      });
+    }
+    function _offCorrigirColherTracosDosInputs() {
+      document.querySelectorAll('#offc-tracos-lista .offc-traco-row').forEach(row => {
+        const idx = Number(row.dataset.idx);
+        const t = _offCorrigirTracos[idx];
+        if (!t) return;
+        row.querySelectorAll('.offc-campo-traco[data-campo]').forEach(input => {
+          t[input.dataset.campo] = input.value;
+        });
+        row.querySelectorAll('.offc-campo-insumo[data-campo]').forEach(input => {
+          const campo = input.dataset.campo;
+          const atual = t[campo];
+          t[campo] = { original: input.value, ajustes: (atual && Array.isArray(atual.ajustes)) ? atual.ajustes : [] };
+        });
+      });
+    }
+
+    function _offCorrigirAdicionarPausa() {
+      _offCorrigirColherPausasDosInputs();
+      _offCorrigirPausas.push({ pausado_em: null, retomado_em: null, motivo: '' });
+      _offCorrigirRenderPausas();
+    }
+    function _offCorrigirRemoverPausa(idx) {
+      _offCorrigirColherPausasDosInputs();
+      _offCorrigirPausas.splice(idx, 1);
+      _offCorrigirRenderPausas();
+    }
+    function _offCorrigirRemoverTraco(idx) {
+      _offCorrigirColherTracosDosInputs();
+      _offCorrigirTracos.splice(idx, 1);
+      _offCorrigirRenderTracos();
+    }
+
+    function cfgAbrirCorrecaoOperacaoOffline(idTemp) {
       const item = _cfgOperacoesOfflineCache.find(i => i.idTemp === idTemp);
       if (!item) return;
       const f = item.formRecord || {};
-      // Convenção de fuso: mesma "UTC falso = hora de Brasília" usada em
-      // todo o resto do app (ver nowBrasilia()/data.js, formatTime() com
-      // timeZone:'UTC', e _fmtDTL/_eaParaIsoBrasilia mais abaixo neste
-      // arquivo, em Edições Avançadas) — os dígitos do ISO já SÃO a hora
-      // de Brasília, então lemos direto via toISOString().slice(0,16) (UTC
-      // "de verdade" no sentido do JS, mas que aqui representa Brasília
-      // por convenção), sem getHours()/getMinutes() locais — isso evitava
-      // que o resultado dependesse do fuso do navegador (bug: abria/salvava
-      // com +3h de diferença pra quem tem o navegador em horário de
-      // Brasília, por misturar as duas convenções).
-      const paraInputDatetime = iso => {
-        if (!iso) return '';
-        const d = new Date(iso);
-        if (isNaN(d)) return '';
-        return d.toISOString().slice(0, 16);
-      };
-      painel.innerHTML = `
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
-          <label style="font-size:.75rem;color:var(--text-3)">Início
-            <input type="datetime-local" id="cfg-off-inicio-${idSeguro}" value="${paraInputDatetime(f.inicio)}"
-              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem">
-          </label>
-          <label style="font-size:.75rem;color:var(--text-3)">Fim
-            <input type="datetime-local" id="cfg-off-fim-${idSeguro}" value="${paraInputDatetime(f.fim)}"
-              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem">
-          </label>
-          <label style="font-size:.75rem;color:var(--text-3)">ID Bateria
-            <input type="text" id="cfg-off-bateria-${idSeguro}" value="${(f.id_bateria || '').replace(/"/g, '&quot;')}"
-              style="display:block;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:6px 8px;font-size:.8rem;width:120px">
-          </label>
-          <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgSalvarCorrecaoOperacaoOffline('${idSeguro}', '${idTemp.replace(/'/g, "\\'")}')">Salvar correção</button>
-        </div>`;
-      painel.style.display = 'block';
+      _offCorrigirIdTemp = idTemp;
+      // Cópia de trabalho — nunca edita o cache original direto, só o que
+      // vai ser mandado no PATCH ao salvar (ver _validarPayload/
+      // atualizarNaFilaOffline, lib/fila-offline.js: tracos/pausas
+      // enviados SUBSTITUEM o array inteiro, então precisam sair
+      // completos daqui).
+      _offCorrigirPausas = JSON.parse(JSON.stringify(item.pausas || []));
+      _offCorrigirTracos = JSON.parse(JSON.stringify(item.tracos || []));
+
+      const corpo = document.getElementById('offc-corpo');
+      document.getElementById('offc-erro').style.display = 'none';
+      corpo.innerHTML = `
+        <div style="text-align:center;margin-bottom:18px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:.1em;color:#5a5142;text-transform:uppercase">Registro de Operação Offline — ID ${_escaparHtmlLocal(idTemp)}</div>
+        </div>
+
+        ${_offcSecao('Dados Gerais')}
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          ${_offcCampo('ID da Bateria', 'id="offc-bateria"', f.id_bateria, { largura: '160px' })}
+          ${_offcCampo('Turno', 'id="offc-turno"', f.turno, { largura: '140px' })}
+          ${_offcCampo('Dimensão', 'id="offc-dimensao"', f.dimensao, { largura: '140px' })}
+          ${_offcCampo('Capacidade (painéis)', 'id="offc-capacidade"', f.capacidade, { tipo: 'number', largura: '160px' })}
+          ${_offcCampo('Tipo de Montagem', 'id="offc-tipo-montagem"', f.tipo_montagem, { largura: '180px' })}
+        </div>
+
+        ${_offcSecao('Horários')}
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          ${_offcCampo('Início', 'id="offc-inicio"', _offcParaInputDatetime(f.inicio), { tipo: 'datetime-local', largura: '220px' })}
+          ${_offcCampo('Fim', 'id="offc-fim"', _offcParaInputDatetime(f.fim), { tipo: 'datetime-local', largura: '220px' })}
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:22px 0 12px;padding-bottom:4px;border-bottom:2px solid #1a1a1a">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#1a1a1a">Pausas</span>
+          <button type="button" onclick="_offCorrigirAdicionarPausa()"
+            style="background:none;border:1px solid #1a1a1a;border-radius:3px;padding:4px 10px;font-size:.7rem;cursor:pointer;color:#1a1a1a">+ adicionar pausa</button>
+        </div>
+        <div id="offc-pausas-lista"></div>
+
+        ${_offcSecao('Traços')}
+        <div id="offc-tracos-lista"></div>
+      `;
+      _offCorrigirRenderPausas();
+      _offCorrigirRenderTracos();
+
+      document.getElementById('offline-corrigir-modal').style.display = 'flex';
     }
 
-    async function cfgSalvarCorrecaoOperacaoOffline(idSeguro, idTemp) {
-      const inicioEl = document.getElementById('cfg-off-inicio-' + idSeguro);
-      const fimEl = document.getElementById('cfg-off-fim-' + idSeguro);
-      const bateriaEl = document.getElementById('cfg-off-bateria-' + idSeguro);
-      const patch = { formRecord: {} };
+    function _offCorrigirFecharModal() {
+      document.getElementById('offline-corrigir-modal').style.display = 'none';
+      _offCorrigirIdTemp = null;
+    }
+
+    async function cfgSalvarCorrecaoOperacaoOffline() {
+      const idTemp = _offCorrigirIdTemp;
+      if (!idTemp) return;
+      _offCorrigirColherPausasDosInputs();
+      _offCorrigirColherTracosDosInputs();
+
+      const erroEl = document.getElementById('offc-erro');
+      erroEl.style.display = 'none';
+
+      const inicioEl = document.getElementById('offc-inicio');
+      const fimEl = document.getElementById('offc-fim');
+      const bateriaEl = document.getElementById('offc-bateria');
+      const turnoEl = document.getElementById('offc-turno');
+      const dimensaoEl = document.getElementById('offc-dimensao');
+      const capacidadeEl = document.getElementById('offc-capacidade');
+      const tipoMontagemEl = document.getElementById('offc-tipo-montagem');
+
       // NÃO usar `new Date(valor).toISOString()` aqui — isso interpretaria
       // o valor do <input type="datetime-local"> como hora LOCAL do
       // navegador e faria uma conversão de fuso de verdade (ex.: 6h vira
       // 9h pra quem está em horário de Brasília), quebrando a convenção
       // "UTC falso = hora de Brasília" que o resto do app usa pra salvar/
-      // exibir inicio/fim (ver comentário em paraInputDatetime, acima, e
-      // _eaParaIsoBrasilia, em Edições Avançadas, mais abaixo). Mesma
-      // lógica de lá: só completa o valor do input com segundos + 'Z',
-      // preservando os mesmos dígitos de hora que o Master digitou.
-      if (inicioEl && inicioEl.value) patch.formRecord.inicio = _eaParaIsoBrasilia(inicioEl.value);
-      if (fimEl && fimEl.value) patch.formRecord.fim = _eaParaIsoBrasilia(fimEl.value);
-      if (bateriaEl && bateriaEl.value) patch.formRecord.id_bateria = bateriaEl.value.trim();
+      // exibir inicio/fim (ver _offcParaIsoBrasilia/_eaParaIsoBrasilia).
+      const patch = {
+        formRecord: {
+          id_bateria: bateriaEl.value.trim(),
+          turno: turnoEl.value.trim(),
+          dimensao: dimensaoEl.value.trim(),
+          tipo_montagem: tipoMontagemEl.value.trim(),
+        },
+        pausas: _offCorrigirPausas,
+        tracos: _offCorrigirTracos,
+      };
+      if (capacidadeEl.value !== '') patch.formRecord.capacidade = Number(capacidadeEl.value);
+      if (inicioEl.value) patch.formRecord.inicio = _offcParaIsoBrasilia(inicioEl.value);
+      if (fimEl.value) patch.formRecord.fim = _offcParaIsoBrasilia(fimEl.value);
+
       try {
         await LW.corrigirOperacaoOfflinePendente(idTemp, patch);
         LW.mostrarAlerta('Correção salva.', { tipo: 'sucesso' });
+        _offCorrigirFecharModal();
         cfgRenderOperacoesOffline();
       } catch (e) {
-        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+        erroEl.textContent = e.message;
+        erroEl.style.display = 'block';
       }
     }
 

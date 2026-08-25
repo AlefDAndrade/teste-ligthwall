@@ -11,9 +11,10 @@
 // Cobre:
 //   - A aba lista o que foi enviado por POST /operacao-offline/enviar.
 //   - Clicar em "✅ Validar" chama a rota e some da lista depois.
-//   - Clicar em "✏️ Corrigir" abre o painel inline com os campos atuais
-//     pré-preenchidos; salvar aplica a correção (some o "corrigido" some
-//     na recarga do card).
+//   - Clicar em "✏️ Corrigir" abre o modal "papel A4" com os campos atuais
+//     pré-preenchidos (dados gerais, horários, pausas, traços); salvar
+//     aplica a correção e fecha o modal (o card mostra "corrigido" na
+//     recarga da lista).
 //   - Clicar em "❌ Recusar" chama a rota e some da lista.
 //   - Perfil sem a permissão 'config-operacoes-offline' não vê a aba no
 //     menu lateral (mesmo comportamento de qualquer outra aba de config).
@@ -227,7 +228,7 @@ test('na renumeração, dar o mesmo número pra dois traços trava o botão de c
   }
 });
 
-test('clicar em "✏️ Corrigir" abre o painel com os campos pré-preenchidos, e salvar aplica a correção', async () => {
+test('clicar em "✏️ Corrigir" abre o modal com os campos pré-preenchidos, e salvar aplica a correção', async () => {
   const idTemp = 'OFF-ui-corrigir-' + Date.now();
   await enviarOffline(payloadValido(idTemp));
 
@@ -243,16 +244,21 @@ test('clicar em "✏️ Corrigir" abre o painel com os campos pré-preenchidos, 
     window.cfgAbrirCorrecaoOperacaoOffline(idTemp);
     await new Promise(r => setTimeout(r, 100));
 
-    const idSeguro = idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
-    const painel = document.getElementById('cfg-corrigir-' + idSeguro);
-    assert.equal(painel.style.display, 'block', 'painel de correção deveria estar visível');
+    const modal = document.getElementById('offline-corrigir-modal');
+    assert.equal(modal.style.display, 'flex', 'modal de correção deveria estar visível');
 
-    const inputBateria = document.getElementById('cfg-off-bateria-' + idSeguro);
+    const inputBateria = document.getElementById('offc-bateria');
     assert.equal(inputBateria.value, 'B-ui-teste', 'campo deveria vir pré-preenchido com o valor atual');
 
+    // O traço enviado no payload também deveria ter vindo pré-preenchido.
+    const inputSilo = document.querySelector('#offc-tracos-lista .offc-traco-row[data-idx="0"] [data-campo="silo"]');
+    assert.equal(inputSilo.value, 'Silo 1', 'campo do traço deveria vir pré-preenchido');
+
     inputBateria.value = 'B-corrigida-pela-ui';
-    await window.cfgSalvarCorrecaoOperacaoOffline(idSeguro, idTemp);
+    await window.cfgSalvarCorrecaoOperacaoOffline();
     await new Promise(r => setTimeout(r, 400));
+
+    assert.equal(modal.style.display, 'none', 'modal deveria fechar depois de salvar');
 
     const container = document.getElementById('cfg-operacoes-offline-lista');
     assert.ok(container.innerHTML.includes('B-corrigida-pela-ui'), 'card deveria mostrar o valor já corrigido depois de recarregar a lista');
