@@ -3654,34 +3654,43 @@
     }
 
     function _cfgRenumeracaoHtml(idSeguro, idTemp, data, existentes, pendentes) {
-      // Ordem inicial: pela sugestão de número (existentes já têm o seu;
-      // pendentes usam o que o dispositivo offline mandou) — só um ponto
-      // de partida, o Master pode digitar qualquer número em qualquer campo.
-      const linhas = [...existentes, ...pendentes]
-        .sort((a, b) => (a.num_traco ?? 9999) - (b.num_traco ?? 9999));
+      // Duas colunas lado a lado — "Já no sistema" (traços de outras
+      // operações do mesmo dia, já existentes) e "Desta operação"
+      // (os que vieram do envio offline, ainda pendentes) — em vez de
+      // uma lista só misturada. Cada grupo mantém sua própria ordenação
+      // por sugestão de número, só como ponto de partida.
+      const porNumero = (a, b) => (a.num_traco ?? 9999) - (b.num_traco ?? 9999);
+      const existentesOrdenados = [...existentes].sort(porNumero);
+      const pendentesOrdenados = [...pendentes].sort(porNumero);
 
-      const linhasHtml = linhas.map((t, i) => {
-        const idAttr = 'cfg-renum-' + idSeguro + '-' + i;
-        const origemBadge = t.origem === 'pendente'
-          ? '<span class="oov-renum-origem oov-renum-origem--nova">🆕 desta operação</span>'
-          : '<span class="oov-renum-origem oov-renum-origem--existente">já no dia</span>';
+      const linhaHtml = (t, i, prefixo) => {
+        const idAttr = 'cfg-renum-' + idSeguro + '-' + prefixo + '-' + i;
         const refBateria = t.id_bateria ? _escaparHtmlLocal(t.id_bateria) : '—';
         return `
           <div class="oov-renum-linha" data-id-traco="${_escaparHtmlLocal(t.id_traco)}">
             <input type="number" min="1" step="1" value="${t.num_traco ?? ''}" data-renum-input
               id="${idAttr}" class="oov-renum-input" oninput="_cfgAtualizarValidacaoRenumeracao('${idSeguro}')">
-            <div class="oov-renum-info">
-              🔋 ${refBateria} ${origemBadge}
-            </div>
+            <div class="oov-renum-info">🔋 ${refBateria}</div>
           </div>`;
-      }).join('');
+      };
+
+      const colunaHtml = (titulo, lista, prefixo, vazioTexto) => `
+        <div class="oov-renum-coluna">
+          <div class="oov-renum-coluna-titulo">${titulo} <span class="oov-renum-coluna-contagem">${lista.length}</span></div>
+          <div class="oov-renum-lista">
+            ${lista.length ? lista.map((t, i) => linhaHtml(t, i, prefixo)).join('') : `<p class="oov-renum-vazio">${vazioTexto}</p>`}
+          </div>
+        </div>`;
 
       return `
         <p class="oov-renum-intro">
           Confira e ajuste o número de <strong>cada traço do dia ${data}</strong> (os que já existem + os desta
           operação) antes de validar — sem número repetido e sem faltar nenhum.
         </p>
-        <div id="cfg-renum-lista-${idSeguro}" class="oov-renum-lista">${linhasHtml}</div>
+        <div id="cfg-renum-lista-${idSeguro}" class="oov-renum-colunas">
+          ${colunaHtml('📋 Já no sistema', existentesOrdenados, 'ex', 'Nenhum traço deste dia ainda no sistema.')}
+          ${colunaHtml('🆕 Desta operação', pendentesOrdenados, 'pd', 'Nenhum traço pendente nesta operação.')}
+        </div>
         <p id="cfg-renum-erro-${idSeguro}" class="oov-renum-erro"></p>
         <div class="oov-renum-acoes">
           <button type="button" class="btn btn-ghost btn-sm"

@@ -225,6 +225,57 @@
   overflow: hidden;
 }
 
+/* ---- Duas colunas: "Já no sistema" vs "Desta operação" ---- */
+.oov-renum-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.oov-renum-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.oov-renum-coluna-titulo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.oov-renum-coluna-contagem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  font-size: .68rem;
+  font-weight: 700;
+}
+
+.oov-renum-vazio {
+  margin: 0;
+  padding: 14px 12px;
+  font-size: .76rem;
+  font-style: italic;
+  color: var(--text-3);
+  background: var(--bg-3);
+  text-align: center;
+}
+
 .oov-renum-linha {
   display: flex;
   align-items: center;
@@ -271,21 +322,6 @@
   min-width: 0;
 }
 
-.oov-renum-origem {
-  font-size: .66rem;
-  text-transform: uppercase;
-  letter-spacing: .03em;
-  white-space: nowrap;
-}
-
-.oov-renum-origem--nova {
-  color: var(--accent);
-}
-
-.oov-renum-origem--existente {
-  color: var(--text-3);
-}
-
 .oov-renum-erro {
   font-size: .76rem;
   color: var(--red);
@@ -307,5 +343,9 @@
 
   .oov-stats {
     gap: 14px;
+  }
+
+  .oov-renum-colunas {
+    grid-template-columns: 1fr;
   }
 }
