@@ -545,6 +545,96 @@ O próprio `server.js` gera um backup de dados todo fim de dia, sem depender de 
 - Arquivos ficam em `backups-automaticos/` (fora de `public/`, nunca servida como arquivo estático comum), nomeados por data: `backup-dados_AAAA-MM-DD.zip`.
 - Acessível só pelas rotas dedicadas (`/backups-automaticos` e `/backups-automaticos/<nome>`) — essa pasta cresce e diminui sozinha, sem precisar de limpeza manual (diferente de `backups-seguranca/`).
 
+## Backup Automático no Google Drive (plano)
+
+**Objetivo**: hoje os 3 backups automáticos diários (`backup-dados_AAAA-MM-DD.zip`, ver seção acima) só existem no disco do próprio servidor — se a máquina falhar, são perdidos junto. Pedido: em **Configurações → Backup e Restauração**, o Administrador conecta uma conta do Google (fluxo de autorização, não login/senha próprio) e, a partir daí, cada backup automático gerado também é enviado sozinho pro Google Drive dessa conta, sem precisar de ninguém com o navegador aberto.
+
+**Decisão de desenho** (ver conversa que motivou este plano): a ideia original era "e-mail + código de confirmação enviado pelo sistema" — descartada porque confirmar um e-mail por código não dá, por si só, permissão de escrever no Drive de ninguém. Em vez disso, o fluxo usa a autorização OAuth2 padrão do Google ("Autorizar acesso ao Google Drive"): a mesma tela do Google já confirma o e-mail e concede a permissão de gravar arquivos, num passo só, sem o projeto precisar mandar e-mail nenhum (evita adicionar uma dependência nova só pra isso, tipo nodemailer/SMTP).
+
+**Escopo de credencial**: uma única conta Google conectada por instalação (não por usuário do sistema) — mesmo modelo de `security.json` (uma credencial de administração, não por perfil). Guardada em `private/` (fora de `public/`, nunca servida por URL), no mesmo espírito de `SECURITY_PATH`/`USUARIOS_PATH` já existentes.
+
+### 1. Projeto no Google Cloud (fora do código, manual, uma vez)
+
+- Criar um projeto no Google Cloud Console, ativar a **Google Drive API** e configurar a tela de consentimento OAuth (modo "Externo", sem submeter pra verificação do Google — uso interno, então a pessoa vê o aviso "app não verificado" na 1ª autorização e segue por "Avançado", como já combinado).
+- Gerar um **Client ID** e **Client Secret** OAuth2, com URI de redirecionamento apontando pra `/backup-drive/callback` do próprio servidor (ex.: `https://<domínio-do-caddy>/backup-drive/callback`, ver `deploy/Caddyfile.exemplo`).
+- Client ID/Secret entram como variáveis de ambiente novas (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) — nunca hardcoded no repositório, mesmo padrão de segredo-fora-do-git já usado pelo projeto.
+
+### 2. Dependência nova — cliente OAuth leve
+
+- Adicionar `google-auth-library` ao `package.json` (troca token/refresh e assina requisições) — **não** o pacote `googleapis` completo (é pesado, embute cliente de todo produto do Google); o upload em si é só uma chamada HTTP multipart na API REST do Drive, feita com `fetch` nativo do Node, sem lib adicional pra isso.
+
+### 3. `lib/google-drive.js` — wrapper de autenticação e upload (novo)
+
+Módulo isolado, sem depender de nada de `lib/rotas/` — só concentra a conversa com o Google:
+
+- `gerarUrlAutorizacao()` — monta a URL de consentimento do Google, escopo `drive.file` (acesso só aos arquivos que o próprio app cria — nunca ao Drive inteiro da pessoa; é o escopo mínimo necessário, mesmo raciocínio de permissão mínima já usado em `lib/permissoes-area.js`).
+- `trocarCodigoPorTokens(code)` — troca o `code` do callback por `access_token` + `refresh_token`.
+- `obterAccessTokenValido()` — usa o `refresh_token` guardado pra emitir um `access_token` novo sempre que precisar (eles expiram em ~1h; o `refresh_token` não expira sozinho, só se revogado).
+- `enviarArquivoParaODrive(nomeArquivo, buffer)` — upload multipart pra uma pasta fixa (`"Lightwall — Backups Automáticos"`, criada automaticamente na 1ª vez, `id` guardado junto da credencial pra não precisar procurar de novo a cada upload).
+- `revogarAcesso()` — chama o endpoint de revogação do Google e limpa a credencial local (usado por "Desconectar", item 6).
+
+### 4. Onde a credencial fica guardada (novo arquivo, fora de `public/`)
+
+`private/backup-drive.json` (mesmo diretório de `security.json`/`usuarios.json`, mesma razão: nunca servido por URL):
+
+```json
+{
+  "conectado": true,
+  "email": "fabrica@gmail.com",
+  "refreshToken": "...",
+  "pastaId": "...",
+  "ativo": true,
+  "conectadoEm": "2026-08-26T12:00:00Z"
+}
+```
+
+- `ativo` é o toggle liga/desliga (item 6) — permite desativar o envio sem precisar desconectar a conta de novo.
+- `refreshToken` é o único dado realmente sensível aqui — entra na lista de arquivos que o Backup Geral **não** deve incluir (mesmo raciocínio que já vale pra `security.json`: um backup não deve virar um vetor de vazamento de credencial).
+
+### 5. Rotas novas — `lib/rotas/backup-drive.js` (novo módulo, mesmo padrão factory + `tentar()` do resto de `lib/rotas/`)
+
+| Rota | O que faz |
+|---|---|
+| `GET /backup-drive/status` | Devolve `{ conectado, email, ativo }` pro front renderizar a seção (exige sessão de Administrador). |
+| `GET /backup-drive/autorizar` | Exige senha do Administrador reverificada (mesmo padrão de `/mesclar-backup-dados`), então redireciona pra `gerarUrlAutorizacao()`. |
+| `GET /backup-drive/callback` | Recebe o `code` do Google, chama `trocarCodigoPorTokens`, grava `private/backup-drive.json`, redireciona de volta pra Configurações com uma mensagem de sucesso/erro. |
+| `POST /backup-drive/toggle` | Liga/desliga `ativo`, sem desconectar a conta. |
+| `POST /backup-drive/desconectar` | Exige senha do Administrador, chama `revogarAcesso()`, apaga `private/backup-drive.json`. |
+
+### 6. Frontend — nova sub-seção em Configurações → Backup e Restauração
+
+- Card **"☁️ Backup na Nuvem (Google Drive)"**, junto dos cards já existentes (Backup de Dados, Backup Geral, Backups Automáticos).
+- **Desconectado**: botão **"Conectar Google Drive"** → chama `/backup-drive/autorizar` (com o mesmo modal de senha já usado em outras ações administrativas sensíveis).
+- **Conectado**: mostra o e-mail conectado, um toggle **Ativo/Pausado**, e botão **"Desconectar"** (com confirmação, mesmo padrão de outras ações destrutivas do painel de backup).
+
+### 7. Envio automático — gancho em `executarBackupAutomaticoSeNecessario`
+
+Depois que o zip do dia é gravado em `backups-automaticos/` (`lib/rotas/backup.js`, ver seção acima), se `private/backup-drive.json` existir e `ativo === true`:
+
+- Sobe o mesmo buffer já gerado pro Drive, na pasta dedicada (`enviarArquivoParaODrive`).
+- **Fail-safe, igual ao resto deste job**: falha de upload (token revogado, sem internet, cota excedida) só loga erro (`logger.error('backup-drive', ...)`) — nunca impede nem desfaz o backup local, que já está seguro em disco de qualquer forma.
+- Mantém a mesma retenção de **3 arquivos** também no Drive: ao subir um novo, apaga o mais antigo de lá (mirror da rotação que `_rotacionarBackupsAutomaticos` já faz localmente).
+
+### 8. Testes — `test/backup-drive.test.js` (novo)
+
+Seguindo o padrão de `test/helpers/servidor-teste.js` (servidor real isolado, nunca mock de HTTP) com o **Google mockado** (o único ponto externo de verdade) — casos mínimos:
+
+- `/backup-drive/status` sem conexão prévia devolve `conectado:false`.
+- `/backup-drive/autorizar` exige senha correta de Administrador antes de redirecionar.
+- `/backup-drive/callback` com `code` válido grava `private/backup-drive.json` corretamente.
+- Toggle liga/desliga persiste e é respeitado pelo job de envio.
+- Desconectar apaga a credencial e volta ao estado inicial.
+- Upload falhando (mock devolvendo erro) não impede o backup automático LOCAL de ser criado normalmente.
+- Backup Geral **não** inclui `backup-drive.json` no zip.
+
+### 9. Coisas a decidir antes de implementar
+
+- **Criptografar `refreshToken` em repouso?** Hoje `security.json`/`usuarios.json` guardam só hashes (nunca a senha em si) — já o `refreshToken` do Google precisa ser guardado em texto reversível (é assim que a API funciona). Vale considerar cifrar esse campo com uma chave derivada de algo já existente no servidor (ex.: mesmo mecanismo de `lib/security-json.js`), em vez de gravar em claro.
+- **O que fazer se a conta for desconectada do lado do Google** (revogado direto na conta Google, não pelo botão "Desconectar" daqui)? O upload passaria a falhar sempre — o plano cobre isso como uma falha silenciosa (item 7), mas talvez valha um aviso visível em Configurações depois de N falhas seguidas, pra não passar despercebido por dias.
+- **Nome/local da pasta no Drive** fixo (`"Lightwall — Backups Automáticos"`) — ok trocar por algo configurável, mas não parece necessário pro caso de uso.
+
+**Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+
 ## Operação em Andamento (tempo real)
 
 Só existe **uma operação em andamento por vez**, na fábrica inteira. A partir do momento em que "Iniciar Injeção" é clicado em **Registrar Operação**, todo campo preenchido — turno, traços, ajustes, horário de encerramento — é transmitido em tempo real (WebSocket, rota `/ws/operacao-andamento`) pra qualquer outra aba ou computador que também tenha essa mesma tela aberta. Quem só está acompanhando vê a tela se comportar exatamente como se a operação estivesse sendo feita ali, cronômetro incluso.
