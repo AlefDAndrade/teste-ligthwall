@@ -3525,12 +3525,14 @@
     async function cfgRenderOperacoesOffline() {
       const container = document.getElementById('cfg-operacoes-offline-lista');
       if (!container) return;
-      container.innerHTML = '<p style="color:var(--text-3);font-size:.8rem">Carregando…</p>';
+      _cfgAtualizarContadorOffline(null); // esconde o contador enquanto carrega
+      container.innerHTML = _cfgStatusOffline('⏳', 'Carregando…');
       try {
         const lista = await LW.listarOperacoesOfflinePendentes();
         _cfgOperacoesOfflineCache = lista;
+        _cfgAtualizarContadorOffline(lista.length);
         if (!lista.length) {
-          container.innerHTML = '<p style="color:var(--text-3);font-size:.8rem">Nenhuma operação offline pendente no momento. ✅</p>';
+          container.innerHTML = _cfgStatusOffline('✅', 'Nenhuma operação offline pendente no momento.');
           return;
         }
         // Mais recente primeiro — quem revisa normalmente quer ver o que
@@ -3538,8 +3540,30 @@
         const ordenada = [...lista].sort((a, b) => (b.recebidoEm || '').localeCompare(a.recebidoEm || ''));
         container.innerHTML = ordenada.map(item => _cfgCardOperacaoOffline(item)).join('');
       } catch (e) {
-        container.innerHTML = '<p style="color:var(--danger)">' + e.message + '</p>';
+        _cfgAtualizarContadorOffline(null);
+        container.innerHTML = _cfgStatusOffline('⚠️', _escaparHtmlLocal(e.message), { erro: true });
       }
+    }
+
+    // Bolinha "N pendentes" ao lado do título da seção — null esconde
+    // (usado enquanto carrega ou se deu erro, pra não mostrar um número
+    // desatualizado/errado).
+    function _cfgAtualizarContadorOffline(qtd) {
+      const el = document.getElementById('cfg-offline-contador');
+      if (!el) return;
+      if (qtd === null || qtd === undefined) { el.style.display = 'none'; return; }
+      el.style.display = 'inline-flex';
+      el.classList.toggle('oov-contador--zero', qtd === 0);
+      el.textContent = qtd === 0 ? '✅ Em dia' : `⏳ ${qtd} pendente${qtd === 1 ? '' : 's'}`;
+    }
+
+    function _cfgStatusOffline(icone, texto, opts) {
+      opts = opts || {};
+      return `
+        <div class="oov-status${opts.erro ? ' oov-status--erro' : ''}">
+          <div class="oov-status-icone">${icone}</div>
+          <div>${texto}</div>
+        </div>`;
     }
 
     function _cfgCardOperacaoOffline(item) {
@@ -3562,28 +3586,46 @@
       const inicio = f.inicio ? LW.formatDateTime(f.inicio) : '—';
       const fim = f.fim ? LW.formatDateTime(f.fim) : '—';
       const corrigidoTag = item.corrigidoEm
-        ? '<span style="font-size:.7rem;color:var(--accent);margin-left:8px">✏️ corrigido ' + new Date(item.corrigidoEm).toLocaleString('pt-BR') + '</span>'
+        ? '<span class="oov-tag-corrigido">✏️ corrigido ' + new Date(item.corrigidoEm).toLocaleString('pt-BR') + '</span>'
         : '';
       const idSeguro = item.idTemp.replace(/[^a-zA-Z0-9_-]/g, '');
       return `
-        <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;background:var(--bg-2)">
-          <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap">
+        <div class="oov-card${item.corrigidoEm ? ' oov-card--corrigido' : ''}">
+          <div class="oov-card-top">
             <div>
-              <div style="font-weight:600;font-size:.9rem">🔋 ${f.id_bateria || '(sem bateria)'} — ${f.turno || '—'}${corrigidoTag}</div>
-              <div style="font-size:.75rem;color:var(--text-3);margin-top:2px">Recebido em ${recebido} · IP ${item.ip || '—'}</div>
+              <div class="oov-card-titulo">
+                🔋 ${f.id_bateria || '(sem bateria)'}
+                <span class="oov-turno">${f.turno || '—'}</span>
+                ${corrigidoTag}
+              </div>
+              <div class="oov-meta">
+                <span>📥 Recebido em ${recebido}</span>
+                <span>🌐 IP ${item.ip || '—'}</span>
+              </div>
             </div>
-            <div style="font-size:.75rem;color:var(--text-2);text-align:right">
-              <div>Início: ${inicio}</div>
-              <div>Fim: ${fim}</div>
-              <div>${qtdTracos} traço(s)</div>
+            <div class="oov-stats">
+              <div class="oov-stat">
+                <span class="oov-stat-label">Início</span>
+                <span class="oov-stat-valor">${inicio}</span>
+              </div>
+              <div class="oov-stat">
+                <span class="oov-stat-label">Fim</span>
+                <span class="oov-stat-valor">${fim}</span>
+              </div>
+              <div class="oov-stat">
+                <span class="oov-stat-label">Traços</span>
+                <span class="oov-stat-valor">${qtdTracos}</span>
+              </div>
             </div>
           </div>
-          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-            <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirRenumeracaoOperacaoOffline('${idSeguro}')">✅ Validar</button>
-            <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem" onclick="cfgAbrirCorrecaoOperacaoOffline('${idSeguro}')">✏️ Corrigir</button>
-            <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem;color:var(--danger)" onclick="cfgRecusarOperacaoOffline('${idSeguro}')">❌ Recusar</button>
+          <div class="oov-card-footer">
+            <div class="oov-actions">
+              <button type="button" class="btn btn-primary btn-sm" onclick="cfgAbrirRenumeracaoOperacaoOffline('${idSeguro}')">✅ Validar</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="cfgAbrirCorrecaoOperacaoOffline('${idSeguro}')">✏️ Corrigir</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="cfgRecusarOperacaoOffline('${idSeguro}')">❌ Recusar</button>
+            </div>
           </div>
-          <div id="cfg-renumerar-${idSeguro}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)"></div>
+          <div id="cfg-renumerar-${idSeguro}" class="oov-renum-painel" style="display:none"></div>
         </div>`;
     }
 
@@ -3621,32 +3663,30 @@
       const linhasHtml = linhas.map((t, i) => {
         const idAttr = 'cfg-renum-' + idSeguro + '-' + i;
         const origemBadge = t.origem === 'pendente'
-          ? '<span style="font-size:.68rem;color:var(--accent)">🆕 desta operação</span>'
-          : '<span style="font-size:.68rem;color:var(--text-3)">já no dia</span>';
+          ? '<span class="oov-renum-origem oov-renum-origem--nova">🆕 desta operação</span>'
+          : '<span class="oov-renum-origem oov-renum-origem--existente">já no dia</span>';
         const refBateria = t.id_bateria ? _escaparHtmlLocal(t.id_bateria) : '—';
         return `
-          <div class="cfg-renum-linha" data-id-traco="${_escaparHtmlLocal(t.id_traco)}"
-            style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div class="oov-renum-linha" data-id-traco="${_escaparHtmlLocal(t.id_traco)}">
             <input type="number" min="1" step="1" value="${t.num_traco ?? ''}" data-renum-input
-              id="${idAttr}" oninput="_cfgAtualizarValidacaoRenumeracao('${idSeguro}')"
-              style="width:64px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-1);padding:4px 6px;font-size:.85rem;text-align:center">
-            <div style="flex:1;font-size:.78rem;color:var(--text-2)">
+              id="${idAttr}" class="oov-renum-input" oninput="_cfgAtualizarValidacaoRenumeracao('${idSeguro}')">
+            <div class="oov-renum-info">
               🔋 ${refBateria} ${origemBadge}
             </div>
           </div>`;
       }).join('');
 
       return `
-        <p style="font-size:.78rem;color:var(--text-3);margin-bottom:10px;line-height:1.5">
+        <p class="oov-renum-intro">
           Confira e ajuste o número de <strong>cada traço do dia ${data}</strong> (os que já existem + os desta
           operação) antes de validar — sem número repetido e sem faltar nenhum.
         </p>
-        <div id="cfg-renum-lista-${idSeguro}">${linhasHtml}</div>
-        <p id="cfg-renum-erro-${idSeguro}" style="font-size:.75rem;color:var(--danger);margin-top:8px;display:none"></p>
-        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-          <button type="button" class="btn-secondary" style="padding:6px 14px;font-size:.8rem"
+        <div id="cfg-renum-lista-${idSeguro}" class="oov-renum-lista">${linhasHtml}</div>
+        <p id="cfg-renum-erro-${idSeguro}" class="oov-renum-erro"></p>
+        <div class="oov-renum-acoes">
+          <button type="button" class="btn btn-ghost btn-sm"
             onclick="_cfgPreencherSequenciaRenumeracao('${idSeguro}')">🔢 Preencher 1, 2, 3…</button>
-          <button type="button" class="btn-primary" style="padding:6px 14px;font-size:.8rem" id="cfg-renum-confirmar-${idSeguro}"
+          <button type="button" class="btn btn-primary btn-sm" id="cfg-renum-confirmar-${idSeguro}"
             onclick="cfgConfirmarRenumeracaoEValidar('${idSeguro}', '${idTemp.replace(/'/g, "\\'")}')">✅ Confirmar numeração e validar</button>
         </div>`;
     }
@@ -3672,8 +3712,8 @@
       const numeros = [];
       let faltaNumero = false;
       inputs.forEach(input => {
-        const linha = input.closest('.cfg-renum-linha');
-        linha.style.background = '';
+        const linha = input.closest('.oov-renum-linha');
+        linha.classList.remove('oov-renum-linha--erro');
         const valor = input.value.trim();
         if (!valor || Number(valor) <= 0 || !Number.isInteger(Number(valor))) { faltaNumero = true; return; }
         numeros.push({ input, linha, num: Number(valor) });
@@ -3689,7 +3729,7 @@
         if (duplicados.length) {
           mensagem = 'Número(s) repetido(s): #' + duplicados.join(', #') + '. Cada traço do dia precisa de um número único.';
           numeros.forEach(({ num, linha }) => {
-            if (duplicados.includes(num)) linha.style.background = 'rgba(220,53,69,.12)';
+            if (duplicados.includes(num)) linha.classList.add('oov-renum-linha--erro');
           });
         }
       }

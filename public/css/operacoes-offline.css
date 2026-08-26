@@ -1,0 +1,311 @@
+/* ============================================================
+   OPERAÇÕES A VALIDAR (Registro Offline) — Configurações
+   Escopo: só a aba "📴 Operações a Validar" do modal de
+   Configurações (public/partials/modal-config.html, seção
+   #cfg-secao-operacoes-offline) + o markup gerado por
+   cfgRenderOperacoesOffline/_cfgCardOperacaoOffline/
+   _cfgRenumeracaoHtml em app-core.js.
+   Prefixo "oov-" (Operações Offline a Validar) — mesmo padrão de
+   arquivo próprio + prefixo de manutencao.css (man-) e
+   setor-qualidade.css (sq-), pra não colidir com o resto do app.
+   ============================================================ */
+
+/* ---- Cabeçalho da seção: título + contador ao vivo ---- */
+.oov-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.oov-header .card-title {
+  margin-bottom: 0;
+}
+
+.oov-contador {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  border-radius: 20px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  background: rgba(245, 158, 11, .15);
+  color: var(--accent);
+  border: 1px solid rgba(245, 158, 11, .3);
+  white-space: nowrap;
+}
+
+.oov-contador.oov-contador--zero {
+  background: rgba(16, 185, 129, .15);
+  color: var(--green);
+  border-color: rgba(16, 185, 129, .3);
+}
+
+/* ---- Estados: carregando / erro / vazio ---- */
+.oov-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 34px 20px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius-lg);
+  color: var(--text-3);
+  font-size: .82rem;
+}
+
+.oov-status--erro {
+  border-color: rgba(239, 68, 68, .35);
+  color: var(--red);
+}
+
+.oov-status-icone {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+/* ---- Lista de cards ---- */
+.oov-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oov-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 14px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-dim);
+  border-radius: var(--radius);
+  transition: border-color .15s;
+}
+
+.oov-card:hover {
+  border-color: var(--border-2);
+  border-left-color: var(--accent);
+}
+
+.oov-card--corrigido {
+  border-left-color: var(--blue, #3b82f6);
+}
+
+.oov-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.oov-card-titulo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--text);
+}
+
+.oov-card-titulo .oov-turno {
+  font-family: var(--font-body);
+  font-size: .74rem;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px 9px;
+}
+
+.oov-tag-corrigido {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--blue, #3b82f6);
+  background: rgba(59, 130, 246, .12);
+  border: 1px solid rgba(59, 130, 246, .3);
+  border-radius: 20px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.oov-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 3px;
+  font-size: .74rem;
+  color: var(--text-3);
+}
+
+.oov-meta span {
+  white-space: nowrap;
+}
+
+/* ---- Mini-grid de estatísticas (Início / Fim / Traços) ---- */
+.oov-stats {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.oov-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 64px;
+}
+
+.oov-stat-label {
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+}
+
+.oov-stat-valor {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--text);
+}
+
+/* ---- Rodapé do card: ações ---- */
+.oov-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.oov-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Painel de renumeração (abre dentro do card, ao validar) ---- */
+.oov-renum-painel {
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-2);
+}
+
+.oov-renum-intro {
+  font-size: .78rem;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.oov-renum-lista {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.oov-renum-linha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  transition: background .15s;
+}
+
+.oov-renum-linha:last-child {
+  border-bottom: none;
+}
+
+.oov-renum-linha--erro {
+  background: rgba(239, 68, 68, .12);
+}
+
+.oov-renum-input {
+  width: 60px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 5px 6px;
+  font-family: var(--font-mono);
+  font-size: .85rem;
+  text-align: center;
+}
+
+.oov-renum-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.oov-renum-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .8rem;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.oov-renum-origem {
+  font-size: .66rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+
+.oov-renum-origem--nova {
+  color: var(--accent);
+}
+
+.oov-renum-origem--existente {
+  color: var(--text-3);
+}
+
+.oov-renum-erro {
+  font-size: .76rem;
+  color: var(--red);
+  margin-top: 10px;
+  display: none;
+}
+
+.oov-renum-acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .oov-card-top {
+    flex-direction: column;
+  }
+
+  .oov-stats {
+    gap: 14px;
+  }
+}
