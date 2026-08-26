@@ -331,6 +331,41 @@ test('corrigir aplica o patch, e depois validar usa o valor já corrigido', asyn
   assert.equal(op.id_bateria, 'B-corrigida');
 });
 
+// Reproduz o bug relatado: corrigir início/fim (ou pausas) antes de
+// validar precisa RECALCULAR tempo_min/houve_atraso — não pode deixar o
+// valor que o dispositivo offline calculou sozinho, ANTES da correção,
+// "parado" (ver _recalcularTempoOperacao, lib/rotas/operacao-offline.js).
+// payloadValido nasce com inicio 08:00/fim 09:00/tempo_min 60 (sem
+// pausa) — a correção estica o fim pra 10:30 (08:00 -> 10:30 = 150min
+// brutos) e adiciona uma pausa de 15min, então o tempo de operação de
+// verdade devia virar 135min (150 brutos - 15 de pausa), nunca os 60min
+// antigos que vieram prontos no payload original.
+test('corrigir início/fim/pausas recalcula tempo_min/houve_atraso — não usa o valor antigo do dispositivo offline', async () => {
+  const idTemp = 'OFF-corrigir-tempo-' + Date.now();
+  await enviarOffline(payloadValido(idTemp)); // tempo_min:60, houve_atraso:'NAO', sem pausas
+
+  const respCorrigir = await fetch(`${servidor.baseUrl}/operacao-offline/corrigir`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...comAdmin() },
+    body: JSON.stringify({
+      idTemp,
+      formRecord: { fim: '2026-08-19T10:30:00.000Z' }, // era 09:00 — 90min brutos agora
+      pausas: [{ pausado_em: '2026-08-19T08:30:00.000Z', retomado_em: '2026-08-19T08:45:00.000Z', motivo: 'ajuste de máquina' }],
+    }),
+  });
+  assert.equal(respCorrigir.status, 200);
+
+  const respValidar = await validar(idTemp);
+  assert.equal(respValidar.status, 200, await respValidar.text());
+
+  const historico = await (await fetch(`${servidor.baseUrl}/db/historico.json`)).json();
+  const op = historico.find(o => o.id === 'op_off_' + idTemp.slice(4));
+  assert.ok(op, 'operação validada deveria existir no histórico');
+  // 150min brutos (08:00 -> 10:30) - 15min de pausa = 135min, nunca os
+  // 60min que vieram prontos no formRecord original (payloadValido).
+  assert.equal(op.tempo_min, 135);
+  assert.equal(op.houve_atraso, 'SIM'); // 135min > LIMITE_INJECAO_MIN (59)
+});
+
 test('recusar remove da fila sem nunca criar uma operação', async () => {
   const idTemp = 'OFF-recusar-' + Date.now();
   await enviarOffline(payloadValido(idTemp));
