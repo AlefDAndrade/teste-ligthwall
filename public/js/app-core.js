@@ -3546,8 +3546,21 @@
       const f = item.formRecord || {};
       const qtdTracos = Array.isArray(item.tracos) ? item.tracos.length : 0;
       const recebido = item.recebidoEm ? new Date(item.recebidoEm).toLocaleString('pt-BR') : '—';
-      const inicio = f.inicio ? new Date(f.inicio).toLocaleString('pt-BR') : '—';
-      const fim = f.fim ? new Date(f.fim).toLocaleString('pt-BR') : '—';
+      // f.inicio/f.fim seguem a convenção "UTC falso = hora de Brasília"
+      // (mesmo raciocínio de _offcParaInputDatetime/dashboard.js, coluna
+      // Hora Início/Fim do Registro de Baterias) — LW.formatDateTime já lê
+      // os dígitos do ISO direto, sem aplicar o fuso REAL do navegador
+      // (timeZone: 'UTC' internamente). Usar toLocaleString('pt-BR') aqui
+      // (sem forçar UTC) aplicava o fuso de verdade do navegador em cima
+      // de um valor que já É a hora local — fazia este card mostrar um
+      // horário diferente do que a mesma operação mostra no Registro de
+      // Baterias depois de validada. recebidoEm/corrigidoEm (abaixo),
+      // diferente de inicio/fim, são timestamps REAIS do servidor
+      // (new Date().toISOString() em lib/fila-offline.js) — esses sim
+      // devem converter para o fuso do navegador, então continuam com
+      // toLocaleString('pt-BR') normal.
+      const inicio = f.inicio ? LW.formatDateTime(f.inicio) : '—';
+      const fim = f.fim ? LW.formatDateTime(f.fim) : '—';
       const corrigidoTag = item.corrigidoEm
         ? '<span style="font-size:.7rem;color:var(--accent);margin-left:8px">✏️ corrigido ' + new Date(item.corrigidoEm).toLocaleString('pt-BR') + '</span>'
         : '';
