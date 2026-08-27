@@ -136,6 +136,21 @@
     // Extrai só o id — usada tanto no boot (location.href) quanto na
     // mensagem que o service worker manda pra uma aba já aberta (ver
     // listener 'message' logo abaixo).
+    // Mesma ideia de _extrairChamadoIdDaUrl, acima, só que pro retorno do
+    // fluxo OAuth do Google (ver GET /backup-drive/callback,
+    // lib/rotas/backup-drive.js) — a URL vem como
+    // "/?config=backup-drive&ok=1|0&msg=...". Devolve null se o parâmetro
+    // não estiver presente, ou { ok, msg } se estiver.
+    function _extrairRetornoBackupDriveDaUrl(urlStr) {
+      try {
+        const params = new URL(urlStr, window.location.origin).searchParams;
+        if (params.get('config') !== 'backup-drive') return null;
+        return { ok: params.get('ok') === '1', msg: params.get('msg') || '' };
+      } catch (e) {
+        return null;
+      }
+    }
+
     function _extrairChamadoIdDaUrl(urlStr) {
       try {
         return new URL(urlStr, window.location.origin).searchParams.get('chamado');
@@ -652,7 +667,14 @@
       // motivo: um F5 nesta aba não pode reabrir o mesmo registro de
       // novo pra sempre.
       const _programadaIdDaNotificacao = _extrairProgramadaIdDaUrl(window.location.href);
+      // Retorno do fluxo OAuth do Google (ver GET /backup-drive/callback) —
+      // mesmo raciocínio dos dois de cima: captura ANTES de limpar a URL,
+      // senão um F5 nesta aba reabriria a mensagem de novo.
+      const _retornoBackupDrive = _extrairRetornoBackupDriveDaUrl(window.location.href);
       if (_chamadoIdDaNotificacao || _programadaIdDaNotificacao) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+      if (_retornoBackupDrive) {
         window.history.replaceState(null, '', window.location.pathname);
       }
 
@@ -763,6 +785,13 @@
         if (!(_chamadoIdDaNotificacao && await _abrirChamadoDeNotificacao(_chamadoIdDaNotificacao))
             && !(_programadaIdDaNotificacao && await _abrirProgramadaDeNotificacao(_programadaIdDaNotificacao))) {
           _restaurarUltimaPagina();
+        }
+        // Sempre por cima da restauração de página normal — a pessoa
+        // acabou de voltar da tela de consentimento do Google, precisa
+        // ver o resultado independente de qual página estava aberta antes.
+        if (_retornoBackupDrive) {
+          abrirBackupHub();
+          _statusBackupHub(_retornoBackupDrive.msg, _retornoBackupDrive.ok ? 'ok' : 'erro');
         }
 
       } else {
@@ -942,16 +971,21 @@
       if (status) status.style.display = 'none';
       document.getElementById('backup-hub-modal').style.display = 'flex';
       _carregarBackupsAutomaticos();
+      _carregarBackupDriveStatus();
     }
 
     function fecharBackupHub() {
       document.getElementById('backup-hub-modal').style.display = 'none';
     }
 
-    function _statusBackupHub(msg) {
+    function _statusBackupHub(msg, tipo) {
       const status = document.getElementById('backup-hub-status');
       if (!status) return;
-      if (msg) { status.textContent = msg; status.style.display = 'block'; }
+      if (msg) {
+        status.textContent = msg;
+        status.style.display = 'block';
+        status.style.color = tipo === 'erro' ? 'var(--red)' : (tipo === 'ok' ? 'var(--accent)' : 'var(--text-2)');
+      }
       else { status.style.display = 'none'; }
     }
 
@@ -999,7 +1033,165 @@
       })();
     }
 
-    // ---- Backup de Dados (admin) ----
+    // ---- Backup na Nuvem (Google Drive) — Passo 6 do plano, ver README ----
+    // GET /backup-drive/status devolve { conectado, email, ativo,
+    // credenciaisConfiguradas } — nunca refreshToken (ver
+    // lib/rotas/backup-drive.js). Três estados possíveis pra renderizar:
+    //   1. credenciaisConfiguradas=false → Passo 1 do plano ainda não foi
+    //      feito neste servidor (falta GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI)
+    //      — mostra aviso em vez de botão, nada clicável.
+    //   2. conectado=false (mas credenciais ok) → botão "Conectar".
+    //   3. conectado=true → e-mail + toggle ativo/pausado + "Desconectar".
+    function _carregarBackupDriveStatus() {
+      const el = document.getElementById('backup-hub-drive');
+      if (!el) return;
+      el.innerHTML = '<span style="color:var(--text-3);font-size:.82rem">Carregando...</span>';
+
+      (async () => {
+        try {
+          const res = await fetch('/backup-drive/status');
+          if (res.status === 403) {
+            el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Sua sessão de administrador expirou — saia e entre novamente como Administrador.</span>';
+            return;
+          }
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.erro || 'Erro ao consultar status do Google Drive.');
+
+          if (!json.credenciaisConfiguradas) {
+            el.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 14px">
+                <span style="font-size:.82rem;color:var(--text-3)">☁️ Integração com Google Drive ainda não configurada neste servidor.</span>
+              </div>`;
+            return;
+          }
+
+          if (!json.conectado) {
+            el.innerHTML = `
+              <div class="menu-card" id="backup-hub-card-drive-conectar" onclick="abrirBackupDriveSenha('conectar')">
+                <div class="menu-card-icon">☁️</div>
+                <div class="menu-card-title">Conectar Google Drive</div>
+                <div class="menu-card-desc">Envia os backups automáticos diários também pra uma conta do Google Drive.</div>
+              </div>`;
+            return;
+          }
+
+          el.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;flex-wrap:wrap">
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:.85rem;color:var(--text);font-weight:600">☁️ Conectado como ${json.email || '(e-mail não obtido)'}</span>
+                <span style="font-size:.76rem;color:var(--text-3)">Os 3 backups automáticos mais recentes são enviados pra lá também.</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.8rem;color:var(--text-2);user-select:none">
+                  ${json.ativo ? 'Ativo' : 'Pausado'}
+                  <span class="switch">
+                    <input type="checkbox" id="backup-drive-toggle-ativo" ${json.ativo ? 'checked' : ''} onchange="toggleBackupDriveAtivo(this)">
+                    <span class="switch-slider"></span>
+                  </span>
+                </label>
+                <button class="btn btn-ghost btn-sm" onclick="abrirBackupDriveSenha('desconectar')">Desconectar</button>
+              </div>
+            </div>`;
+        } catch (e) {
+          el.innerHTML = `<span style="color:var(--red);font-size:.82rem">Erro ao carregar: ${e.message}</span>`;
+        }
+      })();
+    }
+
+    // Liga/desliga o envio automático sem desconectar a conta — não pede
+    // senha (diferente de conectar/desconectar), é reversível e de baixo
+    // risco (ver POST /backup-drive/toggle, lib/rotas/backup-drive.js).
+    function toggleBackupDriveAtivo(checkbox) {
+      const ativoDesejado = checkbox.checked;
+      checkbox.disabled = true;
+      (async () => {
+        try {
+          const res = await fetch('/backup-drive/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ativo: ativoDesejado }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.erro || 'Erro ao atualizar.');
+          // Recarrega pra manter o label "Ativo"/"Pausado" e o restante
+          // do card sempre consistentes com o que está de fato salvo.
+          _carregarBackupDriveStatus();
+        } catch (e) {
+          LW.mostrarAlerta('Erro ao atualizar Backup na Nuvem: ' + e.message, { tipo: 'erro' });
+          checkbox.checked = !ativoDesejado;
+          checkbox.disabled = false;
+        }
+      })();
+    }
+
+    // ---- Modal de senha — reaproveitado por "Conectar" e "Desconectar" ----
+    // Ambas as ações são sensíveis o bastante (conectar uma conta externa
+    // que vai RECEBER dados da fábrica / desconectar uma já em uso) pra
+    // justificar reverificar a senha de administrador, mesmo já com sessão
+    // aberta — mesmo padrão de /mesclar-backup-dados.
+    let _backupDriveAcaoPendente = null; // 'conectar' | 'desconectar'
+
+    function abrirBackupDriveSenha(acao) {
+      _backupDriveAcaoPendente = acao;
+      const titulo = document.getElementById('backup-drive-senha-titulo');
+      const desc = document.getElementById('backup-drive-senha-desc');
+      if (acao === 'conectar') {
+        titulo.textContent = '☁️ Conectar Google Drive';
+        desc.textContent = 'Confirme sua senha de administrador — você vai ser levado(a) pra tela de autorização do Google.';
+      } else {
+        titulo.textContent = '☁️ Desconectar Google Drive';
+        desc.textContent = 'Confirme sua senha de administrador — o envio automático dos backups pra essa conta vai parar.';
+      }
+      document.getElementById('backup-drive-senha-erro').style.display = 'none';
+      document.getElementById('backup-drive-senha-input').value = '';
+      document.getElementById('backup-drive-senha-modal').style.display = 'flex';
+    }
+
+    function fecharBackupDriveSenha() {
+      document.getElementById('backup-drive-senha-modal').style.display = 'none';
+      _backupDriveAcaoPendente = null;
+    }
+
+    function confirmarBackupDriveSenha() {
+      const senha = document.getElementById('backup-drive-senha-input').value;
+      const erroEl = document.getElementById('backup-drive-senha-erro');
+      const btn = document.getElementById('backup-drive-senha-btn-confirmar');
+      const acao = _backupDriveAcaoPendente;
+      const rota = acao === 'conectar' ? '/backup-drive/autorizar' : '/backup-drive/desconectar';
+
+      erroEl.style.display = 'none';
+      btn.disabled = true;
+
+      (async () => {
+        try {
+          const res = await fetch(rota, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ senha }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.erro || 'Erro.');
+
+          if (acao === 'conectar') {
+            // Sai do sistema agora — a volta é pelo GET /backup-drive/callback
+            // (ver lib/rotas/backup-drive.js), que redireciona de novo pra
+            // "/" já com o resultado (ver _retornoBackupDrive, acima).
+            window.location.href = json.url;
+            return;
+          }
+
+          fecharBackupDriveSenha();
+          _carregarBackupDriveStatus();
+        } catch (e) {
+          erroEl.textContent = e.message;
+          erroEl.style.display = 'block';
+        } finally {
+          btn.disabled = false;
+        }
+      })();
+    }
+
+
     // Gerado no SERVIDOR (rota GET /backup-dados — ver
     // gerarZipDadosServidor, lib/rotas/backup.js), diferente de antes
     // (montado no navegador via fetch de cada GET /db/*.json — ver
