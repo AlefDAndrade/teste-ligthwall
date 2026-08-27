@@ -956,7 +956,17 @@ Reaproveita 100% da UI (`_mostrarAvisoConexao`) e da lógica de fila (`enfileira
 
 **Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
 
-## Limitações conhecidas
+### 10. Numeração inicial customizável + marcação de "sobra" (com nota e vínculo na validação) — IMPLEMENTADO
+
+Dois pedidos distintos, ambos só na tela offline (`public/offline.html`/`public/js/offline-operacao.js`):
+
+**a) Número inicial do contador de traços editável** — antes, todo rascunho novo sempre numerava os traços a partir do 1. Agora, ao entrar num rascunho **novo** (nunca ao retomar um em andamento), um modal pergunta *"Quantos traços já foram feitos hoje?"* — a pessoa digita um número e clica **Salvar** (os traços desta operação passam a contar a partir do seguinte), ou clica **"Não sei — começar do 1"**. Puramente uma ajuda visual/de memória pro operador: a numeração que efetivamente entra no sistema continua sendo decidida de novo pelo Administrador na validação (item 6, "renumeração manual do dia") — esse número nunca é gravado como `num_traco` final. Implementado em `criarStateVazio`/`numeroDoTraco`/`mostrarModalNumeroInicial` (`offline-operacao.js`) e persiste no rascunho salvo (`numero_inicial_traco`, sobrevive a um F5).
+
+**b) Marcador "Este traço é uma sobra" + nota + vínculo na validação** — dentro de cada card de traço, um checkbox "♻️ Este traço é uma sobra" revela um campo de nota livre (`nota_sobra`) — **só uma ajuda de memória pro próprio operador**, já que offline não tem como consultar o sistema pra saber se existe sobra ativa de verdade (mesmo motivo do item 8 do plano original, acima, ter descartado o reaproveitamento automático). Na tela **Configurações → Operações a Validar**, o Administrador vê a nota de cada traço marcado e pode digitar uma referência ao traço/operação original num campo de texto + **"🔗 Salvar vínculo"** — reaproveita a rota `POST /operacao-offline/corrigir` já existente (aceita substituir o array `tracos` inteiro, não precisou de rota nova).
+
+Como a tabela `tracos` tem uma lista fechada de colunas na hora de aprovar (`_tracosParaLinhasRelatorio`, sem espaço pra `eh_sobra`/`nota_sobra`/vínculo como colunas próprias — mudar o schema só pra isso não valeu a pena), a informação é **dobrada dentro do próprio campo `obs`** do traço no momento da validação (`_montarObsComSobra`, `lib/rotas/operacao-offline.js`), como um marcador `[♻️ SOBRA — nota do operador: ... — vinculado a: ... ]` prefixado ao `obs` original — inclusive avisando explicitamente quando ainda não foi vinculado, pra nunca ficar silencioso/ambíguo.
+
+**Status:** implementado. Testes em `test/operacao-offline-sobra.test.js` (5 casos: marcação chega e persiste na fila, `/corrigir` grava o vínculo sem afetar outros campos/traços, validação dobra nota+vínculo no `obs` — nos dois campos `obs` que existem —, validação sem vínculo ainda avisa explicitamente, e um traço comum sem `eh_sobra` continua gravando `obs` exatamente como antes). Suíte completa de operação offline (38 testes) passando.
 
 
 - **3 rotas continuam exigindo senha a cada chamada, por design**: `/mesclar-backup-dados`, `/restaurar-backup-dados` e `/restaurar-backup-geral` — as mais destrutivas do sistema (a última pode sobrescrever dados de produção, configurações e o cadastro de usuários) — não usam sessão, mesmo o resto das rotas administrativas já tendo migrado (ver *Autenticação e Sessão*, acima). É intencional (defesa em profundidade), não um esquecimento.

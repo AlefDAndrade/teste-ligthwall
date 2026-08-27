@@ -42,6 +42,21 @@
     .off-grade-celula { display: flex; flex-direction: column; align-items: center; gap: 2px; }
     .off-grade-celula label { font-size: .65rem; color: var(--text-3); }
 
+    /* Caixinha de marcação "Este traço é uma sobra" — dentro do card do
+       traço, entre o header (berço/silo/expansão) e o corpo (receita).
+       Borda tracejada no estado normal, sólida na cor de destaque quando
+       marcada, pra chamar atenção sem parecer um erro/alerta. */
+    .traco-sobra-box {
+      margin: 0 0 14px; padding: 10px 14px; border: 1px dashed var(--border);
+      border-radius: var(--radius); background: var(--bg-2);
+    }
+    .traco-sobra-box--ativo { border-style: solid; border-color: var(--accent); }
+    .traco-sobra-toggle {
+      display: flex; align-items: center; gap: 8px; font-size: .82rem;
+      color: var(--text-2); cursor: pointer; user-select: none;
+    }
+    .traco-sobra-toggle input { width: 16px; height: 16px; cursor: pointer; }
+
     /* Barra de ações fixa embaixo — mesmo padrão do .page-header (borda +
        fundo var(--bg-2)) usado no topo, agora ancorado no rodapé. */
     .off-actions-bar {
@@ -56,6 +71,34 @@
   </style>
 </head>
 <body>
+
+  <!-- ============ MODAL: QUANTOS TRAÇOS JÁ FORAM FEITOS HOJE? ============
+       Perguntado 1x, ao entrar num rascunho NOVO (nunca ao retomar um já em
+       andamento — ver init(), offline-operacao.js). Puramente uma ajuda
+       visual de numeração pro operador, nunca a numeração final de verdade
+       (essa é sempre decidida de novo pelo Administrador na validação). -->
+  <div id="off-modal-num-inicial"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center">
+    <div class="card" style="width:440px;max-width:92vw;padding:28px">
+      <h2 style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);letter-spacing:.04em;margin:0 0 10px">
+        Quantos traços já foram feitos hoje?</h2>
+      <p style="color:var(--text-2);font-size:.85rem;margin:0 0 16px;line-height:1.5">
+        Conte os traços que já foram feitos hoje (outras baterias, outros aparelhos) — os
+        traços desta operação vão continuar a numeração a partir daí. Se não souber, clique
+        em "Não sei" e a contagem começa do 1. É só uma referência pra você não se perder —
+        a numeração final é sempre conferida por um Administrador na validação.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Traços já feitos hoje</label>
+        <input class="form-input" type="number" min="0" id="off-num-inicial-input" placeholder="Ex: 5"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();LWOff.confirmarNumeroInicial();}">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="LWOff.naoSeiNumeroInicial()">Não sei — começar do 1</button>
+        <button class="btn btn-primary" onclick="LWOff.confirmarNumeroInicial()">Salvar</button>
+      </div>
+    </div>
+  </div>
 
   <div class="off-topbar">
     <div>

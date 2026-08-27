@@ -3810,6 +3810,7 @@
               </div>
             </div>
           </div>
+          ${_cfgSobraSectionOperacaoOffline(item, idSeguro)}
           <div class="oov-card-footer">
             <div class="oov-actions">
               <button type="button" class="btn btn-primary btn-sm" onclick="cfgAbrirRenumeracaoOperacaoOffline('${idSeguro}')">✅ Validar</button>
@@ -3819,6 +3820,71 @@
           </div>
           <div id="cfg-renumerar-${idSeguro}" class="oov-renum-painel" style="display:none"></div>
         </div>`;
+    }
+
+    // ─── Traços marcados como sobra pelo operador (offline-operacao.js) —
+    // mostra a nota que ele deixou pra si mesmo e um campo pra o
+    // Administrador apontar qual é o traço/operação ORIGINAL de que este
+    // é sobra. "Salvar vínculo" reaproveita POST /operacao-offline/
+    // corrigir (já existe, já aceita substituir o array `tracos` inteiro
+    // — não precisou de rota nova nenhuma). O vínculo só vira permanente
+    // de fato quando esta operação for Validada — lib/rotas/operacao-
+    // offline.js dobra eh_sobra/nota_sobra/link_sobra_original dentro do
+    // campo `obs` do traço final nesse momento (ver _montarObsComSobra,
+    // lá), já que a tabela `tracos` não tem colunas próprias pra isso.
+    function _cfgSobraSectionOperacaoOffline(item, idSeguro) {
+      const tracos = Array.isArray(item.tracos) ? item.tracos : [];
+      const marcados = tracos
+        .map((t, indice) => ({ t, indice }))
+        .filter(({ t }) => t && t.eh_sobra);
+      if (!marcados.length) return '';
+
+      return `
+        <div class="oov-sobra-section">
+          <div class="oov-sobra-titulo">♻️ Traços marcados como sobra pelo operador</div>
+          ${marcados.map(({ t, indice }) => `
+            <div class="oov-sobra-item">
+              <div class="oov-sobra-num">Traço ${t.num ?? (indice + 1)}</div>
+              ${t.nota_sobra
+                ? `<div class="oov-sobra-nota">📝 "${_escaparHtmlLocal(t.nota_sobra)}"</div>`
+                : '<div class="oov-sobra-nota oov-sobra-nota--vazia">(operador não deixou nota)</div>'}
+              <div class="oov-sobra-link-row">
+                <input type="text" class="form-input oov-sobra-link-input" id="oov-sobra-link-${idSeguro}-${indice}"
+                  placeholder="Apontar para o traço/operação original (ex.: operação #123, traço 4)"
+                  value="${_escaparHtmlLocal(t.link_sobra_original || '')}">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="cfgSalvarLinkSobra('${idSeguro}', ${indice})">🔗 Salvar vínculo</button>
+              </div>
+              ${t.link_sobra_original ? `<div class="oov-sobra-vinculado">✅ Vinculado a: ${_escaparHtmlLocal(t.link_sobra_original)}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>`;
+    }
+
+    // Salva o vínculo digitado num traço marcado como sobra — PATCH via
+    // /operacao-offline/corrigir, mandando o array `tracos` completo com
+    // só aquele índice alterado (a rota substitui o array inteiro, não dá
+    // pra mandar um PATCH por-índice — ver atualizarNaFilaOffline,
+    // lib/fila-offline.js). `idSeguro` é a versão do idTemp já sem
+    // caracteres especiais (mesmo usado no resto do card) — busca no
+    // cache o item cujo idTemp bate com esse formato pra recuperar o
+    // idTemp de verdade.
+    async function cfgSalvarLinkSobra(idSeguro, indiceTraco) {
+      const item = _cfgOperacoesOfflineCache.find(it => it.idTemp.replace(/[^a-zA-Z0-9_-]/g, '') === idSeguro);
+      if (!item) {
+        LW.mostrarAlerta('Registro não encontrado — a lista pode ter sido atualizada, recarregue e tente de novo.', { tipo: 'erro' });
+        return;
+      }
+      const input = document.getElementById(`oov-sobra-link-${idSeguro}-${indiceTraco}`);
+      if (!input) return;
+      const valor = input.value.trim();
+      try {
+        const tracosAtualizados = (item.tracos || []).map((t, idx) => idx === indiceTraco ? { ...t, link_sobra_original: valor } : t);
+        await LW.corrigirOperacaoOfflinePendente(item.idTemp, { tracos: tracosAtualizados });
+        LW.mostrarAlerta('Vínculo salvo.', { tipo: 'sucesso' });
+        await cfgRenderOperacoesOffline();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
     }
 
     // ─── Renumeração manual do dia, antes de validar ─────────────────────

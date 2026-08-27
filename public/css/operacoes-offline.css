@@ -203,6 +203,71 @@
   flex-wrap: wrap;
 }
 
+/* ---- Traços marcados como sobra (offline-operacao.js) — nota do
+   operador + campo pra Administrador linkar ao traço original ---- */
+.oov-sobra-section {
+  margin-top: 6px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.oov-sobra-titulo {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+}
+
+.oov-sobra-item {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.oov-sobra-item:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.oov-sobra-num {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.oov-sobra-nota {
+  font-size: .82rem;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+
+.oov-sobra-nota--vazia {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.oov-sobra-link-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.oov-sobra-link-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.oov-sobra-vinculado {
+  margin-top: 6px;
+  font-size: .78rem;
+  color: var(--accent);
+}
+
 /* ---- Painel de renumeração (abre dentro do card, ao validar) ---- */
 .oov-renum-painel {
   margin-top: 2px;

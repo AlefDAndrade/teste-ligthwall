@@ -98,6 +98,15 @@
       status: 'idle', // idle | running | finished
       pausas: [],
       tracos: [],
+      // Número a partir do qual os traços DESTA operação são numerados —
+      // decidido no modal "Quantos traços já foram feitos hoje?"
+      // (mostrarModalNumeroInicial, mais abaixo), perguntado 1x ao entrar
+      // num rascunho NOVO (nunca ao retomar um já em andamento — ver
+      // init()). `null` = ainda não perguntado (só acontece no instante
+      // entre o boot e a resposta do modal); numeroDoTraco() trata esse
+      // caso caindo pra 1, então nada quebra se algo tentar adicionar um
+      // traço antes da resposta.
+      numeroInicialTraco: null,
       // "🚫 Não Enchido" / vazamento (ver card Bateria Atual, abaixo) —
       // mesmo formato usado no online (bateria-atual.js/GET
       // /bercos-andamento): mapa esparso { 'B1': { esquerda:'baixou',
@@ -217,6 +226,10 @@
       houve_atraso: state.houve_atraso,
       motivo_atraso: state.motivo_atraso || '',
       qtd_tracos: state.tracos.length,
+      // Ver numeroDoTraco/mostrarModalNumeroInicial, acima — precisa
+      // sobreviver a um F5 no meio do preenchimento (senão o modal
+      // reapareceria e resetaria a numeração visual toda vez).
+      numero_inicial_traco: state.numeroInicialTraco || 1,
       // Marcações de "baixou/vazou" e "🚫 Não Enchido" feitas no card
       // Bateria Atual (ver seção BATERIA ATUAL, abaixo) — só entra no
       // formRecord quando houver alguma, pra não poluir registros sem
@@ -256,6 +269,10 @@
       pausas: pendente.pausas || [],
       tracos: pendente.tracos || [],
       bercos_marcados: fr.bercos_marcados || {},
+      // fallback 1 cobre rascunhos salvos ANTES desta funcionalidade
+      // existir (nunca tiveram esse campo) — comportamento idêntico ao
+      // de sempre pra eles, sem quebrar nada.
+      numeroInicialTraco: fr.numero_inicial_traco || 1,
     };
     return true;
   }
@@ -957,6 +974,44 @@
   }
 
   // ============================================================
+  //  NÚMERO INICIAL DO CONTADOR DE TRAÇOS
+  //
+  //  Ao entrar num rascunho NOVO (nunca ao retomar um já em andamento —
+  //  ver init()), pergunta quantos traços já foram feitos hoje (outras
+  //  baterias, outros aparelhos) — os traços desta operação passam a ser
+  //  numerados a partir daí, em vez de sempre começar do 1. Puramente
+  //  cosmético/ajuda de memória pro operador: a numeração que de fato
+  //  entra no sistema é decidida de novo pelo Administrador na validação
+  //  ("renumeração manual do dia", ver lib/rotas/operacao-offline.js),
+  //  que sempre prevalece sobre este número — inclusive quando o
+  //  operador chuta errado ou simplesmente não sabe (ver naoSeiNumero
+  //  Inicial, abaixo).
+  // ============================================================
+
+  function mostrarModalNumeroInicial() {
+    const modal = $('off-modal-num-inicial');
+    if (!modal) return;
+    $('off-num-inicial-input').value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => $('off-num-inicial-input').focus(), 50);
+  }
+
+  function confirmarNumeroInicial() {
+    const bruto = $('off-num-inicial-input').value.trim();
+    const n = parseInt(bruto, 10);
+    state.numeroInicialTraco = (bruto !== '' && Number.isFinite(n) && n >= 0) ? n + 1 : 1;
+    $('off-modal-num-inicial').style.display = 'none';
+    persist();
+    renderTracos(); // reflete o novo offset nos tabs, se já houver traço(s) de um rascunho recuperado por engano
+  }
+
+  function naoSeiNumeroInicial() {
+    state.numeroInicialTraco = 1;
+    $('off-modal-num-inicial').style.display = 'none';
+    persist();
+  }
+
+  // ============================================================
   //  TRAÇOS
   // ============================================================
 
@@ -979,13 +1034,36 @@
       expansao: '',
       densidadeEPS: '',
       operacoes: [],
+      // Marcador "Este traço é uma sobra" — a nota é só uma AJUDA DE
+      // MEMÓRIA pro próprio operador (offline não tem como consultar o
+      // sistema pra saber se existe sobra ativa de verdade, ver
+      // comentário no topo do arquivo). `link_sobra_original` fica de
+      // fora daqui de propósito: só é preenchido depois, pelo
+      // Administrador, na revisão (ver README/lib/rotas/operacao-
+      // offline.js, POST /operacao-offline/corrigir) — o operador nunca
+      // escreve nesse campo.
+      eh_sobra: false,
+      nota_sobra: '',
     };
+  }
+
+  // Número de exibição do traço no índice `indice` (0-based) — soma o
+  // offset escolhido pela pessoa no modal "Quantos traços já foram feitos
+  // hoje?" (mostrarModalNumeroInicial, mais abaixo) ao índice dentro
+  // desta operação. Puramente uma AJUDA VISUAL pro operador não se
+  // perder no dia — o número que efetivamente entra no sistema é
+  // decidido de novo pelo Administrador na validação ("renumeração
+  // manual do dia", ver comentário grande no topo de lib/rotas/operacao-
+  // offline.js), que não tem como saber, só olhando o aparelho, quantos
+  // traços outras baterias já fizeram hoje.
+  function numeroDoTraco(indice) {
+    return (state.numeroInicialTraco || 1) + indice;
   }
 
   function addTraco() {
     const prev = state.tracos[state.tracos.length - 1];
     const sugeridoIni = prev?.berco_fim ? String(Number(prev.berco_fim) + 1) : '1';
-    state.tracos.push(criarEstruturaTraco(state.tracos.length + 1, sugeridoIni));
+    state.tracos.push(criarEstruturaTraco(numeroDoTraco(state.tracos.length), sugeridoIni));
     expandedTracoIndex = state.tracos.length - 1;
     renderTracos();
     persist();
@@ -995,7 +1073,7 @@
   function removeTraco(i) {
     if (!confirm('Remover este traço?')) return;
     state.tracos.splice(i, 1);
-    state.tracos.forEach((t, idx) => { t.num = idx + 1; });
+    state.tracos.forEach((t, idx) => { t.num = numeroDoTraco(idx); });
     if (expandedTracoIndex >= state.tracos.length) expandedTracoIndex = Math.max(0, state.tracos.length - 1);
     renderTracos();
     persist();
@@ -1123,7 +1201,7 @@
     tabsEl.innerHTML = state.tracos.map((t, i) => {
       const { icon, cls } = statusDoTraco(t, i, state.tracos);
       return `<button type="button" class="traco-tab ${cls} ${i === expandedTracoIndex ? 'active' : ''}" onclick="LWOff.expandirTraco(${i})">
-        <span class="status-icon">${icon}</span> Traço ${t.num}
+        <span class="status-icon">${icon}</span> Traço ${t.num}${t.eh_sobra ? ' ♻️' : ''}
       </button>`;
     }).join('');
 
@@ -1162,6 +1240,23 @@
           </div>
         </div>
         <button class="traco-remove-btn" onclick="LWOff.removeTraco(${i})" title="Remover traço">✕</button>
+
+        <div class="traco-sobra-box${t.eh_sobra ? ' traco-sobra-box--ativo' : ''}">
+          <label class="traco-sobra-toggle">
+            <input type="checkbox" ${t.eh_sobra ? 'checked' : ''} onchange="LWOff.updateTraco(${i},'eh_sobra',this.checked)">
+            ♻️ Este traço é uma sobra (reaproveitamento de um traço anterior)
+          </label>
+          ${t.eh_sobra ? `
+            <div class="form-group" style="margin-top:8px;margin-bottom:0">
+              <label class="form-label">Nota pra você mesmo(a) não se perder de qual sobra é essa</label>
+              <textarea class="form-input" rows="2" oninput="LWOff.updateTraco(${i},'nota_sobra',this.value)"
+                placeholder="Ex: sobra do traço 3 de ontem, bateria B-12...">${escaparHtml(t.nota_sobra || '')}</textarea>
+              <div style="font-size:.72rem;color:var(--text-3);margin-top:4px">
+                Essa nota é só pra te ajudar a lembrar — quem for validar este registro poderá
+                vincular este traço ao original.
+              </div>
+            </div>` : ''}
+        </div>
 
         <div class="traco-card-body">
           <div class="traco-section-label">⚖ Receita Real Pesada</div>
@@ -1489,6 +1584,7 @@
     if (!retomando) {
       idTemp = gerarIdTemp();
       iniciadoEm = new Date().toISOString();
+      mostrarModalNumeroInicial();
     }
 
     await loadConfig();
@@ -1563,5 +1659,6 @@
     iniciarInjecao, togglePausa, finalizarInjecao,
     addTraco, removeTraco, updateTraco, updateInsumo, updateTempoBatida, expandirTraco,
     updateBercoPersonalizado, registrar, descartarPendente, descartarDaFila,
+    confirmarNumeroInicial, naoSeiNumeroInicial,
   };
 })();
