@@ -27,7 +27,21 @@
 
   // ── NORMALIZA CAMPO INSUMO ───────────────────────────────
   // Suporta: número puro, string, ou { original, ajustes[], total }
-  function normalizarInsumo(val) {
+  //
+  // isResultado (default false) distingue os dois tipos de campo:
+  // - Insumos de receita (cimento, água, EPS, superplast, incorporador):
+  //   cada ajuste é um ACRÉSCIMO na batelada — o total é original + soma
+  //   de todos os ajustes.
+  // - "Resultados" de processo (densidade, flow): cada ajuste é uma
+  //   REMEDIÇÃO — o operador leu de novo e registrou o valor novo, não
+  //   um acréscimo. O valor válido é a leitura mais recente (último
+  //   ajuste), nunca a soma. Mesma distinção já feita em dashboard.js
+  //   (_valRel/isResultado) para a coluna da tabela do Relatório de
+  //   Injeção — esta função ficou sem ela, fazendo "Densidade Média" e
+  //   "Flow Médio" somarem remedições em vez de usar a última (ver
+  //   comentário do usuário: densidade/flow médios batendo muito acima
+  //   do esperado).
+  function normalizarInsumo(val, isResultado = false) {
     if (val === null || val === undefined || val === '') {
       return { original: NaN, ajustes: [], total: NaN };
     }
@@ -35,7 +49,14 @@
       const ajustes  = Array.isArray(val.ajustes) ? val.ajustes : [];
       const original = parseFloat(val.original);
       let total;
-      if (val.total !== undefined && val.total !== '') {
+      if (isResultado) {
+        // Última remedição sobrescreve o valor — nunca soma.
+        if (ajustes.length > 0) {
+          total = parseFloat(ajustes[ajustes.length - 1]);
+        } else {
+          total = original;
+        }
+      } else if (val.total !== undefined && val.total !== '') {
         total = parseFloat(val.total);
       } else if (ajustes.length > 0) {
         total = ajustes.reduce((s, v) => s + (parseFloat(v) || 0), isNaN(original) ? 0 : original);
@@ -247,7 +268,7 @@
       ['densidade', 'flow'].forEach(campo => {
         const raw = t[campo];
         if (raw === undefined) return;
-        const val = normalizarInsumo(raw);
+        const val = normalizarInsumo(raw, /* isResultado */ true);
         if (!isNaN(val.total)) valoresProcessoPorCampo[campo].push(val.total);
       });
 
