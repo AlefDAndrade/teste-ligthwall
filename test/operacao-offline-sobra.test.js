@@ -1,10 +1,10 @@
 // ─── test/operacao-offline-sobra.test.js ────────────────────────────────────
 // Cobertura da marcação "Este traço é uma sobra" (offline-operacao.js) e do
 // vínculo que o Administrador aponta na revisão (POST /operacao-offline/
-// corrigir, chamado pela tela "Operações a Validar" quando clica em
-// "🔗 Salvar vínculo" — ver _cfgSobraSectionOperacaoOffline/cfgSalvarLinkSobra,
-// public/js/app-core.js). Roda contra o server.js DE VERDADE, mesma base de
-// test/operacao-offline-validar.test.js.
+// corrigir, chamado pelo modal "Vincular Sobra" — cfgAbrirVincularSobra/
+// cfgLinkarSobra, public/js/app-core.js — calendário + lista de traços do
+// dia, em vez do campo de texto livre de antes). Roda contra o server.js DE
+// VERDADE, mesma base de test/operacao-offline-validar.test.js.
 //
 // Cobre:
 //   - Um traço enviado com eh_sobra:true e nota_sobra permanece assim na
@@ -155,7 +155,7 @@ test('POST /operacao-offline/corrigir grava o vínculo (link_sobra_original) sem
   assert.equal(itemDepois.tracos[1].eh_sobra, false, 'segundo traço não deveria ter sido afetado');
 });
 
-test('ao validar, traço marcado como sobra grava obs com nota + vínculo (nos dois campos obs)', async () => {
+test('ao validar, traço marcado como sobra grava obs com nota + vínculo — formato LEGADO (string livre, de antes do modal "Vincular Sobra" existir)', async () => {
   const idTemp = 'OFF-sobra-' + crypto.randomUUID();
   await enviarOffline(payloadValido(idTemp, [
     tracoBase(idTemp, { eh_sobra: true, nota_sobra: 'sobra do traço 3 de ontem', link_sobra_original: 'operação #123, traço 4' }),
@@ -172,6 +172,42 @@ test('ao validar, traço marcado como sobra grava obs com nota + vínculo (nos d
     assert.match(obs, /SOBRA/);
     assert.match(obs, /sobra do traço 3 de ontem/);
     assert.match(obs, /operação #123, traço 4/);
+  }
+});
+
+test('ao validar, traço marcado como sobra grava obs com nota + vínculo — formato ESTRUTURADO (objeto do modal "Vincular Sobra", cfgLinkarSobra/app-core.js)', async () => {
+  // Reproduz o formato que o modal "Vincular Sobra" grava de verdade
+  // (calendário + lista de traços do dia, ver cfgLinkarSobra) — objeto,
+  // não mais uma string digitada à mão. Sem o backend saber formatar
+  // esse formato (_formatarVinculoSobra, lib/rotas/operacao-offline.js),
+  // o obs final sairia como "vinculado a: [object Object]".
+  const idTemp = 'OFF-sobra-' + crypto.randomUUID();
+  await enviarOffline(payloadValido(idTemp, [
+    tracoBase(idTemp, {
+      eh_sobra: true,
+      nota_sobra: 'sobra de uma bateria vizinha',
+      link_sobra_original: {
+        id_traco: 'traco_original_xyz', data: '2026-08-20', num_traco: 7,
+        id_bateria: 'B-99', berco_inicio: '3', berco_finalizacao: '6',
+      },
+    }),
+  ]));
+
+  const respValidar = await validar(idTemp);
+  assert.equal(respValidar.status, 200, JSON.stringify(await respValidar.json().catch(() => ({}))));
+
+  const relatorio = await (await fetch(`${servidor.baseUrl}/db/relatorio_injecao.json`)).json();
+  const traco = relatorio.find(t => t.id_traco === 'traco_off_' + idTemp);
+  assert.ok(traco, 'traço deveria estar em relatorio_injecao.json');
+
+  for (const obs of [traco.obs, traco.ultilizado.operacao[0].obs]) {
+    assert.doesNotMatch(obs, /\[object Object\]/, 'nunca deveria vazar "[object Object]" no obs final');
+    assert.match(obs, /SOBRA/);
+    assert.match(obs, /sobra de uma bateria vizinha/);
+    assert.match(obs, /Traço 7/);
+    assert.match(obs, /20\/08\/2026/, 'data deveria vir formatada em pt-BR');
+    assert.match(obs, /B-99/);
+    assert.match(obs, /3.{1,2}6/, 'faixa de berços (3 a 6) deveria aparecer');
   }
 });
 

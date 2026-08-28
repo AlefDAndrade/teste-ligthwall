@@ -3848,39 +3848,146 @@
               ${t.nota_sobra
                 ? `<div class="oov-sobra-nota">📝 "${_escaparHtmlLocal(t.nota_sobra)}"</div>`
                 : '<div class="oov-sobra-nota oov-sobra-nota--vazia">(operador não deixou nota)</div>'}
+              ${renderVinculoSobraAtual(t)}
               <div class="oov-sobra-link-row">
-                <input type="text" class="form-input oov-sobra-link-input" id="oov-sobra-link-${idSeguro}-${indice}"
-                  placeholder="Apontar para o traço/operação original (ex.: operação #123, traço 4)"
-                  value="${_escaparHtmlLocal(t.link_sobra_original || '')}">
-                <button type="button" class="btn btn-ghost btn-sm" onclick="cfgSalvarLinkSobra('${idSeguro}', ${indice})">🔗 Salvar vínculo</button>
+                <button type="button" class="btn btn-outline-accent btn-sm"
+                  onclick="cfgAbrirVincularSobra('${idSeguro}', ${indice})">🔗 ${t.link_sobra_original ? 'Trocar vínculo' : 'Vincular ao traço original'}</button>
               </div>
-              ${t.link_sobra_original ? `<div class="oov-sobra-vinculado">✅ Vinculado a: ${_escaparHtmlLocal(t.link_sobra_original)}</div>` : ''}
             </div>
           `).join('')}
         </div>`;
     }
 
-    // Salva o vínculo digitado num traço marcado como sobra — PATCH via
-    // /operacao-offline/corrigir, mandando o array `tracos` completo com
-    // só aquele índice alterado (a rota substitui o array inteiro, não dá
-    // pra mandar um PATCH por-índice — ver atualizarNaFilaOffline,
-    // lib/fila-offline.js). `idSeguro` é a versão do idTemp já sem
-    // caracteres especiais (mesmo usado no resto do card) — busca no
-    // cache o item cujo idTemp bate com esse formato pra recuperar o
-    // idTemp de verdade.
-    async function cfgSalvarLinkSobra(idSeguro, indiceTraco) {
+    // Mostra o vínculo já salvo, se houver. Aceita 2 formatos: o objeto
+    // estruturado novo ({ id_traco, data, num_traco, ... }, ver
+    // cfgLinkarSobra) e a string livre digitada à mão pelo formato antigo
+    // (antes desta tela ter o calendário) — sem quebrar vínculos já salvos.
+    function renderVinculoSobraAtual(t) {
+      const link = t.link_sobra_original;
+      if (!link) return '';
+      if (typeof link === 'string') {
+        return `<div class="oov-sobra-vinculado">✅ Vinculado a: ${_escaparHtmlLocal(link)}</div>`;
+      }
+      const dataFmt = link.data ? new Date(link.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+      const bateria = link.id_bateria ? ` · Bateria ${_escaparHtmlLocal(link.id_bateria)}` : '';
+      const bercos = (link.berco_inicio || link.berco_finalizacao)
+        ? ` · Berços ${_escaparHtmlLocal(link.berco_inicio ?? '—')}–${_escaparHtmlLocal(link.berco_finalizacao ?? '—')}`
+        : '';
+      return `<div class="oov-sobra-vinculado">✅ Vinculado a: Traço ${_escaparHtmlLocal(link.num_traco ?? '—')} · ${dataFmt}${bateria}${bercos}</div>`;
+    }
+
+    // ─── Modal "Vincular Sobra" — calendário + lista de traços do dia ────
+
+    let _mvsIdSeguro = null;
+    let _mvsIndiceTraco = null;
+
+    function cfgAbrirVincularSobra(idSeguro, indiceTraco) {
       const item = _cfgOperacoesOfflineCache.find(it => it.idTemp.replace(/[^a-zA-Z0-9_-]/g, '') === idSeguro);
       if (!item) {
         LW.mostrarAlerta('Registro não encontrado — a lista pode ter sido atualizada, recarregue e tente de novo.', { tipo: 'erro' });
         return;
       }
-      const input = document.getElementById(`oov-sobra-link-${idSeguro}-${indiceTraco}`);
-      if (!input) return;
-      const valor = input.value.trim();
+      _mvsIdSeguro = idSeguro;
+      _mvsIndiceTraco = indiceTraco;
+      const t = (item.tracos || [])[indiceTraco] || {};
+      const contexto = document.getElementById('mvs-contexto');
+      if (contexto) {
+        contexto.textContent = `Traço ${t.num ?? (indiceTraco + 1)} desta operação offline`
+          + (t.nota_sobra ? ` — nota do operador: "${t.nota_sobra}"` : '');
+      }
+      const dataInput = document.getElementById('mvs-data');
+      if (dataInput) dataInput.value = item.data || '';
+      document.getElementById('mvs-resultado').innerHTML = '';
+      const modal = document.getElementById('modal-vincular-sobra');
+      if (modal) modal.style.display = 'flex';
+      if (dataInput && dataInput.value) cfgBuscarTracosParaVinculo();
+    }
+
+    function cfgFecharVincularSobra() {
+      const modal = document.getElementById('modal-vincular-sobra');
+      if (modal) modal.style.display = 'none';
+      _mvsIdSeguro = null;
+      _mvsIndiceTraco = null;
+    }
+
+    // Busca todos os traços (LW.getRelatorioInjecao — mesma fonte do
+    // Relatório de Injeção) e filtra pela data escolhida no calendário.
+    // Cada traço aparece com o suficiente pra reconhecer qual é (número,
+    // turno, bateria, berços, densidade/flow) e um botão "Linkar".
+    async function cfgBuscarTracosParaVinculo() {
+      const dataInput = document.getElementById('mvs-data');
+      const resultado = document.getElementById('mvs-resultado');
+      if (!dataInput || !resultado) return;
+      const dataEscolhida = dataInput.value;
+      if (!dataEscolhida) { resultado.innerHTML = ''; return; }
+
+      resultado.innerHTML = '<p style="color:var(--text-3);font-size:.84rem">Carregando traços do dia...</p>';
+      let todos = [];
       try {
-        const tracosAtualizados = (item.tracos || []).map((t, idx) => idx === indiceTraco ? { ...t, link_sobra_original: valor } : t);
+        todos = await LW.getRelatorioInjecao();
+      } catch (e) {
+        resultado.innerHTML = `<p style="color:var(--red);font-size:.84rem">Erro ao carregar traços: ${_escaparHtmlLocal(e.message)}</p>`;
+        return;
+      }
+
+      const doDia = (todos || [])
+        .filter(t => t.data === dataEscolhida)
+        .sort((a, b) => (a.num_traco || 0) - (b.num_traco || 0));
+
+      if (!doDia.length) {
+        resultado.innerHTML = '<p style="color:var(--text-3);font-size:.84rem">Nenhum traço registrado nesta data.</p>';
+        return;
+      }
+
+      resultado.innerHTML = `
+        <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:10px">
+          ${doDia.length} traço${doDia.length !== 1 ? 's' : ''} nesta data</div>
+        <div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto">
+          ${doDia.map(t => {
+            const usos = t.ultilizado?.operacao || [];
+            const uso = usos[0] || {};
+            const bateria = uso.id_bateria ? `Bateria ${_escaparHtmlLocal(uso.id_bateria)}` : 'Bateria —';
+            const bercos = (uso.berco_inicio || uso.berco_finalizacao)
+              ? ` · Berços ${_escaparHtmlLocal(uso.berco_inicio ?? '—')}–${_escaparHtmlLocal(uso.berco_finalizacao ?? '—')}`
+              : '';
+            const densidade = t.densidade?.original != null || t.densidade?.total != null
+              ? ` · Densid. ${_escaparHtmlLocal(t.densidade.total ?? t.densidade.original)}` : '';
+            const flow = t.flow?.original != null || t.flow?.total != null
+              ? ` · Flow ${_escaparHtmlLocal(t.flow.total ?? t.flow.original)}` : '';
+            return `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius)">
+                <div style="font-size:.84rem;color:var(--text-2)">
+                  <strong style="color:var(--text)">Traço ${_escaparHtmlLocal(t.num_traco ?? '—')}</strong>
+                  ${t.turno ? ` · ${_escaparHtmlLocal(t.turno)}` : ''} · ${bateria}${bercos}${densidade}${flow}
+                </div>
+                <button type="button" class="btn btn-primary btn-sm"
+                  onclick='cfgLinkarSobra(${JSON.stringify(JSON.stringify({
+                    id_traco: t.id_traco, data: t.data, num_traco: t.num_traco,
+                    id_bateria: uso.id_bateria ?? null, berco_inicio: uso.berco_inicio ?? null,
+                    berco_finalizacao: uso.berco_finalizacao ?? null,
+                  }))})'>🔗 Linkar</button>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    // Salva o vínculo escolhido no modal — PATCH via /operacao-offline/corrigir
+    // (mesmo caminho de antes, cfgSalvarLinkSobra), mandando o array
+    // `tracos` completo com só aquele índice alterado (a rota substitui o
+    // array inteiro — ver atualizarNaFilaOffline, lib/fila-offline.js).
+    async function cfgLinkarSobra(linkJson) {
+      if (_mvsIdSeguro === null || _mvsIndiceTraco === null) return;
+      const item = _cfgOperacoesOfflineCache.find(it => it.idTemp.replace(/[^a-zA-Z0-9_-]/g, '') === _mvsIdSeguro);
+      if (!item) {
+        LW.mostrarAlerta('Registro não encontrado — a lista pode ter sido atualizada, recarregue e tente de novo.', { tipo: 'erro' });
+        return;
+      }
+      const link = JSON.parse(linkJson);
+      try {
+        const tracosAtualizados = (item.tracos || []).map((t, idx) => idx === _mvsIndiceTraco ? { ...t, link_sobra_original: link } : t);
         await LW.corrigirOperacaoOfflinePendente(item.idTemp, { tracos: tracosAtualizados });
         LW.mostrarAlerta('Vínculo salvo.', { tipo: 'sucesso' });
+        cfgFecharVincularSobra();
         await cfgRenderOperacoesOffline();
       } catch (e) {
         LW.mostrarAlerta(e.message, { tipo: 'erro' });
