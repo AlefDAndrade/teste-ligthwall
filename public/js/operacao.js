@@ -2141,6 +2141,29 @@
       </div>`;
   }
 
+  // Relação Água/Cimento (A/C) do traço — água ÷ cimento, calculada a
+  // partir do TOTAL atual de cada insumo (original + ajustes, ver
+  // totalInsumo). Só informativa/somente-leitura: não é um campo do
+  // traço, é derivada dos dois campos que já existem. Faixa ideal
+  // 0,35–0,40 (LW.RELACAO_AC_MIN/MAX, data.js) — fora da faixa, o valor
+  // fica destacado em vermelho como aviso visual pra quem está pesando a
+  // receita.
+  function renderRelacaoAC(t) {
+    const cimento = totalInsumo(t.cimento_real || { original: '', ajustes: [] }, 'cimento_real');
+    const agua = totalInsumo(t.agua_real || { original: '', ajustes: [] }, 'agua_real');
+    const { texto, status } = LW.formatarRelacaoAC(cimento, agua);
+    const cor = status === 'ok' ? 'var(--green)' : (status ? 'var(--red)' : 'var(--text-2)');
+    const aviso = status && status !== 'ok'
+      ? ` <span style="font-weight:400">(ideal: 0,35 a 0,40)</span>`
+      : '';
+    return `
+      <div class="traco-ac-relacao" style="margin:-4px 0 14px;padding:8px 12px;border-radius:8px;
+                  background:var(--bg-2, rgba(255,255,255,.03));border:1px solid var(--border);
+                  font-size:.85rem;color:var(--text-2)">
+        Relação Água/Cimento (A/C): <strong style="color:${cor}">${texto}</strong>${aviso}
+      </div>`;
+  }
+
   function renderTracos() {
     const container = $('tracos-container');
     if (!container) return;
@@ -2241,6 +2264,7 @@
             ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 2, 'kg', t._reaproveitado)}
             ${renderCampoTempoBatida(t, i, t._reaproveitado)}
           </div>
+          <div id="ac-relacao-${i}">${renderRelacaoAC(t)}</div>
 
           <!-- Seção: Resultado -->
           <div class="traco-section-label">📊 Resultado Obtido</div>
@@ -3032,6 +3056,13 @@
         insumo.original = value;
       }
       persist();
+      // Cimento/água mudaram → atualiza só o mini-card de Relação A/C
+      // (sem re-renderizar o traço inteiro, que tiraria o foco do campo
+      // que a pessoa está digitando).
+      if (field === 'cimento_real' || field === 'agua_real') {
+        const el = document.getElementById(`ac-relacao-${i}`);
+        if (el) el.innerHTML = renderRelacaoAC(state.tracos[i]);
+      }
     },
     removeTraco,
     addTraco,

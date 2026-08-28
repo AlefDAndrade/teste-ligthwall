@@ -174,6 +174,11 @@
               flow:            valorFinal(traco.flow, true),
               densidade:       valorFinal(traco.densidade, true),
               densidade_eps:   valorFinal(traco.densidade_eps, true),
+              // Cimento/água são insumo (soma original + ajustes — ver
+              // comentário de valorFinal acima), usados só pra calcular a
+              // Relação Água/Cimento (A/C) exibida no card do traço.
+              cimento:         valorFinal(traco.cimento_real),
+              agua:            valorFinal(traco.agua_real),
               berco_inicio:    uso.berco_inicio,
               berco_fim:       uso.berco_finalizacao,
               obs:             (uso.obs !== undefined ? uso.obs : (traco.obs || '')).trim(),
@@ -275,10 +280,13 @@
             <span class="dbf-traco-num">Traço ${num}</span>
             ${t.reaproveitado ? `<span class="dbf-badge dbf-badge-reap">♻ Reaproveitado</span>` : ''}
           </div>`;
+          const acDetalhe = LW.formatarRelacaoAC(t.cimento, t.agua);
+          const acCor = acDetalhe.status === 'ok' ? 'var(--green)' : (acDetalhe.status ? 'var(--red)' : 'inherit');
           html += `<div class="dbf-traco-grid">
             <span><span class="dbf-traco-label">Flow</span>${t.flow !== null ? fmtNum(t.flow, 0) : '—'}</span>
             <span><span class="dbf-traco-label">Densidade</span>${t.densidade !== null ? fmtNum(t.densidade, 0) : '—'}</span>
             <span><span class="dbf-traco-label">Berços</span>${escapeHtml(t.berco_inicio || '—')} ao ${escapeHtml(t.berco_fim || '—')}</span>
+            <span><span class="dbf-traco-label">Relação A/C</span><span style="color:${acCor}">${acDetalhe.texto}</span></span>
           </div>`;
           if (t.reaproveitado) {
             html += `<div class="dbf-traco-origem">↳ Origem: Operação ${escapeHtml(t.origem_bateria || t.origem_operacao || '—')} · Traço ${num}</div>`;

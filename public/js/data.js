@@ -1218,6 +1218,55 @@ async function getOperacaoAndamento() {
 
 // ---- Calculation helpers ----
 
+// Relação Água/Cimento (A/C) — parâmetro de dosagem do traço (água ÷
+// cimento, ambos em kg). Faixa ideal de referência: 0,35 a 0,40. Abaixo
+// disso a mistura tende a ficar seca/pouco trabalhável; acima disso, a
+// resistência mecânica do concreto tende a cair pelo excesso de água.
+// Usado em 3 telas (Registrar Operação/Receita, Análise Focada e
+// Debriefing do Dia) — centralizado aqui pra não haver 3 implementações
+// levemente diferentes da mesma conta.
+const RELACAO_AC_MIN = 0.35;
+const RELACAO_AC_MAX = 0.40;
+
+/**
+ * Calcula a relação A/C (água / cimento). Retorna null se os valores não
+ * permitirem um cálculo confiável (cimento ausente/zero/negativo, água
+ * ausente/negativa) — nunca retorna NaN/Infinity pra tela.
+ */
+function calcularRelacaoAC(cimento, agua) {
+  const c = parseFloat(cimento);
+  const a = parseFloat(agua);
+  if (isNaN(c) || c <= 0 || isNaN(a) || a < 0) return null;
+  return a / c;
+}
+
+/**
+ * Classifica um valor de relação A/C já calculado (ver calcularRelacaoAC)
+ * quanto à faixa ideal (0,35–0,40): 'baixa' (abaixo), 'ok' (dentro) ou
+ * 'alta' (acima). Retorna null se não houver valor calculável.
+ */
+function classificarRelacaoAC(valor) {
+  if (valor === null || valor === undefined || isNaN(valor)) return null;
+  if (valor < RELACAO_AC_MIN) return 'baixa';
+  if (valor > RELACAO_AC_MAX) return 'alta';
+  return 'ok';
+}
+
+/**
+ * Calcula a relação A/C e cimento, retorna a relação, e já retorna
+ * formatada (2 casas, vírgula) + status, prontos pra exibir. Conveniência
+ * pra quem só quer o texto final (ex: "0,38") sem lidar com null/NaN.
+ */
+function formatarRelacaoAC(cimento, agua, casas = 2) {
+  const valor = calcularRelacaoAC(cimento, agua);
+  if (valor === null) return { valor: null, texto: '—', status: null };
+  return {
+    valor,
+    texto: valor.toFixed(casas).replace('.', ','),
+    status: classificarRelacaoAC(valor)
+  };
+}
+
 /**
  * Calcula painéis e m² para um tipo de montagem e quantidade de berços.
  * Suporta qualquer número de "tipos de placa" (2p, sp, 3p, ...), definidos
@@ -2861,6 +2910,12 @@ window.LW = {
   // Cálculos
   calcPaineis,
   calcPaineisPersonalizado,
+  // Relação Água/Cimento (A/C) — ver comentário acima da implementação.
+  calcularRelacaoAC,
+  classificarRelacaoAC,
+  formatarRelacaoAC,
+  RELACAO_AC_MIN,
+  RELACAO_AC_MAX,
   aplicarNaoEnchidosNoCalc,
   // Resolve o tipo de placa ('2p'/'sp'/...) de UM LADO de UM berço, dada a
   // montagem atual — usado por aplicarNaoEnchidosNoCalc (acima) e agora

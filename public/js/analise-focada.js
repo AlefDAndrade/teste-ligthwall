@@ -412,9 +412,11 @@
     // mesma aparência.
     let receitaHtml = null;
     if (traco) {
+      const acDetalhe = LW.formatarRelacaoAC(traco.original?.cimento, traco.original?.agua);
       const camposReceita = [
         ['Cimento', _fmtKg(traco.original?.cimento), 'kg'],
         ['Água', _fmtKg(traco.original?.agua), 'kg'],
+        ['Relação A/C', acDetalhe.valor === null ? null : acDetalhe.texto, ''],
         ['EPS', _fmtKg(traco.original?.eps), 'kg'],
         ['Densidade EPS', traco.densidade_eps || null, 'kg/m³'],
         ['Silo EPS', traco.silo || null, ''],
@@ -425,9 +427,14 @@
         ['Densidade', traco.densidade ?? null, 'kg/m³'],
         ['Flow', traco.flow ?? null, ''],
       ];
-      receitaHtml = camposReceita.map(([label, valor, unidade]) =>
-        `<div>${label}: <strong>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`
-      ).join('');
+      // Relação A/C fora da faixa ideal (0,35–0,40) ganha destaque em
+      // vermelho — mesmo critério de LW.classificarRelacaoAC (data.js),
+      // usado também na Receita (Registrar Operação) e no Debriefing.
+      const corAC = acDetalhe.status && acDetalhe.status !== 'ok' ? 'var(--red)' : (acDetalhe.status === 'ok' ? 'var(--green)' : null);
+      receitaHtml = camposReceita.map(([label, valor, unidade]) => {
+        const cor = label === 'Relação A/C' && corAC ? `style="color:${corAC}"` : '';
+        return `<div>${label}: <strong ${cor}>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`;
+      }).join('');
     }
 
     const numeroFmt = String(numeroBerco).padStart(2, '0');
@@ -730,9 +737,11 @@
       // _construirTabelaAjustesPorEvento, dashboard.js.
       const numLinhas = Math.max(t.ajustes.length, densidadeLeituras.length, flowLeituras.length);
       const semAjuste = numLinhas === 0;
+      const acDetalhe = LW.formatarRelacaoAC(t.original.cimento, t.original.agua);
       const camposReceita = [
         ['Cimento', _fmtKg(t.original.cimento), 'kg'],
         ['Água', _fmtKg(t.original.agua), 'kg'],
+        ['Relação A/C', acDetalhe.valor === null ? null : acDetalhe.texto, ''],
         ['EPS', _fmtKg(t.original.eps), 'kg'],
         ['Densidade EPS', t.densidade_eps || null, 'kg/m³'],
         ['Silo EPS', t.silo || null, ''],
@@ -745,9 +754,11 @@
       ];
       const infoBercos = _bercosEnchidosDoTraco(bercosVisuais, t.berco_inicio, t.berco_finalizacao);
       camposReceita.push(['Berços Enchidos', infoBercos ? `${infoBercos.enchidos}/${infoBercos.total}` : null, '']);
-      const receitaHtml = camposReceita.map(([label, valor, unidade]) =>
-        `<div>${label}: <strong>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`
-      ).join('');
+      const corAC = acDetalhe.status && acDetalhe.status !== 'ok' ? 'var(--red)' : (acDetalhe.status === 'ok' ? 'var(--green)' : null);
+      const receitaHtml = camposReceita.map(([label, valor, unidade]) => {
+        const cor = label === 'Relação A/C' && corAC ? `style="color:${corAC}"` : '';
+        return `<div>${label}: <strong ${cor}>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`;
+      }).join('');
 
       const ajustesHtml = semAjuste
         ? `<div class="af-sem-ajuste">Receita sem ajuste.</div>`
