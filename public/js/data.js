@@ -1202,6 +1202,120 @@ async function _tentarFinalizarAndamentosPendentes() {
   _salvarAndamentosAFinalizar(restantes);
 }
 
+// ── Marcação de berço (Bateria Atual) sem rede — mesmo problema do bloco
+// acima, cenário diferente: a pessoa está LOGADA, controlando a operação
+// em andamento pela tela de Registrar Operação, e clica num indicador de
+// "Vazou"/"Não Enchido" (● / •, ver bateria-atual.js, _baCliqueDot) bem
+// na hora em que a rede está fora. Diferente do resto do formulário (que
+// só grava em localStorage até o clique em "Registrar"), essa marcação
+// SEMPRE foi pensada pra ir direto pro servidor — de propósito, porque
+// sincroniza em tempo real com outros dispositivos olhando a mesma tela
+// (ver comentário no topo de bateria-atual.js). Antes desta fila, uma
+// queda de rede nesse instante específico fazia o clique reverter sozinho
+// (a marcação "não pegava") sem cair em nenhuma fila de retry — diferente
+// de tudo mais nesta tela, que sobrevive a uma queda de conexão.
+//
+// A rota do servidor (POST /marcar-berco-andamento) sempre ALTERNA
+// (toggle) a partir do estado atual DELA MESMA — não do que o cliente
+// acha que é o estado atual (ver comentário da rota,
+// lib/rotas/operacao-andamento.js) — por isso é seguro simplesmente
+// guardar cada clique, na ordem em que aconteceu, e re-enviar exatamente
+// esses mesmos cliques depois: o resultado final bate com o que teria
+// acontecido se cada clique tivesse ido direto pro servidor na hora,
+// contanto que a ORDEM seja preservada (por isso, assim como na fila
+// principal, para no primeiro item que falhar em vez de pular à frente).
+const DB_KEY_MARCACOES_BERCO_PENDENTES = 'lw_marcacoes_berco_pendentes';
+
+function _lerMarcacoesBercoPendentes() {
+  try {
+    const raw = localStorage.getItem(DB_KEY_MARCACOES_BERCO_PENDENTES);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) { return []; }
+}
+
+function _salvarMarcacoesBercoPendentes(lista) {
+  try { localStorage.setItem(DB_KEY_MARCACOES_BERCO_PENDENTES, JSON.stringify(lista)); } catch (_) { /* localStorage indisponível */ }
+  _notificarMarcacoesBercoPendentesMudou();
+}
+
+let _onMarcacoesBercoPendentesMudou = null;
+function aoMudarMarcacoesBercoPendentes(callback) { _onMarcacoesBercoPendentesMudou = callback; }
+function _notificarMarcacoesBercoPendentesMudou() {
+  if (_onMarcacoesBercoPendentesMudou) _onMarcacoesBercoPendentesMudou(_lerMarcacoesBercoPendentes());
+}
+
+/** Cópia (não referência) da fila de marcações de berço ainda não confirmadas pelo servidor. */
+function marcacoesBercoPendentes() {
+  return _lerMarcacoesBercoPendentes();
+}
+
+async function _enviarMarcacaoBerco({ berco, lado, estado, tipo }) {
+  const res = await fetch('/marcar-berco-andamento?deviceId=' + encodeURIComponent(getDeviceId()), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ berco, lado, estado, tipo }),
+  });
+  if (!res.ok) {
+    const erro = await res.json().catch(() => null);
+    const e = new Error((erro && erro.erro) || 'Falha ao marcar berço.');
+    e.eraFalhaDeRede = false;
+    throw e;
+  }
+}
+
+/**
+ * Ponto de entrada usado por bateria-atual.js ao clicar num indicador de
+ * berço. Tenta mandar pro servidor na hora; se a falha for de REDE (sem
+ * conexão — fetch() lança TypeError, não chega a ter resposta), guarda o
+ * clique pra reenviar depois e devolve {ok:true, offline:true} — quem
+ * chamou mantém a marcação otimista na tela em vez de desfazer, já que
+ * não foi rejeitada de verdade, só ainda não confirmada. Qualquer outra
+ * falha (permissão, validação, 409 de dono da operação, etc.) propaga
+ * normalmente pra quem chamou desfazer o otimismo, igual sempre foi.
+ */
+async function marcarBercoAndamento(berco, lado, estado, tipo) {
+  const item = { berco, lado, estado, tipo: tipo || null };
+  try {
+    await _enviarMarcacaoBerco(item);
+    return { ok: true, offline: false };
+  } catch (e) {
+    if (e instanceof TypeError) {
+      // Sem conexão de verdade (nem chegou a ter resposta) — enfileira.
+      const fila = _lerMarcacoesBercoPendentes();
+      fila.push({ ...item, enfileiradoEm: new Date().toISOString() });
+      _salvarMarcacoesBercoPendentes(fila);
+      return { ok: true, offline: true };
+    }
+    throw e; // rejeição de verdade do servidor — quem chamou desfaz o clique
+  }
+}
+
+/**
+ * Tenta reenviar, em ordem, todos os cliques de marcação de berço
+ * pendentes (mesma lógica de "para no primeiro que falhar" da fila
+ * principal, pra não embaralhar a ordem dos toggles). Chamada junto do
+ * resto da sincronização (ver tentarSincronizarFilaPendentes, abaixo).
+ */
+async function _tentarMarcacoesBercoPendentes() {
+  const fila = _lerMarcacoesBercoPendentes();
+  if (!fila.length) return;
+  let processados = 0;
+  for (const item of fila) {
+    try {
+      await _enviarMarcacaoBerco(item);
+      processados++;
+    } catch (e) {
+      if (e instanceof TypeError) break; // ainda sem rede — tenta o resto depois
+      // Rejeição de verdade (não é mais o dono, operação já não existe
+      // mais, etc.) — este clique específico não faz mais sentido reenviar,
+      // descarta e segue tentando os próximos, em vez de travar a fila
+      // inteira num item que nunca vai passar.
+      processados++;
+    }
+  }
+  if (processados > 0) _salvarMarcacoesBercoPendentes(fila.slice(processados));
+}
+
 /**
  * Busca o snapshot atual da operação em andamento direto do servidor —
  * usado ao abrir a tela. Lança erro só em falha de REDE de verdade (sem
@@ -1969,6 +2083,7 @@ async function tentarSincronizarFilaPendentes() {
   // instante. Tenta esses também, sempre que esta função rodar.
   if (!fila.length) {
     await _tentarFinalizarAndamentosPendentes();
+    await _tentarMarcacoesBercoPendentes();
     return;
   }
 
@@ -1991,6 +2106,7 @@ async function tentarSincronizarFilaPendentes() {
       if (_onOperacoesPendentesSincronizadas) _onOperacoesPendentesSincronizadas(processados);
     }
     await _tentarFinalizarAndamentosPendentes();
+    await _tentarMarcacoesBercoPendentes();
   } finally {
     _sincronizandoFilaPendentes = false;
   }
@@ -2886,6 +3002,7 @@ window.LW = {
   getOperacaoAtual, saveOperacaoAtual, clearOperacaoAtual,
   enfileirarOperacaoPendente, tamanhoFilaPendentes,
   tentarSincronizarFilaPendentes, aoMudarFilaPendentes, aoSincronizarPendentes,
+  marcarBercoAndamento, marcacoesBercoPendentes, aoMudarMarcacoesBercoPendentes,
 
   // Operação em Andamento (sincronização ao vivo via WebSocket)
   conectarOperacaoAndamento, enviarOperacaoAndamento, getOperacaoAndamento,

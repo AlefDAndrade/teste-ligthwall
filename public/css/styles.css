@@ -3477,6 +3477,23 @@ td.mono {
   text-shadow: 0 0 6px var(--sq-cor-azul, var(--blue));
 }
 
+/* Marcação feita SEM conexão, ainda não confirmada pelo servidor (ver
+   _pendentesLocais/LW.marcacoesBercoPendentes, bateria-atual.js/data.js)
+   — reenviada sozinha assim que a internet voltar. Contorno tracejado por
+   cima da cor normal (vermelho/azul de .ba-dot-marcado), só pra deixar
+   claro que ainda não sincronizou com outros dispositivos olhando esta
+   mesma tela — some sozinho assim que a confirmação chegar. */
+.ba-dot.ba-dot-pendente {
+  outline: 2px dashed currentColor;
+  outline-offset: 2px;
+  animation: ba-dot-pendente-pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes ba-dot-pendente-pulso {
+  0%, 100% { outline-color: currentColor; }
+  50% { outline-color: transparent; }
+}
+
 .ba-vazio {
   color: var(--text-3);
   font-style: italic;

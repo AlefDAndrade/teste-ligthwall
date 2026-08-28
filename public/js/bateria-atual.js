@@ -97,6 +97,13 @@
   // pro listener da célula, sem também alternar baixou/não enchido.
   let _modoDetalhesBerco = false;
 
+  // Evita repetir o aviso "sem conexão" a cada clique offline — mostra só
+  // uma vez por sessão da página (mesmo espírito do aviso de "conexão
+  // caiu" em operacao.js). Volta a false quando a fila de pendentes
+  // esvazia de vez (ver LW.aoMudarMarcacoesBercoPendentes, abaixo) — assim,
+  // se a conexão cair de novo depois, o aviso aparece de novo.
+  let _avisouMarcacaoOffline = false;
+
   // Cor por tipo de montagem de UM berço. As duas situações guardam o
   // tipo de um jeito DIFERENTE, então precisam de funções diferentes pra
   // resolver a cor:
@@ -217,13 +224,26 @@
   // Personalizada, sem nenhuma pista de qual lado era qual tipo — motivo
   // do desconto "trocado" que o operador via nos cards de Registrar
   // Operação (ver conversa que motivou esta mudança).
-  function _tituloDot(estado, lado, tipo) {
+  function _tituloDot(estado, lado, tipo, pendente) {
     const ladoTxt = lado === 'direita' ? 'Direito' : 'Esquerdo';
     const tipoTxt = tipo ? ` (${LW.escaparHtml(String(tipo).toUpperCase())})` : '';
-    if (estado === 'nao_enchido') return `${ladoTxt}${tipoTxt} — Não enchido`;
-    if (estado === 'baixou') return `${ladoTxt}${tipoTxt} — Baixou/Vazou`;
+    const sufixoPendente = pendente ? ' — sem conexão, será enviado quando a internet voltar' : '';
+    if (estado === 'nao_enchido') return `${ladoTxt}${tipoTxt} — Não enchido${sufixoPendente}`;
+    if (estado === 'baixou') return `${ladoTxt}${tipoTxt} — Baixou/Vazou${sufixoPendente}`;
     return `${ladoTxt}${tipoTxt}`;
   }
+
+  // Marcações feitas nesta aba que ainda não foram confirmadas pelo
+  // servidor (rede caiu no clique, ver LW.marcarBercoAndamento/
+  // marcacoesBercoPendentes, data.js) — mapa esparso { 'B1-esquerda':
+  // true }. Usado só pra 2 coisas: (1) não deixar _sincronizarMarcacoes
+  // sobrescrever a marcação otimista com o estado (desatualizado) do
+  // servidor antes do reenvio automático confirmar, e (2) mostrar um
+  // indicador visual de "ainda não confirmado" (ver .ba-dot-pendente,
+  // styles.css) pra não passar a falsa impressão de que já sincronizou
+  // com os outros dispositivos.
+  let _pendentesLocais = {};
+  function _chavePendente(berco, lado) { return `${berco}-${lado}`; }
 
   // Indica se ESTE dispositivo pode marcar os vazamentos agora — mesmo
   // critério de _bloqueadoPorAutorizacao/_aplicarTravaDeAutorizacao
@@ -318,14 +338,20 @@
       const esqNaoEnchido = estadoEsq === 'nao_enchido';
       const dirMarcado = estadoDir === 'baixou' || dirNaoEnchido;
       const esqMarcado = estadoEsq === 'baixou' || esqNaoEnchido;
+      // Ainda não confirmado pelo servidor (rede caiu no clique, ver
+      // _pendentesLocais acima) — indicador visual próprio (.ba-dot-
+      // pendente, styles.css), pra não passar a falsa impressão de que já
+      // sincronizou com os outros dispositivos olhando esta mesma tela.
+      const dirPendente = !!_pendentesLocais[_chavePendente(berco, 'direita')];
+      const esqPendente = !!_pendentesLocais[_chavePendente(berco, 'esquerda')];
       return `
         <div class="ba-celula" data-berco="${berco}"
           style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
-          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="direita"
-            data-tooltip="${_tituloDot(estadoDir, 'direita', tipoDir)}">${dirNaoEnchido ? '✕' : '•'}</span>
+          <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}${dirPendente ? ' ba-dot-pendente' : ''}" data-berco="${berco}" data-lado="direita"
+            data-tooltip="${_tituloDot(estadoDir, 'direita', tipoDir, dirPendente)}">${dirNaoEnchido ? '✕' : '•'}</span>
           <span class="ba-numero">B${numero}</span>
-          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${berco}" data-lado="esquerda"
-            data-tooltip="${_tituloDot(estadoEsq, 'esquerda', tipoEsq)}">${esqNaoEnchido ? '✕' : '•'}</span>
+          <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}${esqPendente ? ' ba-dot-pendente' : ''}" data-berco="${berco}" data-lado="esquerda"
+            data-tooltip="${_tituloDot(estadoEsq, 'esquerda', tipoEsq, esqPendente)}">${esqNaoEnchido ? '✕' : '•'}</span>
         </div>`;
     }).join('')}</div>`;
 
@@ -449,8 +475,11 @@
     const ehNaoEnchido = novoEstado === 'nao_enchido';
     dotEl.classList.toggle('ba-dot-marcado', !!novoEstado);
     dotEl.classList.toggle('ba-dot-nao-enchido', ehNaoEnchido);
+    dotEl.classList.remove('ba-dot-pendente'); // limpo até saber se precisa (ver abaixo)
     dotEl.textContent = ehNaoEnchido ? '✕' : '•';
     dotEl.setAttribute('data-tooltip', _tituloDot(novoEstado, lado, tipoFixado));
+
+    const chave = _chavePendente(berco, lado);
 
     try {
       // A rota exige sessão de usuário logado com permissão de controlar
@@ -460,17 +489,39 @@
       // lib/rotas/operacao-andamento.js), não é mais usado pra autorização.
       // `tipo` (opcional) é o tipo fixado acima — o servidor só grava
       // quando o lado está sendo MARCADO (nunca ao desmarcar).
-      const res = await fetch('/marcar-berco-andamento?deviceId=' + encodeURIComponent(LW.getDeviceId()), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ berco, lado, estado: estadoDesejado, tipo: tipoFixado }),
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.erro || 'Falha ao marcar berço.');
+      //
+      // LW.marcarBercoAndamento (data.js) distingue "sem conexão de
+      // verdade" (não chegou a ter resposta) de "o servidor rejeitou" — só
+      // o segundo caso deve desfazer o clique. No primeiro, o clique fica
+      // guardado numa fila própria (mesmo padrão de finalizarOperacao
+      // Andamento) e reenviado sozinho quando a rede voltar (ver
+      // tentarSincronizarFilaPendentes, data.js) — igual ao resto desta
+      // tela, que já sobrevive a uma queda de conexão no meio do
+      // preenchimento.
+      const resultado = await LW.marcarBercoAndamento(berco, lado, estadoDesejado, tipoFixado);
+      if (resultado && resultado.offline) {
+        // Marcação aceita localmente, mas ainda não confirmada pelo
+        // servidor — mantém o clique, só sinaliza visualmente.
+        delete _pendentesLocais[chave];
+        if (novoEstado) _pendentesLocais[chave] = true;
+        dotEl.classList.toggle('ba-dot-pendente', !!novoEstado);
+        dotEl.setAttribute('data-tooltip', _tituloDot(novoEstado, lado, tipoFixado, !!novoEstado));
+        if (!_avisouMarcacaoOffline) {
+          _avisouMarcacaoOffline = true;
+          if (typeof LW !== 'undefined' && LW.mostrarAlerta) {
+            LW.mostrarAlerta('📡 Sem conexão — a marcação foi salva e será enviada assim que a internet voltar.', { tipo: 'aviso' });
+          }
+        }
+      } else {
+        delete _pendentesLocais[chave];
+      }
     } catch (e) {
-      // Desfaz o otimismo — volta pro estado (e tipo fixado) de antes do
+      // Rejeição de verdade do servidor (permissão, 409 de dono, etc.) —
+      // desfaz o otimismo, volta pro estado (e tipo fixado) de antes do
       // clique, a partir do snapshot original (marcadoBerco), em vez de
       // reconstruir campo a campo — evita deixar `tipos` dessincronizado
       // do `estado` depois de desfazer.
+      delete _pendentesLocais[chave];
       if (Object.keys(marcadoBerco).length) _bercosMarcados[berco] = marcadoBerco;
       else delete _bercosMarcados[berco];
       _notificarMudancaMarcacoes();
@@ -746,7 +797,7 @@
   // reconstruiria o card inteiro a cada rodada mesmo sem nada de novo,
   // dando a impressão de ficar "recarregando" o tempo todo.
   function _renderSeMudou() {
-    const assinatura = JSON.stringify([_dadosAtuais, _bercosMarcados]);
+    const assinatura = JSON.stringify([_dadosAtuais, _bercosMarcados, _pendentesLocais]);
     if (assinatura === _ultimaAssinatura) return;
     _ultimaAssinatura = assinatura;
     _renderBateriaAtual(_dadosAtuais);
@@ -756,11 +807,43 @@
   // arquivo) — nunca busca o resumo da operação em si, que já chega via
   // atualizarComEstado(). Silencioso em caso de falha de rede: mantém as
   // últimas marcações conhecidas em vez de apagar o card.
+  //
+  // IMPORTANTE: se este dispositivo tiver cliques ainda não confirmados
+  // pelo servidor (rede caiu no clique, ver _pendentesLocais/
+  // LW.marcacoesBercoPendentes, data.js), o snapshot do servidor ainda
+  // não reflete esses cliques — sobrescrever _bercosMarcados direto com
+  // ele faria a marcação "sumir" da tela por alguns segundos até o
+  // reenvio automático confirmar (ver tentarSincronizarFilaPendentes,
+  // data.js), mesmo já tendo sido aceita. Por isso, reaplica por cima do
+  // snapshot do servidor os cliques locais ainda pendentes, na ordem em
+  // que foram feitos — mesmo raciocínio de _tentarMarcacoesBercoPendentes
+  // (a rota sempre ALTERNA a partir do estado atual DELA MESMA, então
+  // reaplicar os cliques pendentes reproduz o mesmo resultado que o
+  // servidor vai chegar assim que os processar).
   async function _sincronizarMarcacoes() {
     if (!$('bateria-atual-content')) return; // card só existe na tela Registrar Operação
     try {
       const bercosMarcados = await fetch('/bercos-andamento').then(r => r.ok ? r.json() : {});
-      _bercosMarcados = bercosMarcados || {};
+      const base = bercosMarcados || {};
+      const pendentes = (typeof LW !== 'undefined' && LW.marcacoesBercoPendentes) ? LW.marcacoesBercoPendentes() : [];
+      for (const item of pendentes) {
+        const atual = { ...(base[item.berco] || {}) };
+        const estavaMarcado = atual[item.lado] === 'baixou' || atual[item.lado] === 'nao_enchido';
+        // Mesma regra da rota real: se já estava marcado, o clique
+        // desmarca; senão, aplica o estado pedido daquele clique.
+        if (estavaMarcado) {
+          delete atual[item.lado];
+          if (atual.tipos) {
+            const { [item.lado]: _descartado, ...resto } = atual.tipos;
+            if (Object.keys(resto).length) atual.tipos = resto; else delete atual.tipos;
+          }
+        } else {
+          atual[item.lado] = item.estado;
+          if (item.tipo) atual.tipos = { ...(atual.tipos || {}), [item.lado]: item.tipo };
+        }
+        if (Object.keys(atual).length) base[item.berco] = atual; else delete base[item.berco];
+      }
+      _bercosMarcados = base;
       _notificarMudancaMarcacoes();
       _renderSeMudou();
     } catch (_) {
@@ -790,10 +873,39 @@
     },
   };
 
+  // Mantém _pendentesLocais (indicador visual "ainda não confirmado", ver
+  // .ba-dot-pendente) em sincronia com a fila de verdade em localStorage
+  // (LW.marcacoesBercoPendentes, data.js) — cobre tanto os cliques feitos
+  // NESTA aba quanto o caso de recarregar a página com itens que já
+  // estavam pendentes de uma sessão anterior (a fila sobrevive a reload,
+  // é localStorage). Disparado pelo próprio LW.marcarBercoAndamento ao
+  // enfileirar e por _tentarMarcacoesBercoPendentes ao confirmar/drenar
+  // (ver data.js) — ou seja, roda tanto ao PERDER quanto ao RECUPERAR a
+  // conexão, sem precisar de um listener de 'online' próprio aqui.
+  function _aoMudarFilaMarcacoesBerco(fila) {
+    const novaPendencia = {};
+    for (const item of fila) novaPendencia[_chavePendente(item.berco, item.lado)] = true;
+    const drenouTudo = Object.keys(_pendentesLocais).length > 0 && !fila.length;
+    _pendentesLocais = novaPendencia;
+    if (drenouTudo) {
+      _avisouMarcacaoOffline = false; // deixa o aviso aparecer de novo numa próxima queda de conexão
+      _sincronizarMarcacoes(); // busca o snapshot confirmado do servidor (limpa o indicador "pendente")
+    } else {
+      _ultimaAssinatura = null;
+      _renderSeMudou();
+    }
+  }
+
   // Auto-inicia: card sempre visível, sem clique pra abrir. Só sincroniza
   // as MARCAÇÕES periodicamente (ver INTERVALO_SYNC_MARCACOES_MS) — o
   // resumo em si chega de operacao.js assim que ele carregar, não daqui.
   document.addEventListener('DOMContentLoaded', () => {
+    if (typeof LW !== 'undefined' && LW.marcacoesBercoPendentes) {
+      _aoMudarFilaMarcacoesBerco(LW.marcacoesBercoPendentes());
+    }
+    if (typeof LW !== 'undefined' && LW.aoMudarMarcacoesBercoPendentes) {
+      LW.aoMudarMarcacoesBercoPendentes(_aoMudarFilaMarcacoesBerco);
+    }
     _sincronizarMarcacoes();
     setInterval(_sincronizarMarcacoes, INTERVALO_SYNC_MARCACOES_MS);
   });
