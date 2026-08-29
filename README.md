@@ -443,6 +443,56 @@ Auditoria em `relatorio_edicoes.json` (mesmo padrão de `historico_edicoes.json`
 
 **Limitação conhecida**: igual à Edição de Operação, não há checagem de senha no servidor pra essa rota — a trava de "só Administrador" é só na tela (mesmo modelo de confiança já usado ali).
 
+## Registro de Traço Descartado (Perda) — plano
+
+**Objetivo**: hoje, quando um traço dá errado no meio da batelada (erro de dosagem, falha de equipamento, contaminação etc.) e precisa ser descartado, ele simplesmente não é registrado em lugar nenhum — os insumos foram consumidos de verdade, mas o sistema não sabe disso. A ideia é dar um jeito de registrar essa perda (o que foi gasto + o motivo), sem que esse traço vire uma operação, um traço "de verdade" no Relatório de Injeção, ou entre em qualquer cálculo que hoje assume que todo traço em `tracos` representa produção real.
+
+**Por que não é só mais uma linha na tabela `tracos`**: um traço sem nenhum uso vinculado (`ultilizado.operacao` vazio) já é um caso previsto pelo schema — não aparece no Registro de Baterias, na Análise Focada nem na exportação do Relatório de Injeção (todos esses são "por uso"; zero usos = zero linhas). **Mas** o painel de CEP do Setor de Qualidade (`public/js/qualidade-tracos.js`, `getTracosComFiltros`) busca **todos** os traços de `db/relatorio_injecao.json` (via `db.todosOsTracos()`) sem filtrar por uso, e soma isso em `totalTracos`, na Taxa de Acerto, no desvio por insumo e no ranking de receita mais instável. Inserir o traço perdido ali contaminaria esses indicadores — o processo não "errou" nesse caso, o traço nem chegou a ser usado numa bateria. Por isso este plano usa uma tabela e um endpoint **isolados**, isentos por construção (nenhuma tela hoje lê essa tabela), em vez de depender de lembrar de filtrar em todo lugar que lê `todosOsTracos()`.
+
+### 1. Estrutura de dados — tabela `tracos_descartados`
+
+Tabela nova, sem nenhuma relação com `tracos`/`traco_usos`/`ajustes`/`leituras_resultado`:
+
+| Campo | Descrição |
+|---|---|
+| `id` | gerado, ex: `descarte_<timestamp>` |
+| `data`, `turno` | mesmo padrão dos traços normais |
+| `cimento`, `agua`, `eps`, `superplast`, `incorporador` | insumos efetivamente usados nesse traço perdido — números simples, sem a complexidade `{original, ajustes}` (não faz sentido remedir/ajustar um traço que foi descartado) |
+| `tempo_batida` | opcional |
+| `motivo` | texto livre, **obrigatório** (decisão tomada — ver "Perguntas respondidas", abaixo) |
+| `registrado_por`, `device_id` | autoria, mesmo padrão de auditoria já usado no resto do sistema (ver *Autoria automática de registro*) |
+| `registrado_em` | timestamp automático no servidor |
+
+Sem `id_operacao` e sem equivalente a `ultilizado.operacao` — por definição esse traço nunca virou produto, não há elo com operação nenhuma.
+
+### 2. Backend
+
+- `lib/db/tracos-descartados.js` (novo, mesmo padrão factory de `lib/db/tracos.js`): cria a tabela (migração leve, mesmo estilo das outras tabelas novas), `inserirTracoDescartado`, `todosOsTracosDescartados`.
+- `lib/rotas/tracos-descartados.js` (novo, mesmo padrão factory + `tentar(req, res, urlPath, queryParams)` do resto de `lib/rotas/`):
+  - `POST /registrar-traco-descartado` — exige permissão de área `injetora` (mesma checagem de `/salvar-sobra`, ver `podeEditarArea`/`negarEdicao`); valida `motivo` não vazio (400 se vazio); grava e responde `{ ok: true }`.
+  - `GET /db/tracos_descartados.json` — mesma estratégia de reconstrução a partir da tabela usada por `GET /db/sobra.json`.
+- **Backup**: entra no ciclo de Restaurar/Mesclar Backup de Dados (ver *Backup e Restauração*) do mesmo jeito que `sobra` — senão um restore apaga esse histórico silenciosamente. Precisa de `substituirTracosDescartados`/`mesclarTracosDescartados` (mesmo padrão de `substituirTracosEAjustes`/`mesclarTracosEAjustes`, sem a complexidade de usos/ajustes por não existirem aqui) e um novo campo no payload de backup (`db.js`, junto de `tracos`/`ajustes`/`sobra`).
+- **Não** entra em `todosOsTracos()`, `detalheOperacao()`, nem em nenhuma consulta hoje lida pelo CEP ou pela Análise Focada — isolamento por construção, não por filtro.
+
+### 3. Frontend
+
+- **Ponto de entrada** (decisão tomada — ver "Perguntas respondidas", abaixo): na tela de Registro de Traço/Relatório de Injeção (`public/js/operacao.js`), perto de onde o operador lança os insumos de cada traço, um link discreto **"⚠️ Descartar este traço"**.
+- Ao clicar, abre um **formulário simples dedicado** (modal, não a tela cheia de Registrar Operação): os campos de insumo já preenchidos pelo operador para aquele traço vêm pré-carregados (evita digitar tudo de novo), turno/data preenchidos automaticamente, e um campo de texto livre obrigatório para o motivo.
+- Ao salvar (`POST /registrar-traco-descartado`): o traço desaparece da lista de traços pendentes da operação atual — não vira uma linha "pendente" nem exige berço início/fim (não tem berço, não encheu nada).
+- Fetch correspondente em `public/js/data.js`, seguindo o mesmo padrão dos demais.
+
+### 4. Fora de escopo deste plano (decisão deliberada, não esquecimento)
+
+- Uma tela/relatório mostrando o histórico de descartes (total de insumos perdidos por período, motivos mais frequentes) fica para depois — é uma decisão separada sobre **se e onde** esse dado deve aparecer, não algo que deve vazar sozinho pra dentro de um dashboard já existente.
+- Não há tentativa de vincular um traço descartado a um "motivo padronizado" nem de o transformar em indicador de qualidade automaticamente (ver item 5, abaixo, sobre a decisão de motivo em texto livre).
+
+### 5. Perguntas respondidas (registradas aqui para não se perderem)
+
+- **Onde registrar**: atalho na tela atual de Registro de Traço, que abre um formulário dedicado simples (não uma tela cheia nova, nem só embutido inline na tela atual).
+- **Formato do motivo**: texto livre (não lista padronizada) — decisão tomada para não travar o operador numa lista fixa nesta primeira versão; pode virar lista padronizada depois, se o texto livre gerado no uso real mostrar poucos padrões repetidos que valham a pena fechar em opções.
+
+**Status**: plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+
 ## Configuração (Administrador)
 
 Em **Menu → Configurações**:
