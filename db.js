@@ -322,6 +322,44 @@ db.exec(`
   );
 
   -- ============================================================
+  --  Traços Descartados (perda) — ver README, "Registro de Traço
+  --  Descartado (Perda) — plano".
+  --
+  --  De PROPÓSITO sem nenhuma relação com tracos/traco_usos/ajustes/
+  --  leituras_resultado: um traço aqui nunca chegou a encher berço
+  --  nenhum, então não faz sentido nenhum dos conceitos de "uso"
+  --  daquelas tabelas (id_operacao, berco_inicio/fim, ajustes ao vivo,
+  --  remedição de densidade/flow). É esse isolamento físico — nenhuma
+  --  tabela em comum, nenhuma FK, nenhuma tela hoje faz SELECT nela —
+  --  que garante que este dado NUNCA contamina o painel de CEP do Setor
+  --  de Qualidade (public/js/qualidade-tracos.js) nem qualquer outro
+  --  cálculo que hoje assume "todo traço em tracos = produção real"
+  --  (ver justificativa completa no README).
+  --
+  --  Insumos gravados como número simples (sem a forma {original,
+  --  ajustes} das Fases 5/8) — não faz sentido ajustar/remedir um traço
+  --  que já foi descartado.
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS tracos_descartados (
+    id            TEXT PRIMARY KEY,
+    data          TEXT,
+    turno         TEXT,
+    cimento       REAL,
+    agua          REAL,
+    eps           REAL,
+    superplast    REAL,
+    incorporador  REAL,
+    tempo_batida  REAL,
+    motivo        TEXT NOT NULL,
+    -- Mesmo raciocínio de operacoes.operador_nome (ver README, "Autoria
+    -- automática de registro") — puramente um rótulo de auditoria, não
+    -- controle de acesso.
+    operador_nome TEXT,
+    registrado_em TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_tracos_descartados_data ON tracos_descartados(data);
+
+  -- ============================================================
   --  Berços Visuais — snapshot de estado dos 2 LADOS de cada berço
   --  físico de uma operação (representação visual já existente hoje em
   --  "Bateria Atual", ver bateria-atual.js — só que sem persistência
@@ -1205,6 +1243,17 @@ Object.assign(module.exports, criarSobraContadorTracos(db));
 // ============================================================
 const criarDbTracos = require('./lib/db/tracos.js');
 Object.assign(module.exports, criarDbTracos(db));
+
+// ============================================================
+//  Traços Descartados (perda) — ver README, "Registro de Traço
+//  Descartado (Perda) — plano", passo 1.
+//
+//  Domínio novo (não é fatiamento de nada que já existia em db.js) —
+//  segue o mesmo padrão factory do resto de lib/db/ desde o início, sem
+//  nenhuma migração de JSON legado (nunca existiu como arquivo).
+// ============================================================
+const criarDbTracosDescartados = require('./lib/db/tracos-descartados.js');
+Object.assign(module.exports, criarDbTracosDescartados(db));
 
 // ════════════════════════════════════════════════════════════════════════
 //  SETOR DE MANUTENÇÃO — Fase 2 (backend real)
