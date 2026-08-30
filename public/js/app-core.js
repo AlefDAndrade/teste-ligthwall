@@ -273,28 +273,71 @@
 
     // ---- Grupo de navegação com dropdown (ex: "Traços" — ver .nav-group,
     // styles.css, e nav-tabbar.html) ----
-    // Hover (CSS puro, :hover/:focus-within) já abre o dropdown sozinho em
-    // mouse/teclado — isso aqui é só o FALLBACK pra touch (tablets/celular
-    // não têm ":hover" de verdade; um toque vira só um "tap" que não fica
-    // "pairando"). toggleNavGroup alterna a classe .open; um clique em
-    // QUALQUER lugar fora do grupo aberto fecha de novo (ver o listener
-    // 'click' no document, logo abaixo).
-    function toggleNavGroup(triggerEl) {
-      const grupo = triggerEl.closest('.nav-group');
+    // O .nav-dropdown de cada grupo é MOVIDO pro <body> logo abaixo
+    // (_prepararNavGroups) e vira position:fixed — ele não pode mais
+    // morar dentro de .nav-group porque .tabbar-scroll tem
+    // overflow-x:auto, e por especificação de CSS isso faz o navegador
+    // tratar overflow-y como 'auto' também (não some 'visible' de graça).
+    // Ou seja, um dropdown position:absolute ali dentro fica cortado
+    // assim que passa da borda inferior da tabbar, mesmo com
+    // display:flex certinho — o mesmo problema já resolvido antes neste
+    // projeto em .rb-popover (relatorio-bercos.js, _garantirPopover).
+    // Por isso abrir/fechar aqui é 100% via JS (mouseenter/mouseleave
+    // pro mouse, toggleNavGroup pro toque, focus/focusout pro teclado) —
+    // não dá mais pra confiar em :hover/:focus-within puro em CSS, já
+    // que o dropdown deixou de ser descendente do .nav-group no DOM.
+    const NAV_GROUP_FECHAR_DELAY_MS = 200; // tolerância pro mouse "atravessar" do gatilho até o dropdown sem fechar no meio do caminho
+    let _navGroupFecharTimer = null;
+
+    function _posicionarNavDropdown(grupo) {
+      const trigger = grupo.querySelector('.nav-group-trigger');
+      const dropdown = grupo.querySelector('.nav-dropdown') || document.getElementById(grupo.dataset.dropdownId || '');
+      if (!trigger || !dropdown) return;
+      const rect = trigger.getBoundingClientRect();
+      dropdown.style.left = Math.round(rect.left) + 'px';
+      dropdown.style.top = Math.round(rect.bottom) + 'px';
+    }
+
+    function abrirNavGroup(grupo) {
       if (!grupo) return;
-      const abrindo = !grupo.classList.contains('open');
-      fecharNavGroups();
-      if (abrindo) {
-        grupo.classList.add('open');
-        triggerEl.setAttribute('aria-expanded', 'true');
+      clearTimeout(_navGroupFecharTimer);
+      fecharNavGroups(grupo); // fecha qualquer outro grupo aberto antes de abrir este
+      grupo.classList.add('open');
+      const trigger = grupo.querySelector('.nav-group-trigger');
+      const dropdown = document.getElementById(grupo.dataset.dropdownId || '');
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      if (dropdown) {
+        dropdown.classList.add('show');
+        _posicionarNavDropdown(grupo);
       }
     }
 
-    function fecharNavGroups() {
+    function agendarFecharNavGroup() {
+      clearTimeout(_navGroupFecharTimer);
+      _navGroupFecharTimer = setTimeout(() => fecharNavGroups(), NAV_GROUP_FECHAR_DELAY_MS);
+    }
+
+    // toggleNavGroup = fallback de toque (tablets/celular não têm hover
+    // de verdade; um toque vira só um "tap" que não fica "pairando").
+    function toggleNavGroup(triggerEl) {
+      const grupo = triggerEl.closest('.nav-group');
+      if (!grupo) return;
+      if (grupo.classList.contains('open')) fecharNavGroups();
+      else abrirNavGroup(grupo);
+    }
+
+    // 'exceto': grupo que NÃO deve ser fechado (usado por abrirNavGroup
+    // pra trocar de um grupo aberto pro outro sem um flash de "fechou
+    // tudo, depois abriu de novo").
+    function fecharNavGroups(exceto) {
+      clearTimeout(_navGroupFecharTimer);
       document.querySelectorAll('.nav-group.open').forEach(g => {
+        if (g === exceto) return;
         g.classList.remove('open');
         const trigger = g.querySelector('.nav-group-trigger');
+        const dropdown = document.getElementById(g.dataset.dropdownId || '');
         if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (dropdown) dropdown.classList.remove('show');
       });
     }
     // Expostas em window (chamadas direto do onclick inline no HTML, mesmo
@@ -302,11 +345,53 @@
     window.toggleNavGroup = toggleNavGroup;
     window.fecharNavGroups = fecharNavGroups;
 
+    // Move cada .nav-dropdown pro <body> (ver comentário acima) e liga
+    // hover/teclado. Guarda o vínculo grupo↔dropdown em
+    // grupo.dataset.dropdownId porque, depois da mudança de pai, o
+    // dropdown deixa de ser descendente do .nav-group — um simples
+    // grupo.querySelector('.nav-dropdown') não encontraria ele mais.
+    function _prepararNavGroups() {
+      document.querySelectorAll('.nav-group').forEach((grupo, i) => {
+        const trigger = grupo.querySelector('.nav-group-trigger');
+        const dropdown = grupo.querySelector('.nav-dropdown');
+        if (!trigger || !dropdown) return;
+
+        if (!dropdown.id) dropdown.id = `nav-dropdown-auto-${i}`;
+        grupo.dataset.dropdownId = dropdown.id;
+        dropdown.dataset.grupoId = grupo.id || (grupo.id = `nav-group-auto-${i}`);
+
+        document.body.appendChild(dropdown);
+
+        [trigger, dropdown].forEach(el => {
+          el.addEventListener('mouseenter', () => abrirNavGroup(grupo));
+          el.addEventListener('mouseleave', agendarFecharNavGroup);
+        });
+        trigger.addEventListener('focus', () => abrirNavGroup(grupo));
+        dropdown.addEventListener('focusout', (e) => {
+          if (e.relatedTarget !== trigger && !dropdown.contains(e.relatedTarget)) fecharNavGroups();
+        });
+      });
+    }
+    _prepararNavGroups();
+
+    // Reposiciona o dropdown aberto se a janela mudar de tamanho — ele é
+    // position:fixed agora, não acompanha sozinho um resize. Rolar a
+    // faixa de abas (.tabbar-scroll) fecha, pra não deixar o dropdown
+    // "flutuando" longe do gatilho que o abriu.
+    window.addEventListener('resize', () => {
+      const aberto = document.querySelector('.nav-group.open');
+      if (aberto) _posicionarNavDropdown(aberto);
+    });
+    document.querySelector('.tabbar-scroll')?.addEventListener('scroll', () => fecharNavGroups());
+
     // Clique fora de qualquer .nav-group aberto fecha — sem isso, o
-    // fallback de touch (toggleNavGroup) ficaria aberto pra sempre até a
-    // pessoa tocar de novo no mesmo botão.
+    // fallback de toque (toggleNavGroup) ficaria aberto pra sempre até a
+    // pessoa tocar de novo no mesmo botão. O dropdown foi movido pro
+    // <body> (não é mais descendente de .nav-group), por isso o clique
+    // também precisa ser liberado quando cai dentro de .nav-dropdown.
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.nav-group')) fecharNavGroups();
+      if (e.target.closest('.nav-group') || e.target.closest('.nav-dropdown')) return;
+      fecharNavGroups();
     });
 
     // Garante que a aba clicada/ativada fique visível dentro da faixa de
@@ -321,13 +406,27 @@
       navEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
 
+    // Acha o .nav-group "dono" de um item de nav — seja o próprio
+    // gatilho (.nav-group-trigger, ainda dentro do .nav-group no DOM) ou
+    // um item de dentro do dropdown (.nav-dropdown-item). Esse segundo
+    // caso não dá mais pra resolver com closest('.nav-group') puro: o
+    // dropdown foi movido pro <body> em _prepararNavGroups() (ver
+    // comentário lá em cima), então um item dele NÃO é mais descendente
+    // do .nav-group no DOM — o vínculo agora vive em
+    // dropdown.dataset.grupoId.
+    function _grupoDoNavItem(navEl) {
+      const dropdown = navEl.closest('.nav-dropdown');
+      if (dropdown && dropdown.dataset.grupoId) return document.getElementById(dropdown.dataset.grupoId);
+      return navEl.closest('.nav-group');
+    }
+
     // Quando a página ativa é uma das que mora DENTRO do dropdown "Traços"
     // (ver .nav-group, nav-tabbar.html), o próprio botão-gatilho "Traços"
     // também deveria acender — sem isso, abrir "Dashboard de Traço" ou
     // "Traços Descartados" deixaria a tabbar inteira sem nenhuma aba
     // marcada como ativa, o que pareceria um bug de navegação.
     function _marcarGrupoComoAtivoSeAplicavel(navEl) {
-      const grupo = navEl.closest('.nav-group');
+      const grupo = _grupoDoNavItem(navEl);
       if (!grupo) return;
       const trigger = grupo.querySelector('.nav-group-trigger');
       if (trigger) trigger.classList.add('active');
@@ -369,14 +468,14 @@
         // o dropdown some assim que o mouse sai dali — não faz sentido
         // rolar até um item que não vai continuar visível; rola até o
         // botão-gatilho (esse sim sempre visível na faixa) no lugar dele.
-        const grupoDoItem = navEl.closest('.nav-group');
+        const grupoDoItem = _grupoDoNavItem(navEl);
         _rolarAbaAtivaParaVisivel(grupoDoItem ? grupoDoItem.querySelector('.nav-group-trigger') : navEl);
       } else {
         const btn = document.querySelector(`[data-page="${pageId}"]`);
         if (btn) {
           btn.classList.add('active');
           _marcarGrupoComoAtivoSeAplicavel(btn);
-          const grupoDoItem = btn.closest('.nav-group');
+          const grupoDoItem = _grupoDoNavItem(btn);
           _rolarAbaAtivaParaVisivel(grupoDoItem ? grupoDoItem.querySelector('.nav-group-trigger') : btn);
         }
       }

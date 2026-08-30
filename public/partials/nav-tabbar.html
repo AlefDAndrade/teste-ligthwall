@@ -60,8 +60,17 @@
              (antes só acessível de dentro do Relatório, botão "Ver em
              Dashboard") e Traços Descartados num hover só — 3 destinos,
              1 espaço na tabbar. Ver .nav-group/.nav-dropdown, styles.css,
-             e toggleNavGroup()/fechar ao clicar fora, app-core.js. -->
-        <div class="nav-group" id="nav-group-tracos">
+             e toggleNavGroup()/fechar ao clicar fora, app-core.js.
+
+             data-atalho-page="relatorio": o botão-gatilho não navega
+             direto (abre o dropdown), então não tem data-page — sem
+             ESSE atributo aqui no próprio .nav-group,
+             _ordenarTabbarPorAtalho() (keyboard-shortcuts.js) não sabe
+             onde encaixar o grupo na ordem por atalho (Alt+1, Alt+2...)
+             e ele "sobra" na primeira posição da tabbar. O valor é
+             "relatorio" pra manter a MESMA posição de atalho (Alt+3) que
+             o botão "Traços" tinha antes de virar dropdown. -->
+        <div class="nav-group" id="nav-group-tracos" data-atalho-page="relatorio">
           <button class="nav-item nav-group-trigger" type="button" title="Traços" aria-haspopup="true" aria-expanded="false" onclick="toggleNavGroup(this)">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
@@ -76,7 +85,7 @@
           </button>
           <div class="nav-dropdown" role="menu">
             <button class="nav-dropdown-item" role="menuitem" data-page="relatorio" onclick="fecharNavGroups(); showPage('relatorio',this)">
-              📋 Relatório de Injeção
+              📋 Relatório de traços
             </button>
             <button class="nav-dropdown-item" role="menuitem" data-page="qualidade-tracos" onclick="fecharNavGroups(); showPage('qualidade-tracos',this)">
               📐 Dashboard de Traço

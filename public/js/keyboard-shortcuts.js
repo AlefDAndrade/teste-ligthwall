@@ -522,21 +522,41 @@
     return [1, tecla];
   }
 
-  /** Reordena de fato os botões .nav-item dentro de .tabbar-scroll, com
-   * base no atalho EFETIVO (padrão ou personalizado) de cada um. Só
-   * reordena — nunca esconde nem cria/remove item (isso já é papel de
-   * _paginaPermitida/showPage). Não faz nada se a página atual não tiver
-   * a tabbar (ex.: tv.html). */
+  /** Devolve a "página" usada só pra fins de ordenação por atalho — pra um
+   * .nav-item normal é o próprio data-page; pra um .nav-group (ex:
+   * "Traços", nav-tabbar.html), que embrulha um botão-gatilho sem
+   * data-page (ele abre um dropdown com 3 destinos, não navega direto),
+   * é o data-atalho-page marcado no próprio grupo, representando a
+   * posição que o grupo deve ocupar (mesmo atalho/posição que o destino
+   * principal do grupo tinha antes de virar dropdown). */
+  function _paginaParaOrdenacao(el) {
+    return el.classList.contains('nav-group')
+      ? el.getAttribute('data-atalho-page')
+      : el.getAttribute('data-page');
+  }
+
+  /** Reordena de fato os botões .nav-item (e os .nav-group, ex: "Traços")
+   * dentro de .tabbar-scroll, com base no atalho EFETIVO (padrão ou
+   * personalizado) de cada um. Só reordena — nunca esconde nem cria/
+   * remove item (isso já é papel de _paginaPermitida/showPage). Não faz
+   * nada se a página atual não tiver a tabbar (ex.: tv.html). */
   function _ordenarTabbarPorAtalho() {
     const scroll = document.querySelector('.tabbar-scroll');
     if (!scroll) return;
 
-    const itens = Array.from(scroll.querySelectorAll('.nav-item[data-page]'));
+    // '.nav-group[data-atalho-page]' entra aqui do lado de '.nav-item
+    // [data-page]' — sem isso, um grupo (que não tem data-page, só o
+    // botão-gatilho por dentro dele) fica de fora do sort inteiro; como
+    // TODOS os outros itens são replocados (appendChild) pro fim, na
+    // ordem certa, o grupo — parado, nunca movido — acaba "sobrando" e
+    // desliza sozinho pra primeira posição à medida que os irmãos
+    // anteriores vão sendo puxados dali.
+    const itens = Array.from(scroll.querySelectorAll('.nav-item[data-page], .nav-group[data-atalho-page]'));
     if (!itens.length) return;
 
     itens.sort((a, b) => {
-      const cfgA = NAV_CONFIG.find(n => n.page === a.getAttribute('data-page'));
-      const cfgB = NAV_CONFIG.find(n => n.page === b.getAttribute('data-page'));
+      const cfgA = NAV_CONFIG.find(n => n.page === _paginaParaOrdenacao(a));
+      const cfgB = NAV_CONFIG.find(n => n.page === _paginaParaOrdenacao(b));
       const comboA = cfgA ? _comboEfetivo(cfgA.id, cfgA.comboPadrao) : '';
       const comboB = cfgB ? _comboEfetivo(cfgB.id, cfgB.comboPadrao) : '';
       const [grupoA, chaveA] = _ordemDoCombo(comboA);
@@ -553,8 +573,14 @@
     scroll.querySelectorAll('.tabbar-divider').forEach(el => el.remove());
 
     // appendChild em nó já existente no DOM só MOVE (não clona) — os
-    // listeners (onclick="showPage(...)") e a classe "active" do item
-    // corrente sobrevivem à reordenação.
+    // listeners (onclick="showPage(...)"/"toggleNavGroup(...)") e a
+    // classe "active" do item corrente sobrevivem à reordenação. Funciona
+    // igual pra um .nav-group inteiro (o dropdown dele já não mora mais
+    // dentro do grupo no DOM — foi movido pro <body>, ver
+    // _prepararNavGroups em app-core.js — então mover o grupo aqui não
+    // arrasta o dropdown junto, mas isso não importa: o dropdown é
+    // position:fixed e se reposiciona sozinho relativo ao gatilho
+    // sempre que abre).
     itens.forEach(el => scroll.appendChild(el));
   }
 

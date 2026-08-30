@@ -407,7 +407,19 @@ h4 {
    Descartados) disputando espaço na faixa horizontal, vira 1 gatilho só
    que abre um menu com as 3 ao passar o mouse. Some espaço na tabbar sem
    esconder nenhuma página — só muda de 1 clique direto pra 1
-   hover + 1 clique. */
+   hover + 1 clique.
+
+   .nav-dropdown é MOVIDO pra fora daqui (attachado direto no <body>) via
+   JS logo no boot — ver app-core.js. Motivo: .tabbar-scroll tem
+   overflow-x:auto pra rolar a faixa de abas, e por especificação de CSS,
+   definir overflow-x sem definir overflow-y faz o navegador tratar
+   overflow-y como 'auto' também (não fica 'visible' por padrão). Ou
+   seja, qualquer dropdown com position:absolute dentro da tabbar fica
+   cortado/invisível assim que ultrapassa a borda inferior dela, mesmo
+   com display:flex aplicado certinho — dá pra confirmar o mesmo padrão,
+   já resolvido antes no projeto, em .rb-popover (relatorio-bercos.js,
+   _garantirPopover): position:fixed + anexado no <body> pra escapar do
+   overflow:auto de um ancestral. */
 .nav-group {
   position: relative;
   display: flex;
@@ -426,21 +438,22 @@ h4 {
   transition: transform .15s;
 }
 
-.nav-group.open .nav-caret,
-.nav-group:hover .nav-caret,
-.nav-group:focus-within .nav-caret {
+/* Só .open (classe controlada 100% por JS agora — mouseenter/leave,
+   toque e teclado, ver app-core.js) — nada de :hover/:focus-within
+   puro em CSS aqui, porque o dropdown não é mais descendente de
+   .nav-group no DOM (foi movido pro <body>), então essas pseudo-classes
+   não teriam como continuar direcionando ele mesmo se quiséssemos. */
+.nav-group.open .nav-caret {
   transform: rotate(180deg);
 }
 
 .nav-dropdown {
   display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
+  position: fixed; /* não absolute: precisa ficar de pé sozinho fora de .tabbar-scroll */
   min-width: 220px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0 0 var(--radius) var(--radius);
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
   z-index: 95; /* acima da tabbar (90), abaixo de popovers/modais */
   flex-direction: column;
@@ -448,12 +461,10 @@ h4 {
   gap: 2px;
 }
 
-/* Hover (mouse) + focus-within (Tab pelo teclado) abrem sozinhos;
-   .open é o fallback pra touch (sem hover real) — alternado por
-   toggleNavGroup(), ver app-core.js. */
-.nav-group:hover .nav-dropdown,
-.nav-group:focus-within .nav-dropdown,
-.nav-group.open .nav-dropdown {
+/* left/top vêm inline via JS (_posicionarNavDropdown, app-core.js),
+   calculados a partir do retângulo do gatilho — sem isso o navegador
+   não saberia onde encaixar um elemento position:fixed solto no body. */
+.nav-dropdown.show {
   display: flex;
 }
 
