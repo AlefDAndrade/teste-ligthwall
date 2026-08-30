@@ -372,6 +372,14 @@
           LWParadas.aplicarFiltros();
         }, 50);
       }
+      // Traços Descartados (Perda) — só leitura (ver README, "Registro de
+      // Traço Descartado (Perda) — plano"), por isso sempre re-renderiza
+      // com dados frescos ao reabrir a aba, sem precisar de "init 1x só"
+      // como paradas (não tem formulário/filtro persistido pra reaplicar
+      // — LWTracosDescartados.render() já refaz o fetch e a tabela toda).
+      if (pageId === 'tracos-descartados') {
+        LWTracosDescartados.render();
+      }
       if (pageId === 'relatorio' && !window._relatorioInit) {
         window._relatorioInit = true;
         LWDash.initRelatorio();

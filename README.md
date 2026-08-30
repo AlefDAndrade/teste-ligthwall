@@ -481,17 +481,27 @@ Sem `id_operacao` e sem equivalente a `ultilizado.operacao` — por definição 
 - Ao salvar (`POST /registrar-traco-descartado`): o traço desaparece da lista de traços pendentes da operação atual — não vira uma linha "pendente" nem exige berço início/fim (não tem berço, não encheu nada).
 - Fetch correspondente em `public/js/data.js`, seguindo o mesmo padrão dos demais.
 
-### 4. Fora de escopo deste plano (decisão deliberada, não esquecimento)
+### 4. Tela de histórico ("Traços Descartados") — implementada
 
-- Uma tela/relatório mostrando o histórico de descartes (total de insumos perdidos por período, motivos mais frequentes) fica para depois — é uma decisão separada sobre **se e onde** esse dado deve aparecer, não algo que deve vazar sozinho pra dentro de um dashboard já existente.
-- Não há tentativa de vincular um traço descartado a um "motivo padronizado" nem de o transformar em indicador de qualidade automaticamente (ver item 5, abaixo, sobre a decisão de motivo em texto livre).
+Estava listada como "fora de escopo" na versão original deste plano — decisão deliberada de não vazar o dado pra dentro de um dashboard já existente antes de decidir **onde** ele deveria aparecer. Decisão tomada depois: **tela nova e dedicada**, só leitura (sem editar/excluir — um traço descartado nasce e morre no ato do registro).
 
-### 5. Perguntas respondidas (registradas aqui para não se perderem)
+- **Menu Principal** (`public/partials/page-menu.html`) e **tabbar** (`public/partials/nav-tabbar.html`): novo item "Traços Descartados", logo depois de "Registro de Paradas".
+- **Página** (`public/partials/page-tracos-descartados.html` + `public/js/tracos-descartados-lista.js`, novo módulo, mesmo padrão de `paradas.js`): KPIs simples (total de descartes + soma de cimento/água/EPS perdidos no período filtrado — de propósito SEM desvio-padrão, taxa de acerto ou ranking, pra não virar um "CEP" disfarçado), filtro por data e por busca livre (motivo/operador), tabela com todos os campos.
+- **Permissão**: página liberada pra visualização de todos os perfis (`PAGINAS_DE_TRABALHO`, `lib/perfis.js`) — mesmo modelo do resto do sistema ("quase todas as páginas são abertas pra visualização por todos"; a escrita já é protegida por área `injetora`, ver passo 2).
+- **Isolamento continua intacto**: esta tela lê só `GET /db/tracos_descartados.json` — nenhuma linha de código dela toca `todosOsTracos()`, `qualidade-tracos.js`, `analise-focada.js` ou `dashboard.js`.
+
+### 5. Fora de escopo (o que ainda fica pra depois)
+
+- Editar ou excluir um traço descartado já registrado (por design: é um registro que só existe pra criação, ver `lib/rotas/tracos-descartados.js`).
+- Exportação (CSV/PDF) do histórico de descartes.
+- Qualquer tentativa de vincular um traço descartado a um "motivo padronizado" ou transformá-lo em indicador de qualidade automático (ver item 6, abaixo, sobre a decisão de motivo em texto livre).
+
+### 6. Perguntas respondidas (registradas aqui para não se perderem)
 
 - **Onde registrar**: atalho na tela atual de Registro de Traço, que abre um formulário dedicado simples (não uma tela cheia nova, nem só embutido inline na tela atual).
 - **Formato do motivo**: texto livre (não lista padronizada) — decisão tomada para não travar o operador numa lista fixa nesta primeira versão; pode virar lista padronizada depois, se o texto livre gerado no uso real mostrar poucos padrões repetidos que valham a pena fechar em opções.
 
-**Status**: passos 1 (estrutura de dados), 2 (backend) e 3 (frontend) concluídos. Passo 3: link discreto "⚠️ Descartar este traço" no card de cada traço (`public/js/operacao.js`, próximo à seção "Receita Real Pesada"), abrindo um modal dedicado com Data/Turno preenchidos automaticamente e os insumos já pesados pré-carregados; motivo em texto livre obrigatório; ao salvar, chama `LW.registrarTracoDescartado` (`public/js/data.js`) e remove o traço da lista de pendentes da operação atual (sem virar linha "pendente" nem exigir berço). Indisponível em Modo de Teste — a rota grava direto na tabela real, sem a distinção real/teste que outras rotas de registro têm; o link fica visualmente desabilitado nesse modo, com tooltip explicando o motivo. Cobertura de testes em `test/tracos-descartados-crud.test.js` (backend) e `test/operacao-descarte-traco.test.js` (UI, jsdom).
+**Status**: passos 1 (estrutura de dados), 2 (backend), 3 (frontend de registro) e 4 (tela de histórico) concluídos. Passo 3: link discreto "⚠️ Descartar este traço" no card de cada traço (`public/js/operacao.js`, próximo à seção "Receita Real Pesada"), abrindo um modal dedicado com Data/Turno preenchidos automaticamente e os insumos já pesados pré-carregados; motivo em texto livre obrigatório; ao salvar, chama `LW.registrarTracoDescartado` (`public/js/data.js`) e remove o traço da lista de pendentes da operação atual (sem virar linha "pendente" nem exigir berço). Indisponível em Modo de Teste — a rota grava direto na tabela real, sem a distinção real/teste que outras rotas de registro têm; o link fica visualmente desabilitado nesse modo, com tooltip explicando o motivo. Passo 4: tela "Traços Descartados" (menu + tabbar), só leitura, com KPIs de insumo perdido e filtro por data/busca — ver item 4, acima. Cobertura de testes em `test/tracos-descartados-crud.test.js` (backend) e `test/operacao-descarte-traco.test.js` (UI, jsdom).
 
 ## Configuração (Administrador)
 

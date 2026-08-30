@@ -48,6 +48,11 @@
             <div class="menu-card-title">Registro de Paradas</div>
             <div class="menu-card-desc">Registre e analise todas as interrupções da produção: motivo, equipamento, duração e classificação.</div>
           </div>
+          <div class="menu-card" tabindex="0" role="button" data-page="tracos-descartados" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('tracos-descartados')">
+            <div class="menu-card-icon">⚠️</div>
+            <div class="menu-card-title">Traços Descartados</div>
+            <div class="menu-card-desc">Histórico de traços perdidos antes de encher berço — insumos consumidos e motivo do descarte. Não entra em nenhum dashboard/CEP.</div>
+          </div>
           <div class="menu-card" tabindex="0" role="button" data-page="setor-qualidade" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('setor-qualidade')">
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
