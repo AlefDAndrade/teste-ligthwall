@@ -491,7 +491,7 @@ Sem `id_operacao` e sem equivalente a `ultilizado.operacao` — por definição 
 - **Onde registrar**: atalho na tela atual de Registro de Traço, que abre um formulário dedicado simples (não uma tela cheia nova, nem só embutido inline na tela atual).
 - **Formato do motivo**: texto livre (não lista padronizada) — decisão tomada para não travar o operador numa lista fixa nesta primeira versão; pode virar lista padronizada depois, se o texto livre gerado no uso real mostrar poucos padrões repetidos que valham a pena fechar em opções.
 
-**Status**: plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+**Status**: passos 1 (estrutura de dados) e 2 (backend) concluídos — tabela `tracos_descartados`, `lib/db/tracos-descartados.js` (com `inserirTracoDescartado`/`substituirTracosDescartados`/`mesclarTracosDescartados`), `lib/rotas/tracos-descartados.js` (`POST /registrar-traco-descartado`, `GET /db/tracos_descartados.json`) e a integração no ciclo de Restaurar/Mesclar Backup de Dados (`lib/rotas/backup.js`), do mesmo jeito que `sobra`/`paradas`. Falta só o **passo 3** (frontend — link "⚠️ Descartar este traço" e o modal dedicado em `public/js/operacao.js`); sem ele, as rotas já funcionam mas não há como chegar até elas pela interface ainda.
 
 ## Configuração (Administrador)
 
