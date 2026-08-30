@@ -115,7 +115,13 @@ test('caminho feliz: grava o traço perdido e ele aparece em GET /db/tracos_desc
   assert.equal(registro.cimento, 350);
   assert.equal(registro.operador_nome, 'Operador Teste');
   assert.notEqual(registro.id, 'id-forjado-pelo-cliente');
-  assert.match(registro.id, /^descarte_\d+$/);
+  // Sufixo hexadecimal aleatório (não só timestamp) — evita colisão de
+  // id entre dois dispositivos descartando no mesmo milissegundo (ver
+  // comentário em lib/rotas/tracos-descartados.js).
+  assert.match(registro.id, /^descarte_\d+_[0-9a-f]{6}$/);
+  // A resposta HTTP também devolve o id gerado (útil pro front, e prova
+  // que o id retornado é exatamente o que foi persistido).
+  assert.equal(corpo.id, registro.id);
   assert.notEqual(registro.registrado_em, '2000-01-01T00:00:00.000Z');
 });
 
