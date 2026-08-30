@@ -80,3 +80,40 @@ test('chamado RECUSADO e encerrado: NÃO ganha a classe "concluido" mesmo tendo 
   assert.doesNotMatch(html, /class="man-trajetoria-passos concluido"/, 'recusa não deveria acionar a cor de "concluído" (verde) — o vermelho de recusado tem prioridade');
   assert.match(html, /class="man-trajetoria-passo recusado"/, 'deveria ter um passo marcado como recusado');
 });
+
+// ─── Regressão do bug reportado pelo usuário: "mesmo com tudo já
+// finalizado o progresso mostra como se estivesse na metade" ───────────
+// Acontecia quando o chamado já estava com a etiqueta fechada
+// (realmente encerrado), mas algum campo do MEIO do fluxo nunca tinha
+// sido marcado (ex.: "aceito" nunca virou 'Sim', ou os passos do fluxo
+// de peça ficaram incompletos) — o passo ATUAL travava nesse buraco pra
+// sempre, mesmo o chamado tendo terminado de verdade.
+
+test('BUG: chamado com etiqueta FECHADA mas "aceito" nunca marcado — trajetória fica inteira concluída (verde), sem nenhum passo pendente/atual', () => {
+  const window = montarJanela();
+  const chamado = chamadoBase({
+    // etiqueta fechada de verdade, só que "aceito" ficou 'Nao' pra
+    // sempre (fluxo antigo/alternativo que fechou sem passar por ali).
+    aceito: 'Nao', aceitoPor: null, aceitoEm: null,
+    situacao: 'Concluido', dataFim: '2026-07-16', etiquetaFechada: true,
+  });
+  const passos = window.MAN._construirPassosTrajetoria(chamado);
+  const html = window.MAN._renderizarTrajetoria(passos);
+  assert.match(html, /class="man-trajetoria-passos concluido"/, 'chamado com etiqueta fechada deveria ficar marcado como concluído');
+  assert.doesNotMatch(html, /class="man-trajetoria-passo pendente"/, 'não deveria sobrar nenhum passo pendente num chamado já encerrado');
+  assert.doesNotMatch(html, /class="man-trajetoria-passo atual"/, 'não deveria sobrar nenhum passo "atual" (chave presa) num chamado já encerrado');
+});
+
+test('BUG: chamado com etiqueta FECHADA e fluxo de peça incompleto (aguardandoPecas=Sim, peça nunca confirmada) — trajetória mesmo assim fica inteira concluída', () => {
+  const window = montarJanela();
+  const chamado = chamadoBase({
+    aceito: 'Sim', aceitoPor: 'Fulano', aceitoEm: '2026-07-16T11:00:00.000Z',
+    aguardandoPecas: 'Sim', pedidoPecaAceito: 'Nao', statusCompra: null,
+    situacao: 'Concluido', dataFim: '2026-07-16', etiquetaFechada: true,
+  });
+  const passos = window.MAN._construirPassosTrajetoria(chamado);
+  const html = window.MAN._renderizarTrajetoria(passos);
+  assert.match(html, /class="man-trajetoria-passos concluido"/, 'chamado com etiqueta fechada deveria ficar concluído mesmo com o fluxo de peça incompleto');
+  assert.doesNotMatch(html, /class="man-trajetoria-passo pendente"/, 'não deveria sobrar passo pendente');
+  assert.doesNotMatch(html, /class="man-trajetoria-passo atual"/, 'não deveria sobrar passo "atual"');
+});

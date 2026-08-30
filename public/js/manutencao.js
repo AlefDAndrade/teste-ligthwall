@@ -1342,10 +1342,26 @@
       feito: m.situacao === 'Concluido' && !!m.etiquetaFechada,
       tooltip: (m.situacao === 'Concluido' && m.etiquetaFechada) ? `Chamado encerrado em ${esc(m.dataFim || '')}` : 'Chamado ainda em aberto',
     });
+
+    // Chamado REALMENTE finalizado (etiqueta fechada) — trava aqui todos
+    // os passos como "feito" (ver conversa que motivou isso: o usuário
+    // reportou a trajetória "parada na metade" mesmo com o chamado já
+    // concluído). Isso acontecia porque algum campo do meio do caminho
+    // (ex.: "aceito", ou algum passo do fluxo de peça) podia ficar sem
+    // ser marcado em fluxos mais antigos/alternativos — e como o passo
+    // ATUAL é sempre "o 1º ainda não feito" (ver _renderizarTrajetoria),
+    // a trajetória congelava nesse buraco pra sempre, mesmo com o
+    // chamado 100% encerrado. Se a etiqueta está fechada, o processo
+    // inteiro terminou de fato — não faz sentido nenhum passo anterior
+    // continuar "pendente" visualmente.
+    if (m.etiquetaFechada === true) {
+      passos.forEach(p => { p.feito = true; });
+    }
     return passos;
   }
 
-  function _renderizarTrajetoria(passos) {
+  function _renderizarTrajetoria(passos, opts) {
+    opts = opts || {};
     let atualIndex = 0;
     while (atualIndex < passos.length && passos[atualIndex].feito) atualIndex++;
     if (atualIndex >= passos.length) atualIndex = passos.length - 1;
@@ -1362,6 +1378,13 @@
     const itens = passos.map((p, i) => {
       let classe;
       if (p.recusado) classe = 'recusado';
+      // Com tudo concluído não existe mais "passo atual" (o chamado já
+      // terminou) — todo mundo vira "feito" (check verde) em vez de
+      // deixar o último ponto preso no ícone de chave inglesa só porque
+      // ele "tecnicamente" foi o último a ser alcançado (ver conversa
+      // que motivou isso, mesmo ajuste que corrigiu a trajetória
+      // travando na metade).
+      else if (concluido) classe = 'feito';
       else if (i < atualIndex) classe = 'feito';
       else if (i === atualIndex) classe = 'atual';
       else classe = 'pendente';
@@ -1375,11 +1398,45 @@
       if (classe === 'atual') icone = '<i class="fas fa-wrench"></i>';
       else if (classe === 'recusado') icone = '<i class="fas fa-times"></i>';
       else if (classe === 'feito') icone = '<i class="fas fa-check"></i>';
-      return `<li class="man-trajetoria-passo ${classe}" title="${esc(p.label)} — ${esc(p.tooltip || '')}">
+      return `<li class="man-trajetoria-passo ${classe}" style="--man-traj-i:${i}" title="${esc(p.label)} — ${esc(p.tooltip || '')}">
         <div class="man-trajetoria-ponto">${icone}</div>
       </li>`;
     }).join('');
-    return `<ul class="man-trajetoria-passos${concluido ? ' concluido' : ''}">${itens}</ul>`;
+    const ul = `<ul class="man-trajetoria-passos${concluido ? ' concluido' : ''}">${itens}</ul>`;
+    if (!opts.comLegenda) return ul;
+
+    // Legenda textual acima da barra — só no painel completo (nunca no
+    // mini do card do Kanban nem no preview flutuante, que precisam
+    // continuar compactos). Mostra em palavras o que os pontos já dizem
+    // visualmente ("em qual etapa estamos agora"), sem quebrar a regra
+    // de nunca escrever texto DENTRO dos pontos (isso continua só no
+    // hover) — o texto fica fora, numa legenda própria.
+    const passoRecusado = passos.find(p => p.recusado);
+    let legendaClasse, legendaIcone, legendaTexto, legendaSub;
+    if (passoRecusado) {
+      legendaClasse = 'recusado';
+      legendaIcone = 'fa-ban';
+      legendaTexto = 'Chamado recusado';
+      legendaSub = passoRecusado.tooltip || '';
+    } else if (concluido) {
+      legendaClasse = 'concluido';
+      legendaIcone = 'fa-circle-check';
+      legendaTexto = 'Chamado concluído';
+      legendaSub = ultimo.tooltip || '';
+    } else {
+      legendaClasse = 'atual';
+      legendaIcone = 'fa-wrench';
+      legendaTexto = passos[atualIndex].label;
+      legendaSub = `Etapa ${atualIndex + 1} de ${passos.length} — ${passos[atualIndex].tooltip || ''}`;
+    }
+    const legenda = `<div class="man-trajetoria-legenda ${legendaClasse}">
+      <i class="fas ${legendaIcone}"></i>
+      <div class="man-trajetoria-legenda-texto">
+        <strong>${esc(legendaTexto)}</strong>
+        <span>${esc(legendaSub)}</span>
+      </div>
+    </div>`;
+    return legenda + ul;
   }
 
   // ── Preview flutuante da trajetória, Ctrl + hover na linha da tabela
@@ -1454,7 +1511,7 @@
     if(!chamado) { toast('Chamado não encontrado.', 'error'); return; }
 
     const progressoEl = document.getElementById('man-progressoChamado');
-    if (progressoEl) progressoEl.innerHTML = _renderizarTrajetoria(_construirPassosTrajetoria(chamado));
+    if (progressoEl) progressoEl.innerHTML = _renderizarTrajetoria(_construirPassosTrajetoria(chamado), { comLegenda: true });
 
     // Nome global único por chamado+campo, pra achar de volta o array de
     // fotos certo quando a miniatura for clicada (o HTML vira uma string

@@ -319,27 +319,37 @@
 
 #man-chartManutencao { max-height: 250px !important; width: 100% !important; }
 
-/* Trajetória do Chamado — linha com pontos e uma chave de manutenção que
-   "percorre" o progresso até o passo atual. Padrão clássico de stepper:
-   a linha conectora é um ::before em cada passo (exceto o 1º), pintado
-   quando o passo (ou o anterior) já foi alcançado — evita posicionamento
-   absoluto frágil pra alinhar linha com os pontos.
+/* ── Trajetória do Chamado — REDESIGN ─────────────────────────────────────
+   Linha com pontos e uma chave de manutenção que "percorre" o progresso
+   até o passo atual. Padrão clássico de stepper: a linha conectora é um
+   ::before em cada passo (exceto o 1º), pintado quando o passo (ou o
+   anterior) já foi alcançado — evita posicionamento absoluto frágil pra
+   alinhar linha com os pontos.
 
-   Cores (pedido do usuário): AMARELO enquanto o chamado está em
-   andamento, VERDE quando a trajetória inteira está concluída (ver
-   classe .concluido, adicionada em <ul> pelo JS quando o último passo
-   já foi alcançado E não é o terminal de recusa —
-   _renderizarTrajetoria, manutencao.js). Um chamado recusado e
-   encerrado NUNCA ganha .concluido (mesmo tendo "chegado ao fim"):
-   continua vermelho, e os passos anteriores (feito) ficam amarelos, não
-   verdes — chegar ao fim por recusa não é uma "conclusão boa".
+   Cores: var(--accent) enquanto o chamado está em andamento, var(--green)
+   quando a trajetória inteira está concluída (classe .concluido,
+   adicionada em <ul> pelo JS quando o último passo já foi alcançado E
+   não é o terminal de recusa — _renderizarTrajetoria, manutencao.js).
+   Um chamado recusado e encerrado NUNCA ganha .concluido (mesmo tendo
+   "chegado ao fim"): continua vermelho — chegar ao fim por recusa não é
+   uma "conclusão boa".
 
-   2ª rodada de ajuste (a 1ª não bastou — usuário: "ainda está bem
-   apagado a linha e os pontos"): nada de opacity/rgba baixo pra
-   simular "sutil" — cores SÓLIDAS, bordas mais grossas (3px), pontos
-   maiores, e a linha "não alcançada ainda ainda" trocou de
-   --border (quase invisível contra o fundo) pra
-   --text-3 sólido. */
+   Bug corrigido nesta rodada (usuário reportou: "mesmo com tudo já
+   finalizado o progresso mostra como se estivesse na metade") — a
+   trajetória travava no meio quando algum campo intermediário não tinha
+   sido marcado, mesmo com o chamado já encerrado. Ver
+   _construirPassosTrajetoria/_renderizarTrajetoria (manutencao.js): um
+   chamado com etiqueta fechada agora força todos os passos como
+   concluídos, e um chamado 100% concluído não deixa mais nenhum ponto
+   "atual" (chave inglesa) parado no fim — todos viram check.
+
+   Esta rodada também trouxe uma legenda textual (.man-trajetoria-legenda,
+   só no painel completo, nunca nos mini-stepper do Kanban/preview) e um
+   tratamento visual mais vivo: linha mais grossa com gradiente,
+   respiração (pulse) no ponto atual, e leve entrada em cascata dos
+   pontos — tudo dentro da paleta que o resto do sistema já usa
+   (var(--accent)/var(--green)/var(--red)/var(--bg-*)/var(--text-*)), sem
+   paleta própria. */
 .man-trajetoria-painel {
   background: var(--bg-3); border: 1px solid var(--border);
   border-radius: 10px; padding: 18px 18px 22px; margin-bottom: 20px;
@@ -349,47 +359,135 @@
   color: var(--accent); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
 }
 .man-trajetoria-wrap { padding: 4px 6px 0; }
+
+/* Legenda — resume em palavras o que os pontos já mostram visualmente
+   ("em qual etapa estamos agora"). Fica FORA dos pontos de propósito
+   (decisão de sempre: nada de texto escrito dentro dos pontos, só no
+   hover) — é uma peça própria, com cartão colorido conforme o estado. */
+.man-trajetoria-legenda {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  padding: 10px 14px; border-radius: 8px; border: 1px solid transparent;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.man-trajetoria-legenda i {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  background: var(--accent); color: #fff;
+}
+.man-trajetoria-legenda-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.man-trajetoria-legenda-texto strong { font-size: 14px; color: var(--text); }
+.man-trajetoria-legenda-texto span {
+  font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.man-trajetoria-legenda.concluido {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green) 35%, transparent);
+}
+.man-trajetoria-legenda.concluido i { background: var(--green); }
+.man-trajetoria-legenda.recusado {
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+}
+.man-trajetoria-legenda.recusado i { background: var(--red); }
+
 .man-trajetoria-passos { display: flex; list-style: none; margin: 0; padding: 0; }
-.man-trajetoria-passo { flex: 1; position: relative; text-align: center; cursor: default; }
+.man-trajetoria-passo {
+  flex: 1; position: relative; text-align: center; cursor: default;
+  animation: man-traj-entrada .35s ease backwards;
+  animation-delay: calc(var(--man-traj-i, 0) * 45ms);
+}
 .man-trajetoria-passo:not(:first-child)::before {
-  content: ''; position: absolute; top: 15px; left: -50%; width: 100%; height: 5px;
-  background: var(--text-3); z-index: 0; border-radius: 3px;
+  content: ''; position: absolute; top: 9px; left: -50%; width: 100%; height: 6px;
+  background: var(--text-3); opacity: .35; z-index: 0; border-radius: 3px;
+  transition: background .25s ease, opacity .25s ease;
 }
 .man-trajetoria-passo.feito:not(:first-child)::before,
-.man-trajetoria-passo.atual:not(:first-child)::before { background: var(--accent); }
+.man-trajetoria-passo.atual:not(:first-child)::before {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff 10%));
+  opacity: 1;
+}
 .man-trajetoria-passos.concluido .man-trajetoria-passo.feito:not(:first-child)::before,
-.man-trajetoria-passos.concluido .man-trajetoria-passo.atual:not(:first-child)::before { background: var(--green); }
-.man-trajetoria-passo.recusado:not(:first-child)::before { background: var(--red); }
+.man-trajetoria-passos.concluido .man-trajetoria-passo.atual:not(:first-child)::before {
+  background: linear-gradient(90deg, var(--green), color-mix(in srgb, var(--green) 70%, #fff 10%));
+  opacity: 1;
+}
+.man-trajetoria-passo.recusado:not(:first-child)::before { background: var(--red); opacity: 1; }
+
+/* Um único tamanho de ponto pra TODOS os estados (feito/atual/pendente/
+   recusado/concluído) — de propósito. Antes o ponto "atual"/"recusado"
+   crescia fisicamente (34px vs 20px dos outros), o que descentralizava
+   a caixa em relação à linha conectora (posicionada com um "top" fixo,
+   pensado pro tamanho pequeno) — o círculo de destaque "flutuava"
+   abaixo da linha (ver conversa que motivou este ajuste). Com um único
+   tamanho de caixa, a linha (top: 11px, metade dos 22px do ponto) casa
+   com o centro de QUALQUER ponto sempre, sem contas frágeis por
+   estado. O destaque do passo atual/recusado agora vem só do
+   box-shadow (anel), que não ocupa espaço de layout — pode "vazar" pra
+   fora do círculo sem puxar a linha junto. */
 .man-trajetoria-ponto {
-  position: relative; z-index: 1; width: 18px; height: 18px; margin: 0 auto;
+  position: relative; z-index: 1; width: 22px; height: 22px; margin: 0 auto;
   border-radius: 50%; background: var(--bg-2); border: 3px solid var(--text-2);
-  transition: all 0.2s; display: flex; align-items: center; justify-content: center;
-  color: transparent; font-size: 9px;
+  transition: background .2s ease, border-color .2s ease, box-shadow .2s ease;
+  display: flex; align-items: center; justify-content: center;
+  color: transparent; font-size: 10px;
 }
 .man-trajetoria-passo.feito .man-trajetoria-ponto {
   background: var(--accent); border-color: var(--accent); color: #fff;
 }
 .man-trajetoria-passo.atual .man-trajetoria-ponto {
-  width: 32px; height: 32px; background: var(--accent); border-color: var(--accent);
-  color: #fff; font-size: 13px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  animation: man-traj-pulso 1.8s ease-out infinite;
 }
 .man-trajetoria-passos.concluido .man-trajetoria-passo.feito .man-trajetoria-ponto,
 .man-trajetoria-passos.concluido .man-trajetoria-passo.atual .man-trajetoria-ponto {
   background: var(--green); border-color: var(--green); color: #fff;
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 30%, transparent);
+  animation: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 22%, transparent);
 }
 .man-trajetoria-passo.recusado .man-trajetoria-ponto {
-  width: 32px; height: 32px; background: var(--red); border-color: var(--red);
-  color: #fff; font-size: 13px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--red) 30%, transparent);
+  background: var(--red); border-color: var(--red);
+  color: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 25%, transparent);
 }
-.man-trajetoria-passo.pendente .man-trajetoria-ponto { background: var(--bg-2); border-color: var(--text-2); }
+.man-trajetoria-passo.pendente .man-trajetoria-ponto {
+  background: transparent; border-color: var(--text-3); border-style: dashed; opacity: .6;
+}
+
+@keyframes man-traj-pulso {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+@keyframes man-traj-entrada {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .man-trajetoria-passo { animation: none !important; }
+  .man-trajetoria-passo.atual .man-trajetoria-ponto { animation: none !important; }
+}
+
+/* Mini-stepper (card do Kanban) e preview flutuante — mesma leitura de
+   cores/ícones do painel completo, só sem legenda e sem a respiração
+   (pulse)/entrada em cascata do ponto atual: numa lista com dezenas de
+   cards isso viraria ruído visual em vez de dar vida, então o "sinal
+   com movimento" fica reservado pro painel de detalhe (1 chamado por
+   vez). */
+.man-kanban-card-footer .man-trajetoria-passo,
+.man-trajetoria-preview-flutuante .man-trajetoria-passo {
+  animation: none;
+}
+.man-kanban-card-footer .man-trajetoria-passo.atual .man-trajetoria-ponto,
+.man-trajetoria-preview-flutuante .man-trajetoria-passo.atual .man-trajetoria-ponto {
+  animation: none;
+}
 
 /* Preview flutuante da trajetória — Ctrl + hover na linha da tabela (ver
    conversa que motivou isso). pointer-events:none pra não atrapalhar o
    mouse em cima da linha por baixo (evita flicker de mouseenter/leave).
    Versão compacta do stepper: reaproveita as mesmas classes
    .man-trajetoria-passos/.man-trajetoria-passo/.man-trajetoria-ponto
-   (inclusive a cor amarelo/verde, herdada de lá), só com pontos um
+   (inclusive a cor accent/verde, herdada de lá), só com pontos um
    pouco menores pra caber num card pequeno. */
 .man-trajetoria-preview-flutuante {
   display: none; position: fixed; z-index: 10000; pointer-events: none;
@@ -397,10 +495,24 @@
   background: var(--bg-3); border: 1px solid var(--accent);
   border-radius: 8px; box-shadow: var(--shadow);
 }
-.man-trajetoria-preview-flutuante .man-trajetoria-ponto { width: 13px; height: 13px; border-width: 2px; font-size: 7px; }
-.man-trajetoria-preview-flutuante .man-trajetoria-passo.atual .man-trajetoria-ponto,
-.man-trajetoria-preview-flutuante .man-trajetoria-passo.recusado .man-trajetoria-ponto { width: 22px; height: 22px; font-size: 10px; }
-.man-trajetoria-preview-flutuante .man-trajetoria-passo:not(:first-child)::before { top: 11px; }
+/* Preview flutuante da trajetória — Ctrl + hover na linha da tabela (ver
+   conversa que motivou isso). pointer-events:none pra não atrapalhar o
+   mouse em cima da linha por baixo (evita flicker de mouseenter/leave).
+   Versão compacta do stepper: reaproveita as mesmas classes
+   .man-trajetoria-passos/.man-trajetoria-passo/.man-trajetoria-ponto
+   (inclusive a cor accent/verde, herdada de lá), só com pontos um
+   pouco menores pra caber num card pequeno. Mesmo tamanho pra TODOS os
+   estados aqui também (ver comentário acima, no .man-trajetoria-ponto
+   base) — o destaque do atual/recusado vem só do box-shadow, nunca de
+   crescer a caixa, pra linha e ponto ficarem sempre alinhados. */
+.man-trajetoria-preview-flutuante .man-trajetoria-ponto { width: 14px; height: 14px; border-width: 2px; font-size: 7px; }
+.man-trajetoria-preview-flutuante .man-trajetoria-passo.atual .man-trajetoria-ponto {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.man-trajetoria-preview-flutuante .man-trajetoria-passo.recusado .man-trajetoria-ponto {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 30%, transparent);
+}
+.man-trajetoria-preview-flutuante .man-trajetoria-passo:not(:first-child)::before { top: 7px; }
 
 @media print {
   .man-no-print { display: none !important; }
