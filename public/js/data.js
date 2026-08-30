@@ -2256,6 +2256,30 @@ async function desativarSobra(motivo, modoTeste = false) {
   await salvarSobra({ ...atual, ativa: false, status: motivo, dataEncerramento: new Date().toISOString() }, modoTeste);
 }
 
+/**
+ * Registro de Traço Descartado (Perda) — ver README, "Registro de Traço
+ * Descartado (Perda) — plano". Grava um traço que deu errado no meio da
+ * batelada (insumos já consumidos de verdade) como perda isolada — nunca
+ * vira produção, nunca entra no Relatório de Injeção. Sem `modoTeste`
+ * (diferente de salvarSobra): a rota do servidor sempre grava na tabela
+ * real `tracos_descartados` (ver lib/rotas/tracos-descartados.js), então
+ * o link que chama esta função fica indisponível em Modo de Teste (ver
+ * abrirDescarteTraco, operacao.js).
+ * @param {object} traco - {data, turno, cimento, agua, eps, superplast,
+ *   incorporador, tempo_batida, motivo, operador_nome}. `id` e
+ *   `registrado_em` são sempre gerados no servidor, mesmo que venham
+ *   preenchidos aqui.
+ */
+async function registrarTracoDescartado(traco) {
+  const res = await fetch('/registrar-traco-descartado', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(traco),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro ao registrar traço descartado');
+}
+
 // ---- Export ----
 
 // ---- Alerta customizado (substitui o alert() nativo do navegador) ----
@@ -3075,6 +3099,9 @@ window.LW = {
 
   // Sobra de traço
   getSobra, salvarSobra, desativarSobra,
+
+  // Traço Descartado (Perda) — ver README, passo 3 do plano
+  registrarTracoDescartado,
 
   // Alerta customizado (substitui alert() nativo)
   mostrarAlerta,
