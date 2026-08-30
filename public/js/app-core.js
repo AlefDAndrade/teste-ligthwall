@@ -271,6 +271,44 @@
       }, 8000);
     }
 
+    // ---- Grupo de navegação com dropdown (ex: "Traços" — ver .nav-group,
+    // styles.css, e nav-tabbar.html) ----
+    // Hover (CSS puro, :hover/:focus-within) já abre o dropdown sozinho em
+    // mouse/teclado — isso aqui é só o FALLBACK pra touch (tablets/celular
+    // não têm ":hover" de verdade; um toque vira só um "tap" que não fica
+    // "pairando"). toggleNavGroup alterna a classe .open; um clique em
+    // QUALQUER lugar fora do grupo aberto fecha de novo (ver o listener
+    // 'click' no document, logo abaixo).
+    function toggleNavGroup(triggerEl) {
+      const grupo = triggerEl.closest('.nav-group');
+      if (!grupo) return;
+      const abrindo = !grupo.classList.contains('open');
+      fecharNavGroups();
+      if (abrindo) {
+        grupo.classList.add('open');
+        triggerEl.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    function fecharNavGroups() {
+      document.querySelectorAll('.nav-group.open').forEach(g => {
+        g.classList.remove('open');
+        const trigger = g.querySelector('.nav-group-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+    // Expostas em window (chamadas direto do onclick inline no HTML, mesmo
+    // padrão de showPage/LWFocada.abrirBusca etc. em nav-tabbar.html).
+    window.toggleNavGroup = toggleNavGroup;
+    window.fecharNavGroups = fecharNavGroups;
+
+    // Clique fora de qualquer .nav-group aberto fecha — sem isso, o
+    // fallback de touch (toggleNavGroup) ficaria aberto pra sempre até a
+    // pessoa tocar de novo no mesmo botão.
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.nav-group')) fecharNavGroups();
+    });
+
     // Garante que a aba clicada/ativada fique visível dentro da faixa de
     // navegação horizontal (.tabbar-scroll) — necessário porque a barra
     // rola lateralmente em telas estreitas ou quando há mais abas do que
@@ -281,6 +319,18 @@
     function _rolarAbaAtivaParaVisivel(navEl) {
       if (!navEl || typeof navEl.scrollIntoView !== 'function') return;
       navEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    // Quando a página ativa é uma das que mora DENTRO do dropdown "Traços"
+    // (ver .nav-group, nav-tabbar.html), o próprio botão-gatilho "Traços"
+    // também deveria acender — sem isso, abrir "Dashboard de Traço" ou
+    // "Traços Descartados" deixaria a tabbar inteira sem nenhuma aba
+    // marcada como ativa, o que pareceria um bug de navegação.
+    function _marcarGrupoComoAtivoSeAplicavel(navEl) {
+      const grupo = navEl.closest('.nav-group');
+      if (!grupo) return;
+      const trigger = grupo.querySelector('.nav-group-trigger');
+      if (trigger) trigger.classList.add('active');
     }
 
     function showPage(pageId, navEl) {
@@ -304,18 +354,30 @@
       }
 
       document.querySelectorAll('.main').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      // '.nav-dropdown-item' (ver .nav-group, styles.css) não tem a
+      // classe '.nav-item' — precisa entrar aqui separado, senão um item
+      // de dropdown marcado ativo uma vez nunca mais perderia o
+      // destaque, mesmo depois de navegar pra outra página.
+      document.querySelectorAll('.nav-item, .nav-dropdown-item').forEach(n => n.classList.remove('active'));
 
       document.getElementById('page-' + pageId).classList.add('active');
 
       if (navEl) {
         navEl.classList.add('active');
-        _rolarAbaAtivaParaVisivel(navEl);
+        _marcarGrupoComoAtivoSeAplicavel(navEl);
+        // Se o item pertence a um .nav-group (ver "Traços", nav-tabbar.html),
+        // o dropdown some assim que o mouse sai dali — não faz sentido
+        // rolar até um item que não vai continuar visível; rola até o
+        // botão-gatilho (esse sim sempre visível na faixa) no lugar dele.
+        const grupoDoItem = navEl.closest('.nav-group');
+        _rolarAbaAtivaParaVisivel(grupoDoItem ? grupoDoItem.querySelector('.nav-group-trigger') : navEl);
       } else {
         const btn = document.querySelector(`[data-page="${pageId}"]`);
         if (btn) {
           btn.classList.add('active');
-          _rolarAbaAtivaParaVisivel(btn);
+          _marcarGrupoComoAtivoSeAplicavel(btn);
+          const grupoDoItem = btn.closest('.nav-group');
+          _rolarAbaAtivaParaVisivel(grupoDoItem ? grupoDoItem.querySelector('.nav-group-trigger') : btn);
         }
       }
 

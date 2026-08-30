@@ -56,15 +56,36 @@
           </svg>
           <span class="nav-text">Operação</span>
         </button>
-        <button class="nav-item" title="Traços" data-page="relatorio" onclick="showPage('relatorio',this)">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span class="nav-text">Traços</span>
-        </button>
+        <!-- Grupo "Traços": junta Relatório de Injeção, Dashboard de Traço
+             (antes só acessível de dentro do Relatório, botão "Ver em
+             Dashboard") e Traços Descartados num hover só — 3 destinos,
+             1 espaço na tabbar. Ver .nav-group/.nav-dropdown, styles.css,
+             e toggleNavGroup()/fechar ao clicar fora, app-core.js. -->
+        <div class="nav-group" id="nav-group-tracos">
+          <button class="nav-item nav-group-trigger" type="button" title="Traços" aria-haspopup="true" aria-expanded="false" onclick="toggleNavGroup(this)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span class="nav-text">Traços</span>
+            <svg class="nav-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="nav-dropdown" role="menu">
+            <button class="nav-dropdown-item" role="menuitem" data-page="relatorio" onclick="fecharNavGroups(); showPage('relatorio',this)">
+              📋 Relatório de Injeção
+            </button>
+            <button class="nav-dropdown-item" role="menuitem" data-page="qualidade-tracos" onclick="fecharNavGroups(); showPage('qualidade-tracos',this)">
+              📐 Dashboard de Traço
+            </button>
+            <button class="nav-dropdown-item" role="menuitem" data-page="tracos-descartados" onclick="fecharNavGroups(); showPage('tracos-descartados',this)">
+              ⚠️ Traços Descartados
+            </button>
+          </div>
+        </div>
 
         <button class="nav-item" title="Berços" data-page="relatorio-bercos" onclick="showPage('relatorio-bercos',this)">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,15 +124,6 @@
             <line x1="3" y1="15" x2="21" y2="15"/>
           </svg>
           <span class="nav-text">Registro de Paradas</span>
-        </button>
-
-        <button class="nav-item" title="Traços Descartados" data-page="tracos-descartados" onclick="showPage('tracos-descartados',this)">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <span class="nav-text">Traços Descartados</span>
         </button>
 
         <button class="nav-item" title="Rastreabilidade" data-page="analise-focada" onclick="LWFocada.abrirBusca(); showPage('analise-focada',this)">

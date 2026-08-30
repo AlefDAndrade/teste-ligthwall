@@ -401,6 +401,88 @@ h4 {
   pointer-events: none;
 }
 
+/* ---- Nav Group (dropdown por hover, ex: "Traços") ----
+   Agrupa páginas relacionadas embaixo de 1 só item da tabbar — em vez de
+   3 abas separadas (Relatório de Injeção / Dashboard de Traço / Traços
+   Descartados) disputando espaço na faixa horizontal, vira 1 gatilho só
+   que abre um menu com as 3 ao passar o mouse. Some espaço na tabbar sem
+   esconder nenhuma página — só muda de 1 clique direto pra 1
+   hover + 1 clique. */
+.nav-group {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.nav-group-trigger {
+  /* mesmo .nav-item por baixo — só adiciona a setinha (.nav-caret) */
+}
+
+.nav-caret {
+  width: 11px;
+  height: 11px;
+  opacity: .6;
+  flex-shrink: 0;
+  transition: transform .15s;
+}
+
+.nav-group.open .nav-caret,
+.nav-group:hover .nav-caret,
+.nav-group:focus-within .nav-caret {
+  transform: rotate(180deg);
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 220px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 95; /* acima da tabbar (90), abaixo de popovers/modais */
+  flex-direction: column;
+  padding: 4px;
+  gap: 2px;
+}
+
+/* Hover (mouse) + focus-within (Tab pelo teclado) abrem sozinhos;
+   .open é o fallback pra touch (sem hover real) — alternado por
+   toggleNavGroup(), ver app-core.js. */
+.nav-group:hover .nav-dropdown,
+.nav-group:focus-within .nav-dropdown,
+.nav-group.open .nav-dropdown {
+  display: flex;
+}
+
+.nav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-2);
+  font-family: var(--font-body);
+  font-size: .83rem;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nav-dropdown-item:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+
+.nav-dropdown-item.active {
+  color: var(--accent);
+}
+
 /* ---- Main Content ---- */
 .main {
   overflow-y: auto;
@@ -2255,6 +2337,13 @@ td.mono {
   }
 
   .nav-item .nav-text {
+    display: none;
+  }
+
+  /* Mesma lógica do texto acima: em tela estreita, o grupo "Traços"
+     também fica só com o ícone — a setinha sozinha, sem o texto do
+     lado, ficaria com uma leitura estranha. */
+  .nav-caret {
     display: none;
   }
 
