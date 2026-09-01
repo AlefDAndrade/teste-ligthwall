@@ -91,7 +91,7 @@ test('GET de um mês nunca salvo devolve esqueleto com campos vazios, nunca null
   assert.deepEqual(corpo.producao, { comentarios: '', proximosPassos: '' });
   assert.deepEqual(corpo.refugo, { comentarios: '', proximosPassos: '' });
   assert.deepEqual(corpo.expedicao, { comentarios: '', proximosPassos: '' });
-  assert.equal(corpo.assuntosGerais, '');
+  assert.deepEqual(corpo.assuntosGerais, { texto: '', fotos: [] });
   assert.equal(corpo.atualizadoEm, null);
 });
 
@@ -164,16 +164,86 @@ test('salvar um bloco diferente (Produção) depois NÃO apaga o que já tinha e
   assert.equal(lido.seguranca.proximosPassos, 'Reforçar treinamento de EPI.');
 });
 
-test('"Assuntos Gerais" (texto solto) é salvo e mesclado do mesmo jeito', async () => {
+test('"Assuntos Gerais" enviado como string solta (compat) é salvo como {texto, fotos: []} e mesclado do mesmo jeito', async () => {
   const cookie = await logarComoAdminMaster();
   const resp = await salvarComentarios({ mes: '2026-08', assuntosGerais: 'Reunião geral marcada pra dia 05.' }, cookie);
   assert.equal(resp.status, 200);
 
   const lido = await (await buscarComentarios('2026-08')).json();
-  assert.equal(lido.assuntosGerais, 'Reunião geral marcada pra dia 05.');
+  assert.deepEqual(lido.assuntosGerais, { texto: 'Reunião geral marcada pra dia 05.', fotos: [] });
   // Blocos salvos antes continuam intactos.
   assert.equal(lido.seguranca.comentarios, 'Nenhuma ocorrência grave no mês.');
   assert.equal(lido.producao.comentarios, 'Produção estável.');
+});
+
+// Data-URI mínima válida (PNG 1x1 transparente) — só precisa começar com
+// "data:image/" pra passar na validação; o conteúdo real não importa aqui.
+const FOTO_VALIDA = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+test('"Assuntos Gerais" com fotos: salva tema de cada uma e gera id no servidor', async () => {
+  const cookie = await logarComoAdminMaster();
+  const resp = await salvarComentarios({
+    mes: '2026-08',
+    assuntosGerais: {
+      texto: 'DDS realizado.',
+      fotos: [
+        { imagem: FOTO_VALIDA, tema: 'DDS com colaboradores' },
+        { imagem: FOTO_VALIDA, tema: 'Reparação tela silo' },
+      ],
+    },
+  }, cookie);
+  assert.equal(resp.status, 200);
+  const corpo = await resp.json();
+  assert.equal(corpo.assuntosGerais.fotos.length, 2);
+  assert.equal(corpo.assuntosGerais.fotos[0].tema, 'DDS com colaboradores');
+  assert.equal(corpo.assuntosGerais.fotos[1].tema, 'Reparação tela silo');
+  // id gerado no servidor pra cada foto nova (front não manda id).
+  assert.ok(corpo.assuntosGerais.fotos[0].id);
+  assert.ok(corpo.assuntosGerais.fotos[1].id);
+  assert.notEqual(corpo.assuntosGerais.fotos[0].id, corpo.assuntosGerais.fotos[1].id);
+
+  const lido = await (await buscarComentarios('2026-08')).json();
+  assert.equal(lido.assuntosGerais.fotos.length, 2);
+});
+
+test('"Assuntos Gerais" com fotos: id enviado pelo front (foto já existente, só editando o tema) é preservado', async () => {
+  const cookie = await logarComoAdminMaster();
+  const primeira = await (await salvarComentarios({
+    mes: '2026-08',
+    assuntosGerais: { texto: '', fotos: [{ imagem: FOTO_VALIDA, tema: 'Tema original' }] },
+  }, cookie)).json();
+  const idGerado = primeira.assuntosGerais.fotos[0].id;
+
+  const segunda = await (await salvarComentarios({
+    mes: '2026-08',
+    assuntosGerais: { texto: '', fotos: [{ id: idGerado, imagem: FOTO_VALIDA, tema: 'Tema editado' }] },
+  }, cookie)).json();
+
+  assert.equal(segunda.assuntosGerais.fotos.length, 1);
+  assert.equal(segunda.assuntosGerais.fotos[0].id, idGerado);
+  assert.equal(segunda.assuntosGerais.fotos[0].tema, 'Tema editado');
+});
+
+test('"Assuntos Gerais" com mais de 12 fotos é recusado (400), nada é gravado', async () => {
+  const cookie = await logarComoAdminMaster();
+  const fotos = Array.from({ length: 13 }, () => ({ imagem: FOTO_VALIDA, tema: '' }));
+  const resp = await salvarComentarios({ mes: '2026-08', assuntosGerais: { texto: '', fotos } }, cookie);
+  assert.equal(resp.status, 400);
+  const corpo = await resp.json();
+  assert.equal(corpo.ok, false);
+  assert.match(corpo.erro, /12/);
+});
+
+test('"Assuntos Gerais" com foto que não é imagem válida (não começa com data:image/) é recusado (400)', async () => {
+  const cookie = await logarComoAdminMaster();
+  const resp = await salvarComentarios({
+    mes: '2026-08',
+    assuntosGerais: { texto: '', fotos: [{ imagem: 'data:application/pdf;base64,AAAA', tema: 'não é foto' }] },
+  }, cookie);
+  assert.equal(resp.status, 400);
+  const corpo = await resp.json();
+  assert.equal(corpo.ok, false);
+  assert.match(corpo.erro, /imagem/i);
 });
 
 test('meses diferentes não se misturam: salvar agosto não mexe em julho', async () => {

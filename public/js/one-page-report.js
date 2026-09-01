@@ -136,6 +136,7 @@
     const expedicaoM2 = [0, 7.32, 527.04, 230.58, 109.8, 0, 0, 1257.21, 966.24, 603.9, 878.4, 0, 0, 340.1, 512.6, 0, 690.2, 0, 0, 210.5, 0, 0];
 
     return {
+      mes: '2026-08',
       mesReferencia: 'Agosto/2026',
       seguranca: {
         disponivel: true,
@@ -173,7 +174,7 @@
         comentarios: ['878,40m² cliente MAKAI', 'Total expedidos: 878,40m²', 'Forecast: 7.015m²'],
         proximosPassos: ['Carga confirmada para o cliente MAKAI'],
       },
-      assuntosGerais: '',
+      assuntosGerais: { texto: '', fotos: [] },
     };
   }
 
@@ -268,9 +269,206 @@
     document.getElementById('opr-exp-comentarios').innerHTML = _oprComentarios(d.comentarios, d.proximosPassos);
   }
 
-  function _renderAssuntosGerais(texto) {
-    const el = document.getElementById('opr-assuntos-gerais');
-    if (el) el.value = texto || '';
+  // ── Assuntos Gerais: texto + fotos com tema ────────────────────────
+  // Único bloco da tela que é EDITÁVEL diretamente aqui (os outros 4
+  // dependem de Registrar Operação/Setor de Qualidade/Segurança/
+  // Expedição) — por isso tem seu próprio pedaço de estado (_agState,
+  // cópia local editável, só vai pro servidor quando "Salvar" é clicado)
+  // em vez de só refletir `_dadosAtuais` como o resto da tela.
+
+  // Mesmo critério de admin de _souAdminAtual (public/js/manutencao.js)
+  // — só controla o que aparece na TELA; quem decide de verdade é o
+  // servidor (POST /salvar-comentarios-one-page-report exige
+  // sessaoOuAdmin, ver lib/rotas/one-page-report.js).
+  function _oprSouAdmin() {
+    try {
+      const p = sessionStorage.getItem('lw_role');
+      return p === 'Administrador' || p === 'Administrativo';
+    } catch (_) { return false; }
+  }
+
+  // Redimensiona/comprime uma foto antes de guardar — MESMA técnica de
+  // _comprimirFotoDefeito (public/js/setor-qualidade.js): canvas limitado
+  // a 1000x1000 (preservando proporção), reexportado como JPEG .75.
+  // Nunca guarda o arquivo bruto da câmera.
+  function _oprComprimirFoto(file) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onerror = () => reject(new Error('Não consegui ler o arquivo da foto.'));
+      leitor.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Arquivo selecionado não é uma imagem válida.'));
+        img.onload = () => {
+          const MAX = 1000;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * (MAX / width)); width = MAX; }
+            else { width = Math.round(width * (MAX / height)); height = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', .75));
+        };
+        img.src = leitor.result;
+      };
+      leitor.readAsDataURL(file);
+    });
+  }
+
+  // Estado local editável de Assuntos Gerais — carregado de
+  // dados.assuntosGerais em _renderAssuntosGerais, só vai pro servidor
+  // em _agSalvar(). `mes` vem de dados.mes (Fase 4 sempre manda; MOCK_DADOS
+  // também, ver acima) — precisa saber PRA QUAL mês salvar.
+  let _agState = { mes: null, texto: '', fotos: [] };
+  let _agSalvando = false;
+  let _agStatusMsg = '';
+  let _agStatusTipo = ''; // 'ok' | 'erro' | ''
+
+  // <input type=file> escondido, reaproveitado (mesmo padrão de "criado
+  // uma vez, lazy" de setor-qualidade.js) — múltiplas fotos de uma vez.
+  let _agFileInputEl = null;
+  function _agFileInput() {
+    if (_agFileInputEl) return _agFileInputEl;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const arquivos = Array.from(input.files || []);
+      input.value = ''; // permite escolher o mesmo arquivo de novo depois
+      if (arquivos.length) _agArquivosEscolhidos(arquivos);
+    });
+    document.body.appendChild(input);
+    _agFileInputEl = input;
+    return input;
+  }
+
+  function _agAbrirSeletorFoto() {
+    _agFileInput().click();
+  }
+
+  async function _agArquivosEscolhidos(arquivos) {
+    for (const file of arquivos) {
+      try {
+        const imagem = await _oprComprimirFoto(file);
+        _agState.fotos.push({
+          id: 'novo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+          imagem,
+          tema: '',
+        });
+      } catch (e) {
+        _agStatusMsg = e.message || 'Não consegui processar uma das fotos.';
+        _agStatusTipo = 'erro';
+      }
+    }
+    _agRenderDOM();
+  }
+
+  function _agRemoverFoto(id) {
+    _agState.fotos = _agState.fotos.filter(f => f.id !== id);
+    _agRenderDOM();
+  }
+
+  function _agAtualizarTexto(valor) {
+    _agState.texto = valor;
+  }
+
+  function _agAtualizarTema(id, valor) {
+    const foto = _agState.fotos.find(f => f.id === id);
+    if (foto) foto.tema = valor;
+  }
+
+  async function _agSalvar() {
+    if (_agSalvando || !_agState.mes) return;
+    _agSalvando = true;
+    _agStatusMsg = 'Salvando…';
+    _agStatusTipo = '';
+    _agRenderDOM();
+    try {
+      const r = await fetch('/salvar-comentarios-one-page-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mes: _agState.mes,
+          assuntosGerais: { texto: _agState.texto, fotos: _agState.fotos },
+        }),
+      });
+      const corpo = await r.json().catch(() => null);
+      if (!r.ok || !corpo || corpo.ok === false) {
+        throw new Error((corpo && corpo.erro) || `Falha ao salvar (HTTP ${r.status}).`);
+      }
+      // Servidor devolve os ids definitivos (fotos novas ganham id lá,
+      // ver validarFotosAssuntosGerais em lib/rotas/one-page-report.js)
+      // — sincroniza pra próxima edição/remoção usar o id certo.
+      _agState.texto = corpo.assuntosGerais.texto;
+      _agState.fotos = corpo.assuntosGerais.fotos;
+      _agStatusMsg = 'Salvo ✓';
+      _agStatusTipo = 'ok';
+    } catch (e) {
+      _agStatusMsg = e.message || 'Falha ao salvar Assuntos Gerais.';
+      _agStatusTipo = 'erro';
+    } finally {
+      _agSalvando = false;
+      _agRenderDOM();
+    }
+  }
+
+  function _agRenderDOM() {
+    const container = document.getElementById('opr-assuntos-gerais-container');
+    if (!container) return;
+    const admin = _oprSouAdmin();
+
+    const fotosHtml = _agState.fotos.map(f => `
+      <div class="opr-ag-foto">
+        ${admin ? `<button type="button" class="opr-ag-foto-remover" title="Remover foto" onclick="LWOnePageReport._agRemoverFoto('${_escaparAtributo(f.id)}')">×</button>` : ''}
+        <img src="${_escaparAtributo(f.imagem)}" alt="${_escaparAtributo(f.tema || 'Foto de Assuntos Gerais')}">
+        ${admin
+          ? `<input class="opr-ag-foto-tema-input" type="text" maxlength="200" placeholder="Tema da foto…" value="${_escaparAtributo(f.tema || '')}" oninput="LWOnePageReport._agAtualizarTema('${_escaparAtributo(f.id)}', this.value)">`
+          : `<div class="opr-ag-foto-tema">${_escaparHtml(f.tema || '')}</div>`
+        }
+      </div>`).join('');
+
+    const addTileHtml = admin ? `
+      <button type="button" class="opr-ag-add" onclick="LWOnePageReport._agAbrirSeletorFoto()">
+        <span class="opr-ag-add-icon">＋</span>
+        <span>Adicionar foto</span>
+      </button>` : '';
+
+    const textoHtml = admin
+      ? `<textarea class="opr-footer-textarea" placeholder="Assuntos gerais do mês…" oninput="LWOnePageReport._agAtualizarTexto(this.value)">${_escaparHtml(_agState.texto)}</textarea>`
+      : `<div class="opr-footer-texto-leitura">${_escaparHtml(_agState.texto)}</div>`;
+
+    const toolbarHtml = admin ? `
+      <div class="opr-ag-toolbar">
+        <button type="button" class="btn btn-sm btn-primary" ${_agSalvando ? 'disabled' : ''} onclick="LWOnePageReport._agSalvar()">
+          ${_agSalvando ? 'Salvando…' : '💾 Salvar Assuntos Gerais'}
+        </button>
+        ${_agStatusMsg ? `<span class="opr-ag-status ${_agStatusTipo ? 'opr-ag-status-' + _agStatusTipo : ''}">${_escaparHtml(_agStatusMsg)}</span>` : ''}
+      </div>` : '';
+
+    container.innerHTML = `
+      ${textoHtml}
+      <div class="opr-ag-grid">${fotosHtml}${addTileHtml}</div>
+      ${toolbarHtml}
+    `;
+  }
+
+  function _renderAssuntosGerais(assuntosGerais, mes) {
+    const ag = assuntosGerais || { texto: '', fotos: [] };
+    _agState = {
+      mes: mes || null,
+      texto: ag.texto || '',
+      // clona as fotos (nunca edita o objeto de _dadosAtuais direto —
+      // só o "Salvar" confirma a mudança pro servidor; até lá é só
+      // rascunho local).
+      fotos: (ag.fotos || []).map(f => ({ ...f })),
+    };
+    _agStatusMsg = '';
+    _agStatusTipo = '';
+    _agRenderDOM();
   }
 
   let _dadosAtuais = null;
@@ -284,7 +482,7 @@
     _renderProducao(dados.producao);
     _renderRefugo(dados.refugo);
     _renderExpedicao(dados.expedicao);
-    _renderAssuntosGerais(dados.assuntosGerais);
+    _renderAssuntosGerais(dados.assuntosGerais, dados.mes);
   }
 
   function imprimir() {
@@ -298,6 +496,12 @@
     render();
   }
 
-  window.LWOnePageReport = { init, render, imprimir };
+  window.LWOnePageReport = {
+    init, render, imprimir,
+    // Assuntos Gerais — chamados via onclick/oninput inline no HTML
+    // gerado por _agRenderDOM (mesmo padrão de onclick="showPage(...)"/
+    // "LWFocada.abrirDetalhesBerco(...)" já usado no resto do app).
+    _agAbrirSeletorFoto, _agRemoverFoto, _agAtualizarTexto, _agAtualizarTema, _agSalvar,
+  };
 
 })();

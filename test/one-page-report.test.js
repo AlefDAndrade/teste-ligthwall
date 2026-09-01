@@ -173,7 +173,7 @@ test('mês sem nenhum dado: 200, nenhum bloco quebra, tudo "indisponível" — n
       `${bloco} não deveria ter nenhum campo numérico inventado`);
   }
 
-  assert.equal(corpo.assuntosGerais, '');
+  assert.deepEqual(corpo.assuntosGerais, { texto: '', fotos: [] });
 });
 
 test('mes ausente cai no mês corrente (relógio congelado = 2026-08)', async () => {
@@ -291,7 +291,7 @@ test('Expedição: m²/dia, contagem de cargas por semana (S1-S4) e acumulado ba
 
 // ── Comentários (Fase 3): string -> array na agregação ─────────────────────
 
-test('Comentários: texto livre salvo (Fase 3) vira array de linhas na agregação; Assuntos Gerais continua string', async () => {
+test('Comentários: texto livre salvo (Fase 3) vira array de linhas na agregação; Assuntos Gerais vira {texto, fotos}', async () => {
   const cookie = await logarComoAdminMaster();
   const resp = await salvarComentarios({
     mes: '2026-04',
@@ -303,7 +303,7 @@ test('Comentários: texto livre salvo (Fase 3) vira array de linhas na agregaç�
   const abr = await (await buscarRelatorio('2026-04')).json();
   assert.deepEqual(abr.producao.comentarios, ['Linha 1', 'Linha 2']); // linha em branco descartada
   assert.deepEqual(abr.producao.proximosPassos, ['Ajustar traço da bateria X']);
-  assert.equal(abr.assuntosGerais, 'Reunião mensal marcada para o dia 30.');
+  assert.deepEqual(abr.assuntosGerais, { texto: 'Reunião mensal marcada para o dia 30.', fotos: [] });
 
   // Bloco que não recebeu comentário nenhum continua com arrays vazios,
   // nunca `undefined`/`null` (a tela usa `.map` direto em cima disso).

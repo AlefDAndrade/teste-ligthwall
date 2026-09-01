@@ -1047,7 +1047,7 @@ Tela (`public/partials/page-one-page-report.html`) de dashboard de página únic
 | Refugo | % refugo diário, traços por linha | ✅ Já existia | tabelas `avaliacao_paineis`/`traco_usos` (SQLite) |
 | Segurança | Ocorrências, acumulado do mês, dias sem acidentes | ✅ Criado (Fase 1) | tabela `seguranca_ocorrencias` — `lib/db/seguranca-ocorrencias.js` |
 | Expedição | Cargas expedidas, m² por semana (S1–S4), acumulado, forecast | ✅ Criado (Fase 2) | tabela `expedicao_cargas` — `lib/db/expedicao.js` |
-| Todos os blocos | Comentários / Próximos passos + Assuntos Gerais | ✅ Criado (Fase 3) | JSON simples por mês — `lib/db/one-page-comentarios.js` |
+| Todos os blocos | Comentários / Próximos passos + Assuntos Gerais (texto + fotos com tema) | ✅ Criado (Fase 3) | JSON simples por mês — `lib/db/one-page-comentarios.js` |
 
 Regra combinada em todas as fases: **onde não há dado real, a tela mostra "Dado indisponível" no lugar do gráfico/número** (`opr-indisponivel`, `public/css/one-page-report.css`) — nunca zero disfarçado de dado real. Vale tanto pro histórico ainda curto de Segurança/Expedição quanto pra qualquer falha de rede no fetch do frontend.
 
@@ -1057,7 +1057,7 @@ Regra combinada em todas as fases: **onde não há dado real, a tela mostra "Dad
 |---|---|---|
 | Dados — Segurança | `lib/db/seguranca-ocorrencias.js` | CRUD de ocorrências + `diasSemAcidentes()` (calculado a partir de `MAX(data)`, nunca gravado como coluna) |
 | Dados — Expedição | `lib/db/expedicao.js` | CRUD de cargas + agregação semanal (S1–S4), acumulado do mês, forecast |
-| Dados — Comentários | `lib/db/one-page-comentarios.js` | Texto livre por bloco + Assuntos Gerais, todos os meses num único `public/db/one-page-comentarios.json` |
+| Dados — Comentários | `lib/db/one-page-comentarios.js` | Texto livre por bloco + Assuntos Gerais ({texto, fotos: [{id, imagem, tema}]}, fotos comprimidas no navegador antes de salvar, mesma técnica de `_comprimirFotoDefeito`/setor-qualidade.js), todos os meses num único `public/db/one-page-comentarios.json` |
 | Rotas | `lib/rotas/seguranca.js` | `GET /db/seguranca_ocorrencias.json`, `GET /seguranca/dias-sem-acidentes`, `POST /registrar-ocorrencia-seguranca`, `POST /excluir-ocorrencia-seguranca` |
 | Rotas | `lib/rotas/expedicao.js` | `GET /db/expedicao_cargas.json`, `GET /expedicao/agregacao-semanal`, `POST /registrar-carga-expedicao`, `POST /excluir-carga-expedicao` |
 | Rotas | `lib/rotas/one-page-report.js` | `GET /db/one-page-comentarios.json`, `POST /salvar-comentarios-one-page-report`, e o endpoint de agregação `GET /db/one-page-report.json?mes=YYYY-MM` (junta os 5 blocos num payload só, já calculado por mês) |
@@ -1065,4 +1065,4 @@ Regra combinada em todas as fases: **onde não há dado real, a tela mostra "Dad
 
 Escrita (registrar/excluir ocorrência de Segurança e carga de Expedição, salvar Comentários) exige sessão de administrador (`sessaoOuAdmin`) — nenhuma dessas ainda é uma área cadastrada em `AREAS_DE_EDICAO` (`lib/perfis.js`); qual perfil pode editar cada bloco é uma decisão de produto em aberto, não técnica. Leitura (todos os `GET`) é livre, mesmo modelo do resto do sistema.
 
-**Testes:** `test/seguranca-ocorrencias-crud.test.js` (10), `test/expedicao-crud.test.js` (13), `test/one-page-comentarios-crud.test.js` (11), `test/one-page-report.test.js` (8, cobrindo o endpoint de agregação — mês ausente/inválido, cada bloco isoladamente, conversão de comentários texto→array) — 42 casos no total.
+**Testes:** `test/seguranca-ocorrencias-crud.test.js` (10), `test/expedicao-crud.test.js` (13), `test/one-page-comentarios-crud.test.js` (15, incluindo fotos de Assuntos Gerais — tema, id gerado no servidor, limite de 12 fotos, imagem inválida recusada), `test/one-page-report.test.js` (8, cobrindo o endpoint de agregação — mês ausente/inválido, cada bloco isoladamente, conversão de comentários texto→array) — 46 casos no total.
