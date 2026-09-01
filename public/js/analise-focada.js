@@ -329,6 +329,24 @@
     return null;
   }
 
+  // Total ATUAL de um insumo do traço (original + soma de todos os
+  // ajustes já feitos) — mesmo critério de "original + soma dos
+  // ajustes" usado no resto do app pra este mesmo cálculo (ver
+  // totalInsumo/renderRelacaoAC em operacao.js, _valRel em
+  // dashboard.js, valorFinal em debriefing.js). Existe porque
+  // detalheOperacao() (lib/db/operacoes-qualidade.js) devolve
+  // `traco.original` (a receita como foi REGISTRADA) separado de
+  // `traco.ajustes` (histórico de mudanças feitas depois) — bug
+  // corrigido aqui: a Relação A/C usava só `traco.original`, então um
+  // traço criado com A/C 0,41 e depois ajustado pra 0,36 (reduzindo
+  // água, por exemplo) continuava mostrando 0,41 na Análise Focada e
+  // na exportação dela — nunca refletia o ajuste.
+  function _afTotalInsumo(traco, campo) {
+    const base = parseFloat(traco.original?.[campo]);
+    const ajustes = Array.isArray(traco.ajustes) ? traco.ajustes : [];
+    return ajustes.reduce((soma, a) => soma + (parseFloat(a[campo]) || 0), isNaN(base) ? 0 : base);
+  }
+
   // Painel avaliado que caiu na posição (pallet+posicao) informada —
   // mesmo cruzamento que _afPaleteDoBerco já faz pra desenhar o mini
   // palete (acima), só que aqui contra avaliacao.paineis em vez de só
@@ -412,7 +430,7 @@
     // mesma aparência.
     let receitaHtml = null;
     if (traco) {
-      const acDetalhe = LW.formatarRelacaoAC(traco.original?.cimento, traco.original?.agua);
+      const acDetalhe = LW.formatarRelacaoAC(_afTotalInsumo(traco, 'cimento'), _afTotalInsumo(traco, 'agua'));
       const camposReceita = [
         ['Cimento', _fmtKg(traco.original?.cimento), 'kg'],
         ['Água', _fmtKg(traco.original?.agua), 'kg'],
@@ -737,7 +755,7 @@
       // _construirTabelaAjustesPorEvento, dashboard.js.
       const numLinhas = Math.max(t.ajustes.length, densidadeLeituras.length, flowLeituras.length);
       const semAjuste = numLinhas === 0;
-      const acDetalhe = LW.formatarRelacaoAC(t.original.cimento, t.original.agua);
+      const acDetalhe = LW.formatarRelacaoAC(_afTotalInsumo(t, 'cimento'), _afTotalInsumo(t, 'agua'));
       const camposReceita = [
         ['Cimento', _fmtKg(t.original.cimento), 'kg'],
         ['Água', _fmtKg(t.original.agua), 'kg'],
@@ -2458,6 +2476,7 @@ ${regras}`;
   ${_afDesenhoPaleteMini}
   ${_afTiposPorBerco}
   ${_afTracoDoBerco}
+  ${_afTotalInsumo}
   ${_afPainelDoBerco}
   ${abrirDetalhesBerco}
 
@@ -2817,5 +2836,10 @@ ${_afScriptAjustePaginaUnica()}
     gerarHtmlMultiplasPdf: _gerarHtmlAfMultiplasEstaticoPdf,
     scriptAjustePaginaUnica: _afScriptAjustePaginaUnica,
     scriptFlagInicial: _afScriptFlagInicial,
+    // Exposto só pra teste (ver test/analise-focada-relacao-ac.test.js) —
+    // regressão do bug relatado: a Relação A/C usava só a receita
+    // original, ignorando ajustes feitos depois (ver comentário de
+    // _afTotalInsumo, acima).
+    totalInsumo: _afTotalInsumo,
   };
 })();
