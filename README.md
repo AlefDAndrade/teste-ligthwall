@@ -295,6 +295,7 @@ A lista de atalhos exibida (em Configurações → Atalhos de Teclado e no modal
 - **OEE** — ver seção dedicada abaixo.
 - **Modo TV** (`tv.html`, fora da SPA principal) — painel fullscreen pra telão da fábrica: operação ao vivo, traços do dia, OEE, últimas paradas. Não exige login.
 - **Menu Principal** — atalhos rápidos + (admin) Backup, Restauração e Importação.
+- **One Page Report** — resumo executivo mensal de página única (Segurança, Produção, Refugo, Expedição + Assuntos Gerais), pensado pra imprimir/exportar como PDF. Ver seção dedicada abaixo.
 
 Atalho `F1` abre o modal de ajuda com todos os atalhos de teclado disponíveis.
 
@@ -1034,37 +1035,34 @@ Como a tabela `tracos` tem uma lista fechada de colunas na hora de aprovar (`_tr
 - "Volume por placa" (referência informativa na tela de Operação) não é atualizado automaticamente ao criar um novo tipo de montagem — precisa ser adicionado manualmente no `config.json`.
 - Testes automatizados (`test/`) cobrem autenticação/sessão, Setor de Qualidade, registrar operação (`test/registrar-operacao.test.js`), traços (`test/registrar-relatorio-injecao.test.js`), editar operação/traço (`test/edicao-operacao-traco.test.js`), paradas (`test/paradas-crud.test.js`), sobra (`test/sobra-crud.test.js`), mesclar backup de dados (`test/mesclar-backup-dados.test.js`), importação (`test/importacao.test.js`) e o fluxo de ponta a ponta do Backup Geral (`test/backup-geral-fluxo-completo.test.js`, além dos testes de regras isoladas já existentes em `test/backup-dados-vs-geral.test.js`, `test/backup-metas-opcional.test.js` e `test/restaurar-backup-checklist.test.js`).
 
-## Nova página: One Page Report (planejamento)
+## One Page Report — IMPLEMENTADO
 
-Nova tela (`public/partials/one-page-report.html`), um dashboard de página única no modelo do relatório executivo mensal já usado pelo time (4 blocos — **Segurança**, **Produção**, **Refugo**, **Expedição** — mais um rodapé de **Assuntos Gerais**), pra dar uma visão rápida e imprimível do mês sem precisar abrir os dashboards analíticos um por um.
+Tela (`public/partials/page-one-page-report.html`) de dashboard de página única no modelo do relatório executivo mensal já usado pelo time (4 blocos — **Segurança**, **Produção**, **Refugo**, **Expedição** — mais um rodapé de **Assuntos Gerais**), pra dar uma visão rápida e imprimível do mês sem precisar abrir os dashboards analíticos um por um. Acesso pelo Menu Principal ou pela barra de navegação lateral (`showPage('one-page-report')`), disponível a todos os perfis (`lib/perfis.js`).
 
-### Levantamento: o que já existe vs. o que falta
+### Levantamento: o que já existia vs. o que foi criado
 
 | Bloco do relatório | Dado | Situação | Fonte |
 |---|---|---|---|
-| Produção | Injeção de baterias por dia/linha | ✅ Existe | `historico.json`, `relatorio_injecao.json` (`lib/rotas/consultas.js`) |
-| Produção | M² total (`calcPaineis`, `M2_POR_PAINEL`) | ✅ Existe | `public/js/data.js` |
-| Refugo | % refugo diário, refugo por tipo/bateria | ✅ Existe | `avaliacao_paineis.json` (Setor de Qualidade, `lib/rotas/qualidade.js`) |
-| Refugo | Traços por linha | ✅ Existe | `lib/rotas/contador-tracos.js`, `relatorio_injecao.json` |
-| Segurança | Ocorrências, acumulado do mês | ❌ Não existe | — |
-| Segurança | Dias sem acidentes | ❌ Não existe | — |
-| Expedição | Cargas expedidas (cliente, m², data) | ❌ Não existe | — |
-| Expedição | M² expedido por semana (S1–S4), acumulado, forecast | ❌ Não existe | — |
-| Todos os blocos | Comentários / Próximos passos | ❌ Não existe (Debriefing tem formato parecido, mas não serve pra isso) | — |
-| Rodapé | Assuntos Gerais (texto livre) | ❌ Não existe | — |
+| Produção | Injeção de baterias por dia/linha, m² total | ✅ Já existia | tabela `operacoes` (SQLite) |
+| Refugo | % refugo diário, traços por linha | ✅ Já existia | tabelas `avaliacao_paineis`/`traco_usos` (SQLite) |
+| Segurança | Ocorrências, acumulado do mês, dias sem acidentes | ✅ Criado (Fase 1) | tabela `seguranca_ocorrencias` — `lib/db/seguranca-ocorrencias.js` |
+| Expedição | Cargas expedidas, m² por semana (S1–S4), acumulado, forecast | ✅ Criado (Fase 2) | tabela `expedicao_cargas` — `lib/db/expedicao.js` |
+| Todos os blocos | Comentários / Próximos passos + Assuntos Gerais | ✅ Criado (Fase 3) | JSON simples por mês — `lib/db/one-page-comentarios.js` |
 
-Regra combinada: **onde não houver dado real ainda, a tela deve mostrar um aviso "Dado indisponível" no lugar do gráfico/número** — nunca zero disfarçado de dado real, nem gráfico vazio sem explicação. Isso vale tanto pra Segurança/Expedição (que serão implementadas, mas podem começar sem histórico) quanto pra qualquer bloco que falhar ao buscar dado (rede/parse).
+Regra combinada em todas as fases: **onde não há dado real, a tela mostra "Dado indisponível" no lugar do gráfico/número** (`opr-indisponivel`, `public/css/one-page-report.css`) — nunca zero disfarçado de dado real. Vale tanto pro histórico ainda curto de Segurança/Expedição quanto pra qualquer falha de rede no fetch do frontend.
 
-### Fases de implementação
+### Estrutura final
 
-| Fase | O que entra | Onde |
+| Camada | Arquivo | O que faz |
 |---|---|---|
-| 1 | Módulo de dados de **Segurança**: ocorrências (data, descrição, gravidade) + cálculo de "dias sem acidentes" (dias desde a última ocorrência registrada) | `lib/db/seguranca-ocorrencias.js` (estado/CRUD) + `lib/rotas/seguranca.js` (rotas HTTP, seguindo o padrão de factory `tentar(req, res, urlPath, queryParams)` já usado em `lib/rotas/`) |
-| 2 | Módulo de dados de **Expedição**: cargas expedidas (data, cliente, m², carga/nº), agregação semanal (S1–S4), acumulado do mês, forecast | `lib/db/expedicao.js` + `lib/rotas/expedicao.js` |
-| 3 | Módulo de **Comentários do One Page Report**: texto livre (Comentários + Próximos Passos) por bloco (Segurança/Produção/Refugo/Expedição) + Assuntos Gerais, persistido em JSON simples, editável manualmente na própria tela | `lib/db/one-page-comentarios.js` + rota dedicada ou anexada a `lib/rotas/seguranca.js`/nova `lib/rotas/one-page-report.js` |
-| 4 | Endpoint de agregação único pro dashboard: `GET /db/one-page-report.json`, que junta os dados que já existem (produção, refugo, traços) com os novos (segurança, expedição, comentários) num payload só, já calculado por mês | `lib/rotas/one-page-report.js` |
-| 5 | Frontend: novo partial + JS da tela, reaproveitando os helpers de gráfico SVG já existentes (`_svgHBarChart` etc., de `public/js/setor-qualidade.js`) pra manter o visual consistente com o resto do app; cada bloco trata ausência de dado com o aviso "Dado indisponível" | `public/partials/one-page-report.html`, `public/js/one-page-report.js`, entrada no menu lateral (`app-core.js` / `index.template.html`) |
-| 6 | Testes automatizados: CRUD de ocorrências e cargas, cálculo de dias sem acidentes, agregação semanal de expedição, endpoint de agregação completo, e o caso "sem dado ainda" retornando o indicador de indisponível (não erro 500, não dado inventado) | `test/seguranca-ocorrencias.test.js`, `test/expedicao-crud.test.js`, `test/one-page-report.test.js` |
-| 7 | Atualizar este README (estrutura de pastas, lista de módulos `lib/db/`/`lib/rotas/`, seção de testes) refletindo os módulos novos, do mesmo jeito que cada fase de fatiamento documentou o que mudou | `README.md` |
+| Dados — Segurança | `lib/db/seguranca-ocorrencias.js` | CRUD de ocorrências + `diasSemAcidentes()` (calculado a partir de `MAX(data)`, nunca gravado como coluna) |
+| Dados — Expedição | `lib/db/expedicao.js` | CRUD de cargas + agregação semanal (S1–S4), acumulado do mês, forecast |
+| Dados — Comentários | `lib/db/one-page-comentarios.js` | Texto livre por bloco + Assuntos Gerais, todos os meses num único `public/db/one-page-comentarios.json` |
+| Rotas | `lib/rotas/seguranca.js` | `GET /db/seguranca_ocorrencias.json`, `GET /seguranca/dias-sem-acidentes`, `POST /registrar-ocorrencia-seguranca`, `POST /excluir-ocorrencia-seguranca` |
+| Rotas | `lib/rotas/expedicao.js` | `GET /db/expedicao_cargas.json`, `GET /expedicao/agregacao-semanal`, `POST /registrar-carga-expedicao`, `POST /excluir-carga-expedicao` |
+| Rotas | `lib/rotas/one-page-report.js` | `GET /db/one-page-comentarios.json`, `POST /salvar-comentarios-one-page-report`, e o endpoint de agregação `GET /db/one-page-report.json?mes=YYYY-MM` (junta os 5 blocos num payload só, já calculado por mês) |
+| Frontend | `public/partials/page-one-page-report.html` + `public/css/one-page-report.css` + `public/js/one-page-report.js` | Tela em si — gráficos SVG próprios (barra/donut), consome `GET /db/one-page-report.json`, com fallback pra dados de exemplo só se a rede falhar |
 
-Ordem pensada pra sempre ter algo visível na tela cedo: fases 1–2 dão os dados que faltam, fase 3 dá o texto editável, fase 4 unifica tudo num único fetch pro frontend, fase 5 é a tela em si (já podendo nascer h consumindo produção/refugo reais desde o primeiro commit), fase 6 tranca o comportamento com teste, fase 7 fecha com a documentação.
+Escrita (registrar/excluir ocorrência de Segurança e carga de Expedição, salvar Comentários) exige sessão de administrador (`sessaoOuAdmin`) — nenhuma dessas ainda é uma área cadastrada em `AREAS_DE_EDICAO` (`lib/perfis.js`); qual perfil pode editar cada bloco é uma decisão de produto em aberto, não técnica. Leitura (todos os `GET`) é livre, mesmo modelo do resto do sistema.
+
+**Testes:** `test/seguranca-ocorrencias-crud.test.js` (10), `test/expedicao-crud.test.js` (13), `test/one-page-comentarios-crud.test.js` (11), `test/one-page-report.test.js` (8, cobrindo o endpoint de agregação — mês ausente/inválido, cada bloco isoladamente, conversão de comentários texto→array) — 42 casos no total.
