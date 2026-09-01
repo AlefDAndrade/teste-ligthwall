@@ -4,9 +4,10 @@
 # /etc/caddy/Caddyfile com o IP certo. Guardado aqui só pra consulta ou
 # ajuste manual, e como documentação do que o script faz de fato.
 #
-# Troque "34-123-45-67" pelo IP externo desta VM (Console do Google Cloud →
-# Compute Engine → VM instances → coluna "External IP"), com PONTOS
-# trocados por HÍFENS. Ex: IP 34.123.45.67 -> 34-123-45-67.nip.io
+# Troque "34-123-45-67" pelo IP externo desta VM (Magalu Cloud: Console →
+# Virtual Machine → sua instância → coluna "IP Público" / Google Cloud:
+# Console → Compute Engine → VM instances → coluna "External IP"), com
+# PONTOS trocados por HÍFENS. Ex: IP 34.123.45.67 -> 34-123-45-67.nip.io
 #
 # Troque "5000" pela porta que o Node está escutando, se for diferente
 # (ver PORT em server.js — padrão 5000).

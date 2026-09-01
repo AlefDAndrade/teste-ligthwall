@@ -1,0 +1,51 @@
+# ─── deploy/lightwall.service ───────────────────────────────────────────────
+# Modelo de serviço systemd pro Lightwall SC — roda o Node em segundo
+# plano, reinicia sozinho se cair (crash, erro não tratado) e sobe
+# automaticamente no boot da VM, sem precisar de ninguém logado via SSH
+# com um `npm start` numa sessão de terminal (que morre ao desconectar,
+# a menos que rodado dentro de `screen`/`tmux`/`nohup` — isto aqui
+# substitui essa necessidade de vez).
+#
+# NÃO é aplicado automaticamente — é um MODELO. Instalação (uma vez, na
+# VM, como root/sudo):
+#
+#   1. Ajuste "WorkingDirectory" e "User" abaixo pro caminho/usuário reais
+#      da sua instalação (ver placeholders SEU-USUARIO e /caminho/do/projeto).
+#   2. Copie pro systemd:
+#        sudo cp deploy/lightwall.service /etc/systemd/system/lightwall.service
+#   3. Recarregue o systemd e habilite o serviço:
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable --now lightwall
+#   4. Confira que subiu:
+#        sudo systemctl status lightwall
+#        sudo journalctl -u lightwall -f      # logs em tempo real
+#
+# Depois de instalado, `git pull` + `sudo systemctl restart lightwall`
+# aplica uma atualização de código (o `ExecStartPre` abaixo já roda
+# `npm install`/`build-index.js` sozinho a cada start, então nunca fica
+# desatualizado por esquecimento).
+#
+# Pra rodar `sudo bash deploy/instalar-https.sh` (Caddy) depois de trocar
+# pra este serviço, nada muda — o Caddy só faz proxy pra localhost:5000,
+# não importa como o Node ali dentro foi iniciado.
+
+[Unit]
+Description=Lightwall SC — Sistema de Injeção
+After=network.target
+
+[Service]
+Type=simple
+User=SEU-USUARIO
+WorkingDirectory=/caminho/do/projeto
+ExecStartPre=/usr/bin/npm install --omit=dev
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+# Ambiente de produção — mesmas variáveis que server.js já lê (ver
+# README.md, "Como rodar"). PORT/HOST são opcionais; sem elas, usa os
+# padrões 5000/127.0.0.1 (Caddy faz proxy pra essa porta, ver acima).
+# Environment=PORT=5000
+# Environment=HOST=127.0.0.1
+
+[Install]
+WantedBy=multi-user.target
