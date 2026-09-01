@@ -271,6 +271,16 @@ const rotasTracosDescartados = require('./lib/rotas/tracos-descartados.js')({ db
 // sessaoOuAdmin` (não `podeEditarArea`) de propósito — ver comentário de
 // PERMISSÃO DE ESCRITA no topo de lib/rotas/seguranca.js.
 const rotasSeguranca = require('./lib/rotas/seguranca.js')({ db, todayBrasiliaServer, sessao: sessaoOuAdmin });
+// Cargas de Expedição — Fase 2 do plano do One Page Report (ver README,
+// "Nova página: One Page Report (planejamento)"). Mesma decisão de
+// PERMISSÃO DE ESCRITA da Fase 1 — ver comentário no topo de
+// lib/rotas/expedicao.js.
+const rotasExpedicao = require('./lib/rotas/expedicao.js')({ db, todayBrasiliaServer, sessao: sessaoOuAdmin });
+// Comentários do One Page Report — Fase 3 do plano (ver README). Módulo de
+// dados PRÓPRIO (JSON simples em DB_DIR, não a conexão SQLite de db.js) —
+// ver comentário no topo de lib/db/one-page-comentarios.js.
+const comentariosOnePageReport = require('./lib/db/one-page-comentarios.js')({ fs, path, DB_DIR });
+const rotasOnePageReport = require('./lib/rotas/one-page-report.js')({ comentarios: comentariosOnePageReport, sessao: sessaoOuAdmin });
 const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
@@ -318,7 +328,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

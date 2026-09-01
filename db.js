@@ -393,6 +393,37 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_seguranca_ocorrencias_data ON seguranca_ocorrencias(data);
 
   -- ============================================================
+  --  Cargas de Expedição — ver README, "Nova página: One Page Report
+  --  (planejamento)", Fase 2. Domínio novo (nunca existiu como arquivo) —
+  --  mesmo padrão de isolamento físico de seguranca_ocorrencias/
+  --  tracos_descartados: sem FK com nenhuma outra tabela, é um registro
+  --  fechado por carga expedida.
+  --
+  --  "m2" fica solto (REAL), não amarrado a M2_POR_PAINEL (public/js/
+  --  data.js) — expedição é medida/pesada na doca no momento da carga,
+  --  não recalculada a partir de contagem de painéis como o resto do
+  --  sistema faz pra produção.
+  --
+  --  Agregação semanal (S1-S4) e forecast (ver agregacaoSemanalExpedicao,
+  --  lib/db/expedicao.js) são CALCULADOS em cima de "data" — nunca
+  --  gravados como coluna — mesmo raciocínio de "dias sem acidentes"
+  --  (seguranca_ocorrencias, acima).
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS expedicao_cargas (
+    id             TEXT PRIMARY KEY,
+    data           TEXT NOT NULL,
+    cliente        TEXT NOT NULL,
+    m2             REAL NOT NULL,
+    numero_carga   TEXT,
+    -- Mesmo raciocínio de operacoes.operador_nome (ver README, "Autoria
+    -- automática de registro") — rótulo de auditoria, não controle de
+    -- acesso.
+    operador_nome  TEXT,
+    registrado_em  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_expedicao_cargas_data ON expedicao_cargas(data);
+
+  -- ============================================================
   --  Berços Visuais — snapshot de estado dos 2 LADOS de cada berço
   --  físico de uma operação (representação visual já existente hoje em
   --  "Bateria Atual", ver bateria-atual.js — só que sem persistência
@@ -1299,6 +1330,11 @@ Object.assign(module.exports, criarDbTracosDescartados(db));
 const criarDbSegurancaOcorrencias = require('./lib/db/seguranca-ocorrencias.js');
 Object.assign(module.exports, criarDbSegurancaOcorrencias(db));
 module.exports.GRAVIDADES_VALIDAS_SEGURANCA = criarDbSegurancaOcorrencias.GRAVIDADES_VALIDAS;
+
+// Fase 2 do plano do One Page Report (ver README) — mesmo padrão de wiring
+// da Fase 1, acima.
+const criarDbExpedicao = require('./lib/db/expedicao.js');
+Object.assign(module.exports, criarDbExpedicao(db));
 
 // ════════════════════════════════════════════════════════════════════════
 //  SETOR DE MANUTENÇÃO — Fase 2 (backend real)
