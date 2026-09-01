@@ -178,9 +178,15 @@
   }
 
   async function carregarDados() {
-    // TODO (Fase 4): trocar por
-    //   const r = await fetch('/db/one-page-report.json');
-    //   return r.ok ? await r.json() : null;
+    // Fase 4 concluída — endpoint agregador real (lib/rotas/one-page-
+    // report.js). MOCK_DADOS (acima) fica só como referência/fallback se
+    // o fetch falhar (rede fora do ar etc.), pra tela nunca quebrar em
+    // branco — mesmo espírito de "nunca mostrar erro cru pro usuário" do
+    // resto do app.
+    try {
+      const r = await fetch('/db/one-page-report.json');
+      if (r.ok) return await r.json();
+    } catch (_) { /* cai no mock abaixo */ }
     return MOCK_DADOS();
   }
 

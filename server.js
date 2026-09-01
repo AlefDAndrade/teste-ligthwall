@@ -280,7 +280,14 @@ const rotasExpedicao = require('./lib/rotas/expedicao.js')({ db, todayBrasiliaSe
 // dados PRÓPRIO (JSON simples em DB_DIR, não a conexão SQLite de db.js) —
 // ver comentário no topo de lib/db/one-page-comentarios.js.
 const comentariosOnePageReport = require('./lib/db/one-page-comentarios.js')({ fs, path, DB_DIR });
-const rotasOnePageReport = require('./lib/rotas/one-page-report.js')({ comentarios: comentariosOnePageReport, sessao: sessaoOuAdmin });
+// `dbSql`/`todayBrasiliaServer` — Fase 4 do plano (endpoint de agregação,
+// GET /db/one-page-report.json): junta Segurança/Expedição (SQLite) com
+// Produção/Refugo (também SQLite, tabelas "operacoes"/"avaliacao_paineis"/
+// "traco_usos") e Comentários (`comentarios`, acima). Ver comentário de
+// FASE 4 no topo de lib/rotas/one-page-report.js.
+const rotasOnePageReport = require('./lib/rotas/one-page-report.js')({
+  comentarios: comentariosOnePageReport, sessao: sessaoOuAdmin, dbSql: db, todayBrasiliaServer,
+});
 const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
