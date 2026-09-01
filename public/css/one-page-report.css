@@ -1,0 +1,445 @@
+/* ============================================================
+   ONE PAGE REPORT LW SC
+   Fase 5 do plano (ver README, "Nova página: One Page Report
+   (planejamento)") — só a parte VISUAL. Os dados vêm de
+   MOCK_DADOS (public/js/one-page-report.js) até as Fases 1-4
+   existirem (lib/db/seguranca-ocorrencias.js, lib/db/expedicao.js,
+   lib/db/one-page-comentarios.js e o endpoint agregador
+   GET /db/one-page-report.json).
+
+   Propositalmente com paleta PRÓPRIA (--opr-*) em vez de var(--bg),
+   var(--text) etc. do tema do app: a referência (relatório mensal já
+   usado pelo time, ver PDF anexado no planejamento) é impressa em
+   papel — fundo branco, cabeçalhos azul-marinho — e precisa parecer
+   igual independente do app estar no tema claro, escuro ou "roxo",
+   e também precisa continuar legível ao imprimir (@media print, no
+   fim do arquivo). ================================================ */
+
+.opr-page-wrap {
+  --opr-navy: #1c2b42;
+  --opr-navy-2: #24374f;
+  --opr-blue: #3f6db3;
+  --opr-blue-2: #1c78c9;
+  --opr-orange: #f2994a;
+  --opr-bg: #ffffff;
+  --opr-bg-2: #f4f6f9;
+  --opr-border: #dde2ea;
+  --opr-text: #1c2b42;
+  --opr-text-2: #5b6472;
+  --opr-text-3: #8993a3;
+}
+
+/* ---- Barra de ferramentas (mês + imprimir) — some na impressão ---- */
+.opr-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.opr-toolbar-info {
+  margin-left: auto;
+  font-size: .78rem;
+  color: var(--text-3);
+}
+
+.opr-aviso-fase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  margin-bottom: 16px;
+  background: rgba(245, 158, 11, .1);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: .82rem;
+}
+
+/* ---- Folha (a "página impressa" em si) ---- */
+.opr-sheet {
+  background: var(--opr-bg);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px 26px;
+  color: var(--opr-text);
+  box-shadow: 0 2px 18px rgba(0, 0, 0, .28);
+}
+
+.opr-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 3px solid var(--opr-navy);
+}
+
+.opr-sheet-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--opr-bg-2);
+  border: 2px solid var(--opr-navy);
+  border-radius: 10px;
+  font-size: 1.3rem;
+}
+
+.opr-sheet-title {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--opr-navy);
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.opr-sheet-title span {
+  color: var(--opr-blue-2);
+}
+
+.opr-sheet-logo {
+  height: 34px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* ---- Grade dos 4 blocos ---- */
+.opr-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1180px) {
+  .opr-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .opr-grid { grid-template-columns: 1fr; }
+}
+
+.opr-col {
+  border: 1px solid var(--opr-border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--opr-bg);
+}
+
+.opr-col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--opr-navy);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.opr-col-header-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.opr-col-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.opr-chart-title {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--opr-text-2);
+  text-align: center;
+}
+
+.opr-chart-box {
+  background: var(--opr-bg-2);
+  border: 1px solid var(--opr-border);
+  border-radius: 8px;
+  padding: 8px 6px;
+}
+
+/* ---- KPIs em destaque (ex: "ACUMULADO MÊS", "DIAS SEM ACIDENTES") ---- */
+.opr-kpi-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.opr-kpi-mini {
+  flex: 0 0 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--opr-navy);
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.opr-kpi-mini-label {
+  font-size: .55rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  opacity: .85;
+  line-height: 1.15;
+}
+
+.opr-kpi-mini-value {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.opr-callout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.opr-callout-label {
+  background: var(--opr-blue);
+  color: #fff;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.opr-callout-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--opr-navy);
+  text-align: center;
+  padding: 2px 0;
+}
+
+/* ---- Donut + legenda ---- */
+.opr-donut-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.opr-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: .72rem;
+  color: var(--opr-text-2);
+}
+
+.opr-donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opr-donut-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---- "Traços por linha" / mini tabela chave-valor ---- */
+.opr-kv-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.opr-kv-key {
+  background: var(--opr-navy);
+  color: #fff;
+  padding: 6px 10px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.opr-kv-val {
+  background: var(--opr-bg-2);
+  border: 1px solid var(--opr-border);
+  border-left: none;
+  color: var(--opr-text);
+  padding: 6px 10px;
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+/* ---- Comentários / Próximos passos ---- */
+.opr-comments {
+  border: 1px solid var(--opr-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: .76rem;
+  color: var(--opr-text);
+  flex: 1;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opr-comments-heading {
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  font-size: .68rem;
+  color: var(--opr-text-2);
+}
+
+.opr-comments ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.opr-comments li {
+  line-height: 1.35;
+}
+
+.opr-tag-exemplo {
+  align-self: flex-start;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--opr-blue-2);
+  background: rgba(28, 120, 201, .1);
+  border: 1px solid rgba(28, 120, 201, .3);
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+/* ---- "Dado indisponível" — regra combinada no README: nunca zero
+   disfarçado de dado real, nem gráfico vazio sem explicação. ---- */
+.opr-indisponivel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 90px;
+  color: var(--opr-text-3);
+  border: 1px dashed var(--opr-border);
+  border-radius: 8px;
+  font-size: .72rem;
+  text-align: center;
+  padding: 10px;
+}
+
+.opr-indisponivel-icon {
+  font-size: 1.2rem;
+}
+
+/* ---- Rodapé "Assuntos Gerais" ---- */
+.opr-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--opr-navy-2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.opr-footer-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  font-family: var(--font-display);
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #fff;
+  border-right: 1px solid rgba(255, 255, 255, .15);
+  flex-shrink: 0;
+}
+
+.opr-footer-body {
+  flex: 1;
+  padding: 12px 16px;
+}
+
+.opr-footer-textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 6px;
+  color: #fff;
+  font-family: inherit;
+  font-size: .82rem;
+  padding: 8px 10px;
+}
+
+.opr-footer-textarea::placeholder {
+  color: rgba(255, 255, 255, .45);
+}
+
+/* ---- SVG dos gráficos: tooltip via data-tooltip (mesmo padrão de
+   public/js/setor-qualidade.js — LWTooltip, ver public/js/tooltip.js) ---- */
+.opr-chart-box svg [data-tooltip] {
+  cursor: help;
+}
+
+/* ---- Impressão: só a folha, sem chrome do app ---- */
+@media print {
+  .opr-no-print,
+  .app-shell > nav,
+  #boot-loading-overlay {
+    display: none !important;
+  }
+
+  .opr-page-wrap .opr-sheet {
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .opr-aviso-fase {
+    display: none !important;
+  }
+}

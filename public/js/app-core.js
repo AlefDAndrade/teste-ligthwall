@@ -589,6 +589,15 @@
         SQ.carregarOpcoesBaterias();
       }
 
+      // One Page Report — resumo mensal (Fase 5 do plano, ver README).
+      // Sempre re-renderiza ao reabrir (não só na 1ª vez): é um resumo
+      // "foto do mês", não uma tela com formulário/filtro pra preservar
+      // entre uma visita e outra — mesmo raciocínio de Traços
+      // Descartados, acima.
+      if (pageId === 'one-page-report') {
+        LWOnePageReport.init();
+      }
+
       // Manutenção — mesmo padrão de guarda "só uma vez, na 1ª vez que
       // abre" do Setor de Qualidade, acima (ver comentário lá).
       if (pageId === 'manutencao' && !window._manInit) {

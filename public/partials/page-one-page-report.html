@@ -1,0 +1,129 @@
+<!-- ============ PAGE: ONE PAGE REPORT LW SC ============
+     Fase 5 do plano (ver README, "Nova página: One Page Report
+     (planejamento)"). Dados vêm de public/js/one-page-report.js —
+     MOCK_DADOS até as Fases 1-4 (backend) existirem, ver comentário
+     no topo daquele arquivo. -->
+    <main class="main opr-page-wrap" id="page-one-page-report">
+      <div class="page-header">
+        <h1 class="page-title">One Page <span>Report</span></h1>
+        <p class="page-desc">Resumo executivo mensal — Segurança, Produção, Refugo e Expedição</p>
+      </div>
+
+      <div class="page-body">
+
+        <div class="opr-toolbar opr-no-print">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('menu')" title="Voltar ao Menu Principal">← Voltar</button>
+          <button class="btn btn-ghost btn-sm" onclick="LWOnePageReport.imprimir()" title="Imprimir ou exportar como PDF">🖨️ Imprimir / PDF</button>
+          <span class="opr-toolbar-info">Referência: <strong id="opr-mes-atual">—</strong></span>
+        </div>
+
+        <div class="opr-aviso-fase opr-no-print">
+          🔧 Protótipo visual (Fase 5 do plano) — os números abaixo são <strong>dados de exemplo</strong>.
+          A integração com dados reais entra nas Fases 1–4 (Segurança, Expedição, Comentários e endpoint agregador).
+        </div>
+
+        <div class="opr-sheet">
+
+          <div class="opr-sheet-header">
+            <div class="opr-sheet-icon">📊</div>
+            <div class="opr-sheet-title">One Page Report <span>LW SC</span></div>
+            <img class="opr-sheet-logo" src="icons/logo-mark.svg" alt="Lightwall">
+          </div>
+
+          <div class="opr-grid">
+
+            <!-- ===== SEGURANÇA ===== -->
+            <div class="opr-col">
+              <div class="opr-col-header">
+                <span class="opr-col-header-icon">🦺</span> Segurança
+              </div>
+              <div class="opr-col-body">
+                <div class="opr-kpi-row">
+                  <div class="opr-kpi-mini">
+                    <div class="opr-kpi-mini-label">Acumulado<br>mês</div>
+                    <div class="opr-kpi-mini-value" id="opr-seg-acumulado">—</div>
+                  </div>
+                  <div style="flex:1">
+                    <div class="opr-chart-title">Ocorrências no mês</div>
+                    <div class="opr-chart-box" id="opr-seg-chart"></div>
+                  </div>
+                </div>
+                <div class="opr-callout">
+                  <div class="opr-callout-label">Estamos trabalhando há</div>
+                  <div class="opr-callout-value" id="opr-seg-dias">—</div>
+                  <div class="opr-callout-label">Dias sem acidentes</div>
+                </div>
+                <div class="opr-comments" id="opr-seg-comentarios"></div>
+              </div>
+            </div>
+
+            <!-- ===== PRODUÇÃO ===== -->
+            <div class="opr-col">
+              <div class="opr-col-header">
+                <span class="opr-col-header-icon">⚙️</span> Produção
+              </div>
+              <div class="opr-col-body">
+                <div class="opr-chart-title">Injeção de baterias</div>
+                <div class="opr-chart-box" id="opr-prod-chart"></div>
+                <div class="opr-chart-title">M² total</div>
+                <div class="opr-donut-wrap" id="opr-prod-donut"></div>
+                <div class="opr-comments" id="opr-prod-comentarios"></div>
+              </div>
+            </div>
+
+            <!-- ===== REFUGO ===== -->
+            <div class="opr-col">
+              <div class="opr-col-header">
+                <span class="opr-col-header-icon">🔍</span> Refugo
+              </div>
+              <div class="opr-col-body">
+                <div class="opr-chart-title">Refugo diário</div>
+                <div class="opr-chart-box" id="opr-ref-chart"></div>
+                <div class="opr-donut-wrap" id="opr-ref-donut"></div>
+                <div>
+                  <div class="opr-chart-title" style="margin-bottom:4px">Traços por linha</div>
+                  <div id="opr-ref-tracos"></div>
+                </div>
+                <div class="opr-comments" id="opr-ref-comentarios"></div>
+              </div>
+            </div>
+
+            <!-- ===== EXPEDIÇÃO ===== -->
+            <div class="opr-col">
+              <div class="opr-col-header">
+                <span class="opr-col-header-icon">🚚</span> Expedição
+              </div>
+              <div class="opr-col-body">
+                <div class="opr-chart-title">Expedição em m²</div>
+                <div class="opr-chart-box" id="opr-exp-chart"></div>
+                <div class="opr-kpi-row" style="justify-content:center">
+                  <div class="opr-kpi-mini" style="flex:0 0 auto;padding:6px 12px">
+                    <div class="opr-kpi-mini-label">M²</div>
+                    <div class="opr-kpi-mini-value" id="opr-exp-m2">—</div>
+                  </div>
+                  <div class="opr-kpi-mini" style="flex:0 0 auto;padding:6px 12px">
+                    <div class="opr-kpi-mini-label">Cargas</div>
+                    <div class="opr-kpi-mini-value" id="opr-exp-cargas-total">—</div>
+                  </div>
+                </div>
+                <div class="opr-chart-title">Qtd de cargas por semana</div>
+                <div class="opr-chart-box" id="opr-exp-cargas"></div>
+                <div class="opr-comments" id="opr-exp-comentarios"></div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="opr-footer">
+            <div class="opr-footer-label">Assuntos Gerais</div>
+            <div class="opr-footer-body">
+              <textarea class="opr-footer-textarea" id="opr-assuntos-gerais"
+                placeholder="Assuntos gerais do mês (disponível na Fase 3 do plano — Comentários)."
+                disabled></textarea>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </main>
