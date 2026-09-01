@@ -360,6 +360,39 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tracos_descartados_data ON tracos_descartados(data);
 
   -- ============================================================
+  --  Ocorrências de Segurança — ver README, "Nova página: One Page
+  --  Report (planejamento)", Fase 1. Domínio novo (nunca existiu como
+  --  arquivo) — mesmo padrão de isolamento físico de tracos_descartados,
+  --  acima: sem FK com nenhuma outra tabela, é um registro fechado por
+  --  ocorrência.
+  --
+  --  "gravidade" é um enum fechado (ver GRAVIDADES_VALIDAS,
+  --  lib/db/seguranca-ocorrencias.js) — não texto livre como
+  --  tracos_descartados.motivo — porque o One Page Report (Fase 5) vai
+  --  agrupar/colorir por gravidade; um valor solto digitado errado
+  --  quebraria esse agrupamento silenciosamente.
+  --
+  --  "Dias sem acidentes" (ver diasSemAcidentes, lib/db/seguranca-
+  --  ocorrencias.js) É CALCULADO — nunca gravado como coluna — a partir
+  --  de MAX(data) desta tabela: sempre a data de HOJE menos a ocorrência
+  --  mais recente, do jeito que o README descreve. Evita o mesmo tipo de
+  --  bug de "campo calculado que desincroniza do dado real" que motivou
+  --  todo o desenho de "original + SUM(ajustes)" em tracos/traco_usos.
+  -- ============================================================
+  CREATE TABLE IF NOT EXISTS seguranca_ocorrencias (
+    id            TEXT PRIMARY KEY,
+    data          TEXT NOT NULL,
+    descricao     TEXT,
+    gravidade     TEXT NOT NULL,
+    -- Mesmo raciocínio de operacoes.operador_nome (ver README, "Autoria
+    -- automática de registro") — rótulo de auditoria, não controle de
+    -- acesso.
+    operador_nome TEXT,
+    registrado_em TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_seguranca_ocorrencias_data ON seguranca_ocorrencias(data);
+
+  -- ============================================================
   --  Berços Visuais — snapshot de estado dos 2 LADOS de cada berço
   --  físico de uma operação (representação visual já existente hoje em
   --  "Bateria Atual", ver bateria-atual.js — só que sem persistência
@@ -1254,6 +1287,18 @@ Object.assign(module.exports, criarDbTracos(db));
 // ============================================================
 const criarDbTracosDescartados = require('./lib/db/tracos-descartados.js');
 Object.assign(module.exports, criarDbTracosDescartados(db));
+
+// ============================================================
+//  Ocorrências de Segurança — ver README, "Nova página: One Page Report
+//  (planejamento)", Fase 1.
+//
+//  Domínio novo (não é fatiamento de nada que já existia em db.js) — segue
+//  o mesmo padrão factory do resto de lib/db/ desde o início, sem nenhuma
+//  migração de JSON legado (nunca existiu como arquivo).
+// ============================================================
+const criarDbSegurancaOcorrencias = require('./lib/db/seguranca-ocorrencias.js');
+Object.assign(module.exports, criarDbSegurancaOcorrencias(db));
+module.exports.GRAVIDADES_VALIDAS_SEGURANCA = criarDbSegurancaOcorrencias.GRAVIDADES_VALIDAS;
 
 // ════════════════════════════════════════════════════════════════════════
 //  SETOR DE MANUTENÇÃO — Fase 2 (backend real)

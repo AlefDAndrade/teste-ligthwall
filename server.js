@@ -266,6 +266,11 @@ const rotasExportarPdf = require('./lib/rotas/exportar-pdf.js')({ db, PRIVATE_DI
 const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste, podeEditarArea, negarEdicao });
 // Registro de Traço Descartado (Perda) — passo 2 do plano, ver README.
 const rotasTracosDescartados = require('./lib/rotas/tracos-descartados.js')({ db, podeEditarArea, negarEdicao });
+// Ocorrências de Segurança — Fase 1 do plano do One Page Report (ver
+// README, "Nova página: One Page Report (planejamento)"). `sessao:
+// sessaoOuAdmin` (não `podeEditarArea`) de propósito — ver comentário de
+// PERMISSÃO DE ESCRITA no topo de lib/rotas/seguranca.js.
+const rotasSeguranca = require('./lib/rotas/seguranca.js')({ db, todayBrasiliaServer, sessao: sessaoOuAdmin });
 const rotasContadorTracos = require('./lib/rotas/contador-tracos.js')({ lerContadorTracosHoje, incrementarContadorTracosHoje, podeControlarOperacao, negarControleDeOperacao });
 const rotasLogAcesso = require('./lib/rotas/log-acesso.js')({ fs, path, ROOT_DIR });
 const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
@@ -313,7 +318,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
