@@ -338,6 +338,7 @@ Notificações Push só funcionam sob HTTPS (ou `localhost`) — se o sistema é
 **Pré-requisitos**
 - VM com o Lightwall já rodando (`npm start`, ver *Como rodar*) — o script assume que o Node está escutando em `localhost` numa porta (padrão `5000`).
 - Portas **80** e **443** liberadas na VM (necessário pro Let's Encrypt validar o domínio e emitir o certificado):
+  - **Locaweb Cloud**: painel → Rede → sua VM → **Port Forwarding** (não "NAT Estático" — esse libera a VM inteira, todas as portas, por padrão) → adicione regras pras portas 22 (SSH), 80 e 443 apontando pra VM. A Locaweb Cloud é construída sobre Apache CloudStack: o IP público não fica direto na VM, ele é alocado à parte e você decide quais portas encaminhar.
   - **Magalu Cloud**: Console → Virtual Machine → sua instância → Segurança/Security Group → adicionar regra de entrada (ingress) TCP 80 e 443, origem `0.0.0.0/0`. Por padrão a Magalu Cloud bloqueia todo tráfego de entrada — sem essa regra o Caddy nem consegue validar o domínio.
   - **Google Cloud**: Console → VPC network → Firewall → criar/editar regra permitindo `tcp:80,443` de `0.0.0.0/0`.
 - Acesso root/sudo na VM.
@@ -350,7 +351,7 @@ Notificações Push só funcionam sob HTTPS (ou `localhost`) — se o sistema é
    ```
    `[porta-do-node]` é opcional — padrão `5000` (mesma porta padrão de `server.js`). Só informe se o `PORT` estiver configurado com outro valor.
 3. O script faz tudo sozinho:
-   - Descobre o IP externo da VM (tenta Magalu Cloud, depois Google Cloud, depois um serviço externo genérico; se nada responder, pergunta manualmente — ver `deploy/instalar-https.sh`).
+   - Descobre o IP externo da VM (tenta Magalu Cloud, depois Google Cloud, depois um serviço externo genérico — esse último é o que funciona na Locaweb Cloud, já que lá o IP público não fica direto na VM; ver `deploy/instalar-https.sh`). Se nada responder, pergunta manualmente.
    - Instala o Caddy (repositório oficial via `apt`).
    - Gera `/etc/caddy/Caddyfile` apontando `SEU-IP-COM-HIFENS.nip.io` → `localhost:PORTA` (ver `deploy/Caddyfile.exemplo` pra um modelo de referência, caso prefira editar manualmente).
    - Recarrega o Caddy — ele mesmo emite e renova o certificado HTTPS automaticamente, sem passo manual nenhum.
@@ -608,14 +609,17 @@ O próprio `server.js` gera um backup de dados todo fim de dia, sem depender de 
 - Arquivos ficam em `backups-automaticos/` (fora de `public/`, nunca servida como arquivo estático comum), nomeados por data: `backup-dados_AAAA-MM-DD.zip`.
 - Acessível só pelas rotas dedicadas (`/backups-automaticos` e `/backups-automaticos/<nome>`) — essa pasta cresce e diminui sozinha, sem precisar de limpeza manual (diferente de `backups-seguranca/`).
 
-## Migrando para outra VM (ex: Google Cloud → Magalu Cloud)
+## Migrando para outra VM (ex: Google Cloud → Locaweb Cloud/Magalu Cloud)
 
 Roteiro pra trocar a VM que hospeda o sistema sem perder dado nenhum — usa o próprio **Backup Geral** (ver seção acima) como ponte entre as duas máquinas, em vez de copiar arquivo por arquivo na mão. `git clone`/`git pull` só traz **código**; os dados de produção (histórico, traços, avaliações, manutenção, config, usuários) vivem fora do controle de versão (`.gitignore`: `data/`, `private/`, `public/db/security.json` etc. — ver *Estrutura de pastas*) e por isso não vêm junto de um clone.
 
-**1. Provisionar a VM nova (Magalu Cloud)**
-- Console → Virtual Machine → Criar instância. Imagem **Ubuntu 24.04 LTS**, tipo de instância conforme a carga (a mesma configuração de vCPU/RAM da VM antiga no Google Cloud é um bom ponto de partida). Acesso Linux é só por **chave SSH** (sem senha) — cadastre sua chave pública na criação.
-- Marque **"Atribuir IPv4 público"** (necessário pra acessar o sistema de fora e pro Let's Encrypt emitir o certificado HTTPS).
-- Por padrão a Magalu Cloud **bloqueia todo tráfego de entrada** — configure o **Security Group** da instância liberando pelo menos: `22/tcp` (SSH, idealmente restrito ao seu IP), `80/tcp` e `443/tcp` (`0.0.0.0/0`, necessários pro `instalar-https.sh` — ver seção *HTTPS via Caddy + nip.io*, acima). A porta do Node (`5000`) **não** precisa ficar exposta publicamente — o Caddy é quem fica na frente, fazendo proxy pra `localhost:5000`.
+**1. Provisionar a VM nova**
+- Imagem **Ubuntu 24.04 LTS** (ou mais recente disponível), tipo de instância conforme a carga (a mesma configuração de vCPU/RAM da VM antiga é um bom ponto de partida). Acesso Linux é só por **chave SSH** (sem senha) — cadastre sua chave pública na criação.
+- Marque a opção de **IP público** (necessário pra acessar o sistema de fora e pro Let's Encrypt emitir o certificado HTTPS).
+- Libere as portas 22 (SSH), 80 e 443 — o procedimento muda por provedor:
+  - **Locaweb Cloud**: painel → Rede → sua VM → aloque um **IP Público** e configure **Port Forwarding** (não "NAT Estático") pras portas 22, 80 e 443 apontando pra VM. A Locaweb Cloud é construída sobre Apache CloudStack: o IP público fica separado da VM, você decide o que encaminhar pra ela — "NAT Estático" libera a VM inteira (todas as portas), evite pra não expor mais do que o necessário.
+  - **Magalu Cloud**: Console → Virtual Machine → sua instância → Segurança/Security Group → adicionar regra de entrada (ingress) TCP 22/80/443, origem `0.0.0.0/0` (ou seu IP, pra 22). Por padrão a Magalu Cloud bloqueia todo tráfego de entrada.
+- A porta do Node (`5000`) **não** precisa ficar exposta publicamente em nenhum dos dois — o Caddy é quem fica na frente, fazendo proxy pra `localhost:5000`.
 
 **2. Instalar Node e trazer o código**
 ```bash
@@ -642,10 +646,10 @@ Alternativa mais simples (sem systemd): `npm start` dentro de um `tmux`/`screen`
 ```bash
 sudo bash deploy/instalar-https.sh
 ```
-Detecta o IP público da VM automaticamente (ver *HTTPS via Caddy + nip.io*, acima — já atualizado pra reconhecer tanto Magalu Cloud quanto Google Cloud).
+Detecta o IP público da VM automaticamente (ver *HTTPS via Caddy + nip.io*, acima — já atualizado pra reconhecer Magalu Cloud, Google Cloud, e um fallback genérico que cobre a Locaweb Cloud e qualquer outro provedor).
 
 **5. Migrar os dados (na VM ANTIGA → depois na NOVA)**
-1. Na VM antiga (Google Cloud), ainda no ar: **Configurações → Backup e Restauração → Backup Geral** — baixa um `.zip` com produção + config + usuários/senhas (hash).
+1. Na VM antiga, ainda no ar: **Configurações → Backup e Restauração → Backup Geral** — baixa um `.zip` com produção + config + usuários/senhas (hash).
 2. Acesse o sistema já rodando na VM nova (ainda com dados "de fábrica", vazios) e faça login com a senha padrão/inicial.
 3. **Configurações → Backup e Restauração → Restaurar Geral** → escolha o `.zip` baixado no passo 1 → confirme com a frase `RESTAURAR TUDO`.
 4. Confira uma tela com dado real (ex: Relatório de Injeção) pra confirmar que a restauração trouxe tudo.

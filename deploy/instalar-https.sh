@@ -65,8 +65,11 @@ fi
 
 # 3) Fallback genérico — funciona em QUALQUER provedor (a própria VM
 # pergunta "qual IP o mundo vê quando eu saio pra internet"), útil pra
-# VPS/provedores sem serviço de metadata (Oracle Cloud, servidor próprio,
-# etc.) — mas exige saída de rede liberada pro serviço externo.
+# VPS/provedores sem serviço de metadata local. É o caso da Locaweb
+# Cloud (construída sobre Apache CloudStack: o IP público fica separado
+# da VM via Port Forwarding/NAT, não dá pra "perguntar pra própria VM"
+# qual é) — e também de qualquer outro provedor (Oracle Cloud, servidor
+# próprio, etc.) — mas exige saída de rede liberada pro serviço externo.
 if [ -z "$IP_EXTERNO" ]; then
   IP_EXTERNO="$(curl -s -m 3 'https://ifconfig.me' || true)"
 fi
@@ -111,6 +114,9 @@ systemctl reload caddy || systemctl restart caddy
 echo
 echo "✅ Pronto. Confira:"
 echo "   1. As portas 80 e 443 precisam estar liberadas na VM:"
+echo "      - Locaweb Cloud: painel → Rede → sua VM → Port Forwarding (não"
+echo "        'NAT Estático') → adicione regras pras portas 80 e 443 apontando"
+echo "        pra esta VM."
 echo "      - Magalu Cloud: Console → Virtual Machine → sua instância →"
 echo "        Segurança/Security Group → adicionar regra de entrada (ingress)"
 echo "        TCP 80 e 443, origem 0.0.0.0/0."
