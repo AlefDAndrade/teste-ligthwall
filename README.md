@@ -585,7 +585,7 @@ Isso foi reforçado com um **cookie `HttpOnly`** (`lw_device_id`, ver `lib/dispo
 
 Isso fecha o ponto (2) (não dá mais pra forjar via DevTools), mas não sozinho o ponto (1): limpar cookies também apaga o `lw_device_id`. Pra reduzir esse atrito sem reautorização manual, cada dispositivo autorizado também guarda o **IP** de quando foi autorizado (`ip`, em `config.json`); se um request chegar com um `deviceId` desconhecido mas do **mesmo IP** de um dispositivo já autorizado antes, o servidor religa automaticamente o cadastro ao novo `deviceId` (`religadoEm` fica registrado, pra auditoria) — cobre o caso comum de rede interna com IP fixo por máquina (chão de fábrica). Não é uma trava adicional, só um atalho de reconhecimento; um IP nunca visto antes continua exigindo autorização manual normalmente.
 
-**Ideia futura, ainda não implementada**: reduzir ainda mais o atrito de religar após limpar cookies **sem** IP conhecido continua em aberto — a seguir, veja "Certificado de Dispositivo (mTLS)" pra como o ponto (1) foi resolvido de vez, sem depender de IP nem de o Administrador reautorizar manualmente.
+**Resolvido de vez** pelo Certificado de Dispositivo (mTLS), a seguir — sobrevive inclusive a limpar todos os dados do navegador, sem depender de IP nem de o Administrador reautorizar manualmente. Ativar (`deploy/ativar-mtls-caddy.sh`) é opcional — sem ativar, cookie + IP continuam sendo a única checagem, exatamente como hoje.
 
 ### Certificado de Dispositivo (mTLS)
 
@@ -604,6 +604,8 @@ Uma terceira via de reconhecimento, em paralelo às duas acima (nunca substitui,
 **Revogar**: mesma UX de "Remover" que `dispositivosAutorizados` já tinha — botão "✕ Revogar" na lista de certificados emitidos. Sem infraestrutura de CRL/OCSP: o certificado continua tecnicamente válido/instalado na máquina, só para de autorizar a partir do momento em que sai da lista.
 
 **Custo**: só vale a pena ativar (`ativar-mtls-caddy.sh`) se o atrito de reautorizar depois de limpar dados do navegador for um problema real — sem ativar, gerar certificados não muda nada no comportamento atual (cookie + IP continuam sendo a única checagem).
+
+Cobertura de testes em `test/certificados-dispositivo-mtls.test.js` (emissão/listagem/revogação, e o ponto central: um request com o header `X-Client-Cert-Serial` autoriza o dispositivo sozinho, sem deviceId nem IP conhecido — o handshake TLS em si, feito pelo Caddy, não é testável aqui).
 
 ## Backup e Restauração (Administrador)
 
