@@ -2717,14 +2717,17 @@ function baixarArquivoTexto(nomeArquivo, conteudo, mimeType = 'text/html') {
  *   mecanismo, baseado no histórico do servidor (`_iniciarTickerImpressao`,
  *   exportar-pdf.js). Nas fases 'carregando'/'ajustando', `feito`/`total`
  *   sempre foram (e continuam sendo) contagem real — `progressoReal` não
- *   se aplica a elas.
+ *   se aplica a elas. `landscape` (padrão `false`, retrato) pede o PDF em
+ *   paisagem — ver `job.landscape`, lib/rotas/exportar-pdf.js (usado hoje
+ *   pelo One Page Report, que precisa da folha mais larga pra caber tudo
+ *   numa página só).
  * @returns {Promise<void>}
  */
-async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgresso } = {}) {
+async function baixarPdfApartirDeHtml(nomeArquivoPdf, html, { signal, onProgresso, landscape } = {}) {
   const respostaInicio = await fetch('/exportar-pdf/iniciar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ html, filename: nomeArquivoPdf }),
+    body: JSON.stringify({ html, filename: nomeArquivoPdf, landscape: landscape === true }),
     signal,
   });
 

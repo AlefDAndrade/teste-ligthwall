@@ -13,7 +13,8 @@
 
         <div class="opr-toolbar opr-no-print">
           <button class="btn btn-ghost btn-sm" onclick="showPage('menu')" title="Voltar ao Menu Principal">← Voltar</button>
-          <button class="btn btn-ghost btn-sm" onclick="LWOnePageReport.imprimir()" title="Imprimir ou exportar como PDF">🖨️ Imprimir / PDF</button>
+          <button class="btn btn-ghost btn-sm" onclick="LWOnePageReport.imprimir()" title="Imprimir (diálogo do navegador)">🖨️ Imprimir</button>
+          <button class="btn btn-outline-accent btn-sm" id="opr-btn-exportar-pdf" onclick="LWOnePageReport.exportarPDF()" title="Gera um PDF de verdade no servidor — tudo numa página só, A4 paisagem">📕 Exportar PDF</button>
 
           <select id="opr-periodo-tipo" class="form-input opr-periodo-tipo" onchange="LWOnePageReport.mudarTipoPeriodo(this.value)">
             <option value="mes">Mês</option>
@@ -33,6 +34,7 @@
             <input type="date" id="opr-range-fim" class="form-input opr-range-input" onchange="LWOnePageReport.mudarRange()">
           </div>
 
+          <span class="opr-toolbar-info" id="opr-pdf-status"></span>
           <span class="opr-toolbar-info">Referência: <strong id="opr-mes-atual">—</strong></span>
         </div>
 

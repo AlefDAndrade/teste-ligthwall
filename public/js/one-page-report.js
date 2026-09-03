@@ -621,6 +621,217 @@
     window.print();
   }
 
+  // ── Exportar PDF via Chromium (lib/rotas/exportar-pdf.js) ──────────────
+  // Diferente de imprimir() (window.print(), diálogo do navegador — cada
+  // navegador pagina/escala diferente, sem garantia nenhuma de "1 página
+  // só"), este botão manda o HTML já renderizado da folha pro SERVIDOR,
+  // que usa um Chromium headless de verdade pra "imprimir" em PDF — mesmo
+  // mecanismo já usado por Análise Focada/Análise de Berços/Análise
+  // Operacional/OEE (ver LW.baixarPdfApartirDeHtml, public/js/data.js).
+  // A4 PAISAGEM (`landscape:true`) + um ajuste de escala via JS (mesma
+  // técnica de _afScriptAjustePaginaUnica, analise-focada.js) garantem
+  // "tudo numa página só", nem que precise encolher o conteúdo pra caber
+  // — nunca corta nada, nunca pagina em 2+ folhas.
+
+  // A4 paisagem = 297x210mm; -5mm de cada lado (mesma margem configurada
+  // em opcoesImpressao, lib/rotas/exportar-pdf.js) = área útil abaixo.
+  // Acoplamento proposital com aquele valor — se a margem mudar lá,
+  // precisa mudar aqui também (mesmo acoplamento implícito que
+  // _AF_PDF_ALTURA_PAGINA_MM já tem com a margem usada por Análise Focada).
+  const OPR_PDF_LARGURA_MM = 287;
+  const OPR_PDF_ALTURA_MM = 200;
+
+  /** CSS extra só do export em PDF — nunca entra na tela ao vivo. Aplicado
+   * SEM @media print (a página roda com emulateMediaType('screen') no
+   * Chromium — ver comentário em lib/rotas/exportar-pdf.js sobre por quê),
+   * então as regras valem incondicionalmente aqui dentro do HTML
+   * standalone. */
+  function _oprCssExportPdf() {
+    return `
+  html, body { margin:0; padding:0; background:#fff; }
+  /* Nunca depender da largura de viewport padrão do Chromium headless
+     (800px — nenhum setViewport explícito em lib/rotas/exportar-pdf.js)
+     pras 2 media queries responsivas de .opr-grid (one-page-report.css):
+     sem isto a grade sairia em 2 colunas (800px < 1180px) em vez das 4
+     que o layout foi desenhado pra ter numa folha A4 paisagem. */
+  .opr-grid { grid-template-columns: repeat(4, 1fr) !important; }
+  .opr-sheet { box-shadow:none !important; padding:0 !important; margin:0 !important; }
+  #opr-pdf-pagina {
+    width: ${OPR_PDF_LARGURA_MM}mm;
+    height: ${OPR_PDF_ALTURA_MM}mm;
+    overflow: hidden;
+    position: relative;
+  }
+  /* transform-origin:top left — encolhe a partir do canto superior
+     esquerdo (padrão do navegador é o CENTRO), senão sobra uma faixa
+     vazia acima do conteúdo em vez de ficar coladinho no topo da página
+     — mesmo raciocínio de .af-op-conteudo-escala, analise-focada.js. */
+  #opr-pdf-conteudo { transform-origin: top left; }
+  `;
+  }
+
+  // `window.__afAjustePaginaConcluido` — MESMO sinalizador que
+  // lib/rotas/exportar-pdf.js já sabe esperar (`page.waitForFunction`,
+  // ver _processarJob) antes de mandar imprimir — reaproveitado de
+  // propósito (em vez de inventar um nome próprio) pra não precisar
+  // mexer no backend genérico só por causa desta tela.
+  function _oprScriptFlagInicial() {
+    return `<script>window.__afAjustePaginaConcluido = false;</script>`;
+  }
+
+  /** Mesma técnica de ajustarParaCaberNumaPagina (_afScriptAjustePaginaUnica,
+   * analise-focada.js): mede a altura real já renderizada, e se não coube
+   * na altura disponível, encolhe via transform:scale() — recalculando a
+   * escala do zero a cada passada (nunca compondo em cima da anterior,
+   * senão o encolhimento cresce exponencialmente) até convergir ou até
+   * MAX_PASSADAS. FATOR_SEGURANCA dá uma folga pra arredondamento de
+   * fonte/subpixel do motor de paginação do Chromium não cortar a última
+   * linha por uma fração de pixel. */
+  function _oprScriptAjustePaginaUnica() {
+    return `<script>
+(function () {
+  var FATOR_SEGURANCA = 0.97;
+  var MAX_PASSADAS = 6;
+
+  function ajustar() {
+    var pagina = document.getElementById('opr-pdf-pagina');
+    var conteudo = document.getElementById('opr-pdf-conteudo');
+    if (!pagina || !conteudo) return;
+    conteudo.style.transform = 'none';
+    conteudo.style.width = '100%';
+
+    var disponivel = pagina.clientHeight * FATOR_SEGURANCA;
+    if (disponivel <= 0) return;
+
+    for (var passada = 0; passada < MAX_PASSADAS; passada++) {
+      var alturaAtual = conteudo.scrollHeight;
+      if (alturaAtual <= disponivel) return; // convergiu (com folga) — não mexe mais em nada
+      var escala = disponivel / alturaAtual; // recalcula do zero, não compõe com a passada anterior
+      conteudo.style.width = (100 / escala) + '%';
+      conteudo.style.transform = 'scale(' + escala + ')';
+    }
+  }
+
+  window.addEventListener('load', function () {
+    try { ajustar(); } catch (e) { /* nunca trava a exportação por causa disto */ }
+    window.__afAjustePaginaConcluido = true; // libera o Puppeteer pra imprimir
+  });
+})();
+</script>`;
+  }
+
+  /** Tira do clone qualquer coisa de EDIÇÃO (textarea/inputs/botões de
+   * Assuntos Gerais) — o PDF é sempre um retrato só-leitura, mesmo que
+   * quem exportou seja Administrador e esteja com a tela em modo edição
+   * no momento (ver podeEditar, _agRenderDOM) — trocado pelas mesmas
+   * divs de exibição usadas por quem NÃO pode editar. */
+  function _oprLimparCloneParaExport(clone) {
+    clone.querySelectorAll('.opr-ag-toolbar, .opr-ag-add, .opr-ag-foto-remover').forEach(el => el.remove());
+    clone.querySelectorAll('.opr-ag-foto-tema-input').forEach(input => {
+      const div = document.createElement('div');
+      div.className = 'opr-ag-foto-tema';
+      div.textContent = input.value || '';
+      input.replaceWith(div);
+    });
+    const textarea = clone.querySelector('.opr-footer-textarea');
+    if (textarea) {
+      const div = document.createElement('div');
+      div.className = 'opr-footer-texto-leitura';
+      div.textContent = textarea.value || '';
+      textarea.replaceWith(div);
+    }
+    return clone;
+  }
+
+  /** Monta o HTML autossuficiente (dados + CSS embutidos) pra mandar pro
+   * endpoint de exportação — CSS BUSCADO dos próprios arquivos servidos
+   * pelo app (styles.css tem as variáveis globais --radius/--font-display/
+   * etc. que one-page-report.css usa; one-page-report.css tem as regras
+   * .opr-*) em vez de duplicado à mão aqui: uma única fonte de verdade,
+   * sem risco de os dois ficarem dessincronizados com o tempo. */
+  async function _gerarHtmlOprStandalone() {
+    const sheetEl = document.querySelector('#page-one-page-report .opr-sheet');
+    if (!sheetEl) throw new Error('Não encontrei o relatório renderizado pra exportar.');
+
+    const clone = sheetEl.cloneNode(true);
+    _oprLimparCloneParaExport(clone);
+
+    let cssBase = '', cssTela = '';
+    try {
+      const [rBase, rTela] = await Promise.all([fetch('/css/styles.css'), fetch('/css/one-page-report.css')]);
+      if (rBase.ok) cssBase = await rBase.text();
+      if (rTela.ok) cssTela = await rTela.text();
+    } catch (_) { /* segue sem CSS embutido — melhor um PDF malformatado do que travar a exportação */ }
+
+    const referenciaEl = document.getElementById('opr-mes-atual');
+    const referencia = (referenciaEl && referenciaEl.textContent) || '';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>${_escaparHtml(`One Page Report — ${referencia}`)}</title>
+<style>
+${cssBase}
+${cssTela}
+${_oprCssExportPdf()}
+</style>
+${_oprScriptFlagInicial()}
+</head>
+<body class="opr-page-wrap">
+  <div id="opr-pdf-pagina">
+    <div id="opr-pdf-conteudo">
+      ${clone.outerHTML}
+    </div>
+  </div>
+${_oprScriptAjustePaginaUnica()}
+</body>
+</html>`;
+  }
+
+  /** Nome de arquivo sanitizado a partir do período atual — sem depender
+   * de `_dadosAtuais.mes` sozinho (fica `null` nos modos "todos"/"range",
+   * ver lib/rotas/one-page-report.js), pra sempre sair um nome com
+   * sentido nos 3 modos. */
+  function _oprNomeArquivoPdf() {
+    if (_periodo.tipo === 'todos') return 'one-page-report-todos-os-periodos.pdf';
+    if (_periodo.tipo === 'range') return `one-page-report-${_periodo.inicio}_a_${_periodo.fim}.pdf`;
+    return `one-page-report-${_periodo.mes || 'mes-atual'}.pdf`;
+  }
+
+  const _OPR_TEXTO_BOTAO_PDF = '📕 Exportar PDF';
+  let _pdfExportando = false;
+
+  async function exportarPDF() {
+    if (_pdfExportando) return;
+    _pdfExportando = true;
+
+    const botao = document.getElementById('opr-btn-exportar-pdf');
+    const status = document.getElementById('opr-pdf-status');
+    if (botao) { botao.disabled = true; botao.textContent = 'Gerando…'; }
+    if (status) { status.textContent = ''; status.className = 'opr-toolbar-info'; }
+
+    try {
+      const html = await _gerarHtmlOprStandalone();
+      await LW.baixarPdfApartirDeHtml(_oprNomeArquivoPdf(), html, {
+        landscape: true,
+        onProgresso: (fase) => {
+          if (!botao) return;
+          if (fase === 'carregando') botao.textContent = 'Carregando…';
+          else if (fase === 'ajustando') botao.textContent = 'Ajustando…';
+          else if (fase === 'imprimindo') botao.textContent = 'Imprimindo…';
+          else if (fase === 'reconectando') botao.textContent = 'Reconectando…';
+        },
+      });
+      if (status) { status.textContent = 'PDF baixado ✓'; status.className = 'opr-toolbar-info opr-pdf-status-ok'; }
+    } catch (e) {
+      if (status) { status.textContent = e.message || 'Falha ao gerar o PDF.'; status.className = 'opr-toolbar-info opr-pdf-status-erro'; }
+    } finally {
+      _pdfExportando = false;
+      if (botao) { botao.disabled = false; botao.textContent = _OPR_TEXTO_BOTAO_PDF; }
+    }
+  }
+
   let _init = false;
   function init() {
     if (_init) { render(); return; }
@@ -629,7 +840,7 @@
   }
 
   window.LWOnePageReport = {
-    init, render, imprimir,
+    init, render, imprimir, exportarPDF,
     mudarMes, mudarMesRelativo, mudarTipoPeriodo, mudarRange,
     // Assuntos Gerais — chamados via onclick/oninput inline no HTML
     // gerado por _agRenderDOM (mesmo padrão de onclick="showPage(...)"/

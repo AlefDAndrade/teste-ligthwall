@@ -86,6 +86,9 @@
   display: none !important;
 }
 
+.opr-pdf-status-ok { color: #7fd99a; }
+.opr-pdf-status-erro { color: #ff9c9c; }
+
 .opr-aviso-fase {
   display: flex;
   align-items: center;
