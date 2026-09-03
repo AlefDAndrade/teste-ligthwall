@@ -8,14 +8,22 @@
 // deliberada de deixar pra depois, exatamente pra não vazar sem querer
 // pra dentro de um dashboard já existente (CEP do Setor de Qualidade,
 // Análise Focada). Agora que é uma tela NOVA e dedicada, o próprio pedido
-// original ("não deve entrar em dashboard") continua satisfeito: aqui é
-// só leitura do histórico, sem nenhum cálculo de CEP/OEE/Taxa de Acerto
-// em cima desses dados.
+// original ("não deve entrar em dashboard") continua satisfeito: aqui não
+// tem nenhum cálculo de CEP/OEE/Taxa de Acerto em cima desses dados.
 //
-// Só LEITURA de propósito — não existe editar/excluir aqui (diferente de
-// paradas.js): um traço descartado nasce e morre no ato do registro (ver
-// lib/rotas/tracos-descartados.js, "este domínio só tem CRIAÇÃO"), então
-// não faz sentido nenhum botão de ação na tabela.
+// Editar/excluir (README, item 8a das pendências) — reverte a decisão
+// original de "só tem criação" (ver comentário antigo removido daqui):
+// na prática, corrigir um valor digitado errado ou apagar um descarte
+// lançado por engano é um caso real que apareceu depois — mesmo padrão
+// de CRUD já usado por paradas.js (editar/excluir com o mesmo id).
+
+// Editar/excluir (README, item 8a das pendências) — mesma área de
+// permissão do registro ('injetora', ver lib/rotas/tracos-descartados.js);
+// botões só aparecem pra quem tem essa área liberada (_perfilPodeEditar,
+// app-core.js — mesmo padrão já usado em paradas.js/setor-qualidade.js/
+// manutencao.js), mas o servidor sempre confere de novo em
+// /editar-traco-descartado e /excluir-traco-descartado — isto aqui é só
+// a parte visual.
 
 'use strict';
 
@@ -117,9 +125,15 @@
     const lista = tracosFiltrados();
 
     if (!lista.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-3)">Nenhum traço descartado no período/filtro selecionado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-3)">Nenhum traço descartado no período/filtro selecionado.</td></tr>';
       return;
     }
+
+    // Mesmo padrão de paradas.js/setor-qualidade.js/manutencao.js: botões
+    // só aparecem pra quem tem a área 'injetora' de edição liberada — o
+    // servidor confere de novo em /editar-traco-descartado e
+    // /excluir-traco-descartado, isto aqui é só a parte visual.
+    const podeEditar = typeof _perfilPodeEditar === 'function' ? _perfilPodeEditar('injetora') : true;
 
     tbody.innerHTML = lista.map(t => `
       <tr>
@@ -133,6 +147,12 @@
         <td style="padding:10px 14px;white-space:nowrap;color:var(--text-2)">
           ${LW.escaparHtml(t.operador_nome || '—')}<br>
           <span style="font-size:.72rem;color:var(--text-3)">${formatarDataHora(t.registrado_em)}</span>
+        </td>
+        <td style="padding:10px 14px;text-align:right;white-space:nowrap">
+          ${podeEditar ? `
+            <button class="btn btn-ghost btn-sm" title="Editar" onclick="LWTracosDescartados.abrirEdicao('${t.id}')">✏</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)" title="Excluir" onclick="LWTracosDescartados.confirmarExclusao('${t.id}')">✕</button>
+          ` : ''}
         </td>
       </tr>
     `).join('');
@@ -155,6 +175,115 @@
     renderizarKPIs();
   }
 
+  // ── Edição/Exclusão (README, item 8a) ────────────────────────────────────
+
+  async function persistirEdicaoTracoDescartado(payload) {
+    const r = await fetch('/editar-traco-descartado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.erro || 'Erro ao editar traço descartado.');
+    return data;
+  }
+
+  async function excluirTracoDescartadoServidor(id) {
+    const r = await fetch('/excluir-traco-descartado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.erro || 'Erro ao excluir traço descartado.');
+    return data;
+  }
+
+  function abrirEdicao(id) {
+    const traco = _tracosDescartados.find(t => t.id === id);
+    if (!traco) return;
+    document.getElementById('tde-id').value            = traco.id;
+    document.getElementById('tde-data').value           = traco.data || '';
+    document.getElementById('tde-turno').value          = traco.turno || '';
+    document.getElementById('tde-cimento').value        = traco.cimento ?? '';
+    document.getElementById('tde-agua').value           = traco.agua ?? '';
+    document.getElementById('tde-eps').value            = traco.eps ?? '';
+    document.getElementById('tde-superplast').value     = traco.superplast ?? '';
+    document.getElementById('tde-incorporador').value   = traco.incorporador ?? '';
+    document.getElementById('tde-tempo-batida').value   = traco.tempo_batida ?? '';
+    document.getElementById('tde-motivo').value         = traco.motivo || '';
+    const erroEl = document.getElementById('tde-erro');
+    erroEl.style.display = 'none';
+    erroEl.textContent = '';
+    document.getElementById('editar-traco-descartado-modal').style.display = 'flex';
+  }
+
+  function fecharModalEdicao() {
+    document.getElementById('editar-traco-descartado-modal').style.display = 'none';
+  }
+
+  async function salvarEdicao() {
+    const erroEl = document.getElementById('tde-erro');
+    erroEl.style.display = 'none';
+    erroEl.textContent = '';
+
+    const motivo = document.getElementById('tde-motivo').value.trim();
+    if (!motivo) {
+      erroEl.textContent = 'Motivo é obrigatório.';
+      erroEl.style.display = 'block';
+      return;
+    }
+
+    const numOuNull = (id) => {
+      const v = document.getElementById(id).value;
+      return v === '' ? null : Number(v);
+    };
+
+    const payload = {
+      id: document.getElementById('tde-id').value,
+      data: document.getElementById('tde-data').value || null,
+      turno: document.getElementById('tde-turno').value.trim() || null,
+      cimento: numOuNull('tde-cimento'),
+      agua: numOuNull('tde-agua'),
+      eps: numOuNull('tde-eps'),
+      superplast: numOuNull('tde-superplast'),
+      incorporador: numOuNull('tde-incorporador'),
+      tempo_batida: numOuNull('tde-tempo-batida'),
+      motivo,
+    };
+
+    const btn = document.getElementById('tde-btn-salvar');
+    btn.disabled = true;
+    btn.textContent = 'Salvando…';
+    try {
+      await persistirEdicaoTracoDescartado(payload);
+      fecharModalEdicao();
+      await render();
+      LW.mostrarAlerta('Traço descartado atualizado com sucesso.', { tipo: 'sucesso' });
+    } catch (e) {
+      erroEl.textContent = e.message;
+      erroEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '💾 Salvar';
+    }
+  }
+
+  async function confirmarExclusao(id) {
+    const confirmou = await LW.mostrarConfirmacao(
+      'Excluir este traço descartado? Essa ação não pode ser desfeita.',
+      { tipo: 'perigo', textoConfirmar: 'Excluir' }
+    );
+    if (!confirmou) return;
+    try {
+      await excluirTracoDescartadoServidor(id);
+      await render();
+      LW.mostrarAlerta('Traço descartado excluído.', { tipo: 'sucesso' });
+    } catch (e) {
+      LW.mostrarAlerta(e.message || 'Erro ao excluir traço descartado.', { tipo: 'erro' });
+    }
+  }
+
   // ── API pública ─────────────────────────────────────────────────────────
 
   window.LWTracosDescartados = {
@@ -162,6 +291,10 @@
     render,
     aplicarFiltros,
     limparFiltros,
+    abrirEdicao,
+    fecharModalEdicao,
+    salvarEdicao,
+    confirmarExclusao,
   };
 
 })();

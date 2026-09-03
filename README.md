@@ -496,7 +496,6 @@ Estava listada como "fora de escopo" na versão original deste plano — decisã
 
 ### 5. Fora de escopo (o que ainda fica pra depois)
 
-- Editar ou excluir um traço descartado já registrado (por design: é um registro que só existe pra criação, ver `lib/rotas/tracos-descartados.js`).
 - Exportação (CSV/PDF) do histórico de descartes.
 - Qualquer tentativa de vincular um traço descartado a um "motivo padronizado" ou transformá-lo em indicador de qualidade automático (ver item 6, abaixo, sobre a decisão de motivo em texto livre).
 
@@ -505,7 +504,11 @@ Estava listada como "fora de escopo" na versão original deste plano — decisã
 - **Onde registrar**: atalho na tela atual de Registro de Traço, que abre um formulário dedicado simples (não uma tela cheia nova, nem só embutido inline na tela atual).
 - **Formato do motivo**: texto livre (não lista padronizada) — decisão tomada para não travar o operador numa lista fixa nesta primeira versão; pode virar lista padronizada depois, se o texto livre gerado no uso real mostrar poucos padrões repetidos que valham a pena fechar em opções.
 
-**Status**: passos 1 (estrutura de dados), 2 (backend), 3 (frontend de registro) e 4 (tela de histórico) concluídos. Passo 3: link discreto "⚠️ Descartar este traço" no card de cada traço (`public/js/operacao.js`, próximo à seção "Receita Real Pesada"), abrindo um modal dedicado com Data/Turno preenchidos automaticamente e os insumos já pesados pré-carregados; motivo em texto livre obrigatório; ao salvar, chama `LW.registrarTracoDescartado` (`public/js/data.js`) e remove o traço da lista de pendentes da operação atual (sem virar linha "pendente" nem exigir berço). Indisponível em Modo de Teste — a rota grava direto na tabela real, sem a distinção real/teste que outras rotas de registro têm; o link fica visualmente desabilitado nesse modo, com tooltip explicando o motivo. Passo 4: tela "Traços Descartados" (menu + tabbar), só leitura, com KPIs de insumo perdido e filtro por data/busca — ver item 4, acima. Cobertura de testes em `test/tracos-descartados-crud.test.js` (backend) e `test/operacao-descarte-traco.test.js` (UI, jsdom).
+**Status**: passos 1 (estrutura de dados), 2 (backend), 3 (frontend de registro) e 4 (tela de histórico) concluídos. Passo 3: link discreto "⚠️ Descartar este traço" no card de cada traço (`public/js/operacao.js`, próximo à seção "Receita Real Pesada"), abrindo um modal dedicado com Data/Turno preenchidos automaticamente e os insumos já pesados pré-carregados; motivo em texto livre obrigatório; ao salvar, chama `LW.registrarTracoDescartado` (`public/js/data.js`) e remove o traço da lista de pendentes da operação atual (sem virar linha "pendente" nem exigir berço). Indisponível em Modo de Teste — a rota grava direto na tabela real, sem a distinção real/teste que outras rotas de registro têm; o link fica visualmente desabilitado nesse modo, com tooltip explicando o motivo. Passo 4: tela "Traços Descartados" (menu + tabbar), com KPIs de insumo perdido e filtro por data/busca — ver item 4, acima.
+
+**Editar/excluir** (revisão desta decisão original — corrigir um valor digitado errado ou apagar um descarte lançado por engano é um caso real que apareceu depois): `POST /editar-traco-descartado` e `POST /excluir-traco-descartado` (`lib/rotas/tracos-descartados.js`, `lib/db/tracos-descartados.js`), mesma área de permissão do registro (`injetora`). `id`/`registrado_em` nunca mudam numa edição — só os campos de dado (insumos/motivo/turno/data/operador). Botões ✏/✕ na tabela do histórico, só pra quem tem a área liberada (`_perfilPodeEditar`, mesmo padrão de `paradas.js`).
+
+Cobertura de testes em `test/tracos-descartados-crud.test.js` (backend, criação + edição + exclusão) e `test/operacao-descarte-traco.test.js` (UI de registro, jsdom).
 
 ## Configuração (Administrador)
 
@@ -973,7 +976,7 @@ A Fase 3 deixou 2 das 3 sub-fases da barra (`carregando`, `ajustando`) com progr
 
 **Ordem de aplicação**: 5.1 → 5.2+5.3 juntos (a chamada em N partes só faz sentido já mesclando o resultado, senão o PDF final fica quebrado em pedaços soltos) → 5.4 (limpeza, só depois de confirmar que 5.2/5.3 funcionam de ponta a ponta) → 5.5 (client-side, só depois do servidor já mandar o formato novo) → 5.6 (refinamento em cima do loop já funcionando). 5.2/5.3 são o núcleo arriscado — validar manualmente com uma "Personalizada" de várias operações (múltiplas páginas, testa o merge e a ordem) E uma "Simples" (1 página só, garante que o caminho de N=1 não regride o comportamento de hoje) antes de considerar a fase concluída.
 
-**Status:** 5.1, 5.2, 5.3, 5.4 e 5.5 concluídas e aplicadas — falta só a 5.6 (refinamento do cancelamento entre páginas; já parcialmente coberto desde a 5.2 pela checagem de `job.status` dentro do loop, mas ainda não formalizado como passo próprio).
+**Status:** 5.1, 5.2, 5.3, 5.4, 5.5 e 5.6 concluídas e aplicadas — plano completo. A checagem de `job.status` entre um bloco e outro do loop de impressão (5.6) já existia desde a 5.2; formalizada como passo próprio, coberta por `test/exportar-pdf-cancelamento-entre-paginas.test.js`.
 
 ## Registro de Operação Offline (PWA) — plano
 
@@ -1086,7 +1089,7 @@ Cenário diferente do resto deste plano (ver *Fora de escopo*, no topo): a pesso
 
 Reaproveita 100% da UI (`_mostrarAvisoConexao`) e da lógica de fila (`enfileirarOperacaoPendente`/`tentarSincronizarFilaPendentes`) que já existem — este item é só sobre **quando** o aviso aparece (ao vivo, assim que a rede cai) em vez de só no momento de registrar.
 
-**Status:** plano ainda não implementado — nenhuma linha de código deste item existe hoje.
+**Status:** plano implementado e aplicado (`_conexaoLive_marcarCaiu`/`_conexaoLive_marcarVoltou`, `public/js/operacao.js`) — evento `online`/`offline` do navegador + checagem ativa por `fetch` a cada 15s, banner persistente enquanto a queda durar. Coberto por `test/operacao-aviso-conexao-ao-vivo.test.js`.
 
 ### 10. Numeração inicial customizável + marcação de "sobra" (com nota e vínculo na validação) — IMPLEMENTADO
 
