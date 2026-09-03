@@ -41,21 +41,49 @@
           <span class="nav-text">Desempenho Turnos</span>
         </button>
 
-        <!-- Consolidado: cada botão leva pra tabela; o "dashboard" que era um
-             item separado (Análise Operacional / Qualidade dos Traços /
-             Análise de Berços) agora se acessa de DENTRO da própria tabela,
-             pelo botão "Ver em Dashboard" acima dos filtros (ver
-             dashboard-toggle.js) — sidebar ficava com 6 opções pra só 3
-             conceitos (Operação, Traços, Berços). -->
-        <button class="nav-item" title="Operação" data-page="registro" onclick="showPage('registro',this)">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          <span class="nav-text">Operação</span>
-        </button>
+        <!-- Grupo "Operações": junta Relatório de Operação (antes o botão
+             solto "Operação", data-page="registro"), Dashboard de Análise
+             Operacional (antes só acessível de DENTRO do Relatório, pelo
+             botão "Ver em Dashboard" acima dos filtros — ver
+             dashboard-toggle.js) e Rastreabilidade (antes um botão solto,
+             data-page="analise-focada") num hover só — mesmo padrão do
+             grupo "Traços" logo abaixo: 3 destinos, 1 espaço na tabbar.
+             Ver .nav-group/.nav-dropdown, styles.css, e
+             toggleNavGroup()/fechar ao clicar fora, app-core.js.
+
+             data-atalho-page="registro": o botão-gatilho não navega
+             direto (abre o dropdown), então não tem data-page — sem
+             ESSE atributo aqui no próprio .nav-group,
+             _ordenarTabbarPorAtalho() (keyboard-shortcuts.js) não sabe
+             onde encaixar o grupo na ordem por atalho (Alt+1, Alt+2...)
+             e ele "sobra" na primeira posição da tabbar. O valor é
+             "registro" pra manter A MESMA posição de atalho (Alt+2) que
+             o botão "Operação" tinha antes de virar dropdown. -->
+        <div class="nav-group" id="nav-group-operacoes" data-atalho-page="registro">
+          <button class="nav-item nav-group-trigger" type="button" title="Operações" aria-haspopup="true" aria-expanded="false" onclick="toggleNavGroup(this)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            <span class="nav-text">Operações</span>
+            <svg class="nav-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="nav-dropdown" role="menu">
+            <button class="nav-dropdown-item" role="menuitem" data-page="registro" onclick="fecharNavGroups(); showPage('registro',this)">
+              📋 Relatório de Operação
+            </button>
+            <button class="nav-dropdown-item" role="menuitem" data-page="analise-operacional" onclick="fecharNavGroups(); showPage('analise-operacional',this)">
+              📊 Dashboard de Análise Operacional
+            </button>
+            <button class="nav-dropdown-item" role="menuitem" data-page="analise-focada" onclick="fecharNavGroups(); LWFocada.abrirBusca(); showPage('analise-focada',this)">
+              🔍 Rastreabilidade
+            </button>
+          </div>
+        </div>
         <!-- Grupo "Traços": junta Relatório de Injeção, Dashboard de Traço
              (antes só acessível de dentro do Relatório, botão "Ver em
              Dashboard") e Traços Descartados num hover só — 3 destinos,
@@ -133,14 +161,6 @@
             <line x1="3" y1="15" x2="21" y2="15"/>
           </svg>
           <span class="nav-text">Registro de Paradas</span>
-        </button>
-
-        <button class="nav-item" title="Rastreabilidade" data-page="analise-focada" onclick="LWFocada.abrirBusca(); showPage('analise-focada',this)">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <span class="nav-text">Rastreabilidade</span>
         </button>
 
         <span class="tabbar-divider" aria-hidden="true"></span>
