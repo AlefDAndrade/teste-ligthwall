@@ -534,6 +534,13 @@
       if (pageId === 'qualidade-tracos') {
         LWQualidade.render();
       }
+      if (pageId === 'consulta-tracos' && !window._consultaTracosInit) {
+        window._consultaTracosInit = true;
+        LWConsultaTracos.init();
+      }
+      if (pageId === 'consulta-tracos') {
+        LWConsultaTracos.render();
+      }
       if (pageId === 'oee' && !window._oeeInit) {
         window._oeeInit = true;
         LWOee.init();

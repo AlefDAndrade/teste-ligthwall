@@ -7,9 +7,12 @@
       </div>
       <div class="page-body">
 
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">
           <button class="btn btn-ghost btn-sm" onclick="showPage('relatorio')" title="Voltar para a tabela do Relatório de Injeção">
             🧾 Ver Tabela</button>
+          <button class="btn btn-outline-accent btn-sm" onclick="LWConsultaTracos.abrirComPeriodoAtual()"
+            title="Lista os traços do período selecionado, com detalhe de insumos por traço e exportação Excel">
+            🔍 Consultar Insumos por Traço</button>
         </div>
 
         <!-- ── FILTROS (inalterados) ── -->

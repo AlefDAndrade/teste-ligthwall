@@ -255,6 +255,12 @@
             <button class="nav-dropdown-item" role="menuitem" data-page="qualidade-tracos" onclick="fecharNavGroups(); showPage('qualidade-tracos',this)">
               📐 Dashboard de Traço
             </button>
+            <!-- Tela auxiliar do Dashboard de Traço (README, pedido —
+                 "consulta detalhada dos traços produzidos no período"),
+                 ver public/js/consulta-tracos.js. -->
+            <button class="nav-dropdown-item" role="menuitem" data-page="consulta-tracos" onclick="fecharNavGroups(); showPage('consulta-tracos',this)">
+              🔍 Consulta de Insumos por Traço
+            </button>
             <button class="nav-dropdown-item" role="menuitem" data-page="tracos-descartados" onclick="fecharNavGroups(); showPage('tracos-descartados',this)">
               ⚠️ Traços Descartados
             </button>
@@ -1517,9 +1523,12 @@
       </div>
       <div class="page-body">
 
-        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">
           <button class="btn btn-ghost btn-sm" onclick="showPage('relatorio')" title="Voltar para a tabela do Relatório de Injeção">
             🧾 Ver Tabela</button>
+          <button class="btn btn-outline-accent btn-sm" onclick="LWConsultaTracos.abrirComPeriodoAtual()"
+            title="Lista os traços do período selecionado, com detalhe de insumos por traço e exportação Excel">
+            🔍 Consultar Insumos por Traço</button>
         </div>
 
         <!-- ── FILTROS (inalterados) ── -->
@@ -1801,6 +1810,115 @@
 
       </div>
     </main>
+<!-- ============ PAGE: CONSULTA DE INSUMOS POR TRAÇO ============
+     Tela AUXILIAR do Dashboard de Traço (CEP) — pedido registrado numa
+     conversa: sem alterar o dashboard existente, uma tela à parte pra
+     consultar/exportar o consumo de insumos traço a traço. Reaproveita
+     db/relatorio_injecao.json (mesma fonte do CEP e do Relatório de
+     Injeção) — sem rota nova no backend, é 100% filtro/agregação no
+     cliente (ver public/js/consulta-tracos.js).
+
+     "Ordem no Dia" em vez de "Hora de Produção" — decisão tomada nesta
+     conversa: o sistema não grava (e nunca gravou) o horário de cada
+     traço individualmente, só o horário de início/fim da OPERAÇÃO
+     inteira (a bateria toda). Mostrar um "horário" aqui seria inventar
+     precisão que não existe — a ordem/sequência de produção dentro do
+     dia é o que dá pra afirmar com segurança. -->
+<main class="main" id="page-consulta-tracos">
+  <div class="page-header">
+    <h1 class="page-title">Consulta de <span>Insumos por Traço</span></h1>
+    <p class="page-desc">Tela auxiliar do Dashboard de Traço — lista os traços do período e mostra os insumos consumidos em cada um, individualmente.</p>
+  </div>
+  <div class="page-body">
+
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="showPage('qualidade-tracos')" title="Voltar para o Dashboard de Traço">
+        📐 Ver Dashboard de Traço</button>
+    </div>
+
+    <!-- ── Filtro de período (mesmo padrão visual/preset do CEP —
+         qualidade-tracos.js/calcularPeriodoPreset, data.js — só que sem
+         bateria/turno/tipo de montagem: tela auxiliar mais simples, de
+         propósito, ver README) ── -->
+    <div class="card mb-4" style="padding:16px 20px">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:.75rem">Período</label>
+          <select class="form-input" id="ct-periodo" style="height:36px;font-size:.84rem;padding:6px 10px">
+            <option value="todos">Todos</option>
+            <option value="hoje">Hoje</option>
+            <option value="semana">Essa semana</option>
+            <option value="mes">Esse mês</option>
+            <option value="mes_passado">Mês passado</option>
+            <option value="personalizado">Personalizado</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:.75rem">Data Início</label>
+          <input class="form-input" type="date" id="ct-data-inicio" style="height:36px;font-size:.84rem;padding:6px 10px">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label" style="font-size:.75rem">Data Fim</label>
+          <input class="form-input" type="date" id="ct-data-fim" style="height:36px;font-size:.84rem;padding:6px 10px">
+        </div>
+        <button class="btn btn-primary" id="btn-ct-filtrar" style="height:36px" onclick="LWConsultaTracos.render()">Filtrar</button>
+        <button class="btn btn-outline-accent" id="btn-ct-exportar-periodo" style="height:36px" onclick="LWConsultaTracos.exportarPeriodo()"
+          title="Gera 1 linha por traço do período filtrado, com todos os insumos">
+          ⬇ Exportar Período (Excel)</button>
+        <span id="ct-resumo" style="margin-left:auto;font-size:.8rem;color:var(--text-3);align-self:center"></span>
+      </div>
+    </div>
+
+    <!-- ── Lista de traços do período ── -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+          <thead>
+            <tr style="background:var(--bg-2)">
+              <th style="text-align:left;padding:10px 14px;font-family:var(--font-display);font-size:.72rem;letter-spacing:.06em;color:var(--text-3)">DATA</th>
+              <th style="text-align:center;padding:10px 14px;font-family:var(--font-display);font-size:.72rem;letter-spacing:.06em;color:var(--text-3)" title="Sequência de produção dentro do dia — o sistema não registra o horário exato de cada traço, só a ordem em que foram produzidos">ORDEM NO DIA</th>
+              <th style="text-align:left;padding:10px 14px;font-family:var(--font-display);font-size:.72rem;letter-spacing:.06em;color:var(--text-3)">TURNO</th>
+              <th style="text-align:left;padding:10px 14px;font-family:var(--font-display);font-size:.72rem;letter-spacing:.06em;color:var(--text-3)">Nº DO TRAÇO</th>
+              <th style="text-align:right;padding:10px 14px;font-family:var(--font-display);font-size:.72rem;letter-spacing:.06em;color:var(--text-3)">TOTAL DE INSUMOS</th>
+              <th style="padding:10px 14px"></th>
+            </tr>
+          </thead>
+          <tbody id="ct-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-3)">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Modal: insumos de 1 traço (versão simplificada da Análise
+       Focada — README, pedido original: "não é necessário apresentar
+       em quais berços o traço foi utilizado ou outros dados de
+       movimentação", só os insumos) ── -->
+  <div id="ct-detalhe-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
+    <div
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:460px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <h2 style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);letter-spacing:.05em">🧪 INSUMOS DO TRAÇO</h2>
+        <button onclick="LWConsultaTracos.fecharDetalhe()"
+          style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <p id="ct-detalhe-contexto" style="font-size:.82rem;color:var(--text-3);margin-bottom:18px">—</p>
+
+      <div id="ct-detalhe-insumos"
+        style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px">
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="LWConsultaTracos.fecharDetalhe()">Fechar</button>
+        <button class="btn btn-outline-accent" onclick="LWConsultaTracos.exportarTracoSelecionado()">⬇ Exportar este Traço (Excel)</button>
+      </div>
+    </div>
+  </div>
+</main>
 <!-- ============ PAGE: OEE ============ -->
     <main class="main" id="page-oee">
       <div class="page-header">
@@ -5851,6 +5969,7 @@
 
   <script src="js/analise-operacional.js"></script>
   <script src="js/qualidade-tracos.js"></script>
+  <script src="js/consulta-tracos.js"></script>
   <script src="js/oee.js"></script>
   <script src="js/metas.js"></script>
   <script src="js/relatorio-bercos.js"></script>

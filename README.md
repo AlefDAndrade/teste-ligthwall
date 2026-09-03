@@ -214,9 +214,9 @@ As 5 fases estão feitas — `public/db/` só guarda mais `config.json` e `opera
 
 **Limitação conhecida da instalação**: `better-sqlite3` compila um módulo nativo na instalação (`npm install`) — normalmente automático, mas se o `npm install` falhar por falta de binário pré-compilado pra sua versão exata do Node, o fallback é compilar do código-fonte, o que exige ferramentas de build (`build-essential`/`python3` no Linux) e acesso de rede pra baixar os headers do Node. Em ambientes com rede restrita, isso pode falhar — use `npm install` (nunca `npm ci`) na primeira vez depois de puxar essa mudança, já que o `package-lock.json` ainda não tem a entrada de `better-sqlite3` resolvida de verdade.
 
-## Fatiamento de db.js (plano)
+## Fatiamento de db.js
 
-`db.js` está com 3.353 linhas — cresceu por fases (ver "Banco de Dados (SQLite)", acima) sem nunca ser reorganizado depois, então hoje mistura schema, migrações de JSON legado e regras de negócio de domínios sem nenhuma relação entre si (traço, manutenção, sessão de usuário) num arquivo só. Isso está **planejado**, seguindo o mesmo padrão já validado no fatiamento de `server.js`: um domínio por vez, sem mudar lógica nenhuma — só onde o código mora —, com a suíte de testes daquele domínio (e uma bateria manual das rotas que o usam) rodando verde antes de seguir pra próxima fase.
+`db.js` tinha 3.353 linhas — cresceu por fases (ver "Banco de Dados (SQLite)", acima) sem nunca ser reorganizado depois, então misturava schema, migrações de JSON legado e regras de negócio de domínios sem nenhuma relação entre si (traço, manutenção, sessão de usuário) num arquivo só. Isso foi **concluído** (Fases 2–9, ver Status ao final desta seção), seguindo o mesmo padrão já validado no fatiamento de `server.js`: um domínio por vez, sem mudar lógica nenhuma — só onde o código mora —, com a suíte de testes daquele domínio (e uma bateria manual das rotas que o usam) rodando verde antes de seguir pra próxima fase. Hoje `db.js` tem só schema/setup do banco (Fase 1) e a migração de histórico legado ainda não movida (Fase 10, ver Status).
 
 **Diferença importante em relação ao fatiamento de `server.js`**: `db.js` não é só um conjunto de funções — o módulo inteiro **é** a conexão viva com o SQLite (`module.exports = db`, o objeto de conexão do `better-sqlite3`, com as funções de cada domínio "penduradas" nele). Cada módulo extraído vai precisar **receber** essa conexão já aberta (via factory, mesmo padrão de `lib/rotas/`) em vez de abrir a própria — só existe uma conexão com o banco no processo inteiro, isso não muda.
 
@@ -425,6 +425,26 @@ Ao escolher "Personalizado" em Tipo de Montagem, abre a grade de berços:
 **Compatibilidade**: `tipo_montagem` é gravado como `"PERSONALIZADA"` (um valor fixo, pra continuar agrupando junto nos filtros/gráficos que já existem — OEE, Análise Operacional, Registro de Baterias), com o detalhe berço a berço guardado à parte em `bercos_personalizados` (um array, um item por berço, ex: `["3t","3t","sp",null,...]`). Os totais (`paineis_por_tipo`, `m2_por_tipo`, `placas_cimenticia`) são somados a partir dessa grade e ficam no mesmo formato que Simples/Híbrida já produzem — então nada no resto do sistema precisou de nenhuma mudança pra exibir/somar baterias Personalizadas corretamente (inclusive tipos novos tipo "1T", "3T": as colunas da tabela de Registro de Baterias e os gráficos por tipo já são dinâmicos).
 
 **Limitação conhecida**: o badge de "Tipo de Montagem" pra uma bateria Personalizada usa a mesma cor neutra (cinza) de um tipo desconhecido — diferente de Simples/Híbrida, que têm cor própria. O detalhe da composição (quais berços, quais tipos) só fica visível olhando o registro completo (`bercos_personalizados`), sem uma visualização dedicada ainda.
+
+## Consulta de Insumos por Traço
+
+Tela **auxiliar** do Dashboard de Traço/CEP (`public/js/qualidade-tracos.js`) — pedido registrado numa conversa: sem alterar o dashboard existente, uma tela à parte pra consultar/comparar/exportar o consumo de insumos traço a traço (`public/partials/page-consulta-tracos.html`, `public/js/consulta-tracos.js`). Acessível pelo menu "Traços" da barra de navegação ou pelo botão "🔍 Consultar Insumos por Traço" dentro do próprio Dashboard de Traço (que já leva o período atualmente filtrado, sem precisar escolher tudo de novo).
+
+**Fluxo**: escolher período → lista de traços daquele intervalo → clicar num traço → ver os insumos → exportar (o traço, ou o período inteiro) em Excel.
+
+**Sem rota nova no backend** — reaproveita `db/relatorio_injecao.json` (mesma fonte do CEP e do Relatório de Injeção); filtro por data, cálculo de "ordem no dia" e totais são feitos 100% no cliente.
+
+**"Ordem no Dia" em vez de "Horário de produção"** — decisão tomada na mesma conversa: o sistema nunca gravou (e ainda não grava) um horário por TRAÇO individual, só o horário de início/fim da OPERAÇÃO inteira (a bateria toda — colunas `inicio`/`fim` de `operacoes`). Mostrar uma hora ali seria inventar precisão que não existe; em vez disso, cada traço recebe sua posição de produção dentro do dia (1º, 2º, 3º...), assumindo que a ordem de chegada em `db/relatorio_injecao.json` reflete a ordem real de registro (a query que gera esse JSON, `todosOsTracos()` em `lib/db/tracos.js`, não tem `ORDER BY` — volta na ordem de inserção do SQLite). Essa premissa é testada diretamente (`test/consulta-tracos-ordem-insercao.test.js`: registra traços em sequência conhecida e confere que voltam na mesma ordem).
+
+**Detalhe de 1 traço** (modal, versão bem mais simples que a Análise Focada, de propósito — só os insumos, sem berços nem movimentação): Cimento, Água, EPS, Superplastificante, Incorporador de Ar, e o total somado.
+
+**Exportação Excel** (SheetJS/`window.XLSX`, mesma lib já usada em `setor-qualidade.js`):
+- **Período inteiro**: 1 linha por traço (Data, Ordem no Dia, Turno, Nº do Traço, os 5 insumos, Total) — cronológico, mais antigo primeiro (facilita somar/analisar na planilha).
+- **1 traço só**: formato "ficha" (Campo/Valor), não a mesma tabela — é um registro individual, não uma lista pra somar.
+
+**Permissão**: item próprio no catálogo (`consulta-tracos`, tipo `dashboard`) — não amarrado ao item do CEP (`qualidade-tracos`); um Administrador pode liberar um sem o outro, se fizer sentido pro perfil.
+
+Cobertura de testes em `test/consulta-tracos-logica.test.js` (cálculos/ordenação/formato de exportação, funções puras) e `test/consulta-tracos-ordem-insercao.test.js` (premissa de ordem de inserção, ponta a ponta via API).
 
 ## Editar Traço (Relatório de Injeção)
 
