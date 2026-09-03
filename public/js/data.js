@@ -867,6 +867,62 @@ async function removerDispositivo(deviceId) {
 }
 
 /**
+ * Certificado de Autorização de Dispositivo (mTLS) — Configurações →
+ * Dispositivos Autorizados. Camada ADICIONAL de reconhecimento, em
+ * paralelo ao deviceId/cookie acima (ver lib/certificado-dispositivo.js,
+ * lib/dispositivo-autorizado.js): sobrevive a limpar todos os dados do
+ * navegador, porque a identidade vive num certificado instalado no
+ * SO/navegador, não em cookie/localStorage.
+ */
+
+/** Lista (serial, nome, emitidoEm) dos certificados já emitidos. Requer sessão de admin válida. */
+async function listarCertificadosDispositivo() {
+  const res = await fetch('/certificados-dispositivo');
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os certificados.');
+  return data.lista;
+}
+
+/**
+ * Gera um novo certificado — devolve { blob, nomeArquivo, senha, serial }
+ * pro chamador decidir o que fazer (mostrar a senha, disparar o download).
+ * A senha só existe NESTA resposta — não fica guardada no servidor depois
+ * desta chamada retornar (ver emitirCertificado(),
+ * lib/certificado-dispositivo.js). Requer sessão de admin válida.
+ */
+async function gerarCertificadoDispositivo(nome) {
+  const res = await fetch('/gerar-certificado-dispositivo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome: nome || '' }),
+  });
+  if (!res.ok) {
+    let erro = 'Não foi possível gerar o certificado.';
+    try { erro = (await res.json()).erro || erro; } catch (_) { /* corpo não era JSON (ex: 403 de sessão) */ }
+    throw new Error(erro);
+  }
+  const senha = res.headers.get('X-Certificado-Senha');
+  const serial = res.headers.get('X-Certificado-Serial');
+  const cd = res.headers.get('Content-Disposition') || '';
+  const match = cd.match(/filename="(.+?)"/);
+  const nomeArquivo = match ? match[1] : 'lightwall-dispositivo.p12';
+  const blob = await res.blob();
+  return { blob, nomeArquivo, senha, serial };
+}
+
+/** Revoga (remove da lista de aceitos) um certificado pelo serial. Requer sessão de admin válida. */
+async function revogarCertificadoDispositivo(serial) {
+  const res = await fetch('/revogar-certificado-dispositivo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serial }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.erro || 'Não foi possível revogar o certificado.');
+  return data.lista;
+}
+
+/**
  * Operações a Validar (Registro Offline) — Configurações, itens 6/7 do
  * plano (ver README, "Registro de Operação Offline (PWA)"). As 4 funções
  * abaixo espelham exatamente lib/rotas/operacao-offline.js — todas
@@ -3041,6 +3097,7 @@ window.LW = {
 
   // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
   listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
+  listarCertificadosDispositivo, gerarCertificadoDispositivo, revogarCertificadoDispositivo,
   get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
   // Operações a Validar (Registro Offline — Configurações, itens 6/7 do

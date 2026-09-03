@@ -19,3 +19,22 @@
 # Depois de editar, aplique com: sudo systemctl reload caddy
 # (portas 80 e 443 precisam estar liberadas no firewall da VM pro Caddy
 # conseguir emitir/renovar o certificado Let's Encrypt automaticamente).
+
+# ─── Certificado de Dispositivo (mTLS OPCIONAL) ─────────────────────────────
+# Normalmente você não escreve isto à mão — deploy/ativar-mtls-caddy.sh já
+# faz esta edição sozinho. Guardado aqui só de referência: é isto que o
+# script acrescenta quando você ativa o reconhecimento por certificado
+# (Configurações → Dispositivos Autorizados → "Gerar certificado", ver
+# lib/certificado-dispositivo.js). O bloco final fica assim:
+#
+# 34-123-45-67.nip.io {
+#     tls {
+#         client_auth {
+#             mode request                                  # OPCIONAL — nunca bloqueia quem não tem certificado
+#             trusted_ca_cert_file /etc/caddy/lightwall-ca-dispositivos.pem
+#         }
+#     }
+#     reverse_proxy localhost:5000 {
+#         header_up X-Client-Cert-Serial {tls_client_serial} # repassa o serial pro Node
+#     }
+# }

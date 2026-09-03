@@ -581,7 +581,25 @@ Isso foi reforçado com um **cookie `HttpOnly`** (`lw_device_id`, ver `lib/dispo
 
 Isso fecha o ponto (2) (não dá mais pra forjar via DevTools), mas não sozinho o ponto (1): limpar cookies também apaga o `lw_device_id`. Pra reduzir esse atrito sem reautorização manual, cada dispositivo autorizado também guarda o **IP** de quando foi autorizado (`ip`, em `config.json`); se um request chegar com um `deviceId` desconhecido mas do **mesmo IP** de um dispositivo já autorizado antes, o servidor religa automaticamente o cadastro ao novo `deviceId` (`religadoEm` fica registrado, pra auditoria) — cobre o caso comum de rede interna com IP fixo por máquina (chão de fábrica). Não é uma trava adicional, só um atalho de reconhecimento; um IP nunca visto antes continua exigindo autorização manual normalmente.
 
-**Ideia futura, ainda não implementada**: pra fechar os dois pontos de vez (inclusive sobreviver a limpar dados do navegador), a alternativa mais robusta seria **mTLS** (autenticação mútua por certificado de cliente) — cada máquina recebe um certificado assinado por uma CA própria, instalado uma vez no navegador/SO, e o Caddy (já usado pra HTTPS, ver `deploy/Caddyfile.exemplo`) passa a exigi-lo no handshake TLS, antes de qualquer requisição HTTP. É uma identidade que vive na camada de rede, não em cookie/localStorage — não é apagada limpando dados do navegador e não dá pra forjar via JS. Autorizar continuaria parecido com hoje (gerar e emitir um certificado por máquina), mas desautorizar poderia continuar sendo só remover da lista de seriais permitidos (mesma UX de Configurações → Dispositivos Autorizados) sem precisar de infraestrutura de revogação (CRL/OCSP). Custo: precisa manter uma CA e instalar um certificado por máquina nova — só vale a pena se o cenário de spoofing for um risco real levado a sério, não só a questão de "some ao limpar cache" (que a combinação cookie+IP acima já resolve com bem menos esforço).
+**Ideia futura, ainda não implementada**: reduzir ainda mais o atrito de religar após limpar cookies **sem** IP conhecido continua em aberto — a seguir, veja "Certificado de Dispositivo (mTLS)" pra como o ponto (1) foi resolvido de vez, sem depender de IP nem de o Administrador reautorizar manualmente.
+
+### Certificado de Dispositivo (mTLS)
+
+Uma terceira via de reconhecimento, em paralelo às duas acima (nunca substitui, sempre reforça) — resolve os dois pontos de vez, inclusive sobreviver a limpar TODOS os dados do navegador: cada máquina recebe um **certificado de cliente TLS**, instalado uma vez no navegador/SO, que vive na camada de rede em vez de cookie/localStorage. Não é apagado limpando dados do navegador e não dá pra forjar via DevTools.
+
+**Como gerar (Administrador Master ou perfil Administrativo)**: Configurações → Dispositivos Autorizados → seção "🔏 Certificado de Autorização" → dá um nome à máquina (ex: "PC Injetora 1") → "Gerar certificado". O servidor:
+
+1. Gera (na primeira vez que isso acontece nesta instalação) uma **CA própria** — um par de chaves que assina os certificados de dispositivo — guardada em `private/ca-dispositivos/` (fora de `public/`, nunca servida pela web, mesmo tratamento de `security.json`/`usuarios.json`). A chave privada da CA nunca sai da VM.
+2. Emite um certificado assinado por essa CA, empacota num arquivo `.p12` protegido por senha aleatória, e devolve o download — a senha só aparece nesta hora (não fica guardada em lugar nenhum depois; se for perdida, gere um certificado novo e revogue o antigo).
+3. Registra o **serial** do certificado (informação pública por natureza — já vai em todo handshake TLS) numa lista em `config.json` (`certificadosAutorizados`), ao lado de `dispositivosAutorizados`.
+
+**Instalar na máquina**: duplo-clique no `.p12` (Windows) → assistente de importação de certificado → Chrome/Edge já reconhece. Isso é o único passo manual por máquina — feito uma vez, nunca mais precisa reautorizar aquele computador, mesmo limpando cookies/localStorage.
+
+**Ativar o reconhecimento no servidor** (só precisa rodar uma vez por instalação, depois do primeiro certificado gerado): `sudo bash deploy/ativar-mtls-caddy.sh` — copia o certificado PÚBLICO da CA pro Caddy confiar nele, e configura `client_auth` em modo **opcional** (`mode request` — nunca bloqueia quem não tem certificado instalado; é reforço, não substituição). O Caddy passa a repassar o serial do certificado apresentado pro Node via header `X-Client-Cert-Serial`, que `dispositivoAutorizado()` (`lib/dispositivo-autorizado.js`) passa a checar **antes** de deviceId/IP — se o serial bate com um certificado autorizado, o dispositivo é reconhecido direto, sem precisar de cookie nem de religar por IP.
+
+**Revogar**: mesma UX de "Remover" que `dispositivosAutorizados` já tinha — botão "✕ Revogar" na lista de certificados emitidos. Sem infraestrutura de CRL/OCSP: o certificado continua tecnicamente válido/instalado na máquina, só para de autorizar a partir do momento em que sai da lista.
+
+**Custo**: só vale a pena ativar (`ativar-mtls-caddy.sh`) se o atrito de reautorizar depois de limpar dados do navegador for um problema real — sem ativar, gerar certificados não muda nada no comportamento atual (cookie + IP continuam sendo a única checagem).
 
 ## Backup e Restauração (Administrador)
 

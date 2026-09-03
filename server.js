@@ -137,6 +137,15 @@ const {
   podeConfirmarRecebimentoPeca,
 } = require('./lib/permissoes-area.js')({ sessao, sessaoUsuario, perfis, perfisFixosOverrides, perfisCustomizados });
 
+// ─── CERTIFICADO DE DISPOSITIVO (mTLS) — ver lib/certificado-dispositivo.js ──
+// Camada ADICIONAL de reconhecimento de dispositivo, em paralelo ao cookie
+// HttpOnly + fallback por IP que já existiam (não substitui nenhum dos
+// dois) — resolve o caso de limpar TODOS os dados do navegador, via
+// certificado de cliente TLS instalado uma vez por máquina (Configurações
+// → Dispositivos Autorizados → "Gerar certificado"). Precisa vir ANTES de
+// dispositivo-autorizado.js, que consome `certificadoDispositivo` abaixo.
+const certificadoDispositivo = require('./lib/certificado-dispositivo.js')({ fs, path, DB_DIR, PRIVATE_DIR });
+
 // ─── DISPOSITIVO AUTORIZADO — Fase 12 do fatiamento, ver README ───────────
 // lerDispositivosAutorizados/salvarDispositivosAutorizados/
 // dispositivoAutorizado/podeControlarOperacao/negarControleDeOperacao agora
@@ -150,7 +159,7 @@ const {
   dispositivoAutorizado,
   podeControlarOperacao,
   negarControleDeOperacao,
-} = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea });
+} = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea, certificadoDispositivo });
 
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
 // _enviarWsParaTodos/broadcastOperacaoAndamento/broadcastOperacaoFinalizada/
@@ -296,6 +305,7 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
+const rotasCertificadosDispositivo = require('./lib/rotas/certificados-dispositivo.js')({ sessao: sessaoOuAdmin, certificadoDispositivo });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao: sessaoOuAdmin, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
@@ -335,7 +345,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasCertificadosDispositivo, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

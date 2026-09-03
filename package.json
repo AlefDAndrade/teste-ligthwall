@@ -20,6 +20,7 @@
   "dependencies": {
     "better-sqlite3": "^12.11.1",
     "jszip": "^3.10.1",
+    "node-forge": "^1.4.0",
     "pdf-lib": "^1.17.1",
     "puppeteer-core": "^23.11.1",
     "web-push": "^3.6.7",

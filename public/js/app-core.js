@@ -2742,7 +2742,7 @@
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
       if (secao === 'autorizados') cfgRenderAutorizados();
-      if (secao === 'dispositivos') cfgRenderDispositivos();
+      if (secao === 'dispositivos') { cfgRenderDispositivos(); cfgRenderCertificados(); }
       if (secao === 'operacoes-offline') cfgRenderOperacoesOffline();
       if (secao === 'automacao') cfgRenderAutomacao();
       if (secao === 'sql') cfgSqlAoAbrirSecao();
@@ -3881,6 +3881,92 @@
         await LW.removerDispositivo(deviceId);
         LW.mostrarAlerta('Dispositivo removido.', { tipo: 'sucesso' });
         cfgRenderDispositivos();
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    // ---- Certificado de Autorização de Dispositivo (mTLS) — ver
+    // lib/certificado-dispositivo.js, lib/dispositivo-autorizado.js.
+    // Camada ADICIONAL de reconhecimento, em paralelo ao deviceId/cookie
+    // acima: sobrevive a limpar todos os dados do navegador. ------------
+
+    async function cfgRenderCertificados() {
+      const elLista = document.getElementById('cfg-certificados-lista');
+      if (!elLista) return;
+      elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Carregando…</span>';
+
+      let lista = [];
+      try {
+        lista = await LW.listarCertificadosDispositivo();
+      } catch (e) {
+        elLista.innerHTML = `<span style="color:var(--red);font-size:.8rem">${_escaparHtmlLocal(e.message)}</span>`;
+        return;
+      }
+
+      if (!lista.length) {
+        elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Nenhum certificado emitido ainda.</span>';
+        return;
+      }
+
+      elLista.innerHTML = lista.map(c => {
+        const nome = c.nome ? _escaparHtmlLocal(c.nome) : '<span style="color:var(--text-3)">(sem nome)</span>';
+        const dataFmt = c.emitidoEm ? new Date(c.emitidoEm).toLocaleString('pt-BR') : '';
+        const serialCurto = (c.serial || '').slice(0, 12) + '…';
+        return `
+          <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div style="font-size:.85rem;color:var(--text-1)">${nome}</div>
+              <div style="font-size:.7rem;color:var(--text-3);word-break:break-all">${_escaparHtmlLocal(serialCurto)}${dataFmt ? ' · emitido em ' + dataFmt : ''}</div>
+            </div>
+            <button type="button" onclick="cfgRevogarCertificado('${_escaparHtmlLocal(c.serial)}')"
+              style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;margin-left:auto">✕ Revogar</button>
+          </div>`;
+      }).join('');
+    }
+
+    /** Botão "🔏 Gerar certificado" — emite, dispara o download do .p12 e mostra a senha (só existe nesta hora). */
+    async function cfgGerarCertificado() {
+      const inputNome = document.getElementById('cfg-certificado-nome');
+      const nome = (inputNome?.value || '').trim();
+      try {
+        const { blob, nomeArquivo, senha } = await LW.gerarCertificadoDispositivo(nome);
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nomeArquivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        if (inputNome) inputNome.value = '';
+        cfgRenderCertificados();
+
+        await LW.mostrarAlerta(
+          `Certificado "${nome || 'Dispositivo Lightwall'}" gerado — o download do arquivo .p12 começou.\n\n`
+          + `Senha do arquivo (anote agora, só aparece esta vez):\n${senha}\n\n`
+          + 'Instale o .p12 no computador que vai operar (duplo-clique no Windows) usando essa senha. '
+          + 'Depois de instalado, esse computador continua autorizado mesmo se os dados do navegador forem limpos.',
+          { titulo: '🔏 Certificado gerado', tipo: 'sucesso' }
+        );
+      } catch (e) {
+        LW.mostrarAlerta(e.message, { tipo: 'erro' });
+      }
+    }
+
+    /** Botão "✕ Revogar" de cada linha — remove da lista de aceitos (não invalida o arquivo já instalado, só o servidor para de reconhecer o serial). */
+    async function cfgRevogarCertificado(serial) {
+      const confirmou = await LW.mostrarConfirmacao(
+        'O computador que usa este certificado só vai continuar autorizado se também estiver na lista por deviceId/IP, acima.',
+        { titulo: 'Revogar este certificado?', textoConfirmar: 'Revogar', tipo: 'perigo', icon: '🛑' }
+      );
+      if (!confirmou) return;
+      try {
+        await LW.revogarCertificadoDispositivo(serial);
+        LW.mostrarAlerta('Certificado revogado.', { tipo: 'sucesso' });
+        cfgRenderCertificados();
       } catch (e) {
         LW.mostrarAlerta(e.message, { tipo: 'erro' });
       }
