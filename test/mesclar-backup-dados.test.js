@@ -20,6 +20,11 @@
 //   - Nenhum arquivo mesclável presente no payload é recusado (400).
 //   - JSON inválido dentro de um dos arquivos mescláveis é recusado (400)
 //     com o nome do arquivo na mensagem.
+//   - Filtro por data (opcional, `filtroDataInicio`/`filtroDataFim`):
+//     traz só um período do backup (ex: 1 dia), ignora o resto — cada
+//     domínio filtrado pelo seu próprio campo de data ("data" pra
+//     operações/traços; "inicio" pra paradas); datas inválidas/invertidas
+//     são recusadas; sem filtro, comportamento idêntico a sempre.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -209,4 +214,119 @@ test('deduplicação: parada cujo id já existe é contada como duplicata, não 
   assert.equal(data.resultado.paradas.inseridos, 0);
   assert.equal(data.resultado.paradas.duplicatas, 1);
   assert.equal(await contarParadas(), paradasAntes, 'não deveria ter criado uma parada nova (mesmo id)');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Filtro por data (pedido — "quero subir apenas os dados de um dia
+// específico"): opcional, `filtroDataInicio`/`filtroDataFim` no payload.
+// Sem eles, comportamento IDÊNTICO a sempre (já coberto pelos testes
+// acima). Com eles, só entra no merge o que cai dentro do intervalo —
+// mesmo que o resto do backup fosse tudo registro novo/não-duplicata.
+// ═══════════════════════════════════════════════════════════════════════
+
+test('filtroDataInicio+filtroDataFim iguais (um único dia): só traz operações daquele dia, ignora o resto do backup', async () => {
+  const idDentro = 'op-filtro-dentro-' + Date.now();
+  const idFora = 'op-filtro-fora-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'historico.json': JSON.stringify([
+        operacaoDoBackup(idDentro, { data: '2026-09-04' }),
+        operacaoDoBackup(idFora, { data: '2026-09-03' }),
+      ]),
+    },
+    filtroDataInicio: '2026-09-04',
+    filtroDataFim: '2026-09-04',
+  });
+  assert.equal(resp.status, 200);
+  const data = await resp.json();
+  assert.equal(data.resultado.operacoes.inseridos, 1);
+  assert.deepEqual(data.resultado.filtroData, { inicio: '2026-09-04', fim: '2026-09-04', ignorados: 1 });
+
+  assert.ok(await buscarOperacao(idDentro), 'operação do dia filtrado deveria ter entrado');
+  assert.equal(await buscarOperacao(idFora), undefined, 'operação de outro dia NÃO deveria ter entrado');
+});
+
+test('filtro de data se aplica também a traços e paradas, cada um pelo seu próprio campo de data (traço: "data"; parada: "inicio")', async () => {
+  const idOpDentro = 'op-filtro2-dentro-' + Date.now();
+  const idTracoDentro = 'traco-filtro-dentro-' + Date.now();
+  const idTracoFora = 'traco-filtro-fora-' + Date.now();
+  const idParadaDentro = 'parada-filtro-dentro-' + Date.now();
+  const idParadaFora = 'parada-filtro-fora-' + Date.now();
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'relatorio_injecao.json': JSON.stringify([
+        { ...tracoDoBackup(idTracoDentro, idOpDentro), data: '2026-09-04' },
+        { ...tracoDoBackup(idTracoFora, idOpDentro, 2), data: '2026-09-03' },
+      ]),
+      'paradas.json': JSON.stringify([
+        { ...paradaDoBackup(idParadaDentro), inicio: '2026-09-04T10:00:00.000Z', fim: '2026-09-04T10:10:00.000Z' },
+        { ...paradaDoBackup(idParadaFora), inicio: '2026-09-03T10:00:00.000Z', fim: '2026-09-03T10:10:00.000Z' },
+      ]),
+    },
+    filtroDataInicio: '2026-09-04',
+    filtroDataFim: '2026-09-04',
+  });
+  assert.equal(resp.status, 200);
+  const data = await resp.json();
+  assert.equal(data.resultado.tracos.inseridos, 1);
+  assert.equal(data.resultado.paradas.inseridos, 1);
+  assert.equal(data.resultado.filtroData.ignorados, 2); // 1 traço + 1 parada fora do período
+});
+
+test('filtro só com "de" (sem "até"): traz tudo A PARTIR daquela data em diante', async () => {
+  const idAntes = 'op-filtro-so-inicio-antes-' + Date.now();
+  const idDepois = 'op-filtro-so-inicio-depois-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'historico.json': JSON.stringify([
+        operacaoDoBackup(idAntes, { data: '2026-09-01' }),
+        operacaoDoBackup(idDepois, { data: '2026-09-04' }),
+      ]),
+    },
+    filtroDataInicio: '2026-09-04',
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.operacoes.inseridos, 1);
+  assert.ok(await buscarOperacao(idDepois));
+  assert.equal(await buscarOperacao(idAntes), undefined);
+});
+
+test('data inicial depois da data final é recusada (400), nada é mesclado', async () => {
+  const idOp = 'op-filtro-datas-invertidas-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'historico.json': JSON.stringify([operacaoDoBackup(idOp, { data: '2026-09-04' })]) },
+    filtroDataInicio: '2026-09-10',
+    filtroDataFim: '2026-09-04',
+  });
+  assert.equal(resp.status, 400);
+  const data = await resp.json();
+  assert.match(data.erro, /data inicial/i);
+  assert.equal(await buscarOperacao(idOp), undefined);
+});
+
+test('formato de data inválido no filtro é recusado (400)', async () => {
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'historico.json': JSON.stringify([operacaoDoBackup('op-filtro-formato-invalido')]) },
+    filtroDataInicio: '04/09/2026', // formato errado de propósito (esperado: AAAA-MM-DD)
+  });
+  assert.equal(resp.status, 400);
+  const data = await resp.json();
+  assert.match(data.erro, /formato/i);
+});
+
+test('sem filtro nenhum (comportamento de sempre): resultado.filtroData vem null', async () => {
+  const idOp = 'op-sem-filtro-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'historico.json': JSON.stringify([operacaoDoBackup(idOp)]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.filtroData, null);
+  assert.ok(await buscarOperacao(idOp));
 });

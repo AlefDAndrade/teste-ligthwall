@@ -1828,6 +1828,15 @@
 
     let _mesclarArquivos = null; // { 'historico.json': '<texto original>', ... } já validados
 
+    // "YYYY-MM-DD" (formato de <input type="date">) -> "DD/MM/AAAA", só
+    // pra exibição no aviso de confirmação/resultado do filtro de data
+    // (abaixo) — não existia um helper genérico pra isso em data.js.
+    function _formatarDataInputBr(iso) {
+      if (!iso) return '';
+      const [ano, mes, dia] = iso.split('-');
+      return `${dia}/${mes}/${ano}`;
+    }
+
     function abrirMesclarBackup() {
       if (!_perfilTemAcao('backup-restauracao')) return;
       document.getElementById('mesclar-backup-modal').style.display = 'flex';
@@ -1846,6 +1855,23 @@
       document.getElementById('mesclar-erro').style.display = 'none';
       document.getElementById('mesclar-file-input').value = '';
       document.getElementById('mesclar-senha').value = '';
+      document.getElementById('mesclar-filtro-data-ativo').checked = false;
+      document.getElementById('mesclar-filtro-data-inicio').value = '';
+      document.getElementById('mesclar-filtro-data-fim').value = '';
+      document.getElementById('mesclar-filtro-data-campos').style.display = 'none';
+    }
+
+    // Mostra/esconde os dois campos de data — desativar o filtro também
+    // limpa as datas (evita mandar um filtro "fantasma" se a pessoa
+    // preencheu e depois desmarcou o checkbox sem limpar os campos).
+    function toggleMesclarFiltroData() {
+      const ativo = document.getElementById('mesclar-filtro-data-ativo').checked;
+      const campos = document.getElementById('mesclar-filtro-data-campos');
+      campos.style.display = ativo ? 'flex' : 'none';
+      if (!ativo) {
+        document.getElementById('mesclar-filtro-data-inicio').value = '';
+        document.getElementById('mesclar-filtro-data-fim').value = '';
+      }
     }
 
     function voltarMesclarStep0() {
@@ -1921,8 +1947,23 @@
       const senha = document.getElementById('mesclar-senha').value;
       if (!senha) { mostrarErroMesclar('Digite sua senha de administrador.'); return; }
 
+      const filtroAtivo = document.getElementById('mesclar-filtro-data-ativo').checked;
+      const filtroDataInicio = filtroAtivo ? document.getElementById('mesclar-filtro-data-inicio').value : '';
+      const filtroDataFim = filtroAtivo ? document.getElementById('mesclar-filtro-data-fim').value : '';
+      if (filtroAtivo && !filtroDataInicio && !filtroDataFim) {
+        mostrarErroMesclar('Preencha ao menos uma data, ou desmarque "Trazer só um período específico".');
+        return;
+      }
+      if (filtroAtivo && filtroDataInicio && filtroDataFim && filtroDataInicio > filtroDataFim) {
+        mostrarErroMesclar('A data "De" não pode ser depois da data "Até".');
+        return;
+      }
+
+      const mensagemConfirmacao = filtroAtivo
+        ? `Isso vai ADICIONAR aos dados atuais só os registros deste backup entre ${filtroDataInicio ? _formatarDataInputBr(filtroDataInicio) : 'o início'} e ${filtroDataFim ? _formatarDataInputBr(filtroDataFim) : 'o fim'} do backup — o resto do arquivo é ignorado. Nada do que já existe aqui será apagado ou alterado.`
+        : 'Isso vai ADICIONAR os registros deste backup aos dados atuais. Nada do que já existe aqui será apagado ou alterado.';
       const confirmou = await LW.mostrarConfirmacao(
-        'Isso vai ADICIONAR os registros deste backup aos dados atuais. Nada do que já existe aqui será apagado ou alterado.',
+        mensagemConfirmacao,
         { titulo: 'Mesclar backup de dados?', textoConfirmar: 'Mesclar', icon: '🔗' }
       );
       if (!confirmou) return;
@@ -1936,7 +1977,12 @@
         const res = await fetch('/mesclar-backup-dados', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ senha, arquivos: _mesclarArquivos }),
+          body: JSON.stringify({
+            senha,
+            arquivos: _mesclarArquivos,
+            ...(filtroDataInicio ? { filtroDataInicio } : {}),
+            ...(filtroDataFim ? { filtroDataFim } : {}),
+          }),
         });
         const json = await res.json();
         if (!json.ok) throw new Error(json.erro || 'Erro ao mesclar backup.');
@@ -1956,6 +2002,9 @@
           linhas.push(`Histórico de edição: <strong>${r.edicoes_operacao.inseridos}</strong> registro(s)`);
         }
         if (!linhas.length) linhas.push('Nenhum registro novo encontrado — tudo neste backup já existia aqui.');
+        if (r.filtroData) {
+          linhas.push(`<span style="color:var(--text-3)">📅 Filtro de data aplicado (${r.filtroData.inicio ? _formatarDataInputBr(r.filtroData.inicio) : '…'} a ${r.filtroData.fim ? _formatarDataInputBr(r.filtroData.fim) : '…'}) — ${r.filtroData.ignorados} registro(s) do backup ficaram de fora por estarem fora do período.</span>`);
+        }
 
         document.getElementById('mesclar-step-1').style.display = 'none';
         document.getElementById('mesclar-step-2').style.display = 'block';

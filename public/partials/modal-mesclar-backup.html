@@ -56,6 +56,29 @@
           ✓ Isso vai ADICIONAR esses registros aos dados atuais — nada existente é apagado ou alterado.
         </p>
 
+        <!-- Filtro por data (README, pedido — "quero subir apenas os dados
+             de um dia") — opcional: sem preencher nada, mescla o backup
+             inteiro, comportamento de sempre. -->
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text);cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="mesclar-filtro-data-ativo" onchange="toggleMesclarFiltroData()">
+            Trazer só um período específico deste backup
+          </label>
+          <div id="mesclar-filtro-data-campos" style="display:none;gap:10px;align-items:center;flex-wrap:wrap">
+            <div>
+              <label style="display:block;font-size:.75rem;color:var(--text-3);margin-bottom:4px">De</label>
+              <input type="date" id="mesclar-filtro-data-inicio" class="form-input" style="height:34px">
+            </div>
+            <div>
+              <label style="display:block;font-size:.75rem;color:var(--text-3);margin-bottom:4px">Até</label>
+              <input type="date" id="mesclar-filtro-data-fim" class="form-input" style="height:34px">
+            </div>
+            <div style="font-size:.74rem;color:var(--text-3);flex-basis:100%;margin-top:2px">
+              Pra trazer só um dia (ex: 04/09), preencha os dois campos com a mesma data.
+            </div>
+          </div>
+        </div>
+
         <label style="display:block;font-size:.85rem;color:var(--text-2);margin-bottom:6px">Confirme sua senha de
           administrador para continuar:</label>
         <input type="password" id="mesclar-senha" class="form-input" style="margin-bottom:20px;width:100%"
