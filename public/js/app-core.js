@@ -2784,62 +2784,28 @@
     }
 
     // ---- Menu lateral das Configurações ----
-    function cfgMostrarSecao(secao) {
-      const elDados = document.getElementById('cfg-secao-dados');
-      const elPaletes = document.getElementById('cfg-secao-paletes');
-      const elAtalhos = document.getElementById('cfg-secao-atalhos');
-      const elUsuarios = document.getElementById('cfg-secao-usuarios');
-      const elAutorizados = document.getElementById('cfg-secao-autorizados');
-      const elDispositivos = document.getElementById('cfg-secao-dispositivos');
-      const elOperacoesOffline = document.getElementById('cfg-secao-operacoes-offline');
-      const elAutomacao = document.getElementById('cfg-secao-automacao');
-      const elSql = document.getElementById('cfg-secao-sql');
-      const elNotificacoes = document.getElementById('cfg-secao-notificacoes');
-      const elParadas = document.getElementById('cfg-secao-paradas');
-      const elTiposManutencao = document.getElementById('cfg-secao-tipos-manutencao');
-      const elPrioridades = document.getElementById('cfg-secao-prioridades');
-      if (elDados) elDados.style.display = secao === 'dados' ? 'block' : 'none';
-      if (elPaletes) elPaletes.style.display = secao === 'paletes' ? 'block' : 'none';
-      if (elAtalhos) elAtalhos.style.display = secao === 'atalhos' ? 'block' : 'none';
-      if (elUsuarios) elUsuarios.style.display = secao === 'usuarios' ? 'block' : 'none';
-      if (elAutorizados) elAutorizados.style.display = secao === 'autorizados' ? 'block' : 'none';
-      if (elDispositivos) elDispositivos.style.display = secao === 'dispositivos' ? 'block' : 'none';
-      if (elOperacoesOffline) elOperacoesOffline.style.display = secao === 'operacoes-offline' ? 'block' : 'none';
-      if (elAutomacao) elAutomacao.style.display = secao === 'automacao' ? 'block' : 'none';
-      if (elSql) elSql.style.display = secao === 'sql' ? 'block' : 'none';
-      if (elNotificacoes) elNotificacoes.style.display = secao === 'notificacoes' ? 'block' : 'none';
-      if (elParadas) elParadas.style.display = secao === 'paradas' ? 'block' : 'none';
-      if (elTiposManutencao) elTiposManutencao.style.display = secao === 'tipos-manutencao' ? 'block' : 'none';
-      if (elPrioridades) elPrioridades.style.display = secao === 'prioridades' ? 'block' : 'none';
+    // Seções de Configurações — nome da seção -> ids de conteúdo/nav
+    // (usado por cfgMostrarSecao, abaixo). Lista central em vez de 13
+    // pares de `const el.../if (el...)` repetidos: mesmo comportamento,
+    // menos código pra manter sincronizado quando uma seção nova entrar.
+    const CFG_SECOES = [
+      'dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'dispositivos',
+      'operacoes-offline', 'automacao', 'sql', 'notificacoes', 'paradas',
+      'tipos-manutencao', 'prioridades',
+    ];
 
-      const ESTILO_ATIVO = 'text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600';
-      const ESTILO_INATIVO = 'text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer';
-      const navDados = document.getElementById('cfg-nav-dados');
-      const navPaletes = document.getElementById('cfg-nav-paletes');
-      const navAtalhos = document.getElementById('cfg-nav-atalhos');
-      const navUsuarios = document.getElementById('cfg-nav-usuarios');
-      const navAutorizados = document.getElementById('cfg-nav-autorizados');
-      const navDispositivos = document.getElementById('cfg-nav-dispositivos');
-      const navOperacoesOffline = document.getElementById('cfg-nav-operacoes-offline');
-      const navAutomacao = document.getElementById('cfg-nav-automacao');
-      const navSql = document.getElementById('cfg-nav-sql');
-      const navNotificacoes = document.getElementById('cfg-nav-notificacoes');
-      const navParadas = document.getElementById('cfg-nav-paradas');
-      const navTiposManutencao = document.getElementById('cfg-nav-tipos-manutencao');
-      const navPrioridades = document.getElementById('cfg-nav-prioridades');
-      if (navDados) navDados.style.cssText = secao === 'dados' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navPaletes) navPaletes.style.cssText = secao === 'paletes' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navAtalhos) navAtalhos.style.cssText = secao === 'atalhos' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navUsuarios) navUsuarios.style.cssText = secao === 'usuarios' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navAutorizados) navAutorizados.style.cssText = secao === 'autorizados' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navDispositivos) navDispositivos.style.cssText = secao === 'dispositivos' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navOperacoesOffline) navOperacoesOffline.style.cssText = secao === 'operacoes-offline' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navAutomacao) navAutomacao.style.cssText = secao === 'automacao' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navSql) navSql.style.cssText = secao === 'sql' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navNotificacoes) navNotificacoes.style.cssText = secao === 'notificacoes' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navParadas) navParadas.style.cssText = secao === 'paradas' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navTiposManutencao) navTiposManutencao.style.cssText = secao === 'tipos-manutencao' ? ESTILO_ATIVO : ESTILO_INATIVO;
-      if (navPrioridades) navPrioridades.style.cssText = secao === 'prioridades' ? ESTILO_ATIVO : ESTILO_INATIVO;
+    function cfgMostrarSecao(secao) {
+      CFG_SECOES.forEach(s => {
+        const conteudo = document.getElementById('cfg-secao-' + s);
+        if (conteudo) conteudo.style.display = secao === s ? 'block' : 'none';
+        // Estado ativo do nav agora é só uma classe (.ativo, ver <style>
+        // em modal-config.html) — NUNCA mais sobrescreve style.cssText
+        // inteiro (era o bug de antes: apagava sem querer o
+        // `display:none` que _cfgAplicarVisibilidadeDeAbas() tinha
+        // aplicado pra perfis sem aquela aba liberada).
+        const nav = document.getElementById('cfg-nav-' + s);
+        if (nav) nav.classList.toggle('ativo', secao === s);
+      });
 
       if (secao === 'atalhos') cfgRenderAtalhos();
       if (secao === 'usuarios') cfgRenderUsuarios();
@@ -2850,15 +2816,10 @@
       if (secao === 'sql') cfgSqlAoAbrirSecao();
       if (secao === 'notificacoes') cfgRenderNotificacoes();
 
-      // Reaplica por último, de propósito: os `navX.style.cssText = ...`
-      // acima SUBSTITUEM o style inteiro do botão (é assim que o destaque
-      // visual da aba ativa funciona) — isso apaga sem querer o
-      // `display:none` que _cfgAplicarVisibilidadeDeAbas() tinha aplicado,
-      // reexibindo TODAS as abas de Configurações pra qualquer perfil
-      // não-admin (bug real, pego numa conversa: um perfil customizado só
-      // com Atalhos liberado via visto TODAS as outras abas mesmo assim).
-      // Reforçar aqui, toda vez que uma seção é mostrada, corrige na
-      // raiz — não importa quantas vezes cfgMostrarSecao for chamada.
+      // Reforça a visibilidade de abas por perfil aqui também (não só na
+      // abertura do modal) — não importa quantas vezes cfgMostrarSecao
+      // for chamada, garante que uma aba escondida pro perfil atual
+      // nunca reapareça.
       _cfgAplicarVisibilidadeDeAbas();
     }
 

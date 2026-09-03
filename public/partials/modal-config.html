@@ -1,11 +1,49 @@
 <!-- ============ MODAL CONFIGURAÇÕES ============ -->
+  <style>
+    /* ---- Navegação lateral (Configurações) ----------------------------
+       Substituiu o padrão antigo (estilo inline repetido em cada botão,
+       trocado via JS com style.cssText — ver cfgMostrarSecao, app-core.js)
+       por classes: mesma paleta de sempre (--bg-2/--accent/--text-2), só
+       reorganizada. Estado ativo é uma barra à esquerda (2px, --accent) +
+       leve fundo — linguagem comum de painel de configurações (em vez do
+       "botão com moldura" de antes), mais discreta e alinhada ao resto do
+       app. Ícones em linha (stroke, currentColor) substituem os emojis
+       coloridos — a cor deixa de vir do ícone e passa a vir só do estado
+       (ativo = --accent, resto = --text-2/--text-3), igual o resto da UI. */
+    .cfg-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      border-left: 2px solid transparent;
+      color: var(--text-2);
+      padding: 9px 12px;
+      font-size: .85rem;
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      transition: background .15s ease, color .15s ease, border-color .15s ease;
+    }
+    .cfg-nav-item:hover { background: var(--bg-2); color: var(--text); }
+    .cfg-nav-item svg { flex-shrink: 0; opacity: .75; transition: opacity .15s ease; }
+    .cfg-nav-item.ativo { background: var(--bg-2); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+    .cfg-nav-item.ativo svg { opacity: 1; }
+    /* Ícone dentro de .card-title (títulos de seção) — mesmo idioma
+       visual do nav, herda a cor do texto ao redor (currentColor), nunca
+       colorido sozinho. */
+    .card-title svg { flex-shrink: 0; }
+  </style>
   <div id="config-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
     <div class="cfg-modal-box"
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:32px;width:880px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-        <h2 style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em">⚙
+        <h2 style="font-family:var(--font-display);font-size:1.4rem;color:var(--accent);letter-spacing:.08em;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V10c.1.7.6 1.3 1.3 1.5H20a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
           CONFIGURAÇÕES</h2>
         <div style="display:flex;align-items:center;gap:10px">
           <button class="btn btn-ghost btn-sm" onclick="LWTour.iniciar('config', { forcado: true })"
@@ -18,46 +56,46 @@
       <div class="cfg-modal-layout" style="display:flex;gap:24px;align-items:flex-start">
 
         <!-- ---- Menu lateral ---- -->
-        <div class="cfg-modal-nav" style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--border);padding-right:20px">
-          <button type="button" id="cfg-nav-dados" onclick="cfgMostrarSecao('dados')"
-            style="text-align:left;background:var(--bg-2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer;font-weight:600">
-            🔧 Baterias e Montagem</button>
-          <button type="button" id="cfg-nav-paletes" onclick="cfgMostrarSecao('paletes')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🎨 Paletes</button>
-          <button type="button" id="cfg-nav-atalhos" onclick="cfgMostrarSecao('atalhos')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            ⌨️ Atalhos de Teclado</button>
-          <button type="button" id="cfg-nav-usuarios" onclick="cfgMostrarSecao('usuarios')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔑 Usuários</button>
-          <button type="button" id="cfg-nav-autorizados" onclick="cfgMostrarSecao('autorizados')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🟢 Operação em Andamento</button>
-          <button type="button" id="cfg-nav-dispositivos" onclick="cfgMostrarSecao('dispositivos')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔐 Dispositivos Autorizados</button>
-          <button type="button" id="cfg-nav-operacoes-offline" onclick="cfgMostrarSecao('operacoes-offline')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            📴Validar Operações Offline</button>
-          <button type="button" id="cfg-nav-automacao" onclick="cfgMostrarSecao('automacao')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🤖 Automação</button>
-          <button type="button" id="cfg-nav-sql" onclick="cfgMostrarSecao('sql')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🗄️ Dados SQL</button>
-          <button type="button" id="cfg-nav-notificacoes" onclick="cfgMostrarSecao('notificacoes')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔔 Notificações</button>
-          <button type="button" id="cfg-nav-paradas" onclick="cfgMostrarSecao('paradas')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            ⏸️ Motivos de Parada</button>
-          <button type="button" id="cfg-nav-tipos-manutencao" onclick="cfgMostrarSecao('tipos-manutencao')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🔧 Tipos de Manutenção</button>
-          <button type="button" id="cfg-nav-prioridades" onclick="cfgMostrarSecao('prioridades')"
-            style="text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:var(--radius);padding:10px 14px;font-size:.85rem;cursor:pointer">
-            🚦 Prioridades</button>
+        <div class="cfg-modal-nav" style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border);padding-right:20px">
+          <button type="button" id="cfg-nav-dados" class="cfg-nav-item ativo" onclick="cfgMostrarSecao('dados')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+            Baterias e Montagem</button>
+          <button type="button" id="cfg-nav-paletes" class="cfg-nav-item" onclick="cfgMostrarSecao('paletes')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.3-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.3A4.2 4.2 0 0 0 21 12c0-5-4-9-9-9Z"/><circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8" r="1.1" fill="currentColor" stroke="none"/></svg>
+            Paletes</button>
+          <button type="button" id="cfg-nav-atalhos" class="cfg-nav-item" onclick="cfgMostrarSecao('atalhos')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="18" y1="10" x2="18" y2="10"/><line x1="6" y1="14" x2="14" y2="14"/><line x1="17" y1="14" x2="18" y2="14"/></svg>
+            Atalhos de Teclado</button>
+          <button type="button" id="cfg-nav-usuarios" class="cfg-nav-item" onclick="cfgMostrarSecao('usuarios')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"/><circle cx="9" cy="8" r="3.2"/><path d="M17.5 20v-1.5c0-1.3-.7-2.5-1.8-3.1"/><path d="M14.3 5.1a3.2 3.2 0 0 1 0 6.1"/></svg>
+            Usuários</button>
+          <button type="button" id="cfg-nav-autorizados" class="cfg-nav-item" onclick="cfgMostrarSecao('autorizados')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+            Operação em Andamento</button>
+          <button type="button" id="cfg-nav-dispositivos" class="cfg-nav-item" onclick="cfgMostrarSecao('dispositivos')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z"/><path d="M9 12l2 2 4-4"/></svg>
+            Dispositivos Autorizados</button>
+          <button type="button" id="cfg-nav-operacoes-offline" class="cfg-nav-item" onclick="cfgMostrarSecao('operacoes-offline')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9a11 11 0 0 1 14 0"/><path d="M8.5 12.5a6.5 6.5 0 0 1 7 0"/><path d="M12 17.5h.01"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+            Validar Operações Offline</button>
+          <button type="button" id="cfg-nav-automacao" class="cfg-nav-item" onclick="cfgMostrarSecao('automacao')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+            Automação</button>
+          <button type="button" id="cfg-nav-sql" class="cfg-nav-item" onclick="cfgMostrarSecao('sql')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5V12c0 1.7 3.6 3 8 3s8-1.3 8-3V5.5"/><path d="M4 12v6.5c0 1.7 3.6 3 8 3s8-1.3 8-3V12"/></svg>
+            Dados SQL</button>
+          <button type="button" id="cfg-nav-notificacoes" class="cfg-nav-item" onclick="cfgMostrarSecao('notificacoes')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>
+            Notificações</button>
+          <button type="button" id="cfg-nav-paradas" class="cfg-nav-item" onclick="cfgMostrarSecao('paradas')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            Motivos de Parada</button>
+          <button type="button" id="cfg-nav-tipos-manutencao" class="cfg-nav-item" onclick="cfgMostrarSecao('tipos-manutencao')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>
+            Tipos de Manutenção</button>
+          <button type="button" id="cfg-nav-prioridades" class="cfg-nav-item" onclick="cfgMostrarSecao('prioridades')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>
+            Prioridades</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -139,7 +177,7 @@
                   <input type="color" id="cfg-mont-simples-cor"
                     style="width:42px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);cursor:pointer">
                   <button type="button" class="btn btn-ghost btn-sm" onclick="_cfgSugerirCorMontagem()"
-                    title="O programa já sugere uma cor automaticamente — clique aqui para sortear outra sugestão, ou escolha à mão no quadradinho">🎲</button>
+                    title="O programa já sugere uma cor automaticamente — clique aqui para sortear outra sugestão, ou escolha à mão no quadradinho"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h3.5c1 0 1.9.5 2.4 1.4L14 17.6c.5.9 1.4 1.4 2.4 1.4H20"/><path d="M17 4l3 3-3 3"/><path d="M3 18h3.5c1 0 1.9-.5 2.4-1.4l1-1.7"/><path d="M14.5 8.6 15 7.6c.5-.9 1.4-1.4 2.4-1.4H20"/><path d="M17 20l3-3-3-3"/></svg></button>
                 </div>
               </div>
             </div>
@@ -377,7 +415,7 @@
                vê esta aba — nenhum perfil cadastrado, nem Administrativo,
                tem permissão de gerenciar outros usuários. -->
           <div id="cfg-secao-usuarios" style="display:none">
-            <div class="card-title">🔑 Usuários</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"/><circle cx="9" cy="8" r="3.2"/><path d="M17.5 20v-1.5c0-1.3-.7-2.5-1.8-3.1"/><path d="M14.3 5.1a3.2 3.2 0 0 1 0 6.1"/></svg>Usuários</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Cada usuário entra com <strong>usuário e senha próprios</strong>, e o <strong>perfil</strong>
               escolhido aqui decide o que essa pessoa pode acessar — ela não escolhe isso na hora do login,
@@ -438,7 +476,7 @@
                          exige senha de Administrador (ver
                          perfis-customizados.js). -->
                     <button type="button" onclick="abrirPermissoesDoPerfilSelecionado()" title="Ver/editar permissões deste perfil"
-                      style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-2);cursor:pointer;font-size:1rem">⚙️</button>
+                      style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-2);cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9V10c.1.7.6 1.3 1.3 1.5H20a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
                   </div>
                 </div>
               </div>
@@ -471,7 +509,7 @@
                computador. O que sobra útil aqui é só visualizar/cancelar
                a operação em andamento agora, se houver uma. -->
           <div id="cfg-secao-autorizados" style="display:none">
-            <div class="card-title">Operação em Andamento</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>Operação em Andamento</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Quem pode iniciar, encerrar e registrar operações em <strong>Registrar Operação</strong> é definido
               por pessoa (aba <strong>Usuários</strong> — permissão "Pode iniciar/encerrar operações"), não mais
@@ -491,7 +529,7 @@
                Administrador Master escapa desta checagem. Ver
                dispositivoAutorizado() em server.js. -->
           <div id="cfg-secao-dispositivos" style="display:none">
-            <div class="card-title">🔐 Dispositivos Autorizados</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z"/><path d="M9 12l2 2 4-4"/></svg>Dispositivos Autorizados</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Além da permissão por pessoa (aba <strong>Usuários</strong>), controlar operações em
               <strong>Registrar Operação</strong> agora também exige que ESTE COMPUTADOR esteja autorizado — vale
@@ -506,7 +544,7 @@
                 <input type="text" id="cfg-dispositivos-meu-nome" placeholder="Nome (opcional, ex: PC Injetora 1)"
                   style="flex:1;min-width:160px" class="form-input">
                 <code id="cfg-dispositivos-meu-id" style="font-size:.75rem;color:var(--text-2);background:var(--bg-3);padding:6px 10px;border-radius:var(--radius);word-break:break-all"></code>
-                <button type="button" class="btn btn-sm" onclick="cfgAutorizarEsteDispositivo()">✅ Autorizar este dispositivo</button>
+                <button type="button" class="btn btn-sm" onclick="cfgAutorizarEsteDispositivo()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.3 2.3 4.7-5"/></svg>Autorizar este dispositivo</button>
               </div>
             </div>
 
@@ -540,7 +578,7 @@
                  só passa a AUTORIZAR sozinho depois desse passo no
                  servidor. -->
             <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
-              <div class="card-title" style="font-size:.85rem">🔏 Certificado de Autorização (opcional, mais durável)</div>
+              <div class="card-title" style="font-size:.85rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Certificado de Autorização (opcional, mais durável)</div>
               <p style="font-size:.75rem;color:var(--text-3);margin-bottom:14px;line-height:1.5">
                 Em vez de depender de cookie/navegador (que se perde ao limpar dados), gere um certificado aqui e
                 instale-o UMA VEZ no computador que vai operar — ele continua autorizado mesmo depois de limpar o
@@ -551,7 +589,7 @@
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
                 <input type="text" id="cfg-certificado-nome" placeholder="Nome (ex: PC Injetora 1)"
                   style="flex:1;min-width:200px" class="form-input">
-                <button type="button" class="btn btn-sm" onclick="cfgGerarCertificado()">🔏 Gerar certificado</button>
+                <button type="button" class="btn btn-sm" onclick="cfgGerarCertificado()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Gerar certificado</button>
               </div>
 
               <div class="card-title" style="font-size:.8rem">Certificados emitidos</div>
@@ -572,7 +610,7 @@
                errados (horários e quantidade de traços) antes de validar. -->
           <div id="cfg-secao-operacoes-offline" style="display:none">
             <div class="oov-header">
-              <div class="card-title">📴 Operações a Validar (Registro Offline)</div>
+              <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9a11 11 0 0 1 14 0"/><path d="M8.5 12.5a6.5 6.5 0 0 1 7 0"/><path d="M12 17.5h.01"/><line x1="3" y1="3" x2="21" y2="21"/></svg>Operações a Validar (Registro Offline)</div>
               <span id="cfg-offline-contador" class="oov-contador" style="display:none"></span>
             </div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
@@ -587,7 +625,7 @@
 
           <!-- ========== SEÇÃO: Automação ========== -->
           <div id="cfg-secao-automacao" style="display:block">
-            <div class="card-title">🤖 Modo Automático</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>Modo Automático</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Quando ativado, os campos de insumo dos traços em <strong>Registrar Operação</strong> passam a ser
               preenchidos automaticamente conforme leituras chegam de fora (balança/CLP, via Modbus TCP) — em vez
@@ -606,7 +644,7 @@
             </div>
 
             <p style="font-size:.74rem;color:var(--text-3);margin-top:14px;margin-bottom:0">
-              💡 A coleta automática (leitura do CLP) ainda não está conectada — ver README, "Modo Automático",
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>A coleta automática (leitura do CLP) ainda não está conectada — ver README, "Modo Automático",
               para status e o que falta.
             </p>
           </div>
@@ -614,7 +652,7 @@
 
           <!-- ========== SEÇÃO: Dados SQL ========== -->
           <div id="cfg-secao-sql" style="display:none">
-            <div class="card-title">🗄️ Dados SQL</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5V12c0 1.7 3.6 3 8 3s8-1.3 8-3V5.5"/><path d="M4 12v6.5c0 1.7 3.6 3 8 3s8-1.3 8-3V12"/></svg>Dados SQL</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Consulta direta às tabelas do banco (SQLite), para apagar uma linha específica ou a tabela
               <strong>inteira</strong> manualmente — use com cuidado: a exclusão é <strong>permanente</strong> e
@@ -635,7 +673,7 @@
                 <input class="form-input" id="cfg-sql-busca" placeholder="Digite para filtrar…" oninput="cfgSqlRenderLinhas()">
               </div>
               <button class="btn btn-ghost btn-sm" onclick="cfgSqlCarregarLinhas()" title="Recarregar">↺ Atualizar</button>
-              <button class="btn btn-danger btn-sm" id="cfg-sql-btn-limpar" onclick="cfgSqlLimparTabela()" title="Excluir TODAS as linhas desta tabela" disabled>🧹 Limpar Todas</button>
+              <button class="btn btn-danger btn-sm" id="cfg-sql-btn-limpar" onclick="cfgSqlLimparTabela()" title="Excluir TODAS as linhas desta tabela" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><path d="M4 7h16"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>Limpar Todas</button>
             </div>
 
             <div id="cfg-sql-status" style="font-size:.75rem;color:var(--text-3);margin-bottom:10px"></div>
@@ -651,7 +689,7 @@
 
           <!-- ========== SEÇÃO: Notificações ========== -->
           <div id="cfg-secao-notificacoes" style="display:none">
-            <div class="card-title">🔔 Notificações</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>Notificações</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Escolha, perfil a perfil, quem recebe as notificações push de Manutenção — <strong>Abertura de
               Chamado</strong> (novo chamado corretivo aberto) e <strong>Pedido de Peça</strong> (chamado já em
@@ -672,7 +710,7 @@
 
           <!-- ========== SEÇÃO: Motivos de Parada ========== -->
           <div id="cfg-secao-paradas" style="display:none">
-            <div class="card-title">⏸️ Motivos de Parada</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Motivos de Parada</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Motivos disponíveis para escolher ao registrar uma parada de máquina (Registro de Paradas). Adicionar,
               remover ou renomear aqui reflete na hora nos dois selects daquela tela (formulário e filtro).
@@ -696,7 +734,7 @@
 
           <!-- ========== SEÇÃO: Tipos de Manutenção ========== -->
           <div id="cfg-secao-tipos-manutencao" style="display:none">
-            <div class="card-title">🔧 Tipos de Manutenção</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>Tipos de Manutenção</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Tipos disponíveis para escolher ao abrir um chamado corretivo ou agendar uma manutenção programada
               (Registro de Manutenção). Adicionar, remover ou renomear aqui reflete na hora nos 3 selects daquela
@@ -722,7 +760,7 @@
 
           <!-- ========== SEÇÃO: Prioridades ========== -->
           <div id="cfg-secao-prioridades" style="display:none">
-            <div class="card-title">🚦 Prioridades</div>
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>Prioridades</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Níveis de prioridade disponíveis ao abrir um chamado corretivo, cada um com sua própria cor (usada nos
               botões de seleção, no painel de chamados e no filtro). Adicionar, remover ou renomear aqui reflete na
@@ -772,7 +810,7 @@
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <h2 style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);letter-spacing:.05em">🔗
+        <h2 style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);letter-spacing:.05em;display:flex;align-items:center;gap:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M13 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L18 11.5"/><path d="M11 17.5 9.5 19a3.5 3.5 0 0 1-5-5L6 12.5"/></svg>
           VINCULAR SOBRA</h2>
         <button onclick="cfgFecharVincularSobra()"
           style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
