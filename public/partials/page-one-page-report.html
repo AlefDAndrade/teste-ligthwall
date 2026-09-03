@@ -6,7 +6,7 @@
     <main class="main opr-page-wrap" id="page-one-page-report">
       <div class="page-header">
         <h1 class="page-title">One Page <span>Report</span></h1>
-        <p class="page-desc">Resumo executivo mensal — Segurança, Produção, Refugo e Expedição</p>
+        <p class="page-desc">Resumo executivo — Segurança, Produção, Refugo e Expedição</p>
       </div>
 
       <div class="page-body">
@@ -14,6 +14,25 @@
         <div class="opr-toolbar opr-no-print">
           <button class="btn btn-ghost btn-sm" onclick="showPage('menu')" title="Voltar ao Menu Principal">← Voltar</button>
           <button class="btn btn-ghost btn-sm" onclick="LWOnePageReport.imprimir()" title="Imprimir ou exportar como PDF">🖨️ Imprimir / PDF</button>
+
+          <select id="opr-periodo-tipo" class="form-input opr-periodo-tipo" onchange="LWOnePageReport.mudarTipoPeriodo(this.value)">
+            <option value="mes">Mês</option>
+            <option value="todos">Todos os períodos</option>
+            <option value="range">Personalizado</option>
+          </select>
+
+          <div class="opr-mes-seletor" id="opr-mes-seletor">
+            <button class="btn btn-ghost btn-sm opr-mes-seta" onclick="LWOnePageReport.mudarMesRelativo(-1)" title="Mês anterior" aria-label="Mês anterior">‹</button>
+            <input type="month" id="opr-mes-input" class="form-input opr-mes-input" onchange="LWOnePageReport.mudarMes(this.value)">
+            <button class="btn btn-ghost btn-sm opr-mes-seta" onclick="LWOnePageReport.mudarMesRelativo(1)" title="Próximo mês" aria-label="Próximo mês">›</button>
+          </div>
+
+          <div class="opr-range-seletor opr-oculto" id="opr-range-seletor">
+            <input type="date" id="opr-range-inicio" class="form-input opr-range-input" onchange="LWOnePageReport.mudarRange()">
+            <span class="opr-range-ate">até</span>
+            <input type="date" id="opr-range-fim" class="form-input opr-range-input" onchange="LWOnePageReport.mudarRange()">
+          </div>
+
           <span class="opr-toolbar-info">Referência: <strong id="opr-mes-atual">—</strong></span>
         </div>
 
@@ -40,11 +59,11 @@
               <div class="opr-col-body">
                 <div class="opr-kpi-row">
                   <div class="opr-kpi-mini">
-                    <div class="opr-kpi-mini-label">Acumulado<br>mês</div>
+                    <div class="opr-kpi-mini-label">Acumulado<br>período</div>
                     <div class="opr-kpi-mini-value" id="opr-seg-acumulado">—</div>
                   </div>
                   <div style="flex:1">
-                    <div class="opr-chart-title">Ocorrências no mês</div>
+                    <div class="opr-chart-title">Ocorrências no período</div>
                     <div class="opr-chart-box" id="opr-seg-chart"></div>
                   </div>
                 </div>
@@ -77,7 +96,7 @@
                 <span class="opr-col-header-icon">🔍</span> Refugo
               </div>
               <div class="opr-col-body">
-                <div class="opr-chart-title">Refugo diário</div>
+                <div class="opr-chart-title">Refugo no período</div>
                 <div class="opr-chart-box" id="opr-ref-chart"></div>
                 <div class="opr-donut-wrap" id="opr-ref-donut"></div>
                 <div>
@@ -106,7 +125,7 @@
                     <div class="opr-kpi-mini-value" id="opr-exp-cargas-total">—</div>
                   </div>
                 </div>
-                <div class="opr-chart-title">Qtd de cargas por semana</div>
+                <div class="opr-chart-title">Qtd de cargas</div>
                 <div class="opr-chart-box" id="opr-exp-cargas"></div>
                 <div class="opr-comments" id="opr-exp-comentarios"></div>
               </div>

@@ -74,6 +74,11 @@ function buscarRelatorio(mes) {
   return fetch(`${servidor.baseUrl}/db/one-page-report.json${qs}`);
 }
 
+/** Mesmo endpoint, mas pros modos "todos"/"range" (querystring própria — ver contextoDoPeriodo, lib/rotas/one-page-report.js). */
+function buscarRelatorioPeriodo(qs) {
+  return fetch(`${servidor.baseUrl}/db/one-page-report.json?${qs}`);
+}
+
 function registrarCarga(payload, cookie) {
   return fetch(`${servidor.baseUrl}/registrar-carga-expedicao`, {
     method: 'POST',
@@ -309,4 +314,79 @@ test('Comentários: texto livre salvo (Fase 3) vira array de linhas na agregaç�
   // nunca `undefined`/`null` (a tela usa `.map` direto em cima disso).
   assert.deepEqual(abr.expedicao.comentarios, []);
   assert.deepEqual(abr.expedicao.proximosPassos, []);
+});
+
+// ── "Todos os períodos"/"Personalizado" (reaproveita o que já foi semeado
+// pelos testes acima: ocorrência em Fev/26, produção+refugo em Mar/26,
+// expedição em Abr/26) — cada bloco agrupado por MÊS, não por dia. ────────
+
+test('periodo=todos: cada bloco agregado por mês, sem Módulo de Comentários/Assuntos Gerais (não têm "1 mês" pra amarrar)', async () => {
+  const corpo = await (await buscarRelatorioPeriodo('periodo=todos')).json();
+
+  assert.deepEqual(corpo.periodo, { tipo: 'todos' });
+  assert.equal(corpo.mes, null);
+  assert.equal(corpo.mesReferencia, 'Todos os períodos');
+  assert.deepEqual(corpo.assuntosGerais, { texto: '', fotos: [] });
+
+  // Segurança: única ocorrência semeada em todo o arquivo (2026-02-10) —
+  // "diasSemAcidentes" continua o mesmo cálculo global de sempre.
+  assert.equal(corpo.seguranca.disponivel, true);
+  assert.equal(corpo.seguranca.acumuladoMes, 1);
+  assert.deepEqual(corpo.seguranca.ocorrenciasPorDia, { labels: ['Fev/26'], values: [1] });
+  assert.deepEqual(corpo.seguranca.comentarios, []);
+  assert.deepEqual(corpo.seguranca.proximosPassos, []);
+
+  // Produção: as 3 operações de março, todas no mesmo mês -> 1 barra só.
+  assert.equal(corpo.producao.disponivel, true);
+  assert.deepEqual(corpo.producao.bateriasPorDia, { labels: ['Mar/26'], values: [3] });
+  assert.equal(corpo.producao.totalM2, 94.9);
+
+  // Refugo: 1 reprovado / 4 painéis (mesmos números do teste de março, só
+  // que agora num bucket "Mar/26" em vez de "dia 5"/"dia 12" separados).
+  assert.equal(corpo.refugo.disponivel, true);
+  assert.deepEqual(corpo.refugo.refugoDiarioPct, { labels: ['Mar/26'], values: [25] });
+  assert.equal(corpo.refugo.totalPct, 25);
+
+  // Expedição: as 3 cargas de abril, mesmo acumulado de sempre, agora
+  // bucketado por mês (não por semana S1-S4).
+  assert.equal(corpo.expedicao.disponivel, true);
+  assert.deepEqual(corpo.expedicao.expedicaoPorDia, { labels: ['Abr/26'], values: [170.5] });
+  assert.deepEqual(corpo.expedicao.cargasPorSemana, { labels: ['Abr/26'], values: [3] });
+  assert.equal(corpo.expedicao.acumuladoM2, 170.5);
+  assert.equal(corpo.expedicao.acumuladoCargas, 3);
+});
+
+test('periodo=range: filtra só o intervalo pedido; meses sem dado aparecem zerados (contínuo, não só os com dado)', async () => {
+  // Fevereiro a Março inteiros: pega a ocorrência de segurança E a
+  // produção/refugo de março, mas FICA DE FORA a expedição de abril.
+  const corpo = await (await buscarRelatorioPeriodo('periodo=range&inicio=2026-02-01&fim=2026-03-31')).json();
+
+  assert.deepEqual(corpo.periodo, { tipo: 'range', inicio: '2026-02-01', fim: '2026-03-31' });
+  assert.equal(corpo.mesReferencia, '01/02/2026 a 31/03/2026');
+
+  // Contínuo: Fev/26 E Mar/26 aparecem, mesmo que um bloco só tenha dado
+  // num dos dois (mesmo espírito de "todo dia do mês aparece, mesmo
+  // zerado" do modo mensal).
+  assert.equal(corpo.seguranca.disponivel, true);
+  assert.deepEqual(corpo.seguranca.ocorrenciasPorDia, { labels: ['Fev/26', 'Mar/26'], values: [1, 0] });
+
+  assert.equal(corpo.producao.disponivel, true);
+  assert.deepEqual(corpo.producao.bateriasPorDia, { labels: ['Fev/26', 'Mar/26'], values: [0, 3] });
+  assert.equal(corpo.producao.totalM2, 94.9);
+
+  // Expedição não tem NENHUMA carga no intervalo pedido -> indisponível,
+  // sem número inventado (mesma regra do modo mensal).
+  assert.equal(corpo.expedicao.disponivel, false);
+  assert.deepEqual(Object.keys(corpo.expedicao).sort(), ['comentarios', 'disponivel', 'proximosPassos'].sort());
+});
+
+test('periodo=range: início/fim inválidos ou fora de ordem devolvem 500 com mensagem, nunca um relatório com dado errado', async () => {
+  const semDatas = await buscarRelatorioPeriodo('periodo=range');
+  assert.equal(semDatas.status, 500);
+
+  const foraDeOrdem = await buscarRelatorioPeriodo('periodo=range&inicio=2026-05-01&fim=2026-01-01');
+  assert.equal(foraDeOrdem.status, 500);
+
+  const formatoInvalido = await buscarRelatorioPeriodo('periodo=range&inicio=01-05-2026&fim=2026-05-31');
+  assert.equal(formatoInvalido.status, 500);
 });

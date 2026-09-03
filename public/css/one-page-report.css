@@ -44,6 +44,48 @@
   color: var(--text-3);
 }
 
+/* ---- Seletor de período (toolbar): tipo (mês/todos/range) + controles
+   específicos de cada tipo, trocados via JS (LWOnePageReport.mudarTipoPeriodo) ---- */
+.opr-periodo-tipo {
+  width: 155px;
+  padding: 5px 8px;
+  font-size: .82rem;
+}
+
+.opr-mes-seletor,
+.opr-range-seletor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opr-mes-seta {
+  padding: 4px 9px;
+  line-height: 1;
+  font-size: .95rem;
+}
+
+.opr-mes-input {
+  width: 150px;
+  padding: 5px 8px;
+  font-size: .82rem;
+}
+
+.opr-range-input {
+  width: 140px;
+  padding: 5px 8px;
+  font-size: .82rem;
+}
+
+.opr-range-ate {
+  font-size: .78rem;
+  color: var(--text-3);
+}
+
+.opr-oculto {
+  display: none !important;
+}
+
 .opr-aviso-fase {
   display: flex;
   align-items: center;
@@ -556,6 +598,12 @@
 
 .opr-ag-status.opr-ag-status-ok { color: #7fd99a; }
 .opr-ag-status.opr-ag-status-erro { color: #ff9c9c; }
+
+.opr-ag-aviso-modo {
+  font-size: .74rem;
+  color: rgba(255, 255, 255, .6);
+  font-style: italic;
+}
 
 /* ---- SVG dos gráficos: tooltip via data-tooltip (mesmo padrão de
    public/js/setor-qualidade.js — LWTooltip, ver public/js/tooltip.js) ---- */

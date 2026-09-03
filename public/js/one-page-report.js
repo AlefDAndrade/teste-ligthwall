@@ -178,14 +178,32 @@
     };
   }
 
-  async function carregarDados() {
+  // `periodo` é opcional — `{tipo:'mes', mes}`, `{tipo:'todos'}` ou
+  // `{tipo:'range', inicio, fim}` (mesmo shape que o endpoint devolve em
+  // `dados.periodo`, ver lib/rotas/one-page-report.js). Sem ele (ou com
+  // `tipo:'mes'` sem `mes`), o endpoint já cai sozinho no mês corrente do
+  // servidor — é o que faz o primeiro carregamento da tela continuar
+  // funcionando sem nenhum parâmetro, igual sempre foi.
+  function _urlDoPeriodo(periodo) {
+    if (!periodo) return '/db/one-page-report.json';
+    if (periodo.tipo === 'todos') return '/db/one-page-report.json?periodo=todos';
+    if (periodo.tipo === 'range' && periodo.inicio && periodo.fim) {
+      return `/db/one-page-report.json?periodo=range&inicio=${encodeURIComponent(periodo.inicio)}&fim=${encodeURIComponent(periodo.fim)}`;
+    }
+    if (periodo.tipo === 'mes' && periodo.mes) {
+      return `/db/one-page-report.json?mes=${encodeURIComponent(periodo.mes)}`;
+    }
+    return '/db/one-page-report.json';
+  }
+
+  async function carregarDados(periodo) {
     // Fase 4 concluída — endpoint agregador real (lib/rotas/one-page-
     // report.js). MOCK_DADOS (acima) fica só como referência/fallback se
     // o fetch falhar (rede fora do ar etc.), pra tela nunca quebrar em
     // branco — mesmo espírito de "nunca mostrar erro cru pro usuário" do
     // resto do app.
     try {
-      const r = await fetch('/db/one-page-report.json');
+      const r = await fetch(_urlDoPeriodo(periodo));
       if (r.ok) return await r.json();
     } catch (_) { /* cai no mock abaixo */ }
     return MOCK_DADOS();
@@ -419,29 +437,37 @@
   function _agRenderDOM() {
     const container = document.getElementById('opr-assuntos-gerais-container');
     if (!container) return;
-    const admin = _oprSouAdmin();
+    // Assuntos Gerais é salvo POR MÊS (ver comentário de FASE 4, lib/rotas/
+    // one-page-report.js) — nos modos "Todos os períodos"/"Personalizado"
+    // não existe UM mês pra amarrar a edição, então a tela vira só leitura
+    // ali (mesmo raciocínio de _agState.mes ficar null nesses modos, ver
+    // _renderAssuntosGerais) mesmo pra quem é admin.
+    const podeEditar = _oprSouAdmin() && _periodo.tipo === 'mes';
 
     const fotosHtml = _agState.fotos.map(f => `
       <div class="opr-ag-foto">
-        ${admin ? `<button type="button" class="opr-ag-foto-remover" title="Remover foto" onclick="LWOnePageReport._agRemoverFoto('${_escaparAtributo(f.id)}')">×</button>` : ''}
+        ${podeEditar ? `<button type="button" class="opr-ag-foto-remover" title="Remover foto" onclick="LWOnePageReport._agRemoverFoto('${_escaparAtributo(f.id)}')">×</button>` : ''}
         <img src="${_escaparAtributo(f.imagem)}" alt="${_escaparAtributo(f.tema || 'Foto de Assuntos Gerais')}">
-        ${admin
+        ${podeEditar
           ? `<input class="opr-ag-foto-tema-input" type="text" maxlength="200" placeholder="Tema da foto…" value="${_escaparAtributo(f.tema || '')}" oninput="LWOnePageReport._agAtualizarTema('${_escaparAtributo(f.id)}', this.value)">`
           : `<div class="opr-ag-foto-tema">${_escaparHtml(f.tema || '')}</div>`
         }
       </div>`).join('');
 
-    const addTileHtml = admin ? `
+    const addTileHtml = podeEditar ? `
       <button type="button" class="opr-ag-add" onclick="LWOnePageReport._agAbrirSeletorFoto()">
         <span class="opr-ag-add-icon">＋</span>
         <span>Adicionar foto</span>
       </button>` : '';
 
-    const textoHtml = admin
+    const textoHtml = podeEditar
       ? `<textarea class="opr-footer-textarea" placeholder="Assuntos gerais do mês…" oninput="LWOnePageReport._agAtualizarTexto(this.value)">${_escaparHtml(_agState.texto)}</textarea>`
       : `<div class="opr-footer-texto-leitura">${_escaparHtml(_agState.texto)}</div>`;
 
-    const toolbarHtml = admin ? `
+    const avisoModoHtml = (_oprSouAdmin() && _periodo.tipo !== 'mes')
+      ? `<div class="opr-ag-aviso-modo">Edição disponível só no modo "Mês".</div>` : '';
+
+    const toolbarHtml = podeEditar ? `
       <div class="opr-ag-toolbar">
         <button type="button" class="btn btn-sm btn-primary" ${_agSalvando ? 'disabled' : ''} onclick="LWOnePageReport._agSalvar()">
           ${_agSalvando ? 'Salvando…' : '💾 Salvar Assuntos Gerais'}
@@ -452,6 +478,7 @@
     container.innerHTML = `
       ${textoHtml}
       <div class="opr-ag-grid">${fotosHtml}${addTileHtml}</div>
+      ${avisoModoHtml}
       ${toolbarHtml}
     `;
   }
@@ -473,9 +500,18 @@
 
   let _dadosAtuais = null;
 
-  async function render() {
-    const dados = await carregarDados();
+  // Período atualmente exibido na tela — `{tipo:'mes', mes}`,
+  // `{tipo:'todos'}` ou `{tipo:'range', inicio, fim}`. Sincronizado com o
+  // que o SERVIDOR devolveu (dados.periodo), não com o que foi pedido: se
+  // o front pedir algo inválido/incompleto, quem decide o padrão é o
+  // endpoint, e a tela reflete o que voltou, não o que foi enviado.
+  let _periodo = { tipo: 'mes', mes: null };
+
+  async function render(periodo) {
+    const dados = await carregarDados(periodo || _periodo);
     _dadosAtuais = dados;
+    _periodo = dados.periodo || { tipo: 'mes', mes: dados.mes };
+    _sincronizarControlesPeriodo();
     const tituloMes = document.getElementById('opr-mes-atual');
     if (tituloMes) tituloMes.textContent = dados.mesReferencia;
     _renderSeguranca(dados.seguranca);
@@ -483,6 +519,102 @@
     _renderRefugo(dados.refugo);
     _renderExpedicao(dados.expedicao);
     _renderAssuntosGerais(dados.assuntosGerais, dados.mes);
+  }
+
+  /** Atualiza os controles da toolbar (select de tipo + os campos do tipo
+   * ativo) pra refletir `_periodo` — chamado sempre depois de um render()
+   * bem-sucedido, nunca direto por quem dispara a troca (evita os
+   * controles mostrarem algo que o servidor ainda não confirmou). */
+  function _sincronizarControlesPeriodo() {
+    const selectTipo = document.getElementById('opr-periodo-tipo');
+    const blocoMes = document.getElementById('opr-mes-seletor');
+    const blocoRange = document.getElementById('opr-range-seletor');
+    if (selectTipo) selectTipo.value = _periodo.tipo;
+    if (blocoMes) blocoMes.classList.toggle('opr-oculto', _periodo.tipo !== 'mes');
+    if (blocoRange) blocoRange.classList.toggle('opr-oculto', _periodo.tipo !== 'range');
+    if (_periodo.tipo === 'mes') {
+      const inputMes = document.getElementById('opr-mes-input');
+      if (inputMes && _periodo.mes) inputMes.value = _periodo.mes;
+    } else if (_periodo.tipo === 'range') {
+      const inputIni = document.getElementById('opr-range-inicio');
+      const inputFim = document.getElementById('opr-range-fim');
+      if (inputIni && _periodo.inicio) inputIni.value = _periodo.inicio;
+      if (inputFim && _periodo.fim) inputFim.value = _periodo.fim;
+    }
+  }
+
+  /** "YYYY-MM" do dia local — mesmo critério de fallback usado no resto
+   * do front quando ainda não existe nenhum mês carregado (não deveria
+   * acontecer na prática, já que init() sempre roda render() primeiro,
+   * mas evita quebrar se mudarMesRelativo for chamado cedo demais). */
+  function _mesLocalAtual() {
+    const hoje = new Date();
+    return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /** Soma/subtrai `delta` meses de um "YYYY-MM", virando ano quando passa
+   * de Janeiro/Dezembro (Date.UTC já normaliza mês fora de 0-11 sozinho). */
+  function _deslocarMes(mesISO, delta) {
+    const [ano, mes] = mesISO.split('-').map(Number);
+    const d = new Date(Date.UTC(ano, (mes - 1) + delta, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /** Chamado pelo <input type="month"> da toolbar (onchange). Ignora
+   * valor vazio/mal formado (ex: usuário limpou o campo) — mantém o mês
+   * atual em vez de disparar um fetch inválido. */
+  function mudarMes(valor) {
+    if (!valor || !/^\d{4}-\d{2}$/.test(valor)) return;
+    if (_periodo.tipo === 'mes' && valor === _periodo.mes) return;
+    render({ tipo: 'mes', mes: valor });
+  }
+
+  /** Botões ‹ › da toolbar — mesmo padrão de navegação relativa (‹/›)
+   * já usado no resto do app (setor-qualidade.js/analise-focada.js). Só
+   * faz sentido no modo "Mês" (nos outros dois o select nem mostra esses
+   * botões — ver _sincronizarControlesPeriodo), mas usa o mês atual (ou
+   * o mês local, se ainda nenhum foi carregado) como base de qualquer forma. */
+  function mudarMesRelativo(delta) {
+    const base = (_periodo.tipo === 'mes' && _periodo.mes) || _mesLocalAtual();
+    mudarMes(_deslocarMes(base, delta));
+  }
+
+  /** Chamado pelo <select> "Mês"/"Todos os períodos"/"Personalizado" da
+   * toolbar. "Todos" dispara na hora (não precisa de mais nenhum dado).
+   * "Personalizado" só dispara fetch se já houver início/fim escolhidos
+   * (ex.: usuário volta pro modo range depois de já ter preenchido as
+   * datas antes) — senão só troca os controles visíveis e espera
+   * mudarRange() ser chamado quando as duas datas estiverem prontas. */
+  function mudarTipoPeriodo(tipo) {
+    if (tipo === 'todos') {
+      render({ tipo: 'todos' });
+      return;
+    }
+    if (tipo === 'range') {
+      const inputIni = document.getElementById('opr-range-inicio');
+      const inputFim = document.getElementById('opr-range-fim');
+      if (inputIni && inputFim && inputIni.value && inputFim.value && inputIni.value <= inputFim.value) {
+        render({ tipo: 'range', inicio: inputIni.value, fim: inputFim.value });
+      } else {
+        _periodo = { tipo: 'range', inicio: (inputIni && inputIni.value) || null, fim: (inputFim && inputFim.value) || null };
+        _sincronizarControlesPeriodo();
+      }
+      return;
+    }
+    render({ tipo: 'mes', mes: (_periodo.tipo === 'mes' && _periodo.mes) || _mesLocalAtual() });
+  }
+
+  /** Chamado pelo onchange dos dois <input type="date"> do modo
+   * Personalizado. Só dispara fetch quando as DUAS datas já foram
+   * escolhidas e início ≤ fim — senão fica quieto (o backend recusaria
+   * mesmo, ver contextoDoPeriodo, lib/rotas/one-page-report.js; melhor
+   * nem chegar a pedir). */
+  function mudarRange() {
+    const inputIni = document.getElementById('opr-range-inicio');
+    const inputFim = document.getElementById('opr-range-fim');
+    if (!inputIni || !inputFim || !inputIni.value || !inputFim.value) return;
+    if (inputIni.value > inputFim.value) return;
+    render({ tipo: 'range', inicio: inputIni.value, fim: inputFim.value });
   }
 
   function imprimir() {
@@ -498,6 +630,7 @@
 
   window.LWOnePageReport = {
     init, render, imprimir,
+    mudarMes, mudarMesRelativo, mudarTipoPeriodo, mudarRange,
     // Assuntos Gerais — chamados via onclick/oninput inline no HTML
     // gerado por _agRenderDOM (mesmo padrão de onclick="showPage(...)"/
     // "LWFocada.abrirDetalhesBerco(...)" já usado no resto do app).
