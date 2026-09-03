@@ -1402,6 +1402,35 @@
     // login como Administrador — não pedimos a senha de novo aqui (ficava
     // redundante). Se a sessão tiver expirado nesse meio tempo, o
     // servidor responde 403 e avisamos pra relogar.
+    // ---- Sincronizar backup automático (README, pendência revisada —
+    // backup automático x backups manuais): pergunta OPCIONAL depois de
+    // qualquer backup manual (Dados ou Geral) bem-sucedido — nunca
+    // automática, a pessoa decide cada vez. "Sim" chama
+    // /sincronizar-backup-automatico (lib/rotas/backup.js), que
+    // sobrescreve o arquivo automático de HOJE com o MESMO conteúdo do
+    // manual que acabou de ser baixado, e reinicia a contagem de
+    // retenção de 3 dias a partir de agora. ----
+    async function _perguntarSincronizarBackupAutomatico(tipo) {
+      const rotulo = tipo === 'geral' ? 'Backup Geral' : 'Backup de Dados';
+      const confirmou = await LW.mostrarConfirmacao(
+        `Quer que este ${rotulo} também vire o backup automático de hoje? Isso sobrescreve o backup automático já salvo hoje (backups-automaticos/) com este mesmo conteúdo, e reinicia a contagem de retenção de 3 dias a partir de agora. Os backups automáticos futuros continuam rodando normalmente depois.`,
+        { titulo: 'Sincronizar backup automático?', textoConfirmar: 'Sim, sincronizar', textoCancelar: 'Não, manter como está' }
+      );
+      if (!confirmou) return;
+      try {
+        const res = await fetch('/sincronizar-backup-automatico', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error((data && data.erro) || ('HTTP ' + res.status));
+        LW.mostrarAlerta('Backup automático de hoje atualizado com sucesso.', { tipo: 'sucesso' });
+      } catch (e) {
+        LW.mostrarAlerta('Não consegui sincronizar o backup automático: ' + e.message, { tipo: 'erro' });
+      }
+    }
+
     function fazerBackupDados() {
       if (!_perfilTemAcao('backup-restauracao')) return;
 
@@ -1433,6 +1462,7 @@
           URL.revokeObjectURL(url);
 
           fecharBackupHub();
+          await _perguntarSincronizarBackupAutomatico('dados');
         } catch (e) {
           LW.mostrarAlerta('Erro ao gerar backup: ' + e.message, { tipo: 'erro' });
         } finally {
@@ -1486,6 +1516,7 @@
           URL.revokeObjectURL(url);
 
           fecharBackupHub();
+          await _perguntarSincronizarBackupAutomatico('geral');
         } catch (e) {
           LW.mostrarAlerta('Erro ao gerar backup geral: ' + e.message, { tipo: 'erro' });
         } finally {

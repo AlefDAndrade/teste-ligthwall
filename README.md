@@ -630,6 +630,7 @@ O próprio `server.js` gera um backup de dados todo fim de dia, sem depender de 
 - Mantém sempre os **últimos 3 dias**: ao criar um novo, remove automaticamente o mais antigo se já houver 3.
 - Arquivos ficam em `backups-automaticos/` (fora de `public/`, nunca servida como arquivo estático comum), nomeados por data: `backup-dados_AAAA-MM-DD.zip`.
 - Acessível só pelas rotas dedicadas (`/backups-automaticos` e `/backups-automaticos/<nome>`) — essa pasta cresce e diminui sozinha, sem precisar de limpeza manual (diferente de `backups-seguranca/`).
+- **Sincronizar com um backup manual (conversa que motivou a mudança)**: até aqui, backup manual (Dados/Geral) e o job automático diário eram 100% independentes — baixar um backup manual nunca afetava `backups-automaticos/`. Agora, depois de qualquer backup manual bem-sucedido, o front pergunta (`LW.mostrarConfirmacao`) se a pessoa quer que ESSE backup também vire o automático de hoje — nunca acontece sozinho. Se ela confirmar, `POST /sincronizar-backup-automatico` (`lib/rotas/backup.js`, `{ tipo: 'dados'|'geral' }`) sobrescreve `backup-dados_<hoje>.zip` com o MESMO conteúdo do manual (mesmo nome de arquivo — não cria um segundo) e reinicia a contagem de retenção de 3 dias a partir de agora; como o job agendado já pula o dia se o arquivo existir, ele não roda de novo mais tarde sobrescrevendo um "Geral" escolhido de propósito com um "Dados" simples. Coberto por `test/backup-sincronizar-automatico.test.js`.
 
 ## Migrando para outra VM (ex: Google Cloud → Locaweb Cloud/Magalu Cloud)
 
