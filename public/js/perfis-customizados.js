@@ -104,17 +104,26 @@ async function cfgRenderPerfisCustomizados() {
 
 // ── Render do catálogo dentro do modal ──────────────────────────────────
 
-// Itens cujo controle ainda é EXCLUSIVO do Administrador Master e do
-// perfil fixo "Administrador" no backend (backup, SQL, importação,
-// gerenciar usuários, salvar configurações — ver temPoderesDeAdmin,
-// server.js): marcar "Acesso Total" pra um perfil CUSTOMIZADO nesses
-// itens ainda não concede acesso de verdade (só os 5 grupos de
-// lib/perfis.js AREAS_DE_EDICAO têm a ponte real pra perfis
-// customizados, ver lib/perfis-customizados.js). Ficam travados em
-// "Ocultar" no formulário de criação, com uma nota explicando o motivo,
-// pra não prometer um controle que ainda não existe de verdade.
+// Itens de "config" (abas de Configurações, exceto Atalhos) cujo
+// controle ainda é EXCLUSIVO do Administrador Master e do perfil fixo
+// "Administrador" no backend (SQL, gerenciar usuários, salvar
+// configurações — ver temPoderesDeAdmin, server.js): marcar "Acesso
+// Total" pra um perfil CUSTOMIZADO nesses itens ainda não concede acesso
+// de verdade. Ficam travados em "Ocultar" no formulário de criação, com
+// uma nota explicando o motivo, pra não prometer um controle que ainda
+// não existe de verdade.
+//
+// Os 5 itens de "Outros" (tipo 'acao': Importar Documentos, Exportações
+// Interativas/Excel, Edição dos Dados, Backup e Restauração) SAÍRAM
+// desta trava (README, pendências — "Perfis customizados: acesso real no
+// backend", já resolvido): Exportações e Edição dos Dados nunca
+// dependeram de temPoderesDeAdmin pra valer de verdade (exportação roda
+// 100% no cliente; edição de dados já é protegida por podeEditarArea
+// 'injetora', igual Registrar Operação); Importar Documentos e Backup e
+// Restauração agora usam `podeUsarItem` (lib/permissoes-area.js), que
+// TAMBÉM libera um perfil customizado que marcou o item — não é mais
+// exclusivo do Administrador.
 function _cpItemAindaExclusivoDoAdmin(item) {
-  if (item.tipo === 'acao') return true;
   if (item.tipo === 'config' && item.id !== 'config-atalhos') {
     // Editando um dos 6 perfis FIXOS (voltou — ver conversa que motivou a
     // mudança: engrenagem ao lado do campo "Perfil"), a trava abaixo NÃO
@@ -123,8 +132,8 @@ function _cpItemAindaExclusivoDoAdmin(item) {
     // lib/perfis.js), diferente de um perfil CUSTOMIZADO novo (onde a
     // maioria ainda não tem esse enforcement, ver comentário abaixo) —
     // destravar aqui só deixa a tela refletir o que já é real, sem
-    // prometer nada novo. Rotas administrativas sensíveis (SQL, backup,
-    // importação) continuam checando a IDENTIDADE do perfil à parte (ver
+    // prometer nada novo. Rotas administrativas sensíveis (SQL, gerenciar
+    // usuários) continuam checando a IDENTIDADE do perfil à parte (ver
     // ehPerfilDeAdmin/temPoderesDeAdmin, server.js), não o catálogo —
     // então mudar isto aqui não abre brecha de segurança nova nenhuma.
     if (_cpEditandoPerfilFixo) return false;

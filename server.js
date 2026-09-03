@@ -127,6 +127,8 @@ const {
   negarEdicao,
   temPoderesDeAdmin,
   sessaoOuAdmin,
+  podeUsarItem,
+  negarAcesso,
   podeExcluirChamado,
   nomeDeQuemAceita,
   nomeParaVisualizacao,
@@ -306,7 +308,7 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
 const rotasCertificadosDispositivo = require('./lib/rotas/certificados-dispositivo.js')({ sessao: sessaoOuAdmin, certificadoDispositivo });
-const rotasImportacao = require('./lib/rotas/importacao.js')({ db, sessao: sessaoOuAdmin, numOuNulo });
+const rotasImportacao = require('./lib/rotas/importacao.js')({ db, podeUsarItem, negarAcesso, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
 const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
@@ -326,12 +328,12 @@ const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
 // contrário dos hashes de senha), então um backup não deve incluí-lo.
 const googleDrive = require('./lib/google-drive.js')();
 const backupDriveJson = require('./lib/backup-drive-json.js')({ fs, path, PRIVATE_DIR });
-const rotasBackupDrive = require('./lib/rotas/backup-drive.js')({ sessao: sessaoOuAdmin, auth, googleDrive, backupDriveJson });
+const rotasBackupDrive = require('./lib/rotas/backup-drive.js')({ sessao: sessaoOuAdmin, podeUsarItem, negarAcesso, auth, googleDrive, backupDriveJson });
 
 const rotasBackup = require('./lib/rotas/backup.js')({
   db, fs, path, JSZip,
   ROOT_DIR, DB_DIR, SECURITY_PATH, USUARIOS_PATH, PERFIS_CUSTOMIZADOS_PATH,
-  auth, sessao: sessaoOuAdmin,
+  auth, podeUsarItem, negarAcesso,
   todayBrasiliaServer, horaMinutoBrasiliaServer,
   lerContadorTracosHoje, recalcularFilaNaoAvaliadasApartirDoSql,
   googleDrive, backupDriveJson,

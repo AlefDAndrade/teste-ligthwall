@@ -1505,18 +1505,28 @@
     const fila = lerFila();
     if (!fila.length) { el.innerHTML = ''; return; }
 
+    // Item mais antigo primeiro — se algo está preso há muito tempo, é o
+    // primeiro que a pessoa vai ver, não escondido no fim da lista.
+    const ordenada = [...fila].sort((a, b) => new Date(a.atualizadoEm) - new Date(b.atualizadoEm));
+
     el.innerHTML = `
       <div class="card" style="padding:14px 16px">
         <div style="font-size:.72rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
           📥 Salvos neste aparelho, aguardando envio (${fila.length})
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${fila.map((p) => {
+          ${ordenada.map((p) => {
             const fr = p.formRecord || {};
+            const antigo = p.atualizadoEm && idadeEmHoras(p.atualizadoEm) >= LIMIAR_AVISO_HORAS;
+            const idadeTexto = p.atualizadoEm ? formatarIdade(p.atualizadoEm) : '';
             return `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.82rem;flex-wrap:wrap">
-              <span>🆔 ${escaparHtml(p.idTemp)} — Bateria ${escaparHtml(fr.id_bateria || '—')} ·
-                ${escaparHtml(String(fr.qtd_tracos ?? 0))} traço(s)</span>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.82rem;flex-wrap:wrap;${antigo ? 'padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.1);border:1px solid #f59e0b40' : ''}">
+              <span>
+                🆔 ${escaparHtml(p.idTemp)} — Bateria ${escaparHtml(fr.id_bateria || '—')} ·
+                ${escaparHtml(String(fr.qtd_tracos ?? 0))} traço(s)
+                ${idadeTexto ? `<span style="color:${antigo ? '#fbbf24' : 'var(--text-3)'}"> · ${idadeTexto}</span>` : ''}
+                ${antigo ? `<br><span style="color:#fbbf24;font-size:.76rem">⚠️ Aguardando envio há muito tempo — confira a conexão deste aparelho, ou avise um Administrador se ele já foi trocado/não vai mais sincronizar.</span>` : ''}
+              </span>
               <button type="button" class="btn btn-ghost btn-sm" onclick="LWOff.descartarDaFila('${p.idTemp}')" title="Descartar este registro">✕ Descartar</button>
             </div>`;
           }).join('')}
@@ -1528,6 +1538,35 @@
     if (!confirm('Tem certeza? Isso apaga esse registro salvo neste aparelho — não tem como desfazer.')) return;
     removerDaFila(idTempAlvo);
     renderFila();
+  }
+
+  // ---- Aviso de item "preso" há muito tempo (README, item 4b das
+  // pendências — "Expiração"): decisão tomada — NUNCA apagar nada
+  // sozinho (um pendente é um registro real de operação, apagar à toa
+  // seria perder trabalho de verdade), só tornar visível quando algo
+  // está esperando envio há tempo demais, pra quem usa o aparelho notar
+  // e agir (checar a conexão, avisar o Administrador, ou descartar de
+  // propósito se for mesmo lixo). Puramente informativo — a fila em si
+  // (lerFila/tentarSincronizarAgora) não muda nada.
+
+  const LIMIAR_AVISO_HORAS = 24; // acima disso, destaca como "há muito tempo"
+
+  /** "há 5 minutos"/"há 3 horas"/"há 2 dias" a partir de um ISO — só as
+   * unidades que interessam pra um pendente offline (nunca segundos). */
+  function formatarIdade(iso) {
+    const ms = Date.now() - new Date(iso).getTime();
+    if (!Number.isFinite(ms) || ms < 0) return '';
+    const minutos = Math.floor(ms / 60000);
+    if (minutos < 60) return minutos <= 1 ? 'há 1 minuto' : `há ${minutos} minutos`;
+    const horas = Math.floor(minutos / 60);
+    if (horas < 24) return horas === 1 ? 'há 1 hora' : `há ${horas} horas`;
+    const dias = Math.floor(horas / 24);
+    return dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+  }
+
+  function idadeEmHoras(iso) {
+    const ms = Date.now() - new Date(iso).getTime();
+    return Number.isFinite(ms) ? ms / 3600000 : 0;
   }
 
   // ============================================================

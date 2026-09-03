@@ -2429,6 +2429,9 @@
             </div>
             <button class="btn btn-primary" style="height:34px" onclick="LWTracosDescartados.aplicarFiltros()">Filtrar</button>
             <button class="btn btn-ghost" style="height:34px" onclick="LWTracosDescartados.limparFiltros()">Limpar</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-outline-accent" style="height:34px" onclick="LWTracosDescartados.exportarCSV()" title="Exporta o histórico filtrado (CSV)">📄 Exportar CSV</button>
+            <button class="btn btn-outline-accent" style="height:34px" onclick="LWTracosDescartados.exportarPDF()" id="tracos-descartados-btn-exportar-pdf" title="Gera um PDF do histórico filtrado (via Chromium)">📕 Exportar PDF</button>
           </div>
         </div>
 

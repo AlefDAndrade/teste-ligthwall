@@ -284,6 +284,109 @@
     }
   }
 
+  // ── Exportação (README, item 8b das pendências) — CSV mesmo padrão de
+  // exportarCSV()/escapeCSV() de manutencao.js (ponto-e-vírgula, aspas
+  // duplicadas quando precisa escapar); PDF via o mesmo pipeline
+  // Chromium dos outros dashboards (LW.baixarPdfApartirDeHtml,
+  // data.js) — CSS compartilhado (LW.gerarCssExportPadrao()), sem
+  // exigir o truque de "página única" do One Page Report (uma lista
+  // pode paginar normalmente, não tem por que forçar 1 folha só). Os
+  // dois respeitam o filtro atual (tracosFiltrados()), não sempre o
+  // histórico inteiro.
+
+  function escapeCSV(valor) {
+    if (valor === null || valor === undefined) return '';
+    let t = String(valor);
+    if (t.includes(';') || t.includes('"') || t.includes('\n') || t.includes('\r')) {
+      t = t.replace(/"/g, '""');
+      t = `"${t}"`;
+    }
+    return t;
+  }
+
+  function exportarCSV() {
+    const lista = tracosFiltrados();
+    if (!lista.length) {
+      LW.mostrarAlerta('Nenhum traço descartado no filtro atual para exportar.', { tipo: 'aviso' });
+      return;
+    }
+    const headers = ['Data', 'Turno', 'Cimento (kg)', 'Água (kg)', 'EPS (kg)', 'Superplast. (kg)', 'Incorp. Ar (kg)', 'Tempo de Batida (s)', 'Motivo', 'Registrado Por', 'Registrado Em'].join(';');
+    const linhas = lista.map(t => [
+      t.data, t.turno, t.cimento, t.agua, t.eps, t.superplast, t.incorporador, t.tempo_batida,
+      t.motivo, t.operador_nome, t.registrado_em,
+    ].map(escapeCSV).join(';'));
+    const conteudo = [headers, ...linhas].join('\r\n');
+    LW.baixarArquivoTexto(`tracos-descartados-${new Date().toISOString().slice(0, 10)}.csv`, conteudo, 'text/csv;charset=utf-8;');
+  }
+
+  function _resumoFiltroAtual() {
+    const inicio = document.getElementById('tracos-descartados-filtro-inicio');
+    const fim = document.getElementById('tracos-descartados-filtro-fim');
+    const busca = document.getElementById('tracos-descartados-filtro-busca');
+    const partes = [
+      inicio && inicio.value ? `de ${inicio.value}` : null,
+      fim && fim.value ? `até ${fim.value}` : null,
+      busca && busca.value ? `busca "${busca.value}"` : null,
+    ].filter(Boolean);
+    return partes.length ? partes.join(' · ') : 'sem filtro (todo o histórico)';
+  }
+
+  async function exportarPDF() {
+    const lista = tracosFiltrados();
+    if (!lista.length) {
+      LW.mostrarAlerta('Nenhum traço descartado no filtro atual para exportar.', { tipo: 'aviso' });
+      return;
+    }
+
+    const linhasHtml = lista.map(t => `
+      <tr>
+        <td>${LW.escaparHtml(t.data || '—')}${t.turno ? ' · ' + LW.escaparHtml(t.turno) : ''}</td>
+        <td>${formatarKg(t.cimento)}</td>
+        <td>${formatarKg(t.agua)}</td>
+        <td>${formatarKg(t.eps)}</td>
+        <td>${formatarKg(t.superplast)}</td>
+        <td>${formatarKg(t.incorporador)}</td>
+        <td>${LW.escaparHtml(t.motivo || '—')}</td>
+        <td>${LW.escaparHtml(t.operador_nome || '—')}<br><span style="font-size:.7rem;color:var(--text-3)">${formatarDataHora(t.registrado_em)}</span></td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Traços Descartados</title>
+<style>${LW.gerarCssExportPadrao()}</style>
+</head>
+<body>
+  <h1>🗑️ Traços Descartados (Perda)</h1>
+  <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} — ${LW.escaparHtml(_resumoFiltroAtual())} — ${lista.length} registro(s)</div>
+  <table>
+    <thead><tr><th>Data/Turno</th><th>Cimento</th><th>Água</th><th>EPS</th><th>Superplast.</th><th>Incorp. Ar</th><th>Motivo</th><th>Registrado</th></tr></thead>
+    <tbody>${linhasHtml}</tbody>
+  </table>
+  <div class="rodape">LightWall</div>
+</body>
+</html>`;
+
+    const botao = document.getElementById('tracos-descartados-btn-exportar-pdf');
+    const textoOriginal = botao ? botao.textContent : '';
+    if (botao) { botao.disabled = true; }
+    try {
+      await LW.baixarPdfApartirDeHtml(`tracos-descartados-${new Date().toISOString().slice(0, 10)}.pdf`, html, {
+        onProgresso: (fase) => {
+          if (!botao) return;
+          if (fase === 'carregando') botao.textContent = 'Carregando…';
+          else if (fase === 'imprimindo') botao.textContent = 'Imprimindo…';
+          else if (fase === 'reconectando') botao.textContent = 'Reconectando…';
+        },
+      });
+    } catch (e) {
+      LW.mostrarAlerta(e.message || 'Erro ao gerar o PDF.', { tipo: 'erro' });
+    } finally {
+      if (botao) { botao.disabled = false; botao.textContent = textoOriginal; }
+    }
+  }
+
   // ── API pública ─────────────────────────────────────────────────────────
 
   window.LWTracosDescartados = {
@@ -295,6 +398,8 @@
     fecharModalEdicao,
     salvarEdicao,
     confirmarExclusao,
+    exportarCSV,
+    exportarPDF,
   };
 
 })();

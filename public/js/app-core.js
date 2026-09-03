@@ -62,6 +62,26 @@
     // páginas em que o perfil só visualiza. null = Administrador (master)
     // ou ainda carregando = tudo liberado; Array = lista real de áreas.
     let _areasDeEdicao = null;
+    // Itens "Outros" (Importar Documentos, Exportações, Edição dos
+    // Dados, Backup e Restauração) que o perfil atual tem "Acesso
+    // Total" — mesmo padrão de _areasDeEdicao (acima), só que por ITEM
+    // em vez de por área (ver itensAcaoPorPerfilMesclados,
+    // lib/rotas/usuarios.js). null = Administrador (master) ou ainda
+    // carregando = tudo liberado; Array = lista real de itens.
+    let _itensAcaoPermitidos = null;
+
+    // Confere se o perfil atual pode USAR o item "Outros" `itemId`
+    // ('importar-documentos'/'export-interativo'/'export-excel'/
+    // 'edicao-dados'/'backup-restauracao') — usado só pra ESCONDER
+    // botões/menus no front; a validação que importa de verdade é
+    // sempre a do servidor (podeUsarItem/podeEditarArea,
+    // lib/permissoes-area.js — cada rota confere de novo).
+    function _perfilTemAcao(itemId) {
+      const role = sessionStorage.getItem('lw_role');
+      if (role === 'Administrador') return true; // master: irrestrito
+      if (!_itensAcaoPermitidos) return true; // ainda carregando — fail-open temporário, ver _paginaPermitida
+      return _itensAcaoPermitidos.includes(itemId);
+    }
 
     // Confere se o perfil atual pode EDITAR a `area` (ver AREAS_DE_EDICAO,
     // lib/perfis.js: 'injetora', 'paradas', 'qualidade', 'manutencao',
@@ -99,18 +119,20 @@
 
     async function _carregarPermissoesDoServidor() {
       const role = sessionStorage.getItem('lw_role');
-      if (role === 'Administrador') { _paginasPermitidas = null; _areasDeEdicao = null; return; } // irrestrito, nunca precisa da lista
+      if (role === 'Administrador') { _paginasPermitidas = null; _areasDeEdicao = null; _itensAcaoPermitidos = null; return; } // irrestrito, nunca precisa da lista
       try {
         const res = await fetch('/perfis');
         const data = await res.json();
         _paginasPermitidas = (data.ok && data.paginasPorPerfil[role]) || [];
         _areasDeEdicao = (data.ok && data.areasEdicaoPorPerfil && data.areasEdicaoPorPerfil[role]) || [];
+        _itensAcaoPermitidos = (data.ok && data.itensAcaoPorPerfil && data.itensAcaoPorPerfil[role]) || [];
       } catch (e) {
         // Sem servidor/rede — mantém null (fail-open temporário, ver
         // comentário em _paginaPermitida) em vez de travar a pessoa fora
         // de tudo por causa de uma falha de rede pontual.
         _paginasPermitidas = null;
         _areasDeEdicao = null;
+        _itensAcaoPermitidos = null;
       }
     }
 
@@ -1133,7 +1155,7 @@
     let _importDestino = null; // 'historico' | 'relatorio_injecao'
 
     function abrirImportacao() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('importar-documentos')) return;
       document.getElementById('import-modal').style.display = 'flex';
       resetImportModal();
     }
@@ -1144,7 +1166,7 @@
 
     // ---- Painel "Backup e Restauração" (admin) ----
     function abrirBackupHub() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
       const status = document.getElementById('backup-hub-status');
       if (status) status.style.display = 'none';
       document.getElementById('backup-hub-modal').style.display = 'flex';
@@ -1381,7 +1403,7 @@
     // redundante). Se a sessão tiver expirado nesse meio tempo, o
     // servidor responde 403 e avisamos pra relogar.
     function fazerBackupDados() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
 
       const card = document.getElementById('backup-hub-card-dados');
 
@@ -1432,7 +1454,7 @@
     // redundante). Se a sessão tiver expirado nesse meio tempo, o
     // servidor responde 403 e avisamos pra relogar.
     function fazerBackupGeral() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
 
       const card = document.getElementById('backup-hub-card-geral');
 
@@ -1596,7 +1618,7 @@
     }
 
     function abrirRestaurarBackup() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
       document.getElementById('restaurar-backup-modal').style.display = 'flex';
       resetRestaurarBackupModal();
     }
@@ -1776,7 +1798,7 @@
     let _mesclarArquivos = null; // { 'historico.json': '<texto original>', ... } já validados
 
     function abrirMesclarBackup() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
       document.getElementById('mesclar-backup-modal').style.display = 'flex';
       resetMesclarBackupModal();
     }
@@ -1952,7 +1974,7 @@
     let _restaurarGeralArquivos = null; // { 'historico.json': '<conteúdo>', ... } já lidos do .zip
 
     function abrirRestaurarGeral() {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('backup-restauracao')) return;
       document.getElementById('restaurar-geral-modal').style.display = 'flex';
       resetRestaurarGeralModal();
     }
@@ -4981,7 +5003,7 @@
     let _eoBercosPersonalizados = [];
 
     function abrirEdicaoOperacao(bateria) {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('edicao-dados')) return;
       _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
       _eoBercosPersonalizados = Array.isArray(bateria.bercos_personalizados)
         ? [...bateria.bercos_personalizados]
@@ -5505,7 +5527,7 @@
     }
 
     async function abrirEdicaoTraco(traco, uso) {
-      if (sessionStorage.getItem('lw_role') !== 'Administrador') return;
+      if (!_perfilTemAcao('edicao-dados')) return;
       _etTracoOriginal = JSON.parse(JSON.stringify(traco));
       _etUsoOriginal = JSON.parse(JSON.stringify(uso || {}));
 
