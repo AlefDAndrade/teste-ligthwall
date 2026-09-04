@@ -25,6 +25,15 @@
 //     domínio filtrado pelo seu próprio campo de data ("data" pra
 //     operações/traços; "inicio" pra paradas); datas inválidas/invertidas
 //     são recusadas; sem filtro, comportamento idêntico a sempre.
+//   - 6 domínios "satélite" adicionados numa conversa posterior ("não
+//     abarca alguns dados, como berço visual"): bercos_visuais.json,
+//     avaliacoes_qualidade.json, operacoes_avaliadas.json,
+//     relatorio_edicoes.json (edições de traço), manutencao_corretiva.json
+//     e manutencao_programada.json — todos amarrados a uma operação/traço
+//     já existente (no destino OU trazida na mesma mesclagem), nunca
+//     criam um registro órfão; dedup por id (ou pela chave natural
+//     traço+data, no caso de edições de traço — "id" é autoincrement,
+//     não confiável entre instalações diferentes).
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -329,4 +338,252 @@ test('sem filtro nenhum (comportamento de sempre): resultado.filtroData vem null
   const data = await resp.json();
   assert.equal(data.resultado.filtroData, null);
   assert.ok(await buscarOperacao(idOp));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6 domínios "satélite" adicionados nesta mudança (conversa que motivou:
+// "não abarca alguns dados, como berço visual"). Todos amarrados a uma
+// operação/traço já existente — helpers/asserções abaixo.
+// ═══════════════════════════════════════════════════════════════════════
+
+function bercoVisualDoBackup(idOp, extras = {}) {
+  return {
+    id_operacao: idOp,
+    bercos: [{ berco: 1, ordem: 1, estado_esquerda: 'ok', estado_direita: 'ok' }],
+    atualizado_em: new Date().toISOString(),
+    ...extras,
+  };
+}
+
+function avaliacaoDoBackup(id, idOp, extras = {}) {
+  return {
+    id, linkedOperacaoId: idOp, batteryId: 'B-backup', turno: '1° TURNO',
+    registeredAt: '2026-07-20T10:00:00.000Z', avaliadorNome: 'Backup', paineis: [],
+    ...extras,
+  };
+}
+
+function edicaoTracoDoBackup(idTraco, idOp, dataEdicao) {
+  return { id_traco: idTraco, id_operacao: idOp, data_edicao: dataEdicao, campos_alterados: [{ campo: 'cimento_real', de: 300, para: 310 }] };
+}
+
+function manutencaoCorretivaDoBackup(id, extras = {}) {
+  return {
+    id, data: '2026-07-20', setor: 'Injetora', maquina: 'Injetora 1', turno: '1° TURNO',
+    observador: 'Backup', prioridade: 'Media', anomalia: 'Ruído estranho', tipoManutencao: 'Mecânica',
+    ...extras,
+  };
+}
+
+function manutencaoProgramadaDoBackup(id, extras = {}) {
+  return {
+    id, data: '2026-07-20', setor: 'Injetora', maquina: 'Injetora 1', solicitante: 'Backup',
+    ...extras,
+  };
+}
+
+async function contarLinhas(nomeArquivo) {
+  const resp = await fetch(`${servidor.baseUrl}/db/${nomeArquivo}`);
+  return (await resp.json()).length;
+}
+
+test('bercos_visuais: só entra se a operação "dona" também existir (no destino ou neste mesmo backup) — nunca cria um órfão', async () => {
+  // Mesclando (não via /registrar-operacao, que já cria um berço visual
+  // inicial sozinho — usaríamos o caminho errado pra este teste, ver
+  // criarBercosVisuaisIniciais) a operação "dona" primeiro, sem berço
+  // visual nenhum.
+  const idOpExiste = 'op-bv-existe-' + Date.now();
+  await mesclar({ senha: SENHA_ADMIN, arquivos: { 'historico.json': JSON.stringify([operacaoDoBackup(idOpExiste)]) } });
+  const idOpNaoExiste = 'op-bv-nao-existe-' + Date.now();
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'bercos_visuais.json': JSON.stringify([bercoVisualDoBackup(idOpExiste), bercoVisualDoBackup(idOpNaoExiste)]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.bercos_visuais.inseridos, 1);
+  assert.equal(data.resultado.bercos_visuais.sem_operacao, 1);
+});
+
+test('bercos_visuais: também entra se a operação "dona" foi trazida NESTA MESMA mesclagem (historico.json junto)', async () => {
+  const idOp = 'op-bv-junto-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'historico.json': JSON.stringify([operacaoDoBackup(idOp)]),
+      'bercos_visuais.json': JSON.stringify([bercoVisualDoBackup(idOp)]),
+    },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.operacoes.inseridos, 1);
+  assert.equal(data.resultado.bercos_visuais.inseridos, 1);
+});
+
+test('bercos_visuais: id_operacao duplicado (já existe) é contado como duplicata, nunca sobrescreve', async () => {
+  const idOp = 'op-bv-dup-' + Date.now();
+  await registrarOperacao(idOp);
+  await mesclar({ senha: SENHA_ADMIN, arquivos: { 'bercos_visuais.json': JSON.stringify([bercoVisualDoBackup(idOp)]) } });
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'bercos_visuais.json': JSON.stringify([bercoVisualDoBackup(idOp, { bercos: [{ berco: 99, ordem: 1, estado_esquerda: 'diferente', estado_direita: 'diferente' }] })]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.bercos_visuais.inseridos, 0);
+  assert.equal(data.resultado.bercos_visuais.duplicatas, 1);
+});
+
+test('avaliacoes_qualidade: entra pelo id (não depende de operação existir — linkedOperacaoId pode ser nulo)', async () => {
+  const idAval = 'aval-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'avaliacoes_qualidade.json': JSON.stringify([avaliacaoDoBackup(idAval, null)]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.avaliacoes_qualidade.inseridos, 1);
+  assert.ok((await contarLinhas('avaliacoes_qualidade.json')) >= 1);
+});
+
+test('avaliacoes_qualidade: id duplicado é contado como duplicata, não reinserido/sobrescrito', async () => {
+  const idAval = 'aval-dup-' + Date.now();
+  await mesclar({ senha: SENHA_ADMIN, arquivos: { 'avaliacoes_qualidade.json': JSON.stringify([avaliacaoDoBackup(idAval, null)]) } });
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'avaliacoes_qualidade.json': JSON.stringify([avaliacaoDoBackup(idAval, null, { avaliadorNome: 'Outro Nome' })]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.avaliacoes_qualidade.inseridos, 0);
+  assert.equal(data.resultado.avaliacoes_qualidade.duplicatas, 1);
+});
+
+test('operacoes_avaliadas: só entra se a operação existir; duplicata por id_operacao é ignorada', async () => {
+  const idOp = 'op-avaliada-' + Date.now();
+  await registrarOperacao(idOp);
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'operacoes_avaliadas.json': JSON.stringify([{ id_operacao: idOp, avaliado_em: new Date().toISOString() }]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.operacoes_avaliadas.inseridos, 1);
+
+  const respDup = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'operacoes_avaliadas.json': JSON.stringify([{ id_operacao: idOp, avaliado_em: new Date().toISOString() }]) },
+  });
+  const dataDup = await respDup.json();
+  assert.equal(dataDup.resultado.operacoes_avaliadas.inseridos, 0);
+  assert.equal(dataDup.resultado.operacoes_avaliadas.duplicatas, 1);
+});
+
+test('relatorio_edicoes.json: precisa vir JUNTO de relatorio_injecao.json no mesmo backup — o id_traco de origem é traduzido pro novo id gerado na mesclagem', async () => {
+  const idOp = 'op-edicao-traco-' + Date.now();
+  const idTracoOrigem = 'traco-edicao-' + Date.now(); // id de origem, do backup — NUNCA sobrevive à mesclagem
+  const dataEdicao = '2026-07-21T09:00:00.000Z';
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'relatorio_injecao.json': JSON.stringify([tracoDoBackup(idTracoOrigem, idOp)]),
+      'relatorio_edicoes.json': JSON.stringify([edicaoTracoDoBackup(idTracoOrigem, idOp, dataEdicao)]),
+    },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.tracos.inseridos, 1);
+  assert.equal(data.resultado.edicoes_traco.inseridos, 1);
+
+  // A edição tem que ter caído no id_traco REAL do destino (sintético,
+  // gerado pela mesclagem) — nunca no id_traco de origem, que não existe
+  // em lugar nenhum do banco de destino.
+  const respHistoricoEdicoes = await fetch(`${servidor.baseUrl}/db/relatorio_edicoes.json`);
+  const edicoes = await respHistoricoEdicoes.json();
+  const edicaoGravada = edicoes.find(e => e.data_edicao === dataEdicao);
+  assert.ok(edicaoGravada, 'esperava a edição gravada em algum id_traco');
+  assert.notEqual(edicaoGravada.id_traco, idTracoOrigem, 'não deveria ter usado o id_traco de origem — esse id não existe no destino');
+});
+
+test('relatorio_edicoes.json: mesma chave (traço traduzido + data) de novo não duplica, mesmo com "id" autoincrement diferente', async () => {
+  const idOp = 'op-edicao-traco-dup-' + Date.now();
+  const idTracoOrigem = 'traco-edicao-dup-' + Date.now();
+  const dataEdicao = '2026-07-21T09:00:00.000Z';
+
+  await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'relatorio_injecao.json': JSON.stringify([tracoDoBackup(idTracoOrigem, idOp)]),
+      'relatorio_edicoes.json': JSON.stringify([edicaoTracoDoBackup(idTracoOrigem, idOp, dataEdicao)]),
+    },
+  });
+
+  // Mesmo backup (mesmo traço de origem, mesma data de edição) mesclado
+  // de novo — desta vez o traço já existe (vira duplicata), e a edição
+  // precisa continuar resolvendo pro MESMO id_traco de destino (não um
+  // novo, já que o traço não foi reinserido) e não duplicar.
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'relatorio_injecao.json': JSON.stringify([tracoDoBackup(idTracoOrigem, idOp)]),
+      'relatorio_edicoes.json': JSON.stringify([{ ...edicaoTracoDoBackup(idTracoOrigem, idOp, dataEdicao), id: 999999 }]),
+    },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.tracos.duplicatas, 1);
+  assert.equal(data.resultado.edicoes_traco.inseridos, 0, 'já tinha essa edição pro mesmo traço — não deveria duplicar');
+});
+
+test('relatorio_edicoes.json: SEM relatorio_injecao.json no mesmo backup, é ignorado silenciosamente (não dá pra saber a qual traço pertenceria)', async () => {
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'relatorio_edicoes.json': JSON.stringify([edicaoTracoDoBackup('traco-orfao-' + Date.now(), 'op-x', '2026-07-21T09:00:00.000Z')]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.edicoes_traco.inseridos, 0);
+});
+
+test('manutencao_corretiva: insere por id novo, ignora duplicata, respeita filtro de data quando pedido', async () => {
+  const idChamado = 'manut-corretiva-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idChamado)]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.manutencao_corretiva.inseridos, 1);
+
+  const respDup = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idChamado, { anomalia: 'Anomalia diferente' })]) },
+  });
+  const dataDup = await respDup.json();
+  assert.equal(dataDup.resultado.manutencao_corretiva.inseridos, 0);
+  assert.equal(dataDup.resultado.manutencao_corretiva.duplicatas, 1);
+
+  // Filtro de data — chamado de outro dia fica de fora.
+  const idFora = 'manut-corretiva-fora-' + Date.now();
+  const respFiltro = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idFora, { data: '2026-01-01' })]) },
+    filtroDataInicio: '2026-07-20',
+    filtroDataFim: '2026-07-20',
+  });
+  const dataFiltro = await respFiltro.json();
+  assert.equal(dataFiltro.resultado.manutencao_corretiva.inseridos, 0);
+  assert.equal(dataFiltro.resultado.filtroData.ignorados, 1);
+});
+
+test('manutencao_programada: insere por id novo, ignora duplicata', async () => {
+  const idAgendamento = 'manut-programada-' + Date.now();
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'manutencao_programada.json': JSON.stringify([manutencaoProgramadaDoBackup(idAgendamento)]) },
+  });
+  const data = await resp.json();
+  assert.equal(data.resultado.manutencao_programada.inseridos, 1);
+
+  const respDup = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'manutencao_programada.json': JSON.stringify([manutencaoProgramadaDoBackup(idAgendamento)]) },
+  });
+  const dataDup = await respDup.json();
+  assert.equal(dataDup.resultado.manutencao_programada.inseridos, 0);
+  assert.equal(dataDup.resultado.manutencao_programada.duplicatas, 1);
 });
