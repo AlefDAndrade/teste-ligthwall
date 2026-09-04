@@ -587,3 +587,84 @@ test('manutencao_programada: insere por id novo, ignora duplicata', async () => 
   assert.equal(dataDup.resultado.manutencao_programada.inseridos, 0);
   assert.equal(dataDup.resultado.manutencao_programada.duplicatas, 1);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Bug real (conversa que motivou): "clico numa operação mesclada e joga
+// pra traço, nenhum filtro funciona — filtro por id do traço não
+// funciona, e pelo id da bateria só mostra a data mesclada". Causa:
+// operacoes.tracos_json é uma FOTOGRAFIA gravada no INSERT
+// (operacaoParaRow) — pro registro ao vivo, os ids nascem juntos e nunca
+// mudam; mas mesclarTracosEAjustes sempre troca o id_traco por um novo
+// sintético, deixando a fotografia da operação apontando pros ids
+// ANTIGOS do backup de origem, que não existem no destino.
+// ═══════════════════════════════════════════════════════════════════════
+
+test('operacoes.tracos_json de uma operação mesclada aponta pros id_traco REAIS do destino, nunca pros ids de origem do backup', async () => {
+  const idOp = 'op-tracosjson-' + Date.now();
+  const idTracoOrigem1 = 'traco-origem-1-' + Date.now();
+  const idTracoOrigem2 = 'traco-origem-2-' + Date.now();
+
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: {
+      'historico.json': JSON.stringify([operacaoDoBackup(idOp, {
+        tracos: [{ id: idTracoOrigem1 }, { id: idTracoOrigem2 }],
+      })]),
+      'relatorio_injecao.json': JSON.stringify([
+        tracoDoBackup(idTracoOrigem1, idOp, 1),
+        tracoDoBackup(idTracoOrigem2, idOp, 2),
+      ]),
+    },
+  });
+  assert.equal(resp.status, 200);
+  const data = await resp.json();
+  assert.equal(data.resultado.operacoes.inseridos, 1);
+  assert.equal(data.resultado.tracos.inseridos, 2);
+
+  const operacao = await buscarOperacao(idOp);
+  assert.ok(operacao, 'esperava a operação mesclada em db/historico.json');
+  assert.ok(Array.isArray(operacao.tracos) && operacao.tracos.length === 2, 'esperava 2 traços em operacao.tracos');
+
+  const idsEmTracosJson = operacao.tracos.map(t => t.id);
+  // NUNCA os ids de origem — eles não existem em lugar nenhum do destino.
+  assert.ok(!idsEmTracosJson.includes(idTracoOrigem1), 'tracos_json não deveria referenciar o id_traco de ORIGEM (não existe no destino)');
+  assert.ok(!idsEmTracosJson.includes(idTracoOrigem2), 'tracos_json não deveria referenciar o id_traco de ORIGEM (não existe no destino)');
+
+  // Cada id em tracos_json precisa ser um id_traco de verdade, existente
+  // no relatorio_injecao.json do destino — é isso que
+  // navegarParaTracosDoRegistro (dashboard.js) usa pra montar o filtro.
+  const todosOsTracos = await (await fetch(`${servidor.baseUrl}/db/relatorio_injecao.json`)).json();
+  const idsRealDeVerdade = new Set(todosOsTracos.map(t => t.id_traco));
+  for (const id of idsEmTracosJson) {
+    assert.ok(idsRealDeVerdade.has(id), `tracos_json referencia "${id}", que não existe em relatorio_injecao.json`);
+  }
+});
+
+test('self-healing: mesclando relatorio_injecao.json DEPOIS (operação já existia sem esses traços), tracos_json da operação é corrigido mesmo assim', async () => {
+  const idOp = 'op-tracosjson-tardio-' + Date.now();
+  const idTracoOrigem = 'traco-origem-tardio-' + Date.now();
+
+  // 1ª mesclagem: só a operação, sem traço nenhum (tracos_json fica vazio).
+  await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'historico.json': JSON.stringify([operacaoDoBackup(idOp, { tracos: [] })]) },
+  });
+  const antes = await buscarOperacao(idOp);
+  assert.deepEqual(antes.tracos, []);
+
+  // 2ª mesclagem, depois: só o traço, referenciando a MESMA operação (já
+  // existente no destino) — tracos_json da operação deveria se atualizar
+  // mesmo sem historico.json vir de novo.
+  const resp = await mesclar({
+    senha: SENHA_ADMIN,
+    arquivos: { 'relatorio_injecao.json': JSON.stringify([tracoDoBackup(idTracoOrigem, idOp, 1)]) },
+  });
+  assert.equal(resp.status, 200);
+
+  const depois = await buscarOperacao(idOp);
+  assert.equal(depois.tracos.length, 1, 'tracos_json deveria ter sido atualizado mesmo a operação não fazendo parte desta 2ª mesclagem');
+  assert.notEqual(depois.tracos[0].id, idTracoOrigem, 'não deveria ser o id de origem — deveria ser o id real gerado na mesclagem');
+
+  const todosOsTracos = await (await fetch(`${servidor.baseUrl}/db/relatorio_injecao.json`)).json();
+  assert.ok(todosOsTracos.some(t => t.id_traco === depois.tracos[0].id), 'o id em tracos_json precisa existir de verdade em relatorio_injecao.json');
+});
