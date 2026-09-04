@@ -45,12 +45,32 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  /**
+   * Resolve o valor FINAL de um campo de insumo — corrige um bug real
+   * (traço com Ajuste de Receita registrado mostrava insumo ZERADO):
+   * `cimento_real`/`agua_real`/etc. (db/relatorio_injecao.json, ver
+   * rowParaTraco/colapsarOriginalEAjustes, lib/db/tracos.js) vêm como um
+   * NÚMERO puro só quando o traço nunca teve ajuste; assim que existe
+   * pelo menos 1 ajuste registrado, o campo vira um OBJETO
+   * `{ original, ajustes: [...] }` — `Number({...})` dá `NaN`, que toda
+   * chamada anterior tratava como 0 silenciosamente. Pra insumo (nunca
+   * pra densidade/flow, que são RESULTADO — o último ajuste sobrescreve,
+   * não soma — ver _valRel, dashboard.js), o valor certo é
+   * original + soma de todos os ajustes.
+   */
+  function _valorFinalInsumo(v) {
+    if (v && typeof v === 'object' && Array.isArray(v.ajustes)) {
+      return v.ajustes.reduce((soma, a) => soma + _numOuZero(a), _numOuZero(v.original));
+    }
+    return _numOuZero(v);
+  }
+
   function _totalInsumos(t) {
-    return CAMPOS_INSUMO.reduce((soma, c) => soma + _numOuZero(t[c.campo]), 0);
+    return CAMPOS_INSUMO.reduce((soma, c) => soma + _valorFinalInsumo(t[c.campo]), 0);
   }
 
   function _fmtKg(v) {
-    return _numOuZero(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' kg';
+    return _valorFinalInsumo(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' kg';
   }
 
   function _lerFiltro() {
@@ -183,7 +203,7 @@
    * Cimento | Água | EPS | Plastificante | Incorporador | Total. */
   function _linhaExportPeriodo(t) {
     const linha = { 'Data': t.data || '', 'Ordem no Dia': t._ordemDoDia, 'Turno': t.turno || '', 'Nº do Traço': t.num_traco ?? '' };
-    CAMPOS_INSUMO.forEach(c => { linha[c.rotulo + ' (kg)'] = _numOuZero(t[c.campo]); });
+    CAMPOS_INSUMO.forEach(c => { linha[c.rotulo + ' (kg)'] = _valorFinalInsumo(t[c.campo]); });
     linha['Total de Insumos (kg)'] = _totalInsumos(t);
     return linha;
   }
@@ -233,7 +253,7 @@
       { Campo: 'Turno', Valor: traco.turno || '' },
       { Campo: 'Nº do Traço', Valor: traco.num_traco ?? '' },
       { Campo: 'Ordem no Dia', Valor: traco._ordemDoDia },
-      ...CAMPOS_INSUMO.map(c => ({ Campo: c.rotulo + ' (kg)', Valor: _numOuZero(traco[c.campo]) })),
+      ...CAMPOS_INSUMO.map(c => ({ Campo: c.rotulo + ' (kg)', Valor: _valorFinalInsumo(traco[c.campo]) })),
       { Campo: 'Total de Insumos (kg)', Valor: _totalInsumos(traco) },
     ];
     const wb = _gerarPlanilha(linhas, 'Traço');

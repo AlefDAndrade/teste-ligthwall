@@ -440,6 +440,8 @@ Tela **auxiliar** do Dashboard de Traço/CEP (`public/js/qualidade-tracos.js`) �
 
 **Detalhe de 1 traço** (modal, versão bem mais simples que a Análise Focada, de propósito — só os insumos, sem berços nem movimentação): Cimento, Água, EPS, Superplastificante, Incorporador de Ar, e o total somado.
 
+**Bug real corrigido numa conversa posterior** ("alguns traços mostram insumo zerado mesmo tendo insumo"): um campo de insumo (`cimento_real` etc., `db/relatorio_injecao.json`) só é um número puro quando o traço NUNCA teve um Ajuste de Receita — assim que existe pelo menos 1 ajuste, o campo vira `{ original, ajustes: [...] }` (ver `colapsarOriginalEAjustes`, `lib/db/tracos.js`). `Number({...})` dá `NaN`, tratado como 0 silenciosamente — todo traço AJUSTADO aparecia com aquele insumo zerado. `_valorFinalInsumo()` (`public/js/consulta-tracos.js`) resolve isso corretamente: `original + soma de todos os ajustes` (nunca "o último valor vence", que é a regra certa só pra densidade/flow — ver `_valRel`, `dashboard.js`). Coberto por `test/consulta-tracos-logica.test.js`.
+
 **Exportação Excel** (SheetJS/`window.XLSX`, mesma lib já usada em `setor-qualidade.js`):
 - **Período inteiro**: 1 linha por traço (Data, Ordem no Dia, Turno, Nº do Traço, os 5 insumos, Total) — cronológico, mais antigo primeiro (facilita somar/analisar na planilha).
 - **1 traço só**: formato "ficha" (Campo/Valor), não a mesma tabela — é um registro individual, não uma lista pra somar.

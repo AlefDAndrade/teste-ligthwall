@@ -31,9 +31,12 @@ function extrairFuncao(nome, ehAsync = false) {
 function montarHelpers() {
   // eslint-disable-next-line no-eval
   const _numOuZero = eval(`(${extrairFuncao('_numOuZero')})`);
-  // As funções abaixo chamam _numOuZero/CAMPOS_INSUMO como closures do
-  // arquivo real — reconstituídas aqui no mesmo escopo de avaliação pra
-  // isso funcionar isolado, sem precisar carregar o arquivo inteiro.
+  // eslint-disable-next-line no-eval
+  const _valorFinalInsumo = eval(`(${extrairFuncao('_valorFinalInsumo')})`);
+  // As funções abaixo chamam _numOuZero/_valorFinalInsumo/CAMPOS_INSUMO
+  // como closures do arquivo real — reconstituídas aqui no mesmo escopo
+  // de avaliação pra isso funcionar isolado, sem precisar carregar o
+  // arquivo inteiro.
   const CAMPOS_INSUMO = [
     { campo: 'cimento_real', rotulo: 'Cimento' },
     { campo: 'agua_real', rotulo: 'Água' },
@@ -49,7 +52,7 @@ function montarHelpers() {
   const _ordenarParaExibicao = eval(`(${extrairFuncao('_ordenarParaExibicao')})`);
   // eslint-disable-next-line no-eval
   const _linhaExportPeriodo = eval(`(${extrairFuncao('_linhaExportPeriodo')})`);
-  return { _numOuZero, _totalInsumos, _comOrdemDoDia, _ordenarParaExibicao, _linhaExportPeriodo, CAMPOS_INSUMO };
+  return { _numOuZero, _valorFinalInsumo, _totalInsumos, _comOrdemDoDia, _ordenarParaExibicao, _linhaExportPeriodo, CAMPOS_INSUMO };
 }
 
 test('_numOuZero: converte string numérica, mas nunca quebra com vazio/undefined/texto', () => {
@@ -66,6 +69,39 @@ test('_totalInsumos: soma os 5 campos de insumo, tratando ausentes como zero', (
   const { _totalInsumos } = montarHelpers();
   const traco = { cimento_real: 300, agua_real: 120, eps_real: '', superplast_real: 3.5, incorporador_real: 1.2 };
   assert.equal(_totalInsumos(traco), 300 + 120 + 0 + 3.5 + 1.2);
+});
+
+// ── Bug real (conversa que motivou): "alguns traços estão mostrando
+// insumo zerado mesmo tendo insumo" — campo com Ajuste de Receita
+// registrado vem como { original, ajustes: [...] } (não um número puro,
+// ver rowParaTraco/colapsarOriginalEAjustes, lib/db/tracos.js);
+// `Number({...})` dá NaN, tratado como 0 por engano. ──
+
+test('_valorFinalInsumo: campo sem ajuste (número puro) — comportamento de sempre', () => {
+  const { _valorFinalInsumo } = montarHelpers();
+  assert.equal(_valorFinalInsumo(300), 300);
+  assert.equal(_valorFinalInsumo(''), 0);
+  assert.equal(_valorFinalInsumo(null), 0);
+});
+
+test('_valorFinalInsumo: campo COM ajuste de receita — original + soma de todos os ajustes (nunca zero por engano)', () => {
+  const { _valorFinalInsumo } = montarHelpers();
+  assert.equal(_valorFinalInsumo({ original: 300, ajustes: [10, -5] }), 305);
+  assert.equal(_valorFinalInsumo({ original: 300, ajustes: [] }), 300);
+  // original vazio ('' — traço sem original conhecido) + ajustes ainda soma certo.
+  assert.equal(_valorFinalInsumo({ original: '', ajustes: [8, 2] }), 10);
+});
+
+test('_totalInsumos: traço com ajuste de receita em alguns insumos não mostra zero pra eles (bug real corrigido)', () => {
+  const { _totalInsumos } = montarHelpers();
+  const traco = {
+    cimento_real: { original: 300, ajustes: [10] },  // com ajuste — 310
+    agua_real: 120,                                   // sem ajuste — número puro
+    eps_real: { original: 8, ajustes: [-1, 0.5] },    // com ajuste — 7.5
+    superplast_real: 3.5,
+    incorporador_real: 1.2,
+  };
+  assert.equal(_totalInsumos(traco), 310 + 120 + 7.5 + 3.5 + 1.2);
 });
 
 test('_comOrdemDoDia: numera 1,2,3... por dia, reiniciando a cada data — não é um contador global', () => {
@@ -114,6 +150,18 @@ test('_linhaExportPeriodo: monta a linha da planilha com as colunas pedidas, "Or
   assert.equal(linha['Total de Insumos (kg)'], 300 + 120 + 8 + 3.5 + 1.2);
   // Nunca deveria existir uma coluna de hora/horário — decisão registrada.
   assert.ok(!Object.keys(linha).some(k => /hora|hor[aá]rio/i.test(k)));
+});
+
+test('_linhaExportPeriodo: campo com ajuste de receita exporta o valor final (original+ajustes), não zero', () => {
+  const { _linhaExportPeriodo } = montarHelpers();
+  const traco = {
+    data: '2026-09-04', turno: '1º TURNO', num_traco: 125, _ordemDoDia: 1,
+    cimento_real: { original: 300, ajustes: [10] }, agua_real: 120, eps_real: 8,
+    superplast_real: 3.5, incorporador_real: 1.2,
+  };
+  const linha = _linhaExportPeriodo(traco);
+  assert.equal(linha['Cimento (kg)'], 310);
+  assert.equal(linha['Total de Insumos (kg)'], 310 + 120 + 8 + 3.5 + 1.2);
 });
 
 test('item de permissão consulta-tracos existe no catálogo, tipo dashboard, próprio (não reaproveita id de qualidade-tracos)', () => {
