@@ -282,6 +282,13 @@ A sessão de usuário cadastrado e a sessão do Administrador Master (cookies Ht
 
 A lista de atalhos exibida (em Configurações → Atalhos de Teclado e no modal de ajuda, F1) mostra só os atalhos das páginas que o perfil logado realmente acessa — um perfil sem acesso ao Setor de Qualidade, por exemplo, não vê os atalhos de lá (ver `lib/perfis.js` / `lib/perfis-customizados.js`, campo `page` em `NAV_CONFIG`/`ACTION_CONFIG`/`REFERENCIA_CONFIG`, `public/js/keyboard-shortcuts.js`). Atalhos globais (Sair, abrir Configurações, Debriefing do Dia, filtro/atualizar/exportar) continuam aparecendo pra todo mundo, já que vivem na topbar, compartilhada por todas as telas.
 
+**Auditoria de cobertura** (pedido numa conversa — "quais pages ainda não têm teclas de atalho"): das 17 páginas do app, 5 não tinham NENHUMA presença em `keyboard-shortcuts.js`. Resolvido:
+- **One Page Report** (`Alt+R`) e **Traços Descartados** (`Alt+T`) ganharam navegação direta — não colidem com nenhum combo já usado (nav ou ação).
+- **Análise Focada** e **Consulta de Insumos por Traço** ficaram de propósito SEM `Alt+dígito` próprio — são páginas de "detalhe", chegadas por drill-down (`Ctrl+clique`, ver acima), não por navegação direta; o atalho que leva até elas já estava catalogado.
+- **Manutenção**: a auditoria achou um atalho REAL já em produção que nunca tinha sido catalogado — `Ctrl + passar o mouse` numa linha da tabela mostra um preview flutuante da trajetória (`_mostrarPreviewTrajetoria`, `public/js/manutencao.js`), sem abrir o modal completo. Comportamento não mudou, só passou a aparecer em `REFERENCIA_CONFIG` (documentado, descobrível).
+
+Coberto por `test/atalhos-cobertura-de-paginas.test.js`.
+
 ## Páginas
 
 - **Registrar Operação** — fluxo de injeção: seleção de bateria/tipo de montagem, traços, tempos, atrasos, sobra de traço entre operações.

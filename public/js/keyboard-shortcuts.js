@@ -34,6 +34,12 @@
     { id: 'nav_paradas', comboPadrao: 'Alt+P', page: 'paradas', label: 'Registro de Paradas', icon: '⏸' },
     { id: 'nav_setor_qualidade', comboPadrao: 'Alt+Q', page: 'setor-qualidade', label: 'Setor de Qualidade', icon: '🛡' },
     { id: 'nav_metas', comboPadrao: 'Alt+M', page: 'metas', label: 'Metas', icon: '🏁' },
+    // ─── Mais 2 páginas sem atalho de navegação (auditoria numa conversa
+    // — "quais pages ainda não têm teclas de atalho"): letras livres
+    // (nenhuma colisão com Alt+D/C/V/E de ACTION_CONFIG, abaixo, nem com
+    // as já usadas aqui em cima).
+    { id: 'nav_one_page_report', comboPadrao: 'Alt+R', page: 'one-page-report', label: 'One Page Report', icon: '📄' },
+    { id: 'nav_tracos_descartados', comboPadrao: 'Alt+T', page: 'tracos-descartados', label: 'Traços Descartados', icon: '🗑' },
   ];
 
   /**
@@ -174,6 +180,19 @@
       contexto: 'Relatório de Injeção',
       page: 'relatorio',
       descricao: 'Abre a Consulta de Insumos daquele traço específico — funciona em qualquer modo (normal ou edição).',
+    },
+    // ─── Atalho real já existente em produção, mas nunca catalogado
+    // aqui (achado numa auditoria — "quais atalhos existem mas não
+    // estão na lista"): sem isto, ninguém descobre ele sozinho, nem ele
+    // aparece em Configurações → Atalhos de Teclado / no modal de
+    // ajuda. Comportamento em si não mudou — só passou a ser
+    // documentado.
+    {
+      icon: '👁',
+      combo: 'Ctrl + passar o mouse',
+      contexto: 'Manutenção',
+      page: 'manutencao',
+      descricao: 'Mostra um preview flutuante da trajetória daquele item, sem abrir o modal completo — só desktop (não existe em toque).',
     },
     {
       icon: '🖱',
