@@ -1813,10 +1813,27 @@
       'relatorio_injecao.json': v => Array.isArray(v),
       'ajustes_tracos.json':    v => Array.isArray(v),
       'paradas.json':           v => Array.isArray(v),
+      // Estes 7 estavam faltando aqui (mesmo já suportados no servidor,
+      // ver VALIDADORES_DADOS_PRODUCAO/MESCLAVEIS, lib/rotas/backup.js)
+      // — o front nunca lia/enviava esses arquivos do .zip pra começo de
+      // conversa, então nada do que o servidor sabe fazer com eles
+      // importava (bug real, pego numa conversa: "os dados mesclados não
+      // mostram os berços visuais em Análise Focada" — o berço nem
+      // chegava a sair do .zip).
+      'tracos_descartados.json':    v => Array.isArray(v),
+      'bercos_visuais.json':        v => Array.isArray(v),
+      'avaliacoes_qualidade.json':  v => Array.isArray(v),
+      'operacoes_avaliadas.json':   v => Array.isArray(v),
+      'relatorio_edicoes.json':     v => Array.isArray(v),
+      'manutencao_corretiva.json':  v => Array.isArray(v),
+      'manutencao_programada.json': v => Array.isArray(v),
     };
     const MESCLAR_DEFAULT_SE_VAZIO = {
       'historico.json': [], 'historico_edicoes.json': [], 'relatorio_injecao.json': [],
       'ajustes_tracos.json': [], 'paradas.json': [],
+      'tracos_descartados.json': [], 'bercos_visuais.json': [], 'avaliacoes_qualidade.json': [],
+      'operacoes_avaliadas.json': [], 'relatorio_edicoes.json': [],
+      'manutencao_corretiva.json': [], 'manutencao_programada.json': [],
     };
     const MESCLAR_LABELS = {
       'historico.json': 'Operações (Registro de Baterias)',
@@ -1824,6 +1841,13 @@
       'relatorio_injecao.json': 'Traços (Relatório de Injeção)',
       'ajustes_tracos.json': 'Ajustes de receita',
       'paradas.json': 'Paradas',
+      'tracos_descartados.json': 'Traços Descartados (Perda)',
+      'bercos_visuais.json': 'Berços Visuais',
+      'avaliacoes_qualidade.json': 'Avaliações de Qualidade',
+      'operacoes_avaliadas.json': 'Operações Avaliadas (marcação)',
+      'relatorio_edicoes.json': 'Histórico de edição de traços',
+      'manutencao_corretiva.json': 'Manutenção Corretiva',
+      'manutencao_programada.json': 'Manutenção Programada',
     };
 
     function parseArquivoMesclar(nome, texto) {
@@ -1915,7 +1939,7 @@
         // relatório de injeção, por exemplo, ainda é válido pra mesclar.
         const presentes = Object.keys(MESCLAR_VALIDACOES).filter(nome => !!zip.file(nome));
         if (!presentes.length) {
-          mostrarErroMesclar('Nenhum arquivo mesclável encontrado neste .zip (historico.json, relatorio_injecao.json, ajustes_tracos.json ou paradas.json).');
+          mostrarErroMesclar('Nenhum arquivo mesclável encontrado neste .zip.');
           return;
         }
 
@@ -2007,6 +2031,32 @@
         }
         if (r.edicoes_operacao.inseridos) {
           linhas.push(`Histórico de edição: <strong>${r.edicoes_operacao.inseridos}</strong> registro(s)`);
+        }
+        // Estes 7 também estavam faltando aqui (mesmo já suportados pelo
+        // servidor) — mesmo bug de fundo do MESCLAR_VALIDACOES (acima):
+        // o resultado até vinha da API, mas a tela nunca mostrava.
+        if (r.tracos_descartados && (r.tracos_descartados.inseridos || r.tracos_descartados.duplicatas)) {
+          linhas.push(`Traços descartados: <strong>${r.tracos_descartados.inseridos} adicionados</strong>, ${r.tracos_descartados.duplicatas} já existiam aqui`);
+        }
+        if (r.bercos_visuais && (r.bercos_visuais.inseridos || r.bercos_visuais.duplicatas || r.bercos_visuais.sem_operacao)) {
+          let linha = `Berços visuais: <strong>${r.bercos_visuais.inseridos} adicionados</strong>, ${r.bercos_visuais.duplicatas} já existiam aqui`;
+          if (r.bercos_visuais.sem_operacao) linha += `, ${r.bercos_visuais.sem_operacao} ignorados (operação não encontrada)`;
+          linhas.push(linha);
+        }
+        if (r.avaliacoes_qualidade && (r.avaliacoes_qualidade.inseridos || r.avaliacoes_qualidade.duplicatas)) {
+          linhas.push(`Avaliações de qualidade: <strong>${r.avaliacoes_qualidade.inseridos} adicionadas</strong>, ${r.avaliacoes_qualidade.duplicatas} já existiam aqui`);
+        }
+        if (r.operacoes_avaliadas && (r.operacoes_avaliadas.inseridos || r.operacoes_avaliadas.duplicatas)) {
+          linhas.push(`Operações avaliadas: <strong>${r.operacoes_avaliadas.inseridos} marcadas</strong>, ${r.operacoes_avaliadas.duplicatas} já estavam marcadas`);
+        }
+        if (r.edicoes_traco && r.edicoes_traco.inseridos) {
+          linhas.push(`Histórico de edição de traços: <strong>${r.edicoes_traco.inseridos}</strong> registro(s)`);
+        }
+        if (r.manutencao_corretiva && (r.manutencao_corretiva.inseridos || r.manutencao_corretiva.duplicatas)) {
+          linhas.push(`Manutenção corretiva: <strong>${r.manutencao_corretiva.inseridos} adicionados</strong>, ${r.manutencao_corretiva.duplicatas} já existiam aqui`);
+        }
+        if (r.manutencao_programada && (r.manutencao_programada.inseridos || r.manutencao_programada.duplicatas)) {
+          linhas.push(`Manutenção programada: <strong>${r.manutencao_programada.inseridos} adicionados</strong>, ${r.manutencao_programada.duplicatas} já existiam aqui`);
         }
         if (!linhas.length) linhas.push('Nenhum registro novo encontrado — tudo neste backup já existia aqui.');
         if (r.filtroData) {
