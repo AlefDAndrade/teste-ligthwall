@@ -8,13 +8,17 @@
 // tabela, mostra preview de trajetória) que nunca tinha sido catalogado —
 // documentado agora sem mudar o comportamento em si.
 //
-// Resolvido: One Page Report e Traços Descartados ganharam Alt+dígito de
-// navegação de verdade (Alt+R/Alt+T); Manutenção ganhou a entrada de
-// referência do Ctrl+hover. Análise Focada e Consulta de Insumos por Traço
-// ficaram de fora de propósito — são páginas de "detalhe" chegadas por
-// drill-down (Ctrl+clique, já catalogado nos testes de
-// test/atalho-ctrl-clique-consulta-tracos.test.js), não faz sentido um
-// Alt+dígito de navegação direta pra elas.
+// Resolvido: One Page Report, Traços Descartados e Manutenção (esta
+// última achada numa conversa SEGUINTE — ver teste "toda página com botão
+// de navegação..." abaixo) ganharam Alt+dígito de navegação de verdade
+// (Alt+R/Alt+T/Alt+N); Manutenção também ganhou a entrada de referência
+// do Ctrl+hover. Análise Focada e Consulta de Insumos por Traço também
+// ganharam o delas (Alt+F/Alt+I) — decisão revista numa conversa AINDA
+// seguinte: percebeu-se que as 2 têm botão próprio no dropdown "Traços"
+// da nav-tabbar (não são só destino de Ctrl+clique, que continua
+// funcionando do mesmo jeito como atalho secundário a partir de Registro
+// de Baterias/Relatório de Injeção), então por consistência com as
+// demais páginas do mesmo dropdown ganharam navegação direta também.
 //
 // Este teste é estrutural (extrai NAV_CONFIG/REFERENCIA_CONFIG do arquivo
 // real e confere as chaves) — mesmo padrão leve já usado em
@@ -49,6 +53,26 @@ test('NAV_CONFIG ganhou navegação pra One Page Report e Traços Descartados', 
   const paginas = extrairPaginas(navConfig);
   assert.ok(paginas.includes('one-page-report'), 'esperava "one-page-report" em NAV_CONFIG');
   assert.ok(paginas.includes('tracos-descartados'), 'esperava "tracos-descartados" em NAV_CONFIG');
+});
+
+// Bug achado numa conversa seguinte ("o setor de manutenção ficou sem
+// atalho"): a auditoria original só checava "a página tem ALGUMA entrada
+// em keyboard-shortcuts.js" — Manutenção passava nesse critério (tinha a
+// entrada do Ctrl+hover em REFERENCIA_CONFIG), mas isso documenta uma
+// AÇÃO dentro da página, não dá a NAVEGAÇÃO até ela. Este teste é mais
+// rigoroso: toda página com botão PRÓPRIO na barra de navegação
+// (nav-item OU nav-dropdown-item, nav-tabbar.html — nunca alcançada só
+// por drill-down/Ctrl+clique) precisa ter Alt+dígito de verdade.
+test('toda página com botão de navegação em nav-tabbar.html tem um Alt+dígito em NAV_CONFIG', () => {
+  const NAV_TABBAR = fs.readFileSync(path.join(__dirname, '..', 'public/partials/nav-tabbar.html'), 'utf8');
+  const paginasDaNavbar = [...NAV_TABBAR.matchAll(/class="nav-(?:item|dropdown-item)"[^>]*data-page="([a-z-]+)"/g)].map(m => m[1]);
+  assert.ok(paginasDaNavbar.length >= 15, `esperava pelo menos 15 botões de navegação, achei ${paginasDaNavbar.length}`);
+
+  const navConfig = extrairBloco('NAV_CONFIG');
+  const paginasComAtalho = new Set(extrairPaginas(navConfig));
+
+  const semAtalho = paginasDaNavbar.filter(p => !paginasComAtalho.has(p));
+  assert.deepEqual(semAtalho, [], `página(s) com botão na navbar mas sem Alt+dígito: ${semAtalho.join(', ')}`);
 });
 
 test('nenhum combo Alt+ colide entre si (nav + ações) — cada tecla usada só uma vez', () => {
