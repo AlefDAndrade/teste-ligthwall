@@ -259,6 +259,32 @@
     showPage('consulta-tracos');
   }
 
+  // ── Ponto de entrada a partir de qualquer lugar que já sabe o
+  // id_traco exato (README, pedido — "atalho no Ctrl pra jogar pra essa
+  // consulta, assim como a operação joga pra Análise Focada"): mesmo
+  // padrão de Ctrl/⌘+clique já usado em onClickLinhaRegistro
+  // (dashboard.js) — chamado por onClickLinhaRelatorio (Relatório de
+  // Injeção, mesmo arquivo). Ajusta o filtro pro DIA do traço (não
+  // depende do filtro que já estava selecionado na tela) e já abre o
+  // modal de detalhe direto, sem precisar procurar na lista. ──
+  async function abrirTracoEspecifico(idTraco) {
+    showPage('consulta-tracos');
+    const todos = await LW.getRelatorioInjecao();
+    const traco = todos.find(t => t.id_traco === idTraco);
+    if (!traco) {
+      LW.mostrarAlerta('Não encontrei esse traço no Relatório de Injeção.', { tipo: 'erro' });
+      return;
+    }
+    const periodoEl = document.getElementById('ct-periodo');
+    const iniEl = document.getElementById('ct-data-inicio');
+    const fimEl = document.getElementById('ct-data-fim');
+    if (periodoEl) periodoEl.value = 'personalizado';
+    if (iniEl) iniEl.value = traco.data;
+    if (fimEl) fimEl.value = traco.data;
+    await render();
+    abrirDetalhe(idTraco);
+  }
+
   function init() {
     const periodo = document.getElementById('ct-periodo');
     if (periodo) {
@@ -278,7 +304,7 @@
     init, render,
     abrirDetalhe, fecharDetalhe,
     exportarPeriodo, exportarTracoSelecionado,
-    abrirComPeriodoAtual,
+    abrirComPeriodoAtual, abrirTracoEspecifico,
   };
 
 })();

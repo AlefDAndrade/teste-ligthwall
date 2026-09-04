@@ -430,6 +430,8 @@ Ao escolher "Personalizado" em Tipo de Montagem, abre a grade de berços:
 
 Tela **auxiliar** do Dashboard de Traço/CEP (`public/js/qualidade-tracos.js`) — pedido registrado numa conversa: sem alterar o dashboard existente, uma tela à parte pra consultar/comparar/exportar o consumo de insumos traço a traço (`public/partials/page-consulta-tracos.html`, `public/js/consulta-tracos.js`). Acessível pelo menu "Traços" da barra de navegação ou pelo botão "🔍 Consultar Insumos por Traço" dentro do próprio Dashboard de Traço (que já leva o período atualmente filtrado, sem precisar escolher tudo de novo).
 
+**Atalho Ctrl+clique** (pedido numa conversa posterior — "atalho no Ctrl pra jogar pra essa consulta, assim como a operação joga pra Análise Focada"): no Relatório de Injeção (`public/js/dashboard.js`, `onClickLinhaRelatorio`), Ctrl (ou ⌘ no Mac) + clique numa linha de traço abre a Consulta de Insumos direto naquele traço — funciona em qualquer modo (normal ou edição), mesmo padrão de `onClickLinhaRegistro` (Registro de Baterias → Análise Focada). Catalogado em `REFERENCIA_CONFIG` (`public/js/keyboard-shortcuts.js`), aparece em Configurações → Atalhos de Teclado e no modal de ajuda (F1). Coberto por `test/atalho-ctrl-clique-consulta-tracos.test.js`.
+
 **Fluxo**: escolher período → lista de traços daquele intervalo → clicar num traço → ver os insumos → exportar (o traço, ou o período inteiro) em Excel.
 
 **Sem rota nova no backend** — reaproveita `db/relatorio_injecao.json` (mesma fonte do CEP e do Relatório de Injeção); filtro por data, cálculo de "ordem no dia" e totais são feitos 100% no cliente.

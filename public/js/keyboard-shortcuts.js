@@ -169,6 +169,13 @@
       descricao: 'Abre a Análise Focada da operação clicada — funciona em qualquer modo (normal, foco ou edição).',
     },
     {
+      icon: '🔎',
+      combo: 'Ctrl + clique',
+      contexto: 'Relatório de Injeção',
+      page: 'relatorio',
+      descricao: 'Abre a Consulta de Insumos daquele traço específico — funciona em qualquer modo (normal ou edição).',
+    },
+    {
       icon: '🖱',
       combo: 'Segurar Ctrl',
       contexto: 'Relatório de Berços',

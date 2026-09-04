@@ -1571,7 +1571,7 @@
         return `
       <tr${idx > 0 ? ' class="linha-traco-reaproveitado linha-relatorio-clicavel"' : ' class="linha-relatorio-clicavel"'}
         data-traco-row-id="${rowId}" data-tooltip="${tituloLinha}"
-        onclick="LWDash.onClickLinhaRelatorio('${rowId}')">
+        onclick="LWDash.onClickLinhaRelatorio('${rowId}', event)">
         <td class="mono"><span class="relatorio-expand-icon" id="icone-${rowId}">${_modoEdicaoRelatorio ? '✏️' : '▸'}</span>${l.data ? l.data.split('-').reverse().join('/') : '—'}</td>
         <td>${LW.escaparHtml(op.id_bateria || '—')}${idx > 0 ? ' <span class="badge badge-gray" data-tooltip="Traço reaproveitado nesta bateria">♻</span>' : ''}</td>
         <td>${l.num_traco || '—'}</td>
@@ -2066,7 +2066,19 @@
   // comportamento de sempre (abrir/fechar o painel de detalhe de ajustes).
   // A função de abrir a edição (abrirEdicaoTraco) vive no index.html,
   // junto com o resto do modal.
-  function onClickLinhaRelatorio(rowId) {
+  function onClickLinhaRelatorio(rowId, event) {
+    // Mesmo atalho de onClickLinhaRegistro (Registro de Baterias, acima):
+    // Ctrl (ou ⌘ no Mac) + clique sempre abre a Consulta de Insumos por
+    // Traço daquele traço específico, independente do modo ativo
+    // (edição) — não precisa desligar o modo atual pra dar uma olhada
+    // rápida nos insumos.
+    if (event && (event.ctrlKey || event.metaKey)) {
+      const dados = window._lwRelatorioMapTemp && window._lwRelatorioMapTemp[rowId];
+      if (dados && dados.traco && dados.traco.id_traco && window.LWConsultaTracos) {
+        LWConsultaTracos.abrirTracoEspecifico(dados.traco.id_traco);
+      }
+      return;
+    }
     if (_modoEdicaoRelatorio) {
       const dados = window._lwRelatorioMapTemp && window._lwRelatorioMapTemp[rowId];
       if (dados && typeof window.abrirEdicaoTraco === 'function') {
