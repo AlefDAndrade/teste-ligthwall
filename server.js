@@ -161,6 +161,7 @@ const {
   dispositivoAutorizado,
   podeControlarOperacao,
   negarControleDeOperacao,
+  certificadoAutorizadoNesteRequest,
 } = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea, certificadoDispositivo });
 
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
@@ -308,6 +309,7 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
 const rotasCertificadosDispositivo = require('./lib/rotas/certificados-dispositivo.js')({ sessao: sessaoOuAdmin, certificadoDispositivo });
+const rotasStatusDispositivo = require('./lib/rotas/status-dispositivo.js')({ certificadoAutorizadoNesteRequest });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, podeUsarItem, negarAcesso, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
@@ -347,7 +349,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasCertificadosDispositivo, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasCertificadosDispositivo, rotasStatusDispositivo, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir

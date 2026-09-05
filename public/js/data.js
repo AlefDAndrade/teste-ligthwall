@@ -68,6 +68,16 @@ let PRIORIDADE_OPTS = [];
 // — a trava de verdade é sempre no servidor (dispositivoAutorizado(),
 // server.js).
 let DISPOSITIVOS_AUTORIZADOS = [];
+// Preenchida por carregarStatusDispositivo() (ver abaixo) — se ESTA conexão
+// (navegador/computador) apresentou um certificado de cliente autorizado
+// (mTLS, ver lib/certificado-dispositivo.js). Antes desta variável existir,
+// _esteDispositivoEstaNaLista() só sabia checar deviceId/cookie — um
+// dispositivo autorizado SÓ por certificado ficava com a tela travada
+// mesmo o servidor aceitando a requisição de verdade, porque o JS nunca
+// chegava a mandar (motivo real do bug: a UI decide ANTES de qualquer
+// request de escrita sair). null = ainda não checado nesta carga de página
+// (tratado como false por segurança até a resposta chegar).
+let AUTORIZADO_POR_CERTIFICADO = null;
 
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
@@ -575,9 +585,40 @@ async function loadConfig() {
     } catch (e) { console.warn('Config override inválida', e); }
   }
 
+  // Certificado de dispositivo (mTLS) — via separada de dispositivosAutorizados
+  // acima (deviceId/cookie): não dá pra saber pelo config.json estático se
+  // ESTA conexão trouxe um certificado válido, só o servidor sabe (o Caddy só
+  // repassa o serial pro Node, nunca pro navegador). Erro aqui (rede caiu,
+  // endpoint indisponível) trata como "não autorizado por certificado" —
+  // mesmo padrão conservador do resto desta função: nunca destrava a UI por
+  // falha de rede, só por confirmação positiva do servidor.
+  await carregarStatusDispositivo();
+
   _configReady = true;
   _configCallbacks.forEach(fn => fn());
   _configCallbacks.length = 0;
+}
+
+/**
+ * Pergunta ao servidor se ESTA conexão (navegador/computador) apresentou um
+ * certificado de cliente autorizado (mTLS, ver lib/certificado-dispositivo.js
+ * e GET /status-dispositivo, lib/rotas/status-dispositivo.js). Preenche
+ * AUTORIZADO_POR_CERTIFICADO, consumida por _esteDispositivoEstaNaLista()
+ * (abaixo) — sem isso, um dispositivo autorizado SÓ por certificado (o caso
+ * de uso central do mTLS: sobreviver a limpar todos os dados do navegador)
+ * ficava com a tela de Operação travada mesmo o servidor aceitando a
+ * requisição de verdade, porque esta checagem de UI só conhecia deviceId.
+ * Rota pública (sem sessão), então nunca deveria dar 403 — qualquer falha
+ * aqui é tratada como "não autorizado", nunca quebra o resto de loadConfig().
+ */
+async function carregarStatusDispositivo() {
+  try {
+    const res = await fetch('/status-dispositivo', { cache: 'no-store' });
+    const data = await res.json();
+    AUTORIZADO_POR_CERTIFICADO = !!(data && data.ok && data.autorizadoPorCertificado);
+  } catch (_) {
+    AUTORIZADO_POR_CERTIFICADO = false;
+  }
 }
 
 /** Executa fn imediatamente se config já carregou, senão aguarda. */
@@ -786,6 +827,7 @@ function ehMaster() {
  * também da permissão de perfil.
  */
 function _esteDispositivoEstaNaLista() {
+  if (AUTORIZADO_POR_CERTIFICADO) return true;
   return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
 }
 
