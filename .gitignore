@@ -12,8 +12,16 @@ public/db/security.json.migrado-*
 
 # Cópia real do ecosystem do PM2 (com Client ID/Secret do Google Drive
 # preenchidos de verdade) — ver deploy/ecosystem.config.js, que é só o
-# MODELO (sem segredo nenhum, seguro de commitar). Qualquer arquivo que
-# comece com "ecosystem.config." e não seja exatamente esse nome nunca
-# deveria ir pro git.
-deploy/ecosystem.config.*.js
+# MODELO (sem segredo nenhum, seguro de commitar).
+#
+# Regra do PM2: um arquivo só é reconhecido como "config com várias apps"
+# se o NOME terminar exatamente em ".config.js" (ex: "producao.config.js")
+# — terminar em outra coisa (ex: "ecosystem.config.real.js", que tem
+# ".real.js" no final) faz o PM2 tratar o arquivo como um script comum e
+# tentar RODAR o próprio arquivo de configuração como se fosse o servidor
+# (bug real, achado numa conversa: "pm2 show" mostrava o script path
+# apontando pro arquivo de config, não pro server.js). Por isso a regra
+# abaixo é ampla — qualquer "*.config.js" dentro de deploy/ (menos o
+# modelo) — em vez de amarrada a um nome específico que alguém possa errar.
+deploy/*.config.js
 !deploy/ecosystem.config.js

@@ -18,10 +18,16 @@
 //
 // COMO USAR (na VM, via SSH — nunca aqui no repositório de desenvolvimento):
 //
-//   1. Copie este arquivo pra um novo, com os valores reais:
-//        cp deploy/ecosystem.config.js deploy/ecosystem.config.real.js
+//   1. Copie este arquivo pra um novo, com os valores reais. IMPORTANTE:
+//      o nome do arquivo TEM que terminar exatamente em ".config.js" —
+//      é assim que o PM2 reconhece "isto é um arquivo de configuração
+//      com várias apps", não um script comum. Terminar em qualquer outra
+//      coisa (ex: "ecosystem.config.real.js", que termina em ".real.js")
+//      faz o PM2 tentar RODAR o próprio arquivo de config como se fosse
+//      o servidor — bug real, já pego numa conversa.
+//        cp deploy/ecosystem.config.js deploy/producao.config.js
 //
-//   2. Edite deploy/ecosystem.config.real.js preenchendo GOOGLE_CLIENT_ID/
+//   2. Edite deploy/producao.config.js preenchendo GOOGLE_CLIENT_ID/
 //      GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI com os valores reais do
 //      Google Cloud Console (ver README.md, "Backup Automático no Google
 //      Drive").
@@ -30,13 +36,16 @@
 //      de recriar a partir do arquivo — o PM2 não atualiza variáveis de
 //      ambiente de um processo já rodando só com `pm2 restart`:
 //        pm2 delete testes
-//        pm2 start deploy/ecosystem.config.real.js
+//        pm2 start deploy/producao.config.js
 //
-//   4. Salve a lista atual do PM2, pra sobreviver a um reboot da VM:
+//   4. Confirme que o "script path" aponta pro server.js (não pro
+//      próprio arquivo de config!) antes de seguir:
+//        pm2 show testes
+//
+//   5. Salve a lista atual do PM2, pra sobreviver a um reboot da VM:
 //        pm2 save
 //
-//   5. Confirme que subiu e que as variáveis foram lidas:
-//        pm2 status
+//   6. Confirme que as variáveis foram lidas:
 //        pm2 env testes   (procure por GOOGLE_CLIENT_ID na lista)
 
 module.exports = {
