@@ -9,3 +9,11 @@ private/
 .test-tmp/
 public/db/security.json
 public/db/security.json.migrado-*
+
+# Cópia real do ecosystem do PM2 (com Client ID/Secret do Google Drive
+# preenchidos de verdade) — ver deploy/ecosystem.config.js, que é só o
+# MODELO (sem segredo nenhum, seguro de commitar). Qualquer arquivo que
+# comece com "ecosystem.config." e não seja exatamente esse nome nunca
+# deveria ir pro git.
+deploy/ecosystem.config.*.js
+!deploy/ecosystem.config.js
