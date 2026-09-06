@@ -565,7 +565,29 @@
             </div>
 
             <div class="card-title" style="font-size:.85rem">Autorizados agora</div>
-            <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
+            <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px"></div>
+
+            <!-- ---- Autorizar por Código/Arquivo ----
+                 Alternativa às duas de cima: não exige sessão de admin NO
+                 computador sendo autorizado — só que a pessoa lá salve o
+                 código num .txt e envie pelo botão que aparece no aviso de
+                 bloqueio (Registrar Operação). Ver lib/codigos-autorizacao.js. -->
+            <div class="card-title" style="font-size:.85rem">Autorizar por Código (Arquivo)</div>
+            <p style="font-size:.75rem;color:var(--text-3);margin-bottom:10px;line-height:1.5">
+              Gere um código com um nome (ex: "PC Injetora 2") e repasse pra pessoa no outro computador — sem
+              precisar de sessão de admin lá. Ela salva o código num <code>.txt</code> e envia pelo botão que
+              aparece no aviso de bloqueio em <strong>Registrar Operação</strong>.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <input type="text" id="cfg-codigos-novo-nome" placeholder="Nome do dispositivo (ex: PC Injetora 2)"
+                style="flex:1;min-width:200px" class="form-input">
+              <button type="button" class="btn btn-sm" onclick="cfgGerarCodigoAutorizacao()">+ Gerar código</button>
+            </div>
+            <div id="cfg-codigos-gerado" style="display:none;margin-bottom:16px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
+              <div style="font-size:.7rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Código gerado — copie e envie pra quem vai usar</div>
+              <code id="cfg-codigos-gerado-valor" style="font-size:.95rem;color:var(--text-1);word-break:break-all"></code>
+            </div>
+            <div id="cfg-codigos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 

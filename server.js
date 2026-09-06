@@ -154,6 +154,27 @@ const {
   negarControleDeOperacao,
 } = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea });
 
+// ─── CÓDIGOS DE AUTORIZAÇÃO DE DISPOSITIVO (por arquivo) ──────────────────
+// Forma alternativa de autorizar um dispositivo, complementar ao que já
+// existe acima — ver lib/codigos-autorizacao.js pro fluxo completo. Precisa
+// vir DEPOIS de lerDispositivosAutorizados/salvarDispositivosAutorizados
+// (reaproveita a MESMA lista) e ANTES de rotasCodigosAutorizacao, abaixo.
+const codigosAutorizacao = require('./lib/codigos-autorizacao.js')({
+  fs, path, DB_DIR, lerDispositivosAutorizados, salvarDispositivosAutorizados,
+});
+
+// Rate limit por IP da rota pública (sem sessão) POST
+// /autorizar-dispositivo-por-arquivo — mesmo raciocínio/padrão de
+// rateLimitOffline, abaixo: persistido em disco (sobrevive a restart),
+// genérico (lib/rate-limit-ip.js). 10 tentativas em 15 minutos é folgado
+// pro uso legítimo (uma autorização é um evento raro por computador) e
+// ainda barra força bruta contra o código de 16 símbolos.
+const rateLimitCodigoAutorizacao = require('./lib/rate-limit-ip.js')({
+  fs, logger, dominioLog: 'codigo-autorizacao',
+  caminhoArquivo: path.join(PRIVATE_DIR, 'rate-limit-codigo-autorizacao.json'),
+  maxTentativas: 10, janelaMs: 15 * 60 * 1000, bloqueioMs: 15 * 60 * 1000,
+});
+
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
 // _enviarWsParaTodos/broadcastOperacaoAndamento/broadcastOperacaoFinalizada/
 // broadcastLeituraAutomatica/broadcastDadosSqlExcluidos agora vivem em
@@ -298,6 +319,16 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
+// Rota de administração dos CÓDIGOS (gerar/listar/revogar) exige sessão do
+// ADMINISTRADOR MASTER — `sessao` puro, NÃO `sessaoOuAdmin` (que também
+// aceitaria o perfil Administrativo, como Dispositivos Autorizados logo
+// acima). Pedido explícito do usuário: só quem tem a senha mestra pode
+// emitir/revogar esses códigos — a rota de USO do código (autorizar-
+// dispositivo-por-arquivo) continua pública, sem sessão nenhuma (ver
+// lib/rotas/codigos-autorizacao.js).
+const rotasCodigosAutorizacao = require('./lib/rotas/codigos-autorizacao.js')({
+  sessao, codigosAutorizacao, rateLimit: rateLimitCodigoAutorizacao,
+});
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, podeUsarItem, negarAcesso, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
@@ -337,7 +368,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasCodigosAutorizacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
