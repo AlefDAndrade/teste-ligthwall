@@ -68,16 +68,6 @@ let PRIORIDADE_OPTS = [];
 // — a trava de verdade é sempre no servidor (dispositivoAutorizado(),
 // server.js).
 let DISPOSITIVOS_AUTORIZADOS = [];
-// Preenchida por carregarStatusDispositivo() (ver abaixo) — se ESTA conexão
-// (navegador/computador) apresentou um certificado de cliente autorizado
-// (mTLS, ver lib/certificado-dispositivo.js). Antes desta variável existir,
-// _esteDispositivoEstaNaLista() só sabia checar deviceId/cookie — um
-// dispositivo autorizado SÓ por certificado ficava com a tela travada
-// mesmo o servidor aceitando a requisição de verdade, porque o JS nunca
-// chegava a mandar (motivo real do bug: a UI decide ANTES de qualquer
-// request de escrita sair). null = ainda não checado nesta carga de página
-// (tratado como false por segurança até a resposta chegar).
-let AUTORIZADO_POR_CERTIFICADO = null;
 
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
@@ -585,40 +575,9 @@ async function loadConfig() {
     } catch (e) { console.warn('Config override inválida', e); }
   }
 
-  // Certificado de dispositivo (mTLS) — via separada de dispositivosAutorizados
-  // acima (deviceId/cookie): não dá pra saber pelo config.json estático se
-  // ESTA conexão trouxe um certificado válido, só o servidor sabe (o Caddy só
-  // repassa o serial pro Node, nunca pro navegador). Erro aqui (rede caiu,
-  // endpoint indisponível) trata como "não autorizado por certificado" —
-  // mesmo padrão conservador do resto desta função: nunca destrava a UI por
-  // falha de rede, só por confirmação positiva do servidor.
-  await carregarStatusDispositivo();
-
   _configReady = true;
   _configCallbacks.forEach(fn => fn());
   _configCallbacks.length = 0;
-}
-
-/**
- * Pergunta ao servidor se ESTA conexão (navegador/computador) apresentou um
- * certificado de cliente autorizado (mTLS, ver lib/certificado-dispositivo.js
- * e GET /status-dispositivo, lib/rotas/status-dispositivo.js). Preenche
- * AUTORIZADO_POR_CERTIFICADO, consumida por _esteDispositivoEstaNaLista()
- * (abaixo) — sem isso, um dispositivo autorizado SÓ por certificado (o caso
- * de uso central do mTLS: sobreviver a limpar todos os dados do navegador)
- * ficava com a tela de Operação travada mesmo o servidor aceitando a
- * requisição de verdade, porque esta checagem de UI só conhecia deviceId.
- * Rota pública (sem sessão), então nunca deveria dar 403 — qualquer falha
- * aqui é tratada como "não autorizado", nunca quebra o resto de loadConfig().
- */
-async function carregarStatusDispositivo() {
-  try {
-    const res = await fetch('/status-dispositivo', { cache: 'no-store' });
-    const data = await res.json();
-    AUTORIZADO_POR_CERTIFICADO = !!(data && data.ok && data.autorizadoPorCertificado);
-  } catch (_) {
-    AUTORIZADO_POR_CERTIFICADO = false;
-  }
 }
 
 /** Executa fn imediatamente se config já carregou, senão aguarda. */
@@ -827,7 +786,6 @@ function ehMaster() {
  * também da permissão de perfil.
  */
 function _esteDispositivoEstaNaLista() {
-  if (AUTORIZADO_POR_CERTIFICADO) return true;
   return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
 }
 
@@ -905,62 +863,6 @@ async function removerDispositivo(deviceId) {
   const data = await res.json();
   if (!data.ok) throw new Error(data.erro || 'Não foi possível remover o dispositivo.');
   DISPOSITIVOS_AUTORIZADOS = data.lista;
-  return data.lista;
-}
-
-/**
- * Certificado de Autorização de Dispositivo (mTLS) — Configurações →
- * Dispositivos Autorizados. Camada ADICIONAL de reconhecimento, em
- * paralelo ao deviceId/cookie acima (ver lib/certificado-dispositivo.js,
- * lib/dispositivo-autorizado.js): sobrevive a limpar todos os dados do
- * navegador, porque a identidade vive num certificado instalado no
- * SO/navegador, não em cookie/localStorage.
- */
-
-/** Lista (serial, nome, emitidoEm) dos certificados já emitidos. Requer sessão de admin válida. */
-async function listarCertificadosDispositivo() {
-  const res = await fetch('/certificados-dispositivo');
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os certificados.');
-  return data.lista;
-}
-
-/**
- * Gera um novo certificado — devolve { blob, nomeArquivo, senha, serial }
- * pro chamador decidir o que fazer (mostrar a senha, disparar o download).
- * A senha só existe NESTA resposta — não fica guardada no servidor depois
- * desta chamada retornar (ver emitirCertificado(),
- * lib/certificado-dispositivo.js). Requer sessão de admin válida.
- */
-async function gerarCertificadoDispositivo(nome) {
-  const res = await fetch('/gerar-certificado-dispositivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome: nome || '' }),
-  });
-  if (!res.ok) {
-    let erro = 'Não foi possível gerar o certificado.';
-    try { erro = (await res.json()).erro || erro; } catch (_) { /* corpo não era JSON (ex: 403 de sessão) */ }
-    throw new Error(erro);
-  }
-  const senha = res.headers.get('X-Certificado-Senha');
-  const serial = res.headers.get('X-Certificado-Serial');
-  const cd = res.headers.get('Content-Disposition') || '';
-  const match = cd.match(/filename="(.+?)"/);
-  const nomeArquivo = match ? match[1] : 'lightwall-dispositivo.p12';
-  const blob = await res.blob();
-  return { blob, nomeArquivo, senha, serial };
-}
-
-/** Revoga (remove da lista de aceitos) um certificado pelo serial. Requer sessão de admin válida. */
-async function revogarCertificadoDispositivo(serial) {
-  const res = await fetch('/revogar-certificado-dispositivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serial }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível revogar o certificado.');
   return data.lista;
 }
 
@@ -3142,7 +3044,6 @@ window.LW = {
 
   // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
   listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
-  listarCertificadosDispositivo, gerarCertificadoDispositivo, revogarCertificadoDispositivo,
   get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
   // Operações a Validar (Registro Offline — Configurações, itens 6/7 do

@@ -566,35 +566,6 @@
 
             <div class="card-title" style="font-size:.85rem">Autorizados agora</div>
             <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
-
-            <!-- ── Certificado de Autorização (mTLS) — camada ADICIONAL, em
-                 paralelo ao deviceId/cookie acima (ver
-                 lib/certificado-dispositivo.js, lib/dispositivo-autorizado.js).
-                 Sobrevive a limpar TODOS os dados do navegador, porque a
-                 identidade vive num certificado instalado no SO/navegador,
-                 não em cookie/localStorage. Requer também ativar mTLS no
-                 Caddy (deploy/ativar-mtls-caddy.sh) pra valer de verdade —
-                 gerar o certificado aqui funciona independente disso, mas
-                 só passa a AUTORIZAR sozinho depois desse passo no
-                 servidor. -->
-            <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
-              <div class="card-title" style="font-size:.85rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Certificado de Autorização (opcional, mais durável)</div>
-              <p style="font-size:.75rem;color:var(--text-3);margin-bottom:14px;line-height:1.5">
-                Em vez de depender de cookie/navegador (que se perde ao limpar dados), gere um certificado aqui e
-                instale-o UMA VEZ no computador que vai operar — ele continua autorizado mesmo depois de limpar o
-                navegador. Requer que o Administrador tenha ativado o reconhecimento de certificado no servidor
-                (<code>deploy/ativar-mtls-caddy.sh</code> — veja o README).
-              </p>
-
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-                <input type="text" id="cfg-certificado-nome" placeholder="Nome (ex: PC Injetora 1)"
-                  style="flex:1;min-width:200px" class="form-input">
-                <button type="button" class="btn btn-sm" onclick="cfgGerarCertificado()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Gerar certificado</button>
-              </div>
-
-              <div class="card-title" style="font-size:.8rem">Certificados emitidos</div>
-              <div id="cfg-certificados-lista" style="display:flex;flex-direction:column;gap:8px"></div>
-            </div>
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 

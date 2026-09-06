@@ -335,7 +335,7 @@
           <span class="nav-text">One Page Report</span>
         </button>
       </div>
-    </nav>
+    </nav>
 <!-- ============ PAGE: MENU ============ -->
     <main class="main active" id="page-menu">
       <div class="menu-page-wrap">
@@ -541,7 +541,7 @@
 
       </div>
     </div>
-
+
 <!-- ============ PAGE: OPERAÇÃO ============ -->
 <main class="main" id="page-operacao">
   <div class="page-header" style="position:relative">
@@ -1918,7 +1918,7 @@
       </div>
     </div>
   </div>
-</main>
+</main>
 <!-- ============ PAGE: OEE ============ -->
     <main class="main" id="page-oee">
       <div class="page-header">
@@ -2134,7 +2134,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main>
+    </main>
 <!-- ============ PAGE: ANÁLISE OPERACIONAL ============ -->
     <main class="main" id="page-analise-operacional">
       <div class="page-header">
@@ -2500,7 +2500,7 @@
         </div>
 
       </div><!-- .page-body -->
-    </main><!-- #page-paradas -->
+    </main><!-- #page-paradas -->
     <!-- ============ PAGE: TRAÇOS DESCARTADOS (PERDA) ============ -->
     <main class="main" id="page-tracos-descartados">
       <div class="page-header">
@@ -2649,7 +2649,7 @@
           </div>
         </div>
       </div>
-    </main><!-- #page-tracos-descartados -->
+    </main><!-- #page-tracos-descartados -->
 <!-- ============ PAGE: SETOR DE QUALIDADE ============ -->
     <main class="main" id="page-setor-qualidade">
       <div class="page-header">
@@ -3912,7 +3912,7 @@
 </div>
 
       </div>
-    </main>
+    </main>
 <!-- ============ PAGE: ONE PAGE REPORT LW SC ============
      Fase 5 do plano (ver README, "Nova página: One Page Report
      (planejamento)"). Dados vêm de public/js/one-page-report.js —
@@ -4058,7 +4058,7 @@
         </div>
 
       </div>
-    </main>
+    </main>
 
   </div><!-- .app-shell -->
 
@@ -4685,35 +4685,6 @@
 
             <div class="card-title" style="font-size:.85rem">Autorizados agora</div>
             <div id="cfg-dispositivos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
-
-            <!-- ── Certificado de Autorização (mTLS) — camada ADICIONAL, em
-                 paralelo ao deviceId/cookie acima (ver
-                 lib/certificado-dispositivo.js, lib/dispositivo-autorizado.js).
-                 Sobrevive a limpar TODOS os dados do navegador, porque a
-                 identidade vive num certificado instalado no SO/navegador,
-                 não em cookie/localStorage. Requer também ativar mTLS no
-                 Caddy (deploy/ativar-mtls-caddy.sh) pra valer de verdade —
-                 gerar o certificado aqui funciona independente disso, mas
-                 só passa a AUTORIZAR sozinho depois desse passo no
-                 servidor. -->
-            <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
-              <div class="card-title" style="font-size:.85rem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Certificado de Autorização (opcional, mais durável)</div>
-              <p style="font-size:.75rem;color:var(--text-3);margin-bottom:14px;line-height:1.5">
-                Em vez de depender de cookie/navegador (que se perde ao limpar dados), gere um certificado aqui e
-                instale-o UMA VEZ no computador que vai operar — ele continua autorizado mesmo depois de limpar o
-                navegador. Requer que o Administrador tenha ativado o reconhecimento de certificado no servidor
-                (<code>deploy/ativar-mtls-caddy.sh</code> — veja o README).
-              </p>
-
-              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-                <input type="text" id="cfg-certificado-nome" placeholder="Nome (ex: PC Injetora 1)"
-                  style="flex:1;min-width:200px" class="form-input">
-                <button type="button" class="btn btn-sm" onclick="cfgGerarCertificado()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:2px"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Gerar certificado</button>
-              </div>
-
-              <div class="card-title" style="font-size:.8rem">Certificados emitidos</div>
-              <div id="cfg-certificados-lista" style="display:flex;flex-direction:column;gap:8px"></div>
-            </div>
           </div>
           <!-- ========== /SEÇÃO: Dispositivos Autorizados ========== -->
 
@@ -5208,7 +5179,7 @@
       </div>
 
     </div>
-  </div>
+  </div>
   <!-- ============ MODAL: EDITAR TRAÇO (Relatório de Injeção) ============ -->
   <div id="editar-traco-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center;padding:20px 0">
@@ -5430,7 +5401,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL IMPORTAÇÃO ============ -->
   <!-- ============ MODAL EXPORTAÇÃO CSV ============ -->
   <div id="export-modal"
@@ -5500,7 +5471,7 @@
 
     </div>
   </div>
-
+
   <!-- ============ MODAL EXPORTAÇÃO EXCEL — RELATÓRIO DE INJEÇÃO ============ -->
   <div id="export-relatorio-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">
@@ -5571,7 +5542,7 @@
 
     </div>
   </div>
-
+
 <!-- ============ MODAL: RESTAURAR BACKUP DE DADOS ============ -->
   <div id="restaurar-backup-modal"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:999;align-items:center;justify-content:center">

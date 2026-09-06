@@ -21,7 +21,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { ipRealDoRequest } = require('../lib/ip-cliente.js');
-const { iniciarServidorDeTeste, DEVICE_ID_TESTE_PADRAO } = require('./helpers/servidor-teste.js');
+const { iniciarServidorDeTeste } = require('./helpers/servidor-teste.js');
 
 // ─── Parte 1: unitário ──────────────────────────────────────────────────────
 
