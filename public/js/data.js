@@ -867,64 +867,6 @@ async function removerDispositivo(deviceId) {
 }
 
 /**
- * Autorização de Dispositivo por Código/Arquivo (ver lib/codigos-autorizacao.js)
- * — forma alternativa: Administrador gera um código com um nome, a pessoa
- * no outro computador salva num .txt e envia pelo botão que aparece no
- * aviso de "dispositivo não autorizado" (autorizarDispositivoPorArquivo,
- * abaixo — essa aí SEM sessão, de propósito).
- */
-
-/** Lista completa de códigos (pendentes/usados/revogados). Requer admin. */
-async function listarCodigosAutorizacao() {
-  const res = await fetch('/codigos-autorizacao');
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os códigos.');
-  return data.lista;
-}
-
-/** Gera um novo código pendente com esse nome. Requer admin. */
-async function gerarCodigoAutorizacao(nome) {
-  const res = await fetch('/gerar-codigo-autorizacao', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível gerar o código.');
-  return data.entrada;
-}
-
-/** Revoga (pelo nome) um código pendente ou já usado. Requer admin. */
-async function revogarCodigoAutorizacao(nome) {
-  const res = await fetch('/revogar-codigo-autorizacao', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível revogar o código.');
-  return data.lista;
-}
-
-/**
- * Envia o CONTEÚDO do arquivo de código pra autorizar ESTE dispositivo —
- * chamada pelo botão de upload na tela bloqueada (ver operacao.js). SEM
- * sessão nenhuma (a rota é pública, protegida só por rate limit + o
- * próprio código ser a credencial) — funciona mesmo sem ninguém logado
- * neste computador.
- */
-async function autorizarDispositivoPorArquivo(conteudo) {
-  const res = await fetch('/autorizar-dispositivo-por-arquivo?deviceId=' + encodeURIComponent(getDeviceId()), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conteudo }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível autorizar este dispositivo.');
-  return data;
-}
-
-/**
  * Operações a Validar (Registro Offline) — Configurações, itens 6/7 do
  * plano (ver README, "Registro de Operação Offline (PWA)"). As 4 funções
  * abaixo espelham exatamente lib/rotas/operacao-offline.js — todas
@@ -3103,10 +3045,6 @@ window.LW = {
   // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
   listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
   get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
-
-  // Autorização de Dispositivo por Código/Arquivo (ver lib/codigos-autorizacao.js)
-  listarCodigosAutorizacao, gerarCodigoAutorizacao, revogarCodigoAutorizacao,
-  autorizarDispositivoPorArquivo,
 
   // Operações a Validar (Registro Offline — Configurações, itens 6/7 do
   // plano, ver README)

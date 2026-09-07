@@ -3918,7 +3918,6 @@
     // nunca confia só na cópia em memória de LW.DISPOSITIVOS_AUTORIZADOS
     // (que só é preenchida uma vez, no carregamento da página).
     async function cfgRenderDispositivos() {
-      cfgRenderCodigos();
       const meuId = document.getElementById('cfg-dispositivos-meu-id');
       if (meuId) meuId.textContent = LW.getDeviceId();
 
@@ -4001,92 +4000,6 @@
       try {
         await LW.removerDispositivo(deviceId);
         LW.mostrarAlerta('Dispositivo removido.', { tipo: 'sucesso' });
-        cfgRenderDispositivos();
-      } catch (e) {
-        LW.mostrarAlerta(e.message, { tipo: 'erro' });
-      }
-    }
-
-    // ---- Autorizar por Código (Arquivo) — ver lib/codigos-autorizacao.js ----
-
-    /** Recarrega a lista de códigos (pendentes/usados/revogados). */
-    async function cfgRenderCodigos() {
-      const elLista = document.getElementById('cfg-codigos-lista');
-      if (!elLista) return;
-      elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Carregando…</span>';
-
-      let lista = [];
-      try {
-        lista = await LW.listarCodigosAutorizacao();
-      } catch (e) {
-        elLista.innerHTML = `<span style="color:var(--red);font-size:.8rem">${_escaparHtmlLocal(e.message)}</span>`;
-        return;
-      }
-
-      if (!lista.length) {
-        elLista.innerHTML = '<span style="color:var(--text-3);font-size:.8rem">Nenhum código gerado ainda.</span>';
-        return;
-      }
-
-      // Mais recente primeiro.
-      const ordenada = [...lista].sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''));
-      elLista.innerHTML = ordenada.map(c => {
-        const nome = _escaparHtmlLocal(c.nome || '');
-        let statusHtml;
-        if (c.revogado) {
-          statusHtml = '<span class="badge badge-red">revogado</span>';
-        } else if (c.usado) {
-          statusHtml = '<span class="badge badge-green">usado</span>';
-        } else {
-          statusHtml = '<span class="badge">pendente</span>';
-        }
-        const dataFmt = c.criadoEm ? new Date(c.criadoEm).toLocaleString('pt-BR') : '';
-        const podeRevogar = !c.revogado;
-        return `
-          <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;flex-wrap:wrap">
-            <div style="min-width:0">
-              <div style="font-size:.85rem;color:var(--text-1)">${nome} ${statusHtml}</div>
-              <div style="font-size:.7rem;color:var(--text-3)">${dataFmt ? 'gerado em ' + dataFmt : ''}${!c.revogado && !c.usado ? ' · <code style="word-break:break-all">' + _escaparHtmlLocal(c.codigo) + '</code>' : ''}</div>
-            </div>
-            ${podeRevogar ? `<button type="button" onclick="cfgRevogarCodigoAutorizacao('${_escaparHtmlLocal(c.nome).replace(/'/g, "\\'")}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;margin-left:auto">✕ Revogar</button>` : ''}
-          </div>`;
-      }).join('');
-    }
-
-    /** Botão "+ Gerar código" — cria um novo código pendente com o nome digitado. */
-    async function cfgGerarCodigoAutorizacao() {
-      const inputNome = document.getElementById('cfg-codigos-novo-nome');
-      const nome = (inputNome?.value || '').trim();
-      if (!nome) {
-        LW.mostrarAlerta('Dê um nome para identificar este código (ex: "PC Injetora 2").', { tipo: 'erro' });
-        return;
-      }
-      try {
-        const entrada = await LW.gerarCodigoAutorizacao(nome);
-        if (inputNome) inputNome.value = '';
-        const bloco = document.getElementById('cfg-codigos-gerado');
-        const valor = document.getElementById('cfg-codigos-gerado-valor');
-        if (bloco && valor) {
-          valor.textContent = entrada.codigo;
-          bloco.style.display = 'block';
-        }
-        LW.mostrarAlerta('Código gerado com sucesso.', { tipo: 'sucesso' });
-        cfgRenderCodigos();
-      } catch (e) {
-        LW.mostrarAlerta(e.message, { tipo: 'erro' });
-      }
-    }
-
-    /** Botão "✕ Revogar" de cada linha — some com o código pendente, ou remove a autorização já concedida por ele. */
-    async function cfgRevogarCodigoAutorizacao(nome) {
-      const confirmou = await LW.mostrarConfirmacao(
-        'Se este código já tiver autorizado um dispositivo, esse dispositivo perde a autorização agora mesmo.',
-        { titulo: `Revogar o código "${nome}"?`, textoConfirmar: 'Revogar', tipo: 'perigo', icon: '🛑' }
-      );
-      if (!confirmou) return;
-      try {
-        await LW.revogarCodigoAutorizacao(nome);
-        LW.mostrarAlerta('Código revogado.', { tipo: 'sucesso' });
         cfgRenderDispositivos();
       } catch (e) {
         LW.mostrarAlerta(e.message, { tipo: 'erro' });

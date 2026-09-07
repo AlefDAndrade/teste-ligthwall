@@ -530,7 +530,7 @@
     }
     if (motivo === 'dispositivo') {
       LW.mostrarAlerta(
-        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador para autorizá-lo, ou envie o arquivo de código no aviso acima.`,
+        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador para autorizá-lo`,
         { tipo: 'erro' }
       );
       return true;
@@ -593,56 +593,20 @@
 
     if (fieldset) fieldset.disabled = !podeControlar;
 
-    // Botão "📎 Enviar arquivo de autorização" (ver lib/codigos-autorizacao.js)
-    // — só faz sentido quando o motivo é FALTA DE DISPOSITIVO autorizado;
-    // nos outros casos (perfil, ou dono de outra pessoa) o innerHTML abaixo
-    // nem inclui o botão, então esconder o banner inteiro já basta.
     if (!aviso) return;
     if (podeControlar) {
       aviso.style.display = 'none';
     } else if (motivo === 'perfil') {
-      aviso.innerHTML = '🔒 <span id="op-aviso-nao-autorizado-texto">Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar.</span>';
+      aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar.</span>';
       aviso.style.display = 'flex';
     } else if (motivo === 'dispositivo') {
-      aviso.innerHTML = `🔒 <span id="op-aviso-nao-autorizado-texto">Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador para autorizá-lo, ou envie o arquivo de código aqui →</span>
-        <label id="op-btn-autorizar-por-arquivo" style="display:inline-flex;margin-left:auto;cursor:pointer">
-          <span class="btn btn-sm" style="pointer-events:none">📎 Enviar arquivo de autorização</span>
-          <input type="file" accept=".txt,text/plain" style="display:none" onchange="opAutorizarPorArquivo(this)">
-        </label>`;
+      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador para autorizá-lo</span>`;
       aviso.style.display = 'flex';
     } else {
-      aviso.innerHTML = '<span id="op-aviso-nao-autorizado-texto">Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar.</span>';
+      aviso.innerHTML = '<span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar.</span>';
       aviso.style.display = 'flex';
     }
   }
-
-  /**
-   * Lê o .txt selecionado no botão "📎 Enviar arquivo de autorização" (ver
-   * banner acima) e manda o CONTEÚDO pro servidor conferir (ver
-   * LW.autorizarDispositivoPorArquivo, data.js — rota pública, sem sessão,
-   * de propósito). Sucesso recarrega a página, pra `_aplicarTravaDeAutorizacao`
-   * já nascer sabendo que este dispositivo passou a estar autorizado.
-   */
-  window.opAutorizarPorArquivo = function opAutorizarPorArquivo(inputEl) {
-    const arquivo = inputEl.files && inputEl.files[0];
-    if (!arquivo) return;
-    const leitor = new FileReader();
-    leitor.onload = async () => {
-      try {
-        await LW.autorizarDispositivoPorArquivo(String(leitor.result || ''));
-        LW.mostrarAlerta('Dispositivo autorizado com sucesso! Recarregando…', { tipo: 'sucesso' });
-        setTimeout(() => window.location.reload(), 900);
-      } catch (e) {
-        LW.mostrarAlerta(e.message, { tipo: 'erro' });
-        inputEl.value = '';
-      }
-    };
-    leitor.onerror = () => {
-      LW.mostrarAlerta('Não foi possível ler o arquivo selecionado.', { tipo: 'erro' });
-      inputEl.value = '';
-    };
-    leitor.readAsText(arquivo, 'utf-8');
-  };
 
   function iniciarInjecao() {
     if (state.status !== 'idle') return;
