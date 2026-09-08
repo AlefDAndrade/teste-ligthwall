@@ -61,14 +61,6 @@ let TIPO_MANUTENCAO_OPTS = [];
 // Configurações > Prioridades), sem essa integração com o tema.
 let PRIORIDADE_OPTS = [];
 
-// Dispositivos autorizados a controlar operação (voltou — ver conversa que
-// motivou a mudança) — [{ deviceId, nome, autorizadoEm }], espelho em
-// memória do que está em config.json (dispositivosAutorizados), preenchido
-// por loadConfig(). Só pra UI/UX (ver dispositivoEstaAutorizado(), abaixo)
-// — a trava de verdade é sempre no servidor (dispositivoAutorizado(),
-// server.js).
-let DISPOSITIVOS_AUTORIZADOS = [];
-
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
 // Configurações → Bateria e Montagem → "Definir Paletes" (ver
@@ -515,17 +507,11 @@ async function loadConfig() {
       PALETES_ORDEM = { ...PALETES_ORDEM_DEFAULT };
     }
 
-    // "dispositivosAutorizados": voltou (ver conversa que motivou a
-    // mudança) — lista de dispositivos que podem controlar operação,
-    // além da permissão de perfil de usuário (ver
-    // dispositivoEstaAutorizado(), abaixo). Ausente/inválido = trata como
-    // lista vazia (nenhum dispositivo autorizado ainda), nunca quebra o
-    // carregamento do resto do config.json.
-    DISPOSITIVOS_AUTORIZADOS = Array.isArray(cfg.dispositivosAutorizados)
-      ? cfg.dispositivosAutorizados.map(d => ({
-          deviceId: d.deviceId, nome: d.nome || '', autorizadoEm: d.autorizadoEm || null,
-        }))
-      : [];
+    // "dispositivosAutorizados": campo LEGADO — a trava por dispositivo
+    // que existia foi removida (ver histórico do git). Se um config.json
+    // antigo ainda tiver essa chave, ela simplesmente não é mais lida
+    // aqui; fica ignorada, sem afetar nada do carregamento do resto do
+    // config.json.
 
   } catch (err) {
     console.warn('[LW] Usando valores fallback — config.json indisponível:', err.message);
@@ -561,7 +547,6 @@ async function loadConfig() {
       { label: 'MÉDIA', cor: 'var(--accent)' },
       { label: 'ALTA', cor: 'var(--red)' },
     ];
-    DISPOSITIVOS_AUTORIZADOS = []; // config.json indisponível — nenhum dispositivo autorizado conhecido
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -652,20 +637,14 @@ function nomeDeQuemEstaLogado() {
 const DB_KEY_DEVICE_ID = 'lw_device_id';
 
 /**
- * ID estável deste navegador/computador. Guardado em localStorage como
- * antes (sobrevive a reabrir o navegador; some se os dados do navegador
- * forem limpos) — MAS agora, assim que possível, é substituído pelo ID do
- * cookie HttpOnly que o servidor emite (ver GET /meu-device-id,
- * lib/dispositivo-cookie.js, server.js), que é a fonte que realmente
- * decide autorização. HttpOnly não pode ser lido por JS, então
- * buscamos o valor uma vez via fetch (_bootstrapDeviceId, chamado no
- * carregamento deste arquivo) e guardamos aqui pra uso síncrono depois —
- * até essa busca terminar (ou se falhar, ex: sem conexão), getDeviceId()
- * cai no valor antigo gerado localmente, sem travar nada.
+ * ID estável deste navegador/computador, gerado uma vez e guardado em
+ * localStorage (sobrevive a reabrir o navegador; some se os dados do
+ * navegador forem limpos). Usado só pra identificar o "dono" da operação
+ * em andamento (ver donoDeviceId em lib/rotas/operacao-andamento.js) —
+ * nunca mais decide AUTORIZAÇÃO (a trava por dispositivo foi removida,
+ * ver histórico do git se precisar resgatar).
  */
-let _deviceIdDoServidor = null;
-
-function _gerarOuLerDeviceIdLocal() {
+function getDeviceId() {
   try {
     let id = localStorage.getItem(DB_KEY_DEVICE_ID);
     if (!id) {
@@ -676,26 +655,6 @@ function _gerarOuLerDeviceIdLocal() {
   } catch (_) {
     return 'dev_sem_localstorage'; // navegador sem localStorage disponível
   }
-}
-
-/** Melhor esforço, chamado uma vez no carregamento da página — busca o ID
- *  real (cookie) no servidor e alinha o localStorage a ele, pra a tela de
- *  Configurações mostrar/autorizar o MESMO valor que o servidor de fato
- *  usa pra checar autorização (ver dispositivoAutorizado(), server.js). */
-async function _bootstrapDeviceId() {
-  try {
-    const resp = await fetch('/meu-device-id');
-    const dados = await resp.json();
-    if (dados && dados.ok && dados.deviceId) {
-      _deviceIdDoServidor = dados.deviceId;
-      try { localStorage.setItem(DB_KEY_DEVICE_ID, dados.deviceId); } catch (_) {}
-    }
-  } catch (_) { /* sem conexão — segue usando o valor local antigo */ }
-}
-_bootstrapDeviceId();
-
-function getDeviceId() {
-  return _deviceIdDoServidor || _gerarOuLerDeviceIdLocal();
 }
 
 /**
@@ -746,9 +705,9 @@ async function registrarAcesso(rota) {
  * podem; os demais perfis só se o usuário específico tiver sido marcado
  * com "pode iniciar operação" no cadastro (ver
  * sessionStorage.lw_pode_iniciar_operacao, gravado no login —
- * login.html/POST /login-usuario). Metade de dispositivoEstaAutorizado()
- * (abaixo) — sozinha, NÃO é suficiente pra controlar operação, também
- * precisa do dispositivo estar autorizado.
+ * login.html/POST /login-usuario). É toda a lógica por trás de
+ * dispositivoEstaAutorizado() (abaixo) — a trava adicional por
+ * DISPOSITIVO que existia aqui foi removida.
  */
 function _perfilTemPermissaoDeOperacao() {
   const role = sessionStorage.getItem('lw_role');
@@ -764,14 +723,13 @@ function _perfilTemPermissaoDeOperacao() {
  * manutencao-front.js). Usado só pra dispensar a trava de "dono da
  * operação" (ver _bloqueadoPorAutorizacao/_aplicarTravaDeAutorizacao,
  * operacao.js, e _podeMarcarVazamento, bateria-atual.js) — pedido
- * explícito do usuário: o Master, NUM DISPOSITIVO AUTORIZADO, pode
- * pausar, trocar traço, marcar berço etc. numa operação que outra
- * pessoa/dispositivo iniciou, sem precisar "🗑️ Limpar Tudo" (que reseta
- * tudo e tira o controle de quem estava operando). Não dispensa a
- * autorização do DISPOSITIVO — só a disputa de "dono" entre dispositivos
- * já autorizados. A trava de verdade é sempre no servidor (mesmo bypass
- * em POST /salvar-operacao-andamento e /marcar-berco-andamento, ver
- * lib/rotas/operacao-andamento.js) — isto aqui é só pra UI/UX.
+ * explícito do usuário: o Master pode pausar, trocar traço, marcar
+ * berço etc. numa operação que outra pessoa iniciou, sem precisar
+ * "🗑️ Limpar Tudo" (que reseta tudo e tira o controle de quem estava
+ * operando). Só dispensa a disputa de "dono" — a trava de verdade é
+ * sempre no servidor (mesmo bypass em POST /salvar-operacao-andamento e
+ * /marcar-berco-andamento, ver lib/rotas/operacao-andamento.js) — isto
+ * aqui é só pra UI/UX.
  */
 function ehMaster() {
   const role = sessionStorage.getItem('lw_role');
@@ -779,91 +737,29 @@ function ehMaster() {
 }
 
 /**
- * Indica se ESTE dispositivo (navegador/computador) está na lista de
- * autorizados (voltou — ver conversa que motivou a mudança; ver
- * DISPOSITIVOS_AUTORIZADOS, preenchida por loadConfig()). Outra metade de
- * dispositivoEstaAutorizado() — sozinha, também NÃO é suficiente, precisa
- * também da permissão de perfil.
- */
-function _esteDispositivoEstaNaLista() {
-  return DISPOSITIVOS_AUTORIZADOS.some(d => d.deviceId === getDeviceId());
-}
-
-/**
- * Indica se é possível controlar a operação em andamento AGORA — as DUAS
- * condições juntas, sem exceção pra nenhum perfil (pedido explícito do
- * usuário): permissão de PERFIL (_perfilTemPermissaoDeOperacao) E
- * dispositivo autorizado (_esteDispositivoEstaNaLista). Usado pela tela
- * de Registrar Operação pra desabilitar campos/botões com feedback claro
- * — a trava de verdade é sempre no servidor (ver podeControlarOperacao()
- * em server.js), isto aqui é só pra UI/UX.
+ * Indica se é possível controlar a operação em andamento AGORA —
+ * permissão de PERFIL (_perfilTemPermissaoDeOperacao). Usado pela tela de
+ * Registrar Operação pra desabilitar campos/botões com feedback claro —
+ * a trava de verdade é sempre no servidor (ver podeControlarOperacao()
+ * em lib/permissoes-area.js), isto aqui é só pra UI/UX.
+ *
+ * A trava ADICIONAL por DISPOSITIVO que existia aqui (allowlist de
+ * computadores em Configurações → Dispositivos Autorizados) foi removida
+ * — abandonada em favor de manter só a lógica de perfis autorizados (ver
+ * histórico do git se precisar resgatar).
  */
 function dispositivoEstaAutorizado() {
-  return _perfilTemPermissaoDeOperacao() && _esteDispositivoEstaNaLista();
+  return _perfilTemPermissaoDeOperacao();
 }
 
 /**
  * Motivo pelo qual dispositivoEstaAutorizado() está false agora — usado
  * pra mostrar a mensagem certa (ver operacao.js, _aplicarTravaDeAutorizacao):
- * 'perfil' se a pessoa logada não tem permissão, 'dispositivo' se tem
- * permissão mas o computador não está autorizado, null se está tudo ok.
- * Prioriza 'perfil' quando as duas faltam — é a causa mais comum
- * (dispositivo autorizado tende a ser configuração única por
- * computador, feita uma vez pelo Administrador).
+ * 'perfil' se a pessoa logada não tem permissão, null se está tudo ok.
  */
 function motivoBloqueioOperacao() {
   if (!_perfilTemPermissaoDeOperacao()) return 'perfil';
-  if (!_esteDispositivoEstaNaLista()) return 'dispositivo';
   return null;
-}
-
-/**
- * Busca a lista completa de dispositivos autorizados no servidor (não a
- * cópia em memória de DISPOSITIVOS_AUTORIZADOS, que só é preenchida uma
- * vez por loadConfig()) — usado pela tela de Configurações →
- * Dispositivos Autorizados, que precisa estar sempre atualizada.
- * Requer sessão de admin válida (servidor responde 403 sem ela).
- */
-async function listarDispositivosAutorizados() {
-  const res = await fetch('/dispositivos-autorizados');
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível listar os dispositivos autorizados.');
-  DISPOSITIVOS_AUTORIZADOS = data.lista;
-  return data.lista;
-}
-
-/**
- * Autoriza um dispositivo (ou atualiza o nome de um já autorizado) —
- * Configurações → Dispositivos Autorizados. Sem `deviceId` informado,
- * autoriza ESTE dispositivo (botão "Autorizar este dispositivo").
- * Requer sessão de admin válida.
- */
-async function autorizarDispositivo(nome, deviceId) {
-  const res = await fetch('/autorizar-dispositivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId: deviceId || getDeviceId(), nome: nome || '' }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível autorizar o dispositivo.');
-  DISPOSITIVOS_AUTORIZADOS = data.lista;
-  return data.lista;
-}
-
-/**
- * Remove um dispositivo da lista de autorizados — Configurações →
- * Dispositivos Autorizados. Requer sessão de admin válida.
- */
-async function removerDispositivo(deviceId) {
-  const res = await fetch('/remover-dispositivo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.erro || 'Não foi possível remover o dispositivo.');
-  DISPOSITIVOS_AUTORIZADOS = data.lista;
-  return data.lista;
 }
 
 /**
@@ -3041,10 +2937,6 @@ window.LW = {
   getDeviceId, registrarAcesso,
   nomeDeQuemEstaLogado,
   dispositivoEstaAutorizado, motivoBloqueioOperacao, ehMaster,
-
-  // Dispositivos Autorizados (Configurações → Dispositivos Autorizados)
-  listarDispositivosAutorizados, autorizarDispositivo, removerDispositivo,
-  get DISPOSITIVOS_AUTORIZADOS() { return DISPOSITIVOS_AUTORIZADOS; },
 
   // Operações a Validar (Registro Offline — Configurações, itens 6/7 do
   // plano, ver README)

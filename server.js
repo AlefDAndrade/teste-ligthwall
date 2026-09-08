@@ -10,7 +10,6 @@ const WebSocket = require('ws');
 // public/db/ exatamente como antes, até cada fase ser migrada de verdade.
 const db = require('./db.js');
 const logger = require('./lib/logger');
-const dispositivoCookie = require('./lib/dispositivo-cookie');
 
 // ─── HORÁRIO DE BRASÍLIA + UTILITÁRIO GENÉRICO — Fase 19 do fatiamento ────
 // todayBrasiliaServer/horaMinutoBrasiliaServer/numOuNulo agora vivem em
@@ -115,13 +114,22 @@ const notificacoesPush = require('./lib/notificacoes-push.js')({
 
 // ─── PERMISSÕES DE ÁREA / MANUTENÇÃO — Fase 16 do fatiamento, ver README ──
 // podeEditarArea/negarEdicao/temPoderesDeAdmin/sessaoOuAdmin/
+// podeUsarItem/negarAcesso/podeControlarOperacao/negarControleDeOperacao/
 // podeExcluirChamado/nomeDeQuemAceita/nomeParaVisualizacao/
 // podeEditarAberturaChamado/podeAceitarChamado/podeAceitarPedidoPeca/
 // podeRenotificarManutencao/podeConfirmarRecebimentoPeca agora vivem em
-// lib/permissoes-area.js. Precisa vir ANTES das factories logo abaixo
-// (inclusive a de Dispositivo Autorizado, que já usa podeEditarArea) —
-// mesma posição de sempre, logo após sessao/sessaoUsuario/perfis/
-// perfisFixosOverrides/perfisCustomizados já definidos.
+// lib/permissoes-area.js. Precisa vir ANTES das factories logo abaixo,
+// que já usam essas funções — mesma posição de sempre, logo após
+// sessao/sessaoUsuario/perfis/perfisFixosOverrides/perfisCustomizados já
+// definidos.
+//
+// podeControlarOperacao/negarControleDeOperacao: a trava por PESSOA
+// (perfil) que decide quem pode iniciar/encerrar/registrar operações. A
+// trava ADICIONAL por DISPOSITIVO que existia aqui (allowlist de
+// computadores em Configurações → Dispositivos Autorizados) foi removida
+// — abandonada em favor de manter só a lógica de perfis autorizados (ver
+// histórico do git se precisar resgatar lib/dispositivo-autorizado.js/
+// lib/dispositivo-cookie.js/lib/rotas/dispositivos-autorizados.js).
 const {
   podeEditarArea,
   negarEdicao,
@@ -129,6 +137,8 @@ const {
   sessaoOuAdmin,
   podeUsarItem,
   negarAcesso,
+  podeControlarOperacao,
+  negarControleDeOperacao,
   podeExcluirChamado,
   nomeDeQuemAceita,
   nomeParaVisualizacao,
@@ -138,21 +148,6 @@ const {
   podeRenotificarManutencao,
   podeConfirmarRecebimentoPeca,
 } = require('./lib/permissoes-area.js')({ sessao, sessaoUsuario, perfis, perfisFixosOverrides, perfisCustomizados });
-
-// ─── DISPOSITIVO AUTORIZADO — Fase 12 do fatiamento, ver README ───────────
-// lerDispositivosAutorizados/salvarDispositivosAutorizados/
-// dispositivoAutorizado/podeControlarOperacao/negarControleDeOperacao agora
-// vivem em lib/dispositivo-autorizado.js — extraído por ser o ponto de
-// maior concorrência entre PRs do que sobrava aqui (chamado ao mesmo tempo
-// por registro-operacao.js, operacao-andamento.js e contador-tracos.js).
-// Precisa vir ANTES das factories logo abaixo, que já usam essas funções.
-const {
-  lerDispositivosAutorizados,
-  salvarDispositivosAutorizados,
-  dispositivoAutorizado,
-  podeControlarOperacao,
-  negarControleDeOperacao,
-} = require('./lib/dispositivo-autorizado.js')({ fs, path, DB_DIR, sessao, sessaoUsuario, perfis, podeEditarArea });
 
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
 // _enviarWsParaTodos/broadcastOperacaoAndamento/broadcastOperacaoFinalizada/
@@ -297,7 +292,6 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
   lerBercosAndamento, salvarBercosAndamentoNoDisco, podeControlarOperacao, negarControleDeOperacao,
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
-const rotasDispositivosAutorizados = require('./lib/rotas/dispositivos-autorizados.js')({ fs, path, DB_DIR, sessao: sessaoOuAdmin });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, podeUsarItem, negarAcesso, numOuNulo });
 const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
 const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
@@ -337,7 +331,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasDispositivosAutorizados, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -435,48 +429,15 @@ const ACESSOS_PATH = path.join(DIR_LOGS, 'acessos.json');
 const server = http.createServer((req, res) => {
 
   // Extrai o caminho (pathname) da URL e os parâmetros de query (ex:
-  // ?deviceId=... — usado tanto pra identificar o "dono" da operação em
-  // andamento (ver donoDeviceId em lib/rotas/operacao-andamento.js) QUANTO
-  // de novo pra AUTORIZAÇÃO de dispositivo (ver dispositivoAutorizado() e
-  // podeControlarOperacao(), acima) — controlar operações agora exige
-  // sessão de usuário válida E dispositivo autorizado, as duas juntas;
+  // ?deviceId=... — usado só pra identificar o "dono" da operação em
+  // andamento, ver donoDeviceId em lib/rotas/operacao-andamento.js — não
+  // mais pra autorização/gate nenhum, a trava por dispositivo foi
+  // removida (ver comentário de podeControlarOperacao, acima);
   // ?modoTeste=true — usado pelo Toggle de Teste em Registrar Operação,
   // ver dirParaModoTeste(), lib/contador-tracos-estado.js).
   const [urlPath, queryString] = req.url.split('?');
   const queryParams = new URLSearchParams(queryString || '');
-  const deviceId = queryParams.get('deviceId') || '';
   const modoTeste = queryParams.get('modoTeste') === 'true';
-
-  // ─── Cookie de identidade do dispositivo (ver lib/dispositivo-cookie.js) ─
-  // Resolve (ou cria) o deviceId "seguro" deste navegador. Quando o cookie
-  // já existe, ele passa a valer como a identidade real do dispositivo pra
-  // TODAS as rotas abaixo (sobrescrevendo aqui mesmo o valor de
-  // queryParams.get('deviceId') — cada rota extraída continua lendo
-  // normalmente de queryParams, sem precisar saber que isso existe), porque
-  // é uma fonte que o JavaScript do navegador não controla (diferente do
-  // deviceId antigo, mandado pelo próprio cliente via query string a
-  // partir do localStorage). Quando o cookie AINDA não existe (primeira
-  // visita deste navegador, ou um cliente que não guarda cookies — ex: os
-  // testes automatizados, de propósito), cai no valor antigo (query
-  // string) sem quebrar nada — e um Set-Cookie é enfileirado pra essa
-  // resposta, pra da próxima vez em diante já valer o cookie.
-  const deviceIdCookieExistente = dispositivoCookie.deviceIdDoCookie(req);
-  const deviceIdGeradoAgora = deviceIdCookieExistente ? null : dispositivoCookie.gerarDeviceId();
-  const novoCookieDispositivo = deviceIdGeradoAgora ? dispositivoCookie.criarCookieDeviceId(deviceIdGeradoAgora) : null;
-  if (deviceIdCookieExistente) {
-    queryParams.set('deviceId', deviceIdCookieExistente);
-  }
-  if (novoCookieDispositivo) {
-    const writeHeadOriginal = res.writeHead.bind(res);
-    res.writeHead = (statusCode, headers) => {
-      headers = headers || {};
-      const existenteHeader = headers['Set-Cookie'];
-      headers['Set-Cookie'] = existenteHeader
-        ? [].concat(existenteHeader, novoCookieDispositivo)
-        : novoCookieDispositivo;
-      return writeHeadOriginal(statusCode, headers);
-    };
-  }
 
   // ─── /db/*.json NUNCA pode ser servido do cache do navegador ───────────
   // Mesmo raciocínio do bloco de Cache-Control lá embaixo (fallback de
@@ -566,22 +527,6 @@ const server = http.createServer((req, res) => {
         }
       }
     });
-  }
-
-  // GET /meu-device-id — devolve o deviceId "seguro" (cookie HttpOnly)
-  // deste navegador em JSON. Necessário porque HttpOnly, por definição,
-  // não pode ser lido pelo JavaScript do navegador — esta rota existe só
-  // pra a tela Configurações → Dispositivos Autorizados conseguir MOSTRAR
-  // o ID pro Administrador copiar/autorizar (ver getDeviceId() em
-  // public/js/data.js). Não abre brecha nenhuma: quem decide se um
-  // dispositivo está autorizado continua sendo sempre o valor real do
-  // cookie no request (ver dispositivoAutorizado()/podeControlarOperacao,
-  // acima) — o que o cliente FAZ com o valor devolvido aqui não afeta essa
-  // checagem.
-  if (req.method === 'GET' && urlPath === '/meu-device-id') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, deviceId: deviceIdCookieExistente || deviceIdGeradoAgora }));
-    return;
   }
 
   // ─── Rotas extraídas pra lib/rotas/ (ver ROTAS_EXTRAIDAS, acima) ───────

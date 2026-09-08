@@ -499,21 +499,18 @@
    * Usado no topo de ações que controlam a operação (iniciar, encerrar,
    * registrar, resetar) — mostra um aviso e retorna true se esta tela NÃO
    * pode agir agora: a pessoa logada não tem permissão de perfil (ver
-   * Configurações → Usuários), OU este dispositivo não está autorizado
-   * (ver Configurações → Dispositivos Autorizados — voltou, ver conversa
-   * que motivou a mudança), OU a operação já tem outro dono (outra
-   * pessoa/dispositivo autorizados que a iniciaram — ver "dono da
-   * operação" em server.js). A trava de verdade é sempre no servidor;
-   * isto aqui só dá feedback imediato (sem esperar a rede) e cobre
-   * atalhos de teclado, que não passam pelos campos/botões desabilitados
-   * na tela.
+   * Configurações → Usuários), OU a operação já tem outro dono (outra
+   * pessoa que a iniciou — ver "dono da operação" em
+   * lib/rotas/operacao-andamento.js). A trava de verdade é sempre no
+   * servidor; isto aqui só dá feedback imediato (sem esperar a rede) e
+   * cobre atalhos de teclado, que não passam pelos campos/botões
+   * desabilitados na tela.
    * @param {object} opts
    * @param {boolean} opts.ignorarDono - usado só pelo "🗑️ Limpar Tudo",
    *   que pode forçar a limpeza mesmo sem ser o dono atual.
    *
    * Administrador Master (LW.ehMaster(), ver data.js) nunca é travado
-   * pela disputa de "dono" — só continua precisando de dispositivo
-   * autorizado (motivo 'dispositivo', acima).
+   * pela disputa de "dono".
    */
   function _bloqueadoPorAutorizacao({ ignorarDono = false } = {}) {
     // Modo de teste é um sandbox local — nunca toca o servidor (ver
@@ -524,13 +521,6 @@
     if (motivo === 'perfil') {
       LW.mostrarAlerta(
         'Você não está autorizado a controlar operações. Peça ao Administrador para habilitar isso no seu cadastro (Configurações → Usuários).',
-        { tipo: 'erro' }
-      );
-      return true;
-    }
-    if (motivo === 'dispositivo') {
-      LW.mostrarAlerta(
-        `Este dispositivo não está autorizado a controlar operações. Peça ao Administrador para autorizá-lo`,
         { tipo: 'erro' }
       );
       return true;
@@ -598,9 +588,6 @@
       aviso.style.display = 'none';
     } else if (motivo === 'perfil') {
       aviso.innerHTML = '🔒 <span>Você está só <strong>acompanhando</strong> esta operação — seu usuário não está autorizado a iniciar, encerrar ou registrar.</span>';
-      aviso.style.display = 'flex';
-    } else if (motivo === 'dispositivo') {
-      aviso.innerHTML = `🔒 <span>Você está só <strong>acompanhando</strong> esta operação — este dispositivo não está autorizado. Peça ao Administrador para autorizá-lo</span>`;
       aviso.style.display = 'flex';
     } else {
       aviso.innerHTML = '<span>Outra pessoa autorizada está controlando esta operação agora — você está só <strong>acompanhando</strong> até ela terminar.</span>';

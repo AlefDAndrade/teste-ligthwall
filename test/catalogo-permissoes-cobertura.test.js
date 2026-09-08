@@ -99,7 +99,7 @@ test('as abas de Configurações que o front consulta existem todas no catálogo
   const bloco = appCore.slice(inicio, appCore.indexOf('};', inicio));
   const secoes = [...bloco.matchAll(/'?([a-z-]+)'?:\s*'cfg-nav-/g)].map(m => m[1]);
 
-  assert.ok(secoes.length >= 13, `esperava ao menos 13 abas mapeadas, achei ${secoes.length}`);
+  assert.ok(secoes.length >= 12, `esperava ao menos 12 abas mapeadas, achei ${secoes.length}`);
   const ausentes = secoes.filter(s => !IDS_CATALOGO.has('config-' + s));
   assert.deepEqual(ausentes, [], `abas consultadas pelo front sem item correspondente no catálogo: ${ausentes.map(s => 'config-' + s).join(', ')}`);
 });

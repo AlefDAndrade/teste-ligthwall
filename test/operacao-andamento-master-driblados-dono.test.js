@@ -3,15 +3,15 @@
 // logado com perfil Administrativo) NUNCA fica travado pela disputa de
 // "dono da operação" (ver donoDeviceId, lib/rotas/operacao-andamento.js) —
 // pedido explícito do usuário: quem operou o dispositivo A começou a
-// operação (virou "dono"), mas o Master, NUM DISPOSITIVO B TAMBÉM
-// AUTORIZADO, ainda precisa poder pausar/trocar traço/marcar berço
-// livremente, sem precisar "🗑️ Limpar Tudo" (que reseta tudo e tira o
-// controle de quem estava operando).
+// operação (virou "dono"), mas o Master, em outro dispositivo, ainda
+// precisa poder pausar/trocar traço/marcar berço livremente, sem precisar
+// "🗑️ Limpar Tudo" (que reseta tudo e tira o controle de quem estava
+// operando).
 //
-// Continua exigindo dispositivo autorizado (sem exceção nenhuma pra
-// nenhum perfil, ver dispositivoAutorizado()/podeControlarOperacao() em
-// lib/dispositivo-autorizado.js) — só a disputa de DONO entre dois
-// dispositivos JÁ autorizados é que o Master dribla.
+// A trava por DISPOSITIVO que existia (allowlist de computadores) foi
+// removida — ver lib/permissoes-area.js (podeControlarOperacao) — só
+// permanece a lógica de perfis autorizados. Estes testes cobrem só a
+// disputa de DONO, que o Master continua driblando.
 
 const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
@@ -183,16 +183,6 @@ test('depois do Master mexer, o dono ORIGINAL continua sendo o dono (Master não
     body: JSON.stringify({ dados: { id_bateria: 'B1', tipo_montagem: 'SP', status: 'ativa' }, clientId: 'y' }),
   });
   assert.equal(respOutro.status, 409);
-});
-
-test('Master, MAS num dispositivo NÃO autorizado, continua barrado (403) — dispositivo não tem exceção pra ninguém', async () => {
-  const cookieMaster = await logarComoAdminMaster();
-  const resp = await fetch(`${servidor.baseUrl}/salvar-operacao-andamento?deviceId=device-nunca-autorizado`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookieMaster },
-    body: JSON.stringify({ dados: { id_bateria: 'B1', tipo_montagem: 'SP', status: 'ativa' }, clientId: 'master' }),
-  });
-  assert.equal(resp.status, 403);
 });
 
 test('Master dribla a trava de dono em POST /marcar-berco-andamento também', async () => {
