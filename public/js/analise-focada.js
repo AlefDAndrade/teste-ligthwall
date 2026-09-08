@@ -269,6 +269,29 @@
     return `${data} ${hora}`;
   }
 
+  // Cópia local de LW.formatarRelacaoAC (data.js — calcularRelacaoAC +
+  // classificarRelacaoAC + formatarRelacaoAC, mesmas faixa 0,35–0,40)
+  // — mesmo padrão de duplicação de _afFormatDateTime (acima): o HTML
+  // exportado standalone não tem acesso a data.js, e _renderReceita
+  // (usada tanto na tela ao vivo quanto no export, ver
+  // _gerarHtmlAfStandalone/_gerarSecoesEstaticasAf) depende desta
+  // função pra montar a Relação A/C de cada traço. Faltando ela no
+  // objeto `LW` fake montado pro export, _renderReceita lançava
+  // TypeError ("LW.formatarRelacaoAC is not a function") antes de
+  // escrever o innerHTML — por isso a seção "🧪 Receita Utilizada"
+  // saía vazia tanto no Exportar Interativo quanto no PDF (que
+  // reaproveita o mesmo HTML autossuficiente).
+  function _afFormatarRelacaoAC(cimento, agua, casas = 2) {
+    const RELACAO_AC_MIN = 0.35;
+    const RELACAO_AC_MAX = 0.40;
+    const c = parseFloat(cimento);
+    const a = parseFloat(agua);
+    const valor = (isNaN(c) || c <= 0 || isNaN(a) || a < 0) ? null : a / c;
+    if (valor === null) return { valor: null, texto: '—', status: null };
+    const status = valor < RELACAO_AC_MIN ? 'baixa' : (valor > RELACAO_AC_MAX ? 'alta' : 'ok');
+    return { valor, texto: valor.toFixed(casas).replace('.', ','), status };
+  }
+
   const AF_CORES_PALETE = { 1: '#66bb6a', 2: '#42a5f5', 3: '#ab47bc', 4: '#ffa726' };
 
   function _afPaletePorMetadeELado() {
@@ -2431,6 +2454,7 @@ ${regras}`;
     corPorTipoSimples: ${_afCorPorTipoSimples},
     corMontagemPorLabel: ${_afCorMontagemPorLabel},
     formatDateTime: ${_afFormatDateTime},
+    formatarRelacaoAC: ${_afFormatarRelacaoAC},
     MONTAGEM_OPCOES: ${JSON.stringify(LW.MONTAGEM_OPCOES || [])},
     BATERIA_IDS: ${JSON.stringify(LW.BATERIA_IDS || [])},
     PALETES_CONFIG: ${JSON.stringify(LW.PALETES_CONFIG || LW.PALETES_CONFIG_DEFAULT || {})},
@@ -2841,5 +2865,12 @@ ${_afScriptAjustePaginaUnica()}
     // original, ignorando ajustes feitos depois (ver comentário de
     // _afTotalInsumo, acima).
     totalInsumo: _afTotalInsumo,
+    // Exposto só pra teste (ver
+    // test/exportacao-interativa-receita-vazia.test.js) — regressão do
+    // bug relatado: o HTML autossuficiente do Exportar Interativo/PDF
+    // ficava com a seção "Receita Utilizada" vazia porque o objeto `LW`
+    // fake embutido (ver _gerarHtmlAfStandalone) não tinha
+    // formatarRelacaoAC.
+    gerarHtmlStandalone: _gerarHtmlAfStandalone,
   };
 })();
