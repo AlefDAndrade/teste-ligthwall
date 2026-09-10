@@ -7,6 +7,7 @@ public/db/teste/
 data/
 private/
 .test-tmp/
+.chromium-pdf/
 public/db/security.json
 public/db/security.json.migrado-*
 
