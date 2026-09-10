@@ -249,11 +249,11 @@
   // ── Cor por tipo de montagem de um berço ────────────────────────────────
   // Mesmo critério de "Bateria Atual" (ver bateria-atual.js, _baCorPorTipo/
   // _baTiposPorBerco): Montagem Personalizada guarda o CÓDIGO do tipo por
-  // berço (bercos_personalizados, 1 posição por berço — ver db.
-  // relatorioBercos()), resolvido por LW.corPorTipoSimples; qualquer outro
-  // tipo (simples ou híbrido) é uniforme pra bateria inteira — todo berço
-  // usa o mesmo LABEL (linha.tipo_montagem), resolvido por
-  // LW.corMontagemPorLabel (que já sabe montar o gradiente 50/50 de
+  // berço (ou um objeto {direita,esquerda} pra berço com "🔀 Berços
+  // Separados" — ver operacao.js), resolvido por LW.corDoBercoPersonalizado;
+  // qualquer outro tipo (simples ou híbrido) é uniforme pra bateria
+  // inteira — todo berço usa o mesmo LABEL (linha.tipo_montagem), resolvido
+  // por LW.corMontagemPorLabel (que já sabe montar o gradiente 50/50 de
   // híbridos). Sem tipo definido (personalizada com berço ainda vazio, ou
   // tipo_montagem ausente) -> null, célula cai no cinza neutro de sempre.
   function _tipoDoBerco(linha, ordem) {
@@ -268,7 +268,7 @@
     const tipo = _tipoDoBerco(linha, ordem);
     if (!tipo) return null;
     return linha.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA
-      ? LW.corPorTipoSimples(tipo)
+      ? LW.corDoBercoPersonalizado(tipo)
       : LW.corMontagemPorLabel(tipo);
   }
 

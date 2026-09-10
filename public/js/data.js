@@ -251,6 +251,48 @@ function corPorTipoSimples(tipo) {
   return { ...corCssDoHex(hex), hibrida: false };
 }
 
+/**
+ * bercos_personalizados[i] guarda, pra CADA berço da Montagem
+ * Personalizada:
+ *  - o CÓDIGO de um tipo simples (ex: 'sp', '2p') — caso de sempre, os 2
+ *    painéis do berço (Direito/Esquerdo) são do MESMO tipo;
+ *  - OU, desde que "🔀 Berços Separados" passou a existir na grade (ver
+ *    operacao.js, abrirGradeMontagemPersonalizada/_gradeClicarLado), um
+ *    OBJETO { direita, esquerda } — cada um dos 2 painéis do berço com
+ *    seu PRÓPRIO tipo (ex: um painel S/P e um 2/P no mesmo berço). Um
+ *    berço cujos 2 lados acabam iguais é guardado como string mesmo
+ *    (formato de sempre) — o objeto só aparece quando os 2 lados
+ *    realmente DIFEREM (ver _gradeClicarLado).
+ *  - null = berço ainda vazio/não usado.
+ * Resolve a cor de um valor desse jeito — tipo simples usa
+ * corPorTipoSimples (cor sólida); berço com os 2 lados diferentes monta
+ * um gradiente 50/50 ad hoc (mesmo formato de corMontagemPorLabel, mas
+ * sem precisar de uma opção híbrida pré-cadastrada em Configurações —
+ * QUALQUER par de tipos simples serve). Ponto único usado pela grade de
+ * Montagem Personalizada (operacao.js) e por qualquer tela que pinte
+ * berços dessa montagem (Bateria Atual, Registro de Baterias, offline...).
+ */
+function corDoBercoPersonalizado(valor) {
+  if (!valor) return _corMontagemNeutra();
+  if (typeof valor !== 'object') return corPorTipoSimples(valor);
+
+  const corDir = valor.direita ? corPorTipoSimples(valor.direita) : null;
+  const corEsq = valor.esquerda ? corPorTipoSimples(valor.esquerda) : null;
+  // Só 1 lado preenchido (o outro ainda vazio, berço em edição): sólida do
+  // lado que já tem tipo — um gradiente com metade cinza não ajuda em nada.
+  if (corDir && !corEsq) return corDir;
+  if (corEsq && !corDir) return corEsq;
+  if (!corDir && !corEsq) return _corMontagemNeutra();
+  if (valor.direita === valor.esquerda) return corDir; // os 2 lados iguais -> sólida, como um berço unificado
+  return {
+    hibrida: true,
+    cor1: corDir.cor, cor2: corEsq.cor,
+    cor: corDir.cor, // fallback pra quem só aceita 1 cor (ex: cor de texto)
+    bg: `linear-gradient(90deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
+    borda: corDir.borda,
+  };
+}
+
 function _corMontagemNeutra() {
   return { hibrida: false, cor: '#5c6475', bg: 'rgba(156, 163, 175, .1)', borda: '#2a2f3a' };
 }
@@ -261,24 +303,41 @@ function _corMontagemNeutra() {
  * "PERSONALIZADA" no Registro de Baterias, pra mostrar quais tipos foram
  * usados sem precisar abrir o registro completo (ver "Limitação conhecida"
  * no README — o detalhe berço a berço só ficava visível ali até agora).
- * @param {Array<string|null>} bercosPersonalizados - um item por berço, ex: ['sp','sp','3t',null,...]
+ * @param {Array<string|object|null>} bercosPersonalizados - um item por berço, ex:
+ *   ['sp','sp',{direita:'3t',esquerda:'sp'},null,...] — objeto = berço com
+ *   os 2 lados marcados separadamente (ver "🔀 Berços Separados").
  */
 function resumoBercosPersonalizados(bercosPersonalizados) {
   if (!Array.isArray(bercosPersonalizados) || !bercosPersonalizados.length) {
     return 'Composição não disponível.';
   }
 
-  const contagem = {};
+  const contagem = {}; // chave: código de tipo simples, OU "tipoA+tipoB" pra berço com os 2 lados diferentes
   let semTipo = 0;
-  bercosPersonalizados.forEach(tipo => {
-    if (!tipo) { semTipo++; return; }
-    contagem[tipo] = (contagem[tipo] || 0) + 1;
+  bercosPersonalizados.forEach(valor => {
+    if (!valor) { semTipo++; return; }
+    if (typeof valor === 'object') {
+      const dir = valor.direita, esq = valor.esquerda;
+      if (dir && esq && dir !== esq) {
+        const chave = `${dir}+${esq}`;
+        contagem[chave] = (contagem[chave] || 0) + 1;
+        return;
+      }
+      const unico = dir || esq;
+      if (!unico) { semTipo++; return; }
+      contagem[unico] = (contagem[unico] || 0) + 1;
+      return;
+    }
+    contagem[valor] = (contagem[valor] || 0) + 1;
   });
 
-  const partes = Object.keys(contagem).map(tipo => {
-    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo);
-    const label = opcao ? opcao.label : tipo.toUpperCase();
-    const n = contagem[tipo];
+  const partes = Object.keys(contagem).map(chave => {
+    const [tipo1, tipo2] = chave.split('+');
+    const label1 = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo1)?.label || tipo1.toUpperCase();
+    const label = tipo2
+      ? `${label1} + ${(MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo2)?.label || tipo2.toUpperCase()} (lados separados)`
+      : label1;
+    const n = contagem[chave];
     return `${label}: ${n} berço${n > 1 ? 's' : ''}`;
   });
 
@@ -1340,18 +1399,43 @@ function calcPaineis(tipoMontagem, bercos) {
  * formato de calcPaineis(), pra tudo que já consome paineis_por_tipo/
  * m2_por_tipo (OEE, Análise Operacional, exportações, Registro de
  * Baterias) funcionar sem nenhuma mudança.
- * @param {Array<string|null>} bercosPersonalizados - um item por berço, ex: ['sp','sp','3t',null,...]
+ * @param {Array<string|object|null>} bercosPersonalizados - um item por berço, ex:
+ *   ['sp','sp',{direita:'3t',esquerda:'sp'},null,...] — objeto = berço com
+ *   os 2 lados marcados separadamente (ver "🔀 Berços Separados",
+ *   operacao.js): 1 painel de cada tipo, um por lado.
  */
 function calcPaineisPersonalizado(bercosPersonalizados) {
   const paineis_por_tipo = {};
   let paineis_total = 0;
 
-  (bercosPersonalizados || []).forEach(tipo => {
-    if (!tipo) return; // berço vazio/não usado — não soma em nenhum tipo
-    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === tipo);
-    const porBerco = opcao ? (Number(opcao['paineis_' + tipo + '_por_berco']) || 0) : 0;
-    paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + porBerco;
-    paineis_total += porBerco;
+  (bercosPersonalizados || []).forEach(valor => {
+    if (!valor) return; // berço vazio/não usado — não soma em nenhum tipo
+
+    if (typeof valor === 'object') {
+      // Berço com os 2 lados marcados separadamente — 1 painel FÍSICO por
+      // lado (Direito/Esquerdo), cada um do seu próprio tipo, independente
+      // de quantos painéis por berço aquele tipo simples produziria se
+      // fosse usado sozinho (paineis_<tipo>_por_berco) — aqui é sempre 1,
+      // porque é literalmente 1 dos 2 painéis físicos do berço.
+      ['direita', 'esquerda'].forEach(lado => {
+        const tipo = valor[lado];
+        if (!tipo) return; // lado ainda não definido (berço em edição)
+        paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + 1;
+        paineis_total += 1;
+      });
+      return;
+    }
+
+    // Berço unificado (formato de sempre) — usa a config do tipo simples
+    // cadastrado (normalmente 2 painéis/berço, mas respeita o que foi
+    // configurado em Configurações → Bateria e Montagem).
+    const opcao = (MONTAGEM_OPCOES || []).find(o => o.modo === 'simples' && o.tipo === valor);
+    if (!opcao) return; // tipo não reconhecido (ex: removido depois) — ignora, não trava o cálculo
+    const { porBerco } = extrairComponentesMontagem(opcao);
+    Object.keys(porBerco).forEach(tipo => {
+      paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + porBerco[tipo];
+      paineis_total += porBerco[tipo];
+    });
   });
 
   const m2_por_tipo = {};
@@ -1385,9 +1469,13 @@ function calcPaineisPersonalizado(bercosPersonalizados) {
  * (abaixo) pra saber de qual tipo descontar quando aquele lado é marcado
  * "🚫 Não Enchido" em Bateria Atual.
  *
- *  - Montagem Personalizada: o tipo já pertence ao berço inteiro
- *    (bercosPersonalizados[bercoNum-1]) — os 2 lados do mesmo berço são
- *    sempre do MESMO tipo.
+ *  - Montagem Personalizada com o berço UNIFICADO (bercosPersonalizados[
+ *    bercoNum-1] é uma string — formato de sempre): sem ambiguidade, os 2
+ *    lados são do MESMO tipo.
+ *  - Montagem Personalizada com o berço em "🔀 Berços Separados" (o valor é
+ *    um objeto {direita,esquerda} — ver operacao.js, _gradeClicarLado):
+ *    cada lado já tem seu próprio tipo registrado explicitamente — sem
+ *    ambiguidade nenhuma, ao contrário do caso da híbrida uniforme abaixo.
  *  - Montagem simples (um tipo só, ex: "2/P"): sem ambiguidade, é o único
  *    tipo que essa montagem produz.
  *  - Montagem híbrida (dois tipos, 1 painel de cada por berço — um em
@@ -1402,7 +1490,10 @@ function calcPaineisPersonalizado(bercosPersonalizados) {
 function _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado) {
   if (tipoMontagem === TIPO_MONTAGEM_PERSONALIZADA) {
     const grade = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
-    return grade[bercoNum - 1] || null;
+    const valor = grade[bercoNum - 1] || null;
+    if (!valor) return null;
+    if (typeof valor === 'object') return valor[lado] || null;
+    return valor; // string unificada — mesmo tipo nos 2 lados
   }
   const opcao = (MONTAGEM_OPCOES || []).find(o => o.label === tipoMontagem);
   if (!opcao) return null;
@@ -2919,6 +3010,7 @@ window.LW = {
   hexParaHue,
   corMontagemPorLabel,
   corPorTipoSimples,
+  corDoBercoPersonalizado,
   resumoBercosPersonalizados,
 
   // Storage

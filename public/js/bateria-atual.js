@@ -107,10 +107,13 @@
   // Cor por tipo de montagem de UM berço. As duas situações guardam o
   // tipo de um jeito DIFERENTE, então precisam de funções diferentes pra
   // resolver a cor:
-  //  - Montagem Personalizada: cada berço guarda o CÓDIGO do tipo (ex:
-  //    'sp', '2p') — mesmo formato usado na grade de configuração (ver
+  //  - Montagem Personalizada: cada berço guarda o CÓDIGO de um tipo
+  //    simples (ex: 'sp', '2p') OU, desde que berços híbridos passaram a
+  //    ser permitidos ali, o LABEL de uma opção híbrida (ex: 'HÍBRIDA
+  //    2p/sp') — mesmo formato usado na grade de configuração (ver
   //    operacao.js, _renderGradeMontagem) — resolvido por
-  //    LW.corPorTipoSimples.
+  //    LW.corDoBercoPersonalizado, que escolhe sozinha entre as duas
+  //    (ver data.js).
   //  - Bateria uniforme (qualquer outro tipo, simples OU híbrido): todo
   //    berço usa o mesmo LABEL cadastrado em Configurações (ex: '2/P',
   //    'S/P', 'HÍBRIDA 2p/sp') — resolvido por LW.corMontagemPorLabel, que
@@ -120,7 +123,7 @@
   //    caía sempre na cor neutra cinza.
   function _baCorPorTipo(ehPersonalizada, tipo) {
     if (!tipo) return null;
-    return ehPersonalizada ? LW.corPorTipoSimples(tipo) : LW.corMontagemPorLabel(tipo);
+    return ehPersonalizada ? LW.corDoBercoPersonalizado(tipo) : LW.corMontagemPorLabel(tipo);
   }
 
   // ── Posição no Palete ───────────────────────────────────────────────

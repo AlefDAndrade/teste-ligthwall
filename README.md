@@ -438,6 +438,18 @@ Ao escolher "Personalizado" em Tipo de Montagem, abre a grade de berços:
 
 **Limitação conhecida**: o badge de "Tipo de Montagem" pra uma bateria Personalizada usa a mesma cor neutra (cinza) de um tipo desconhecido — diferente de Simples/Híbrida, que têm cor própria. O detalhe da composição (quais berços, quais tipos) só fica visível olhando o registro completo (`bercos_personalizados`), sem uma visualização dedicada ainda.
 
+### 🔀 Berços Separados (2 tipos no mesmo berço)
+
+Pedido numa conversa posterior: dentro da Montagem Personalizada, poder marcar um berço com **2 tipos diferentes ao mesmo tempo** — ex: um painel S/P de um lado e um 2/P do outro, no mesmo berço. Antes disso, cada berço só podia guardar 1 tipo só (os 2 lados sempre iguais).
+
+Solução adotada (havia outra opção — reaproveitar a "Híbrida" já cadastrada, mas essa trava numa combinação fixa pré-cadastrada em Configurações; a escolhida não trava em nenhuma combinação): um toggle **"🔀 Berços Separados"** no topo da grade (Registrar Operação e Editar Operação, que reaproveita a mesma grade — ver `abrirGradeMontagemPersonalizada`, `operacao.js`). Desligado (padrão): comportamento de sempre, 1 clique define o berço inteiro. Ligado: cada berço vira 2 metades clicáveis independentes (Direito/Esquerdo — mesma convenção visual de "Bateria Atual"), cada uma podendo receber um tipo diferente.
+
+**Formato de dados**: cada posição de `bercos_personalizados[]` continua sendo, na maioria dos casos, uma STRING (o tipo, formato de sempre — os 2 lados são iguais). Só vira um OBJETO `{ direita, esquerda }` quando os 2 lados de fato **diferem** — ex: `["sp", { "direita": "2p", "esquerda": "sp" }, null, ...]`. Se os 2 lados de um berço separado acabam iguais (ou o toggle é desligado de novo), volta a guardar como string — o objeto é sempre o caso mínimo necessário, nunca o padrão.
+
+Ponto único que resolve os 2 formatos: `LW.tipoDoLadoMontagem()` (tipo de 1 lado específico) e `LW.corDoBercoPersonalizado()` (cor — sólida pra string, ou um gradiente 50/50 ad hoc entre os 2 tipos pra objeto, sem precisar de nenhuma opção híbrida pré-cadastrada) — usados por `calcPaineisPersonalizado`, Bateria Atual, Registro de Baterias (Relatório de Berços) e o direcionamento de painéis pros paletes certos no Setor de Qualidade. A cópia offline (`offline-operacao.js`, sem a grade visual — 2 `<select>` por berço em vez de 2 metades clicáveis) segue exatamente o mesmo formato e as mesmas funções, portadas.
+
+Coberto por `test/bercos-separados.test.js`.
+
 ## Consulta de Insumos por Traço
 
 Tela **auxiliar** do Dashboard de Traço/CEP (`public/js/qualidade-tracos.js`) — pedido registrado numa conversa: sem alterar o dashboard existente, uma tela à parte pra consultar/comparar/exportar o consumo de insumos traço a traço (`public/partials/page-consulta-tracos.html`, `public/js/consulta-tracos.js`). Acessível pelo menu "Traços" da barra de navegação ou pelo botão "🔍 Consultar Insumos por Traço" dentro do próprio Dashboard de Traço (que já leva o período atualmente filtrado, sem precisar escolher tudo de novo).

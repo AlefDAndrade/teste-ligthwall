@@ -2771,7 +2771,8 @@
   // Monta o slabConfig (mesmo formato usado pelo modal de Configuração
   // Personalizada — ver confirmPalletModal) a partir de
   // bercos_personalizados de uma operação real: 1 item por berço (tipo
-  // curto — 'sp'/'2p'/'3t' — ou null). Cada berço enche 2 painéis — um
+  // curto — 'sp'/'2p'/'3t' — ou {direita,esquerda} pra berço com "🔀
+  // Berços Separados", ou null). Cada berço enche 2 painéis — um
   // ESQUERDO, um DIREITO — que vão pra PALETES DIFERENTES (ver
   // _paleteDoBerco/_bercoDoSlot, e o pedido original de "direcionar os
   // painéis pros paletes certos"). Reaproveita a MESMA função que
@@ -2787,13 +2788,20 @@
     // não tiver sido carregada (capacidadeOperacaoAtual nulo).
     const capacidade = capacidadeOperacaoAtual || bercos.length;
     const novo = {};
-    bercos.forEach((tipoBerco, idx) => {
-      const cod = tipoBerco ? String(tipoBerco).toUpperCase() : ''; // 'sp' -> 'SP', '2p' -> '2P', '3t' -> '3T'
-      if (!cod) return;
+    bercos.forEach((valorBerco, idx) => {
+      if (!valorBerco) return;
       const bercoNum = idx + 1;
+      // Resolve o tipo de CADA LADO via LW.tipoDoLadoMontagem — cobre tanto
+      // o berço unificado de sempre (os 2 lados do mesmo tipo) quanto um
+      // berço com "🔀 Berços Separados" (cada lado com seu próprio tipo,
+      // ver operacao.js) sem duplicar a lógica de resolução aqui.
       ['esquerdo', 'direito'].forEach(lado => {
+        const tipo = LW.tipoDoLadoMontagem(
+          LW.TIPO_MONTAGEM_PERSONALIZADA, bercos, bercoNum, lado === 'direito' ? 'direita' : 'esquerda'
+        );
+        if (!tipo) return;
         const destino = _paleteDoBerco(bercoNum, lado, capacidade);
-        if (destino) novo[`stack${destino.pallet}-${destino.posicao}`] = cod;
+        if (destino) novo[`stack${destino.pallet}-${destino.posicao}`] = String(tipo).toUpperCase();
       });
     });
     return novo;

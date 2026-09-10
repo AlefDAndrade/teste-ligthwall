@@ -31,7 +31,7 @@
     pausas: [],
     tracos: [],
     modo_teste: false,
-    bercos_personalizados: null, // [tipo|null, ...] — só usado quando tipo_montagem === 'PERSONALIZADA'
+    bercos_personalizados: null, // [tipo|{direita,esquerda}|null, ...] — só usado quando tipo_montagem === 'PERSONALIZADA' (objeto = berço com os 2 lados marcados separadamente, ver "🔀 Berços Separados"/LW.tipoDoLadoMontagem, data.js)
     // Override de Dimensão por berço específico — [dimensao|null, ...],
     // 1 posição por berço (índice 0 = berço 1). null = usa state.dimensao
     // (a dimensão geral da operação) pra aquele berço. Só recebe valor
@@ -1644,6 +1644,18 @@
   let _gradeTipoAtivo = null;  // tipo selecionado nas abas (string) — null = nenhum selecionado ainda
   let _gradeTrabalho = [];     // cópia de trabalho de state.bercos_personalizados — só vai pro state em "Confirmar"
   let _gradeSomenteRevisao = false;
+  // "🔀 Berços Separados" (ver _renderGradeMontagem) — off por padrão,
+  // sempre reiniciado ao abrir a grade (não é salvo em lugar nenhum, é só
+  // um jeito de EXIBIR/EDITAR a grade). Off: cada berço é 1 botão só, que
+  // marca os 2 lados de uma vez com o mesmo tipo — comportamento de
+  // sempre. On: cada berço vira 2 metades clicáveis independentes
+  // (Direito/Esquerdo), permitindo 2 tipos DIFERENTES no mesmo berço (ex:
+  // um painel S/P e um 2/P) — ver _gradeClicarLado(). Um berço cujos 2
+  // lados acabam iguais (os 2 clicados com o mesmo tipo, ou nunca
+  // separado) continua guardado como o formato de sempre (string); só
+  // vira objeto {direita,esquerda} quando os 2 lados são efetivamente
+  // diferentes — ver _gradeClicarLado.
+  let _gradeModoSeparado = false;
   // Snapshot de _gradeTrabalho no instante em que a revisão foi aberta — só
   // usado em modo de revisão, pra "desfazer": um 2º clique no mesmo berço
   // volta ele pro tipo que tinha antes, em vez de ficar apagado pra sempre
@@ -1696,6 +1708,7 @@
         : (Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : []);
       _gradeTrabalho = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
       _gradeSomenteRevisao = somenteRevisao;
+      _gradeModoSeparado = false; // sempre começa desligado — ver comentário na declaração
       _gradeTipoAtivo = somenteRevisao ? '' : null; // '' = ferramenta de limpar, em modo de revisão
       // Guarda o estado de entrada só em modo de revisão — é pra ele que um
       // berço volta se for clicado de novo (desfazer um clique sem querer).
@@ -1719,11 +1732,18 @@
             <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
               ${somenteRevisao
           ? 'Clique nos berços que ficaram vazios (não foram usados nesta operação).'
-          : 'Selecione um tipo abaixo (ou use os números/Ctrl+número de atalho) e clique nos berços — ou use "De/Até" ou "Completar Vazios" para aplicar de uma vez.'}
+          : 'Selecione um tipo abaixo (ou use os números/Ctrl+número de atalho) e clique nos berços — ou use "De/Até" ou "Completar Vazios" para aplicar de uma vez. Berço com 2 tipos diferentes? Ligue "🔀 Berços Separados" abaixo.'}
             </p>
           </div>
 
           <div id="grade-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
+
+          ${somenteRevisao ? '' : `<div style="margin-bottom:12px">
+            <button type="button" id="grade-btn-modo-separado" class="btn btn-outline-accent btn-sm"
+              title="Liga/desliga a divisão de CADA berço em 2 metades (Direito/Esquerdo) clicáveis independentemente — para berços com 2 tipos diferentes">
+              🔀 Berços Separados: Desligado
+            </button>
+          </div>`}
 
           <div id="grade-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
 
@@ -1757,6 +1777,14 @@
       document.getElementById('grade-btn-aplicar').addEventListener('click', _gradeAplicarRange);
       const btnCompletar = document.getElementById('grade-btn-completar');
       if (btnCompletar) btnCompletar.addEventListener('click', _gradeCompletarVazios);
+      const btnModoSeparado = document.getElementById('grade-btn-modo-separado');
+      if (btnModoSeparado) btnModoSeparado.addEventListener('click', () => {
+        _gradeModoSeparado = !_gradeModoSeparado;
+        btnModoSeparado.textContent = `🔀 Berços Separados: ${_gradeModoSeparado ? 'Ligado' : 'Desligado'}`;
+        btnModoSeparado.classList.toggle('btn-accent', _gradeModoSeparado);
+        btnModoSeparado.classList.toggle('btn-outline-accent', !_gradeModoSeparado);
+        _renderGradeMontagem();
+      });
       document.getElementById('grade-btn-cancelar').addEventListener('click', () => {
         document.removeEventListener('keydown', _gradeKeydownHandler);
         modal.remove();
@@ -1790,6 +1818,49 @@
     });
   }
 
+  /**
+   * Texto curto pra dentro do botão de um berço na grade — tipo simples
+   * mostra o próprio código (ex: "SP"); um berço com os 2 lados
+   * separados (ver "🔀 Berços Separados") mostra os 2 tipos juntos (ex:
+   * "2P/SP", ou só "2P" se os 2 lados acabaram iguais).
+   */
+  function _gradeTextoValor(valor) {
+    if (!valor) return '';
+    if (typeof valor === 'object') {
+      const dir = valor.direita ? String(valor.direita).toUpperCase() : '?';
+      const esq = valor.esquerda ? String(valor.esquerda).toUpperCase() : '?';
+      return dir === esq ? dir : `${dir}/${esq}`;
+    }
+    return String(valor).toUpperCase();
+  }
+
+  /**
+   * Clique numa aba/atalho seguido de clique em UM LADO de um berço (só
+   * quando "🔀 Berços Separados" está ligado, ver _renderGradeMontagem) —
+   * marca só aquele lado, sem mexer no outro. Berço unificado (string,
+   * formato de sempre) vira objeto {direita,esquerda} na hora, preservando
+   * o valor que já tinha nos 2 lados; se depois de marcar os 2 lados
+   * acabam iguais (ou os 2 vazios), volta a guardar como o formato
+   * unificado de sempre — o objeto só existe enquanto os lados realmente
+   * DIFEREM, mantendo bercos_personalizados o mais simples possível pro
+   * resto do sistema (cálculo, cor, exportações...), que já sabe lidar
+   * com os dois formatos (ver LW._opcaoDoBercoPersonalizado/
+   * corDoBercoPersonalizado/tipoDoLadoMontagem, data.js).
+   */
+  function _gradeClicarLado(i, lado) {
+    if (_gradeTipoAtivo === null) {
+      LW.mostrarAlerta('Selecione um tipo de montagem nas abas acima primeiro.', { tipo: 'aviso' });
+      return;
+    }
+    const atual = _gradeTrabalho[i];
+    const lados = (atual && typeof atual === 'object')
+      ? { ...atual }
+      : { direita: atual || null, esquerda: atual || null };
+    lados[lado] = _gradeTipoAtivo || null; // '' (Limpar) -> null
+    _gradeTrabalho[i] = (lados.direita === lados.esquerda) ? lados.direita : lados;
+    _renderGradeMontagem();
+  }
+
   function _renderGradeMontagem() {
     const tabsEl = document.getElementById('grade-tabs');
     if (tabsEl) {
@@ -1817,34 +1888,72 @@
     }
 
     const gridEl = document.getElementById('grade-bercos');
-    if (gridEl) {
-      gridEl.innerHTML = _gradeTrabalho.map((tipo, i) => {
-        const cor = tipo ? LW.corPorTipoSimples(tipo) : null;
+    if (!gridEl) return;
+
+    // "🔀 Berços Separados" ligado (nunca em modo de revisão — ver botão,
+    // escondido nesse modo): cada berço vira 2 metades clicáveis
+    // (Direito em cima / Esquerdo embaixo, mesma convenção visual de
+    // Bateria Atual — ba-dot-topo/ba-dot-base) em vez de 1 botão só.
+    if (_gradeModoSeparado && !_gradeSomenteRevisao) {
+      gridEl.innerHTML = _gradeTrabalho.map((valor, i) => {
+        const lados = (valor && typeof valor === 'object')
+          ? valor
+          : { direita: valor || null, esquerda: valor || null };
         const numero = String(i + 1).padStart(2, '0');
-        // Em modo de revisão, um berço que tinha tipo e foi apagado AGORA
-        // (nesta sessão de revisão) ganha uma borda tracejada + "↺" — sinal
-        // de que ainda dá pra clicar de novo e voltar a ser preenchido.
-        // Berço que já estava vazio antes (nunca preenchido) fica neutro,
-        // sem essa dica, porque não há nada pra desfazer ali.
-        const apagadoNestaRevisao = _gradeSomenteRevisao && !tipo && !!_gradeOriginalRevisao?.[i];
-        const titulo = apagadoNestaRevisao
-          ? `title="Marcado como não usado — clique de novo para restaurar (${_gradeOriginalRevisao[i].toUpperCase()})"`
-          : '';
-        return `<button type="button" data-berco-idx="${i}" ${titulo}
-          style="padding:8px 4px;border-radius:var(--radius);font-size:.74rem;text-align:center;cursor:pointer;
-                 background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};
-                 border:1px ${apagadoNestaRevisao ? 'dashed var(--red-dim)' : 'solid ' + (cor ? cor.borda : 'var(--border)')}">
-          B${numero}${tipo ? '<br><strong>' + tipo.toUpperCase() + '</strong>' : (apagadoNestaRevisao ? '<br>↺' : '')}
-        </button>`;
+        const corDir = lados.direita ? LW.corPorTipoSimples(lados.direita) : null;
+        const corEsq = lados.esquerda ? LW.corPorTipoSimples(lados.esquerda) : null;
+        return `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          <div style="font-size:.68rem;text-align:center;padding:2px 0;background:var(--bg-2);color:var(--text-3)">B${numero}</div>
+          <button type="button" data-berco-idx="${i}" data-lado="direita" title="Direito"
+            style="display:block;width:100%;padding:5px 4px;font-size:.7rem;text-align:center;cursor:pointer;border:0;border-bottom:1px solid var(--border);
+                   background:${corDir ? corDir.bg : 'var(--bg-2)'};color:${corDir ? corDir.cor : 'var(--text-3)'}">
+            D: ${lados.direita ? String(lados.direita).toUpperCase() : '—'}
+          </button>
+          <button type="button" data-berco-idx="${i}" data-lado="esquerda" title="Esquerdo"
+            style="display:block;width:100%;padding:5px 4px;font-size:.7rem;text-align:center;cursor:pointer;border:0;
+                   background:${corEsq ? corEsq.bg : 'var(--bg-2)'};color:${corEsq ? corEsq.cor : 'var(--text-3)'}">
+            E: ${lados.esquerda ? String(lados.esquerda).toUpperCase() : '—'}
+          </button>
+        </div>`;
       }).join('');
 
       gridEl.querySelectorAll('[data-berco-idx]').forEach(btn => {
         btn.addEventListener('click', () => {
           const i = parseInt(btn.getAttribute('data-berco-idx'), 10);
-          _gradeClicarBerco(i);
+          const lado = btn.getAttribute('data-lado');
+          _gradeClicarLado(i, lado);
         });
       });
+      return;
     }
+
+    gridEl.innerHTML = _gradeTrabalho.map((valor, i) => {
+      const cor = valor ? LW.corDoBercoPersonalizado(valor) : null;
+      const numero = String(i + 1).padStart(2, '0');
+      // Em modo de revisão, um berço que tinha tipo e foi apagado AGORA
+      // (nesta sessão de revisão) ganha uma borda tracejada + "↺" — sinal
+      // de que ainda dá pra clicar de novo e voltar a ser preenchido.
+      // Berço que já estava vazio antes (nunca preenchido) fica neutro,
+      // sem essa dica, porque não há nada pra desfazer ali.
+      const apagadoNestaRevisao = _gradeSomenteRevisao && !valor && !!_gradeOriginalRevisao?.[i];
+      const titulo = apagadoNestaRevisao
+        ? `title="Marcado como não usado — clique de novo para restaurar (${LW.escaparHtml(_gradeTextoValor(_gradeOriginalRevisao[i]))})"`
+        : '';
+      return `<button type="button" data-berco-idx="${i}" ${titulo}
+        style="padding:8px 4px;border-radius:var(--radius);font-size:.74rem;text-align:center;cursor:pointer;
+               background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};
+               border:1px ${apagadoNestaRevisao ? 'dashed var(--red-dim)' : 'solid ' + (cor ? cor.borda : 'var(--border)')}">
+        B${numero}${valor ? '<br><strong>' + _gradeTextoValor(valor) + '</strong>' : (apagadoNestaRevisao ? '<br>↺' : '')}
+      </button>`;
+    }).join('');
+
+    gridEl.querySelectorAll('[data-berco-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.getAttribute('data-berco-idx'), 10);
+        _gradeClicarBerco(i);
+      });
+    });
   }
 
   /**

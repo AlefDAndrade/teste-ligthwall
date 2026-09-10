@@ -353,6 +353,25 @@
   //  MONTAGEM PERSONALIZADA — grade simplificada por berço
   // ============================================================
 
+  // "🔀 Berços Separados" (equivalente offline do toggle homônimo na grade
+  // visual online, operacao.js) — local, nunca persiste: só controla COMO
+  // a grade é EXIBIDA/EDITADA agora. Desligado (padrão): 1 select por
+  // berço, define os 2 lados de uma vez (comportamento de sempre). Ligado:
+  // 2 selects por berço (Direito/Esquerdo), cada um podendo ter um tipo
+  // diferente — ver updateBercoPersonalizadoLado().
+  let _offModoSeparado = false;
+
+  function toggleModoSeparado() {
+    _offModoSeparado = !_offModoSeparado;
+    const btn = $('off-btn-modo-separado');
+    if (btn) {
+      btn.textContent = `🔀 Berços Separados: ${_offModoSeparado ? 'Ligado' : 'Desligado'}`;
+      btn.classList.toggle('btn-accent', _offModoSeparado);
+      btn.classList.toggle('btn-outline-accent', !_offModoSeparado);
+    }
+    atualizarGradePersonalizada();
+  }
+
   function atualizarGradePersonalizada() {
     const wrap = $('off-grade-personalizada-wrap');
     const grade = $('off-grade-personalizada');
@@ -367,14 +386,38 @@
       state.bercos_personalizados = Array.from({ length: capacidade }, (_, i) => anterior[i] || null);
     }
     const tiposSimples = MONTAGEM_OPCOES.filter((o) => o.modo === 'simples');
+    const opcoesHtml = (selecionado) => `<option value="">—</option>` +
+      tiposSimples.map((t) => `<option value="${escaparHtml(t.tipo)}" ${selecionado === t.tipo ? 'selected' : ''}>${escaparHtml(t.label)}</option>`).join('');
+
     grade.innerHTML = Array.from({ length: capacidade }, (_, i) => {
-      const atual = state.bercos_personalizados[i] || '';
+      const atual = state.bercos_personalizados[i] || null;
+
+      if (_offModoSeparado) {
+        const lados = (atual && typeof atual === 'object') ? atual : { direita: atual || '', esquerda: atual || '' };
+        return `
+          <div class="off-grade-celula">
+            <label>Berço ${i + 1}</label>
+            <select class="form-select" onchange="LWOff.updateBercoPersonalizadoLado(${i}, 'direita', this.value)" title="Lado Direito">
+              ${opcoesHtml(lados.direita || '')}
+            </select>
+            <select class="form-select" style="margin-top:3px" onchange="LWOff.updateBercoPersonalizadoLado(${i}, 'esquerda', this.value)" title="Lado Esquerdo">
+              ${opcoesHtml(lados.esquerda || '')}
+            </select>
+          </div>`;
+      }
+
+      // Berço unificado, ou já separado numa sessão anterior (objeto) mas
+      // com o toggle desligado agora — mostra vazio (não dá pra escolher
+      // 1 valor único quando os 2 lados são diferentes); trocar o select
+      // sobrescreve os 2 lados de uma vez, como sempre.
+      const valorUnificado = (atual && typeof atual === 'object')
+        ? (atual.direita === atual.esquerda ? (atual.direita || '') : '')
+        : (atual || '');
       return `
         <div class="off-grade-celula">
           <label>Berço ${i + 1}</label>
           <select class="form-select" onchange="LWOff.updateBercoPersonalizado(${i}, this.value)">
-            <option value="">—</option>
-            ${tiposSimples.map((t) => `<option value="${escaparHtml(t.tipo)}" ${atual === t.tipo ? 'selected' : ''}>${escaparHtml(t.label)}</option>`).join('')}
+            ${opcoesHtml(valorUnificado)}
           </select>
         </div>`;
     }).join('');
@@ -386,6 +429,23 @@
     persist();
     renderBateriaAtual(); // cor/tipo do berço na grade de Bateria Atual acompanha a Personalizada
     renderCalculoPaineis(); // total/por tipo mudam a cada berço definido na grade
+  }
+
+  // Marca só UM LADO do berço (ver "🔀 Berços Separados", acima) — igual a
+  // _gradeClicarLado em operacao.js (mesma convenção: objeto só existe
+  // enquanto os 2 lados realmente DIFEREM; se acabam iguais, volta a
+  // guardar como string simples).
+  function updateBercoPersonalizadoLado(i, lado, valor) {
+    if (!Array.isArray(state.bercos_personalizados)) return;
+    const atual = state.bercos_personalizados[i];
+    const lados = (atual && typeof atual === 'object')
+      ? { ...atual }
+      : { direita: atual || null, esquerda: atual || null };
+    lados[lado] = valor || null;
+    state.bercos_personalizados[i] = (lados.direita === lados.esquerda) ? lados.direita : lados;
+    persist();
+    renderBateriaAtual();
+    renderCalculoPaineis();
   }
 
   // ============================================================
@@ -433,11 +493,25 @@
   function calcPaineisPersonalizado(bercosPersonalizados) {
     const paineis_por_tipo = {};
     let paineis_total = 0;
-    (bercosPersonalizados || []).forEach((tipo) => {
-      if (!tipo) return;
-      const opcao = MONTAGEM_OPCOES.find((o) => o.modo === 'simples' && o.tipo === tipo);
-      const porBerco = opcao ? (Number(opcao['paineis_' + tipo + '_por_berco']) || 0) : 0;
-      paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + porBerco;
+    (bercosPersonalizados || []).forEach((valor) => {
+      if (!valor) return;
+
+      if (typeof valor === 'object') {
+        // Berço com os 2 lados marcados separadamente — 1 painel FÍSICO
+        // por lado, cada um do seu próprio tipo (ver comentário equivalente
+        // em calcPaineisPersonalizado, data.js).
+        ['direita', 'esquerda'].forEach((lado) => {
+          const tipo = valor[lado];
+          if (!tipo) return;
+          paineis_por_tipo[tipo] = (paineis_por_tipo[tipo] || 0) + 1;
+          paineis_total += 1;
+        });
+        return;
+      }
+
+      const opcao = MONTAGEM_OPCOES.find((o) => o.modo === 'simples' && o.tipo === valor);
+      const porBerco = opcao ? (Number(opcao['paineis_' + valor + '_por_berco']) || 0) : 0;
+      paineis_por_tipo[valor] = (paineis_por_tipo[valor] || 0) + porBerco;
       paineis_total += porBerco;
     });
     const m2_por_tipo = {};
@@ -515,13 +589,18 @@
   // Mesma convenção do online (ver _tipoDoLadoMontagem, data.js): qual
   // TIPO de placa ('2p'/'sp'/...) um LADO específico de um berço produz —
   // usado só pra saber de qual tipo descontar quando o lado é marcado
-  // "🚫 Não Enchido". Personalizada: tipo do berço inteiro (os 2 lados
-  // sempre batem). Simples: único tipo possível. Híbrida: 1º tipo da
-  // lista = direito, 2º = esquerdo (mesma convenção fixa do online).
+  // "🚫 Não Enchido". Personalizada com berço unificado: tipo do berço
+  // inteiro (os 2 lados batem). Personalizada com "🔀 Berços Separados"
+  // (valor é {direita,esquerda}): cada lado já tem seu tipo próprio.
+  // Simples: único tipo possível. Híbrida: 1º tipo da lista = direito, 2º
+  // = esquerdo (mesma convenção fixa do online).
   function tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado) {
     if (tipoMontagem === TIPO_MONTAGEM_PERSONALIZADA) {
       const grade = Array.isArray(bercosPersonalizados) ? bercosPersonalizados : [];
-      return grade[bercoNum - 1] || null;
+      const valor = grade[bercoNum - 1] || null;
+      if (!valor) return null;
+      if (typeof valor === 'object') return valor[lado] || null;
+      return valor;
     }
     const opcao = (MONTAGEM_OPCOES || []).find((o) => o.label === tipoMontagem);
     if (!opcao) return null;
@@ -610,9 +689,32 @@
     return corMontagemNeutra();
   }
 
+  // Cor de um valor guardado em bercos_personalizados[i] — igual
+  // LW.corDoBercoPersonalizado (data.js): tipo simples (string) usa
+  // corPorTipoSimples; berço com "🔀 Berços Separados" (objeto
+  // {direita,esquerda}) monta um gradiente 50/50 ad hoc entre os 2 tipos
+  // (ou cor sólida se só 1 lado estiver preenchido, ou os 2 lados
+  // acabarem iguais).
+  function corDoBercoPersonalizado(valor) {
+    if (!valor) return corMontagemNeutra();
+    if (typeof valor !== 'object') return corPorTipoSimples(valor);
+
+    const corDir = valor.direita ? corPorTipoSimples(valor.direita) : null;
+    const corEsq = valor.esquerda ? corPorTipoSimples(valor.esquerda) : null;
+    if (corDir && !corEsq) return corDir;
+    if (corEsq && !corDir) return corEsq;
+    if (!corDir && !corEsq) return corMontagemNeutra();
+    if (valor.direita === valor.esquerda) return corDir;
+    return {
+      cor: corDir.cor,
+      bg: `linear-gradient(90deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
+      borda: corDir.borda,
+    };
+  }
+
   function corPorTipoBerco(ehPersonalizada, tipo) {
     if (!tipo) return null;
-    return ehPersonalizada ? corPorTipoSimples(tipo) : corMontagemPorLabel(tipo);
+    return ehPersonalizada ? corDoBercoPersonalizado(tipo) : corMontagemPorLabel(tipo);
   }
 
   // Mesmas 5 cores de fallback do online (_CORES_TIPO_FALLBACK,
@@ -1697,7 +1799,8 @@
   window.LWOff = {
     iniciarInjecao, togglePausa, finalizarInjecao,
     addTraco, removeTraco, updateTraco, updateInsumo, updateTempoBatida, expandirTraco,
-    updateBercoPersonalizado, registrar, descartarPendente, descartarDaFila,
+    updateBercoPersonalizado, updateBercoPersonalizadoLado, toggleModoSeparado,
+    registrar, descartarPendente, descartarDaFila,
     confirmarNumeroInicial, naoSeiNumeroInicial,
   };
 })();
