@@ -628,10 +628,18 @@
 
     // Rótulo amigável do tipo atual — se Personalizada, tipoAtualCodigo já
     // é o CÓDIGO ('sp','2p'...), resolvido pro label via MONTAGEM_OPCOES;
-    // se não, tipoAtualCodigo já É o label (bateria uniforme).
-    const labelTipoAtual = ehPersonalizada
-      ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
-      : (tipoAtualCodigo || '—');
+    // se não, tipoAtualCodigo já É o label (bateria uniforme). Um berço
+    // com "🔀 Berços Separados" (ver operacao.js, _gradeClicarLado) guarda
+    // {direita,esquerda} em vez de um código só — resolve os 2 tipos
+    // separadamente e mostra os 2, cada um com o lado que representa,
+    // senão virava "[object Object]" no rótulo.
+    const _labelDoCodigoSimples = (codigo) =>
+      (LW.MONTAGEM_OPCOES || []).find(o => o.tipo === codigo)?.label || (codigo ? String(codigo).toUpperCase() : '—');
+    const labelTipoAtual = (tipoAtualCodigo && typeof tipoAtualCodigo === 'object')
+      ? `${_labelDoCodigoSimples(tipoAtualCodigo.direita)} (Direito) / ${_labelDoCodigoSimples(tipoAtualCodigo.esquerda)} (Esquerdo)`
+      : ehPersonalizada
+        ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
+        : (tipoAtualCodigo || '—');
 
     const dataEnchimento = dados.inicio ? LW.formatDateTime(dados.inicio) : LW.formatDateTime(new Date());
 

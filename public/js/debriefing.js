@@ -264,7 +264,7 @@
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
       html += `<div class="dbf-bateria-head">
         <span class="dbf-bateria-id"> Bateria ${escapeHtml(bateria.id_bateria || '—')}</span>
-        <span class="dbf-badge dbf-badge-montagem" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}">${escapeHtml(bateria.tipo_montagem || '—')}</span>
+        <span class="dbf-badge dbf-badge-montagem" style="background:${corMont.bgHorizontal || corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}">${escapeHtml(bateria.tipo_montagem || '—')}</span>
         <span class="dbf-bateria-horario">${horaBrasilia(bateria.inicio)} → ${horaBrasilia(bateria.fim)}</span>
       </div>`;
       html += `<div class="dbf-bateria-meta">Previsão desemplaque: <strong>${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}</strong></div>`;

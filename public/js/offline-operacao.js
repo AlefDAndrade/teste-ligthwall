@@ -683,7 +683,7 @@
       if (hex1 && hex2) {
         const c1 = corCssDoHex(hex1);
         const c2 = corCssDoHex(hex2);
-        return { cor: c1.cor, bg: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`, borda: c1.borda };
+        return { cor: c1.cor, bg: `linear-gradient(180deg, ${c1.bg} 50%, ${c2.bg} 50%)`, borda: c1.borda };
       }
     }
     return corMontagemNeutra();
@@ -707,7 +707,7 @@
     if (valor.direita === valor.esquerda) return corDir;
     return {
       cor: corDir.cor,
-      bg: `linear-gradient(90deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
+      bg: `linear-gradient(180deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
       borda: corDir.borda,
     };
   }

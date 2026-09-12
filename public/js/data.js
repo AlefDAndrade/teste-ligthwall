@@ -191,9 +191,16 @@ function corCssDoHex(hex) {
 // - Tipo HÍBRIDO: não tem cor própria — é sempre metade da cor de cada um
 //   dos 2 tipos simples que o compõem (cor1/cor2), pra deixar visualmente
 //   óbvio que é a combinação dos dois. `bg` já vem como um linear-gradient
-//   CSS pronto (50%/50%, sem transição suave) pra uso direto em HTML; quem
-//   desenha em <canvas> usa cor1/cor2 separadamente pra montar o próprio
-//   gradiente (canvas não entende a string CSS linear-gradient()).
+//   CSS pronto (metade de CIMA/metade de BAIXO, 50%/50%, sem transição
+//   suave — cor1 em cima, cor2 embaixo, mesma convenção de Direito=topo/
+//   Esquerdo=base usada pelos pontinhos ba-dot-topo/ba-dot-base) — usado
+//   na grade de berços (célula alta e estreita, ver .ba-celula). Também
+//   vem `bgHorizontal` (mesmas cores, mas lado a lado) pra quem pinta uma
+//   pílula de texto larga e baixa (ex: badge "Tipo de Montagem" no
+//   Dashboard/Debriefing), onde uma divisão de cima/baixo mal dá pra ver.
+//   Pra uso direto em HTML; quem desenha em <canvas> usa cor1/cor2
+//   separadamente pra montar o próprio gradiente (canvas não entende a
+//   string CSS linear-gradient()).
 // - Sem cor disponível (tipo desconhecido, ou híbrido cujos componentes
 //   ainda não têm cor): cinza neutro.
 // Extrai a cor (hex) de uma opção de tipos_montagem.opcoes simples — aceita
@@ -231,7 +238,8 @@ function corMontagemPorLabel(label) {
         hibrida: true,
         cor1: c1.cor, cor2: c2.cor,
         cor: c1.cor, // fallback pra quem só aceita 1 cor (ex: cor de texto)
-        bg: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`,
+        bg: `linear-gradient(180deg, ${c1.bg} 50%, ${c2.bg} 50%)`, // cor1 em cima, cor2 embaixo — grade de berços (célula alta/estreita)
+        bgHorizontal: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`, // lado a lado — badges de texto (pílula larga/baixa), onde cima/baixo fica ilegível
         borda: c1.borda,
       };
     }
@@ -266,7 +274,8 @@ function corPorTipoSimples(tipo) {
  *  - null = berço ainda vazio/não usado.
  * Resolve a cor de um valor desse jeito — tipo simples usa
  * corPorTipoSimples (cor sólida); berço com os 2 lados diferentes monta
- * um gradiente 50/50 ad hoc (mesmo formato de corMontagemPorLabel, mas
+ * um gradiente 50/50 ad hoc, metade de CIMA (Direito) / metade de BAIXO
+ * (Esquerdo) (mesmo formato de corMontagemPorLabel, mas
  * sem precisar de uma opção híbrida pré-cadastrada em Configurações —
  * QUALQUER par de tipos simples serve). Ponto único usado pela grade de
  * Montagem Personalizada (operacao.js) e por qualquer tela que pinte
@@ -288,7 +297,7 @@ function corDoBercoPersonalizado(valor) {
     hibrida: true,
     cor1: corDir.cor, cor2: corEsq.cor,
     cor: corDir.cor, // fallback pra quem só aceita 1 cor (ex: cor de texto)
-    bg: `linear-gradient(90deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
+    bg: `linear-gradient(180deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`, // Direito em cima, Esquerdo embaixo
     borda: corDir.borda,
   };
 }

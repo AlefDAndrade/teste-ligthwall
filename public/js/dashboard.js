@@ -859,7 +859,7 @@
           ? `<span class="badge badge-red" ${b.motivo_atraso ? `data-tooltip="${LW.escaparHtml(b.motivo_atraso)}"` : ''}>⚠ SIM</span>`
           : '<span class="badge badge-green">✓ NÃO</span>'}</td>
         <td data-col="motivo_atraso">${b.motivo_atraso ? LW.escaparHtml(b.motivo_atraso) : '—'}</td>
-        <td data-col="montagem"><span class="badge" style="background:${corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `data-tooltip="${tituloMontagem}"` : ''}>${LW.escaparHtml(b.tipo_montagem || '—')}</span></td>
+        <td data-col="montagem"><span class="badge" style="background:${corMont.bgHorizontal || corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}" ${tituloMontagem ? `data-tooltip="${tituloMontagem}"` : ''}>${LW.escaparHtml(b.tipo_montagem || '—')}</span></td>
         <td data-col="paineis_2p">${b.paineis_2p || 0}</td>
         <td data-col="paineis_sp">${b.paineis_sp || 0}</td>
         ${tdsExtrasPaineis}

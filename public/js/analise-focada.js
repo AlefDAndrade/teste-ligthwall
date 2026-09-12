@@ -414,9 +414,17 @@
     const tipos = _afTiposPorBerco(op, capacidade, gradePersonalizada, ehPersonalizada);
     const tipoAtualCodigo = tipos[numeroBerco - 1] || null;
     const cor = _corPorTipoBerco(ehPersonalizada, tipoAtualCodigo);
-    const labelTipoAtual = ehPersonalizada
-      ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
-      : (tipoAtualCodigo || '—');
+    // Berço com "🔀 Berços Separados" guarda {direita,esquerda} em vez de
+    // um código só — resolve os 2 tipos separadamente (senão virava
+    // "[object Object]" no rótulo, ver bateria-atual.js/_abrirDetalhesBerco
+    // pra mesma correção do lado editável).
+    const _afLabelDoCodigoSimples = (codigo) =>
+      (LW.MONTAGEM_OPCOES || []).find(o => o.tipo === codigo)?.label || (codigo ? String(codigo).toUpperCase() : '—');
+    const labelTipoAtual = (tipoAtualCodigo && typeof tipoAtualCodigo === 'object')
+      ? `${_afLabelDoCodigoSimples(tipoAtualCodigo.direita)} (Direito) / ${_afLabelDoCodigoSimples(tipoAtualCodigo.esquerda)} (Esquerdo)`
+      : ehPersonalizada
+        ? ((LW.MONTAGEM_OPCOES || []).find(o => o.tipo === tipoAtualCodigo)?.label || tipoAtualCodigo || '—')
+        : (tipoAtualCodigo || '—');
 
     const berco = bercosVisuais.find(b => b.ordem === numeroBerco) || {};
     const dirNaoEnchido = berco.estado_direita === 'nao_enchido';
@@ -2055,7 +2063,7 @@
           hibrida: true,
           cor1: c1.cor, cor2: c2.cor,
           cor: c1.cor,
-          bg: `linear-gradient(90deg, ${c1.bg} 50%, ${c2.bg} 50%)`,
+          bg: `linear-gradient(180deg, ${c1.bg} 50%, ${c2.bg} 50%)`,
           borda: c1.borda,
         };
       }
