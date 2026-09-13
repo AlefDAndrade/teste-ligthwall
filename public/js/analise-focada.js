@@ -221,14 +221,19 @@
   }
 
   // Cor por tipo de montagem de UM berço — mesma regra de bateria-atual.js
-  // (_baCorPorTipo): Montagem Personalizada guarda o CÓDIGO do tipo por
-  // berço (resolvido por corPorTipoSimples); qualquer outro tipo (simples
-  // ou híbrido) é uniforme — todo berço usa o mesmo LABEL da operação
-  // (resolvido por corMontagemPorLabel, que também monta o gradiente 50/50
-  // de tipos híbridos).
+  // (_baCorPorTipo): Montagem Personalizada guarda, por berço, o CÓDIGO de
+  // um tipo simples OU (com "🔀 Berços Separados") um objeto
+  // {direita,esquerda} com um tipo por lado — os dois casos são resolvidos
+  // por corDoBercoPersonalizado, que monta o gradiente 50/50 quando os
+  // lados diferem (ver data.js). Usar corPorTipoSimples direto (como
+  // antes) não sabia lidar com esse objeto e caía sempre no cinza neutro
+  // pra berços divididos — bug corrigido aqui. Qualquer outro tipo
+  // (simples ou híbrido) é uniforme — todo berço usa o mesmo LABEL da
+  // operação (resolvido por corMontagemPorLabel, que também monta o
+  // gradiente 50/50 de tipos híbridos).
   function _corPorTipoBerco(ehPersonalizada, tipo) {
     if (!tipo) return null;
-    return ehPersonalizada ? LW.corPorTipoSimples(tipo) : LW.corMontagemPorLabel(tipo);
+    return ehPersonalizada ? LW.corDoBercoPersonalizado(tipo) : LW.corMontagemPorLabel(tipo);
   }
 
   // ============================================================
@@ -2873,6 +2878,14 @@ ${_afScriptAjustePaginaUnica()}
     // original, ignorando ajustes feitos depois (ver comentário de
     // _afTotalInsumo, acima).
     totalInsumo: _afTotalInsumo,
+    // Expostos só pra teste (ver test/analise-focada-berco-personalizado-separado.test.js)
+    // — regressão do bug relatado: berços de Montagem Personalizada com
+    // "🔀 Berços Separados" (um tipo por lado) apareciam cinza na grade
+    // visual porque _corPorTipoBerco usava LW.corPorTipoSimples direto,
+    // que não sabe lidar com o objeto {direita,esquerda} desse caso (ver
+    // comentário de _corPorTipoBerco, acima).
+    corPorTipoBerco: _corPorTipoBerco,
+    renderBercos: _renderBercos,
     // Exposto só pra teste (ver
     // test/exportacao-interativa-receita-vazia.test.js) — regressão do
     // bug relatado: o HTML autossuficiente do Exportar Interativo/PDF
