@@ -234,6 +234,32 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ajustes_traco ON ajustes(id_traco, ordem);
 
+  -- Insumos de Receitas dinâmicos (Configurações → Insumos de Receitas) —
+  -- substitui as colunas fixas cimento_original/agua_original/etc de
+  -- "tracos" (valor "original" de cada insumo, 1 linha por insumo por
+  -- traço) e cimento/agua/etc de "ajustes" (valor de cada insumo POR
+  -- ajuste/reaproveitamento, 1 linha por insumo por ajuste — FK pro id
+  -- autoincrement de "ajustes", não pro par id_traco+ordem, propósito:
+  -- sobrevive a qualquer reordenação futura de ajustes). As colunas
+  -- fixas continuam existindo nas duas tabelas acima só pra migração
+  -- (ver migrarInsumosFixosParaDinamico em lib/db/tracos.js) — nenhum
+  -- código novo deve lê-las/escrevê-las depois da Fase 2.
+  CREATE TABLE IF NOT EXISTS traco_insumos (
+    id_traco TEXT NOT NULL,
+    insumo   TEXT NOT NULL,
+    valor    REAL,
+    PRIMARY KEY (id_traco, insumo)
+  );
+  CREATE INDEX IF NOT EXISTS idx_traco_insumos_traco ON traco_insumos(id_traco);
+
+  CREATE TABLE IF NOT EXISTS ajuste_insumos (
+    id_ajuste INTEGER NOT NULL,
+    insumo    TEXT NOT NULL,
+    valor     REAL,
+    PRIMARY KEY (id_ajuste, insumo)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ajuste_insumos_ajuste ON ajuste_insumos(id_ajuste);
+
   -- Leituras de Densidade/Flow (remedições — NÃO entram em "ajustes": não
   -- têm tempo de batida associado, são só uma releitura que substitui a
   -- anterior, não uma adição). 1 linha por leitura. Diferente de "ajustes"
