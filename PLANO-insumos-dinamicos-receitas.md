@@ -83,19 +83,33 @@ Padrão é ignorado). Suíte relevante ampliada (149 testes: migração,
 backup, importação, registro/edição de traço, PDF, auth) sem regressão.
 
 
-### Fase 3 — Rotas — 🔲 não iniciada
+### Fase 3 — Rotas — ✅ concluída (branch `feat/insumos-dinamicos-formulario`)
 
-- `lib/rotas/registro-operacao.js`: aceitar um insumo QUALQUER no payload
-  (não só os 5), validando contra o catálogo (`config.insumos_receita`) —
-  Padrão sempre obrigatório, Custom só obrigatório se foi explicitamente
-  incluído no payload.
-- `lib/rotas/edicao.js`: edição avançada de traço precisa listar/editar
-  qualquer insumo que o traço tenha, não só os 5.
-- `lib/rotas/operacao-offline.js`: fila offline (PWA) grava localmente e
-  sincroniza depois — precisa carregar o mesmo formato dinâmico.
-- `lib/rotas/leitura-e-ajustes.js`: registrar um novo ajuste/reaproveitamento
-  precisa saber quais insumos Custom aquele traço específico já tem
-  (decisão 5, acima) e exigi-los de novo.
+- `lib/rotas/registro-operacao.js` (`POST /registrar-relatorio-injecao`) e
+  `lib/rotas/operacao-offline.js` (sincronização da fila offline): gravam
+  `novoTraco.insumos_custom` via `db.salvarInsumosCustomDoTraco`, só
+  quando o traço é NOVO (mesma regra dos 5 Padrão — reaproveitar um traço
+  existente nunca reescreve a receita, custom incluso).
+- `lib/rotas/leitura-e-ajustes.js` (`POST /registrar-ajuste-traco`): grava
+  `ajuste.insumos_custom` via `db.salvarInsumosCustomDoAjuste`, usando o
+  `lastInsertRowid` do INSERT do ajuste.
+- `lib/rotas/edicao.js` (`POST /editar-traco-relatorio`): substitui TUDO
+  (mesmo padrão dos 5 Padrão/ajustes — apaga + regrava) tanto os custom
+  "originais" (`novosValores.originais.insumos_custom`) quanto os de cada
+  ajuste (`ajustes[i].insumos_custom`) — inclusive **remover** um insumo
+  custom que existia antes (se o payload editado não trouxer mais aquele
+  nome). `ajuste_insumos` é limpa ANTES de `ajustes` (depende do
+  `id_ajuste` que está prestes a sumir).
+
+**Nenhum comportamento existente mudou** — os 5 Padrão continuam vindo
+exatamente como sempre vieram em todas as 4 rotas.
+
+Teste: `test/insumos-dinamicos-fase3.test.js` (registro, ajuste ao vivo,
+reaproveitamento não reescreve, edição substitui/remove). Suíte relevante
+ampliada (207 testes: as 3 fases desta feature + backup, importação,
+registro/edição/offline de traço, permissões por área, PDF, auth) sem
+regressão.
+
 
 ### Fase 4 — Catálogo com categoria Padrão/Custom — 🔲 não iniciada
 
