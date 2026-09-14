@@ -62,15 +62,48 @@ let TIPO_MANUTENCAO_OPTS = [];
 let PRIORIDADE_OPTS = [];
 // Insumos de Receita (Configurações → Insumos de Receitas) — mesmo
 // raciocínio de MOTIVO_PARADA_OPTS/TIPO_MANUTENCAO_OPTS, acima: catálogo
-// (lista de nomes) configurável pelo Administrador. Fallback (defaults
-// abaixo, em loadConfig) reflete os 5 insumos que sempre existiram como
-// colunas FIXAS das tabelas tracos/ajustes (ver lib/db/tracos.js,
-// ['cimento', 'agua', 'eps', 'superplast', 'incorporador']) — mas ESTE
-// catálogo, por enquanto, é só um REGISTRO independente (ex: consulta,
-// referência), ainda não plugado de volta no formulário de traço/ajuste
-// (que continua com os 5 campos fixos de sempre); ligar os dois um dia
-// exigiria mudar o schema do banco, não só esta lista.
+// (lista de nomes) configurável pelo Administrador. Cada item é
+// { nome, categoria: 'padrao' | 'custom' } — ver PLANO-insumos-dinamicos-
+// receitas.md, Fase 4. "Padrão" são os 5 insumos que sempre existiram
+// como colunas FIXAS das tabelas tracos/ajustes (ver lib/db/tracos.js,
+// CAMPOS_SOMA) — sempre presentes, nome travado, sem botão de remover em
+// Configurações (ver NOMES_INSUMOS_PADRAO/_normalizarInsumosReceita,
+// abaixo). "Custom" são os que o Administrador cadastra livremente —
+// esses sim aparecem/somem do formulário de traço via o botão "+"
+// (Fase 5), gravados em traco_insumos/ajuste_insumos (Fase 2/3).
 let INSUMO_RECEITA_OPTS = [];
+
+// Nomes canônicos dos 5 Padrão — espelha CAMPOS_SOMA/NOMES_INSUMOS_PADRAO
+// de lib/db/tracos.js (duplicado aqui pelo mesmo motivo de
+// LIMITE_INJECAO_MIN em lib/rotas/edicao.js: este arquivo roda no
+// navegador, não dá pra require() o lado do servidor).
+const NOMES_INSUMOS_PADRAO = ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar'];
+
+/**
+ * Normaliza o que veio de config.json (`insumos_receita.opcoes`) pro
+ * formato atual ({nome, categoria}[]) — aceita tanto o formato NOVO
+ * (array de objetos) quanto o formato ANTIGO (array de strings, de uma
+ * instalação salva antes da Fase 4 desta feature): strings viram objeto,
+ * categoria decidida por NOMES_INSUMOS_PADRAO. Os 5 Padrão SEMPRE entram
+ * no resultado, mesmo que o config.json salvo não os liste (instalação
+ * bem antiga) — nunca some, e nunca vira "custom" por engano, mesmo que
+ * o JSON esteja malformado nesse ponto.
+ */
+function _normalizarInsumosReceita(bruto) {
+  const porNome = new Map();
+  (Array.isArray(bruto) ? bruto : []).forEach(item => {
+    let nome = null;
+    if (typeof item === 'string') nome = item.trim();
+    else if (item && typeof item === 'object' && typeof item.nome === 'string') nome = item.nome.trim();
+    if (!nome) return;
+    const categoria = NOMES_INSUMOS_PADRAO.includes(nome) ? 'padrao' : 'custom';
+    porNome.set(nome, { nome, categoria });
+  });
+  NOMES_INSUMOS_PADRAO.forEach(nome => porNome.set(nome, { nome, categoria: 'padrao' }));
+  const padrao = NOMES_INSUMOS_PADRAO.map(nome => porNome.get(nome));
+  const custom = [...porNome.values()].filter(o => o.categoria === 'custom');
+  return [...padrao, ...custom];
+}
 
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
@@ -515,12 +548,15 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "motivos_parada.opcoes" válido — mantendo motivos já carregados.');
     }
 
-    // Insumos de Receita — mesmo padrão de Motivos de Parada, acima.
+    // Insumos de Receita — mesmo padrão de Motivos de Parada, acima, mas
+    // com normalização (ver _normalizarInsumosReceita, Fase 4): garante
+    // categoria Padrão/Custom mesmo vindo de config.json de instalação
+    // antiga (formato só-string).
     if (Array.isArray(cfg.insumos_receita?.opcoes) && cfg.insumos_receita.opcoes.length) {
-      INSUMO_RECEITA_OPTS = cfg.insumos_receita.opcoes;
+      INSUMO_RECEITA_OPTS = _normalizarInsumosReceita(cfg.insumos_receita.opcoes);
     } else if (!INSUMO_RECEITA_OPTS.length) {
       console.warn('[LW] config.json sem "insumos_receita.opcoes" válido — usando fallback de insumos.');
-      INSUMO_RECEITA_OPTS = ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar'];
+      INSUMO_RECEITA_OPTS = _normalizarInsumosReceita([]);
     } else {
       console.warn('[LW] config.json sem "insumos_receita.opcoes" válido — mantendo insumos já carregados.');
     }
@@ -636,7 +672,7 @@ async function loadConfig() {
       { label: 'MÉDIA', cor: 'var(--accent)' },
       { label: 'ALTA', cor: 'var(--red)' },
     ];
-    INSUMO_RECEITA_OPTS = ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar'];
+    INSUMO_RECEITA_OPTS = _normalizarInsumosReceita([]);
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -3029,6 +3065,9 @@ window.LW = {
   get TIPO_MANUTENCAO_OPTS() { return TIPO_MANUTENCAO_OPTS; },
   get PRIORIDADE_OPTS() { return PRIORIDADE_OPTS; },
   get INSUMO_RECEITA_OPTS() { return INSUMO_RECEITA_OPTS; },
+  // Nomes canônicos dos 5 Padrão — Fase 5 usa pra saber quais campos do
+  // formulário de traço são sempre fixos (nunca passam pelo botão "+").
+  get NOMES_INSUMOS_PADRAO() { return NOMES_INSUMOS_PADRAO; },
 
 
   // Config loader

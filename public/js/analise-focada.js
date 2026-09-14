@@ -480,6 +480,11 @@
         ['Tempo de Batida', _fmtTempoBatidaOriginal(traco.original?.tempo_batida), ''],
         ['Densidade', traco.densidade ?? null, 'kg/m³'],
         ['Flow', traco.flow ?? null, ''],
+        // Insumos CUSTOM (Fase 6, ver PLANO-insumos-dinamicos-receitas.md)
+        // — mesma grade dos Padrão acima, em número variável; só aparece
+        // o que ESTE traço de fato usa (ver detalheOperacao,
+        // lib/db/operacoes-qualidade.js).
+        ...Object.entries(traco.insumos_custom || {}).map(([nome, valor]) => [nome, _fmtKg(valor), 'kg']),
       ];
       // Relação A/C fora da faixa ideal (0,35–0,40) ganha destaque em
       // vermelho — mesmo critério de LW.classificarRelacaoAC (data.js),
@@ -805,6 +810,10 @@
         ['Tempo de Batida', _fmtTempoBatidaOriginal(t.original.tempo_batida), ''],
         ['Densidade', t.densidade ?? null, 'kg/m³'],
         ['Flow', t.flow ?? null, ''],
+        // Insumos CUSTOM (Fase 6) — mesmo critério do modal de detalhe de
+        // berço, acima (_afPainelDoBerco/receitaHtml): só entra o que
+        // este traço de fato tem.
+        ...Object.entries(t.insumos_custom || {}).map(([nome, valor]) => [nome, _fmtKg(valor), 'kg']),
       ];
       const infoBercos = _bercosEnchidosDoTraco(bercosVisuais, t.berco_inicio, t.berco_finalizacao);
       camposReceita.push(['Berços Enchidos', infoBercos ? `${infoBercos.enchidos}/${infoBercos.total}` : null, '']);
@@ -831,6 +840,8 @@
                    ${a?.eps ? `<span>EPS +${_fmtKg(a.eps)}kg</span>` : ''}
                    ${a?.superplast ? `<span>Superplast. +${_fmtKg(a.superplast)}kg</span>` : ''}
                    ${a?.incorporador ? `<span>Incorp. +${_fmtKg(a.incorporador)}kg</span>` : ''}
+                   ${Object.entries(a?.insumos_custom || {}).map(([nome, valor]) =>
+                     `<span>${LW.escaparHtml(nome)} +${_fmtKg(valor)}kg</span>`).join('')}
                    ${dens !== undefined ? `<span>Densidade ${_fmtLeitura(dens, 0)} kg/m³</span>` : ''}
                    ${flow !== undefined ? `<span>Flow ${_fmtLeitura(flow, 1)}</span>` : ''}
                  </div>`;

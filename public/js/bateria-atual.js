@@ -687,6 +687,9 @@
         ['Expansão', traco.expansao || null, ''],
         ['Superplast.', _baFmtKg(traco.superplast_real?.original), 'kg'],
         ['Incorp. de Ar', _baFmtKg(traco.incorporador_real?.original), 'kg'],
+        // Insumos CUSTOM (Fase 6, ver PLANO-insumos-dinamicos-receitas.md)
+        // — mesma exibição dos Padrão acima, só que em número variável.
+        ...Object.entries(traco.insumos_custom || {}).map(([nome, v]) => [nome, _baFmtKg(v?.original), 'kg']),
         ['Tempo de Batida', _baFmtTempoBatida(traco.tempo_batida?.original), ''],
         ['Densidade', traco.densidade || null, 'kg/m³'],
         ['Flow', traco.flow || null, ''],

@@ -2754,8 +2754,10 @@
         // direto no objeto de LW.PRIORIDADE_OPTS.
         prioridades: LW.PRIORIDADE_OPTS.map(p => ({ ...p })),
         // Insumos de Receitas (Configurações → Insumos de Receitas) —
-        // mesmo raciocínio de motivosParada, acima.
-        insumosReceita: [...LW.INSUMO_RECEITA_OPTS],
+        // cópia de CADA objeto também (map com spread), mesmo raciocínio
+        // de prioridades, acima: editar aqui (adicionar/remover Custom)
+        // não deve mexer direto em LW.INSUMO_RECEITA_OPTS até salvar.
+        insumosReceita: LW.INSUMO_RECEITA_OPTS.map(o => ({ ...o })),
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
@@ -3376,15 +3378,18 @@
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhuma prioridade cadastrada.</span>';
       }
 
-      // Insumos de Receitas (Configurações → Insumos de Receitas) — mesmo
-      // padrão de Motivos de Parada/Tipos de Manutenção, acima: lista
-      // simples de strings.
+      // Insumos de Receitas (Configurações → Insumos de Receitas) — Fase 4
+      // (ver PLANO-insumos-dinamicos-receitas.md): Padrão ganha badge e
+      // fica sem botão de remover (nome travado pra sempre); Custom
+      // continua com o fluxo de remover de sempre.
       const li = document.getElementById('cfg-insumos-lista');
       if (li) {
-        li.innerHTML = _cfgDados.insumosReceita.map((n, i) => `
+        li.innerHTML = _cfgDados.insumosReceita.map((o, i) => `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
-      <span style="font-size:.85rem;color:var(--text)">${n}</span>
-      <button onclick="cfgRemoverInsumo(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+      <span style="font-size:.85rem;color:var(--text)">${o.nome}</span>
+      ${o.categoria === 'padrao'
+        ? '<span style="font-size:.7rem;color:var(--text-3);background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:2px 10px;margin-left:auto">Padrão</span>'
+        : `<button onclick="cfgRemoverInsumo(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>`}
     </div>
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum insumo cadastrado.</span>';
       }
@@ -3496,26 +3501,32 @@
     }
 
     // ---- Insumos de Receitas (Configurações → Insumos de Receitas) ----
-    // Mesmo padrão de cfgAdicionarMotivoParada/cfgRemoverMotivoParada,
-    // acima — lista simples de strings, catálogo independente do
-    // formulário de traço (ver comentário de INSUMO_RECEITA_OPTS,
-    // data.js).
+    // Fase 4 (ver PLANO-insumos-dinamicos-receitas.md): cada item agora é
+    // {nome, categoria}. Só CUSTOM passa por aqui — Padrão é travado (sem
+    // botão de remover no render, acima) e esta função nunca cria um com
+    // categoria 'padrao'. Formulário de traço (Fase 5) é o que de fato
+    // liga isso ao registro de operação — este catálogo, por enquanto,
+    // só decide quais Custom PODEM ser oferecidos lá.
     function cfgAdicionarInsumo() {
       const input = document.getElementById('cfg-insumo-novo');
       const nome = input.value.trim();
       if (!nome) { LW.mostrarAlerta('Digite o nome do insumo (ex: Superplastificante).', { tipo: 'aviso' }); return; }
-      if (_cfgDados.insumosReceita.some(n => n.toLowerCase() === nome.toLowerCase())) {
+      if (_cfgDados.insumosReceita.some(o => o.nome.toLowerCase() === nome.toLowerCase())) {
         LW.mostrarAlerta('Este insumo já existe.', { tipo: 'aviso' });
         return;
       }
-      _cfgDados.insumosReceita.push(nome);
+      _cfgDados.insumosReceita.push({ nome, categoria: 'custom' });
       input.value = '';
       cfgRenderTudo();
     }
 
     async function cfgRemoverInsumo(i) {
+      const alvo = _cfgDados.insumosReceita[i];
+      // Defensivo — o botão de remover nem aparece pra Padrão (ver render,
+      // acima), mas garante aqui também caso o índice venha adulterado.
+      if (!alvo || alvo.categoria === 'padrao') return;
       const confirmou = await LW.mostrarConfirmacao(
-        `Remover o insumo "${_cfgDados.insumosReceita[i]}"?`,
+        `Remover o insumo "${alvo.nome}"?`,
         { titulo: 'Remover insumo', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
       );
       if (!confirmou) return;

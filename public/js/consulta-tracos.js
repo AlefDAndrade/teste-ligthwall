@@ -66,7 +66,12 @@
   }
 
   function _totalInsumos(t) {
-    return CAMPOS_INSUMO.reduce((soma, c) => soma + _valorFinalInsumo(t[c.campo]), 0);
+    const totalFixo = CAMPOS_INSUMO.reduce((soma, c) => soma + _valorFinalInsumo(t[c.campo]), 0);
+    // Insumos CUSTOM (Fase 6, ver PLANO-insumos-dinamicos-receitas.md) —
+    // entram no total geral junto com os 5 Padrão (é "quanto insumo esse
+    // traço consumiu", não importa se fixo ou custom).
+    const totalCustom = Object.values(t.insumos_custom || {}).reduce((soma, v) => soma + _valorFinalInsumo(v), 0);
+    return totalFixo + totalCustom;
   }
 
   function _fmtKg(v) {
@@ -178,6 +183,13 @@
         <span style="color:var(--text-2)">${c.rotulo}</span>
         <strong>${_fmtKg(traco[c.campo])}</strong>
       </div>`).join('');
+    // Insumos CUSTOM deste traço (Fase 6) — em número variável, só
+    // aparece quem esse traço específico de fato usou.
+    const linhasCustom = Object.entries(traco.insumos_custom || {}).map(([nome, v]) => `
+      <div style="display:flex;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:.88rem">
+        <span style="color:var(--text-2)">${LW.escaparHtml(nome)}</span>
+        <strong>${_fmtKg(v)}</strong>
+      </div>`).join('');
     const linhaTotal = `
       <div style="display:flex;justify-content:space-between;padding:12px 14px;background:var(--bg-2)">
         <span style="color:var(--text);font-weight:600">Total de Insumos</span>
@@ -185,7 +197,7 @@
       </div>`;
 
     const el = document.getElementById('ct-detalhe-insumos');
-    if (el) el.innerHTML = linhas + linhaTotal;
+    if (el) el.innerHTML = linhas + linhasCustom + linhaTotal;
 
     document.getElementById('ct-detalhe-modal').style.display = 'flex';
   }
@@ -200,10 +212,19 @@
 
   /** Uma linha por traço — mesmo layout de colunas pedido: Data | Ordem
    * no Dia (no lugar de "Hora", ver comentário de topo) | Nº do Traço |
-   * Cimento | Água | EPS | Plastificante | Incorporador | Total. */
-  function _linhaExportPeriodo(t) {
+   * Cimento | Água | EPS | Plastificante | Incorporador | Total.
+   * `nomesCustom` (Fase 6, ver PLANO-insumos-dinamicos-receitas.md) — lista
+   * de TODOS os insumos Custom usados por QUALQUER traço do período, já
+   * unificada pelo chamador (exportarPeriodo) — garante que toda linha
+   * da planilha tenha as MESMAS colunas, mesmo que este traço específico
+   * não use aquele insumo (célula fica em branco nesse caso). */
+  function _linhaExportPeriodo(t, nomesCustom = []) {
     const linha = { 'Data': t.data || '', 'Ordem no Dia': t._ordemDoDia, 'Turno': t.turno || '', 'Nº do Traço': t.num_traco ?? '' };
     CAMPOS_INSUMO.forEach(c => { linha[c.rotulo + ' (kg)'] = _valorFinalInsumo(t[c.campo]); });
+    nomesCustom.forEach(nome => {
+      const v = (t.insumos_custom || {})[nome];
+      linha[nome + ' (kg)'] = v === undefined ? '' : _valorFinalInsumo(v);
+    });
     linha['Total de Insumos (kg)'] = _totalInsumos(t);
     return linha;
   }
@@ -230,7 +251,11 @@
       return;
     }
     const ordenados = _ordenarParaExibicao(_tracosFiltrados).slice().reverse(); // cronológico (mais antigo primeiro) fica melhor pra somar/analisar no Excel
-    const linhas = ordenados.map(_linhaExportPeriodo);
+    // União de todos os nomes de insumo Custom usados por QUALQUER traço
+    // do período — mesmas colunas em toda linha da planilha (ver
+    // _linhaExportPeriodo).
+    const nomesCustom = [...new Set(ordenados.flatMap(t => Object.keys(t.insumos_custom || {})))];
+    const linhas = ordenados.map(t => _linhaExportPeriodo(t, nomesCustom));
     const wb = _gerarPlanilha(linhas, 'Traços');
     const { dataInicio, dataFim } = _lerFiltro();
     const sufixo = (dataInicio || dataFim) ? `${dataInicio || 'inicio'}_a_${dataFim || 'hoje'}` : 'todos';
@@ -254,6 +279,7 @@
       { Campo: 'Nº do Traço', Valor: traco.num_traco ?? '' },
       { Campo: 'Ordem no Dia', Valor: traco._ordemDoDia },
       ...CAMPOS_INSUMO.map(c => ({ Campo: c.rotulo + ' (kg)', Valor: _valorFinalInsumo(traco[c.campo]) })),
+      ...Object.entries(traco.insumos_custom || {}).map(([nome, v]) => ({ Campo: nome + ' (kg)', Valor: _valorFinalInsumo(v) })),
       { Campo: 'Total de Insumos (kg)', Valor: _totalInsumos(traco) },
     ];
     const wb = _gerarPlanilha(linhas, 'Traço');
