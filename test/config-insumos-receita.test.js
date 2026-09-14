@@ -43,6 +43,16 @@ function extrairCookie(resposta) {
   return setCookie.split(';')[0] || null;
 }
 
+async function logarComoAdminMaster() {
+  const resp = await fetch(`${servidor.baseUrl}/verificar-senha`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senha: SENHA_ADMIN }),
+  });
+  return extrairCookie(resp);
+}
+
+
 test('sem "insumos_receita" no config.json, GET /db/config.json não trava e o front cai no fallback padrão', async () => {
   const resp = await fetch(`${servidor.baseUrl}/db/config.json`, { cache: 'no-store' });
   assert.equal(resp.status, 200);
@@ -78,7 +88,7 @@ test('POST /salvar-config com insumos_receita customizado round-tripa corretamen
   assert.deepEqual(cfgDepois.insumos_receita, { opcoes: INSUMOS_CUSTOM });
 });
 
-test('uma carga de página NOVA (equivalente a F5) aplica a lista de insumos customizada em LW.INSUMO_RECEITA_OPTS', async () => {
+test('uma carga de página NOVA (equivalente a F5) aplica a lista de insumos customizada em LW.INSUMO_RECEITA_OPTS, com Padrão/Custom corretos', async () => {
   // A esta altura, config.json já tem INSUMOS_CUSTOM salvo (teste anterior)
   // — abrir a página do zero é exatamente o que um F5 de verdade faz:
   // reexecuta loadConfig() do zero, sem nenhum estado herdado.
@@ -101,8 +111,125 @@ test('uma carga de página NOVA (equivalente a F5) aplica a lista de insumos cus
     window.localStorage.setItem('lw_admin_authenticated', 'true');
     await new Promise(r => setTimeout(r, 2500));
 
-    assert.deepEqual(window.LW.INSUMO_RECEITA_OPTS, INSUMOS_CUSTOM);
+    // Formato normalizado (Fase 4, ver PLANO-insumos-dinamicos-receitas.md):
+    // Padrão sempre primeiro (ordem canônica, mesmo sem estarem listados
+    // de novo no config.json salvo — 3 dos 4 nomes salvos eram Padrão,
+    // "Fibra de Vidro" é o único Custom de verdade), Custom depois.
+    assert.deepEqual(JSON.parse(JSON.stringify(window.LW.INSUMO_RECEITA_OPTS)), [
+      { nome: 'Cimento', categoria: 'padrao' },
+      { nome: 'Água', categoria: 'padrao' },
+      { nome: 'EPS', categoria: 'padrao' },
+      { nome: 'Superplastificante', categoria: 'padrao' },
+      { nome: 'Incorporador de Ar', categoria: 'padrao' },
+      { nome: 'Fibra de Vidro', categoria: 'custom' },
+    ]);
   } finally {
     window.close();
+  }
+});
+
+test('fallback (sem config.json customizado): os 5 Padrão vêm com categoria "padrao", nenhum Custom', async () => {
+  const servidorLimpo = await iniciarServidorDeTeste({
+    seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+  });
+  try {
+    const dom = await JSDOM.fromURL(`${servidorLimpo.baseUrl}/index.html`, {
+      runScripts: 'dangerously',
+      resources: 'usable',
+      pretendToBeVisual: true,
+      beforeParse(win) {
+        win.Chart = function () { this.destroy = () => {}; };
+        win.HTMLElement.prototype.scrollIntoView = function () {};
+        win.fetch = (url, opts) => {
+          const absoluta = new URL(url, win.location.href).toString();
+          return fetch(absoluta, opts);
+        };
+      },
+    });
+    const window = dom.window;
+    try {
+      await new Promise(r => setTimeout(r, 2500));
+      const opcoes = JSON.parse(JSON.stringify(window.LW.INSUMO_RECEITA_OPTS));
+      assert.deepEqual(opcoes, [
+        { nome: 'Cimento', categoria: 'padrao' },
+        { nome: 'Água', categoria: 'padrao' },
+        { nome: 'EPS', categoria: 'padrao' },
+        { nome: 'Superplastificante', categoria: 'padrao' },
+        { nome: 'Incorporador de Ar', categoria: 'padrao' },
+      ]);
+      assert.deepEqual(JSON.parse(JSON.stringify(window.LW.NOMES_INSUMOS_PADRAO)), ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar']);
+    } finally {
+      window.close();
+    }
+  } finally {
+    await servidorLimpo.parar();
+  }
+});
+
+test('UI (Configurações → Insumos de Receitas): Padrão sem botão de remover + badge; Custom pode ser adicionado e removido', async () => {
+  // Servidor ISOLADO (não o `servidor` compartilhado do resto do arquivo,
+  // que a esta altura já tem "Fibra de Vidro" salva pelos testes
+  // anteriores) — precisa de estado limpo pra contar botões com precisão.
+  const servidorLimpo = await iniciarServidorDeTeste({
+    seedSecurityJson: { passwordHash: HASH_ADMIN, recoveryKeyHash: null },
+  });
+  const cookieAdmin = (await fetch(`${servidorLimpo.baseUrl}/verificar-senha`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senha: SENHA_ADMIN }),
+  })).headers.get('set-cookie').split(';')[0];
+
+  const dom = await JSDOM.fromURL(`${servidorLimpo.baseUrl}/index.html`, {
+    runScripts: 'dangerously',
+    resources: 'usable',
+    pretendToBeVisual: true,
+    beforeParse(win) {
+      win.Chart = function () { this.destroy = () => {}; };
+      win.HTMLElement.prototype.scrollIntoView = function () {};
+      win.fetch = (url, opts) => {
+        const absoluta = new URL(url, win.location.href).toString();
+        const headers = { ...(opts && opts.headers), Cookie: cookieAdmin };
+        return fetch(absoluta, { ...opts, headers });
+      };
+    },
+  });
+  dom.window.sessionStorage.setItem('lw_role', 'Administrador');
+  await new Promise(r => setTimeout(r, 2500));
+
+  const { window } = dom;
+  const document = window.document;
+  try {
+    window.abrirConfig();
+    await new Promise(r => setTimeout(r, 200));
+    window.cfgMostrarSecao('insumos');
+    await new Promise(r => setTimeout(r, 200));
+
+    const lista = document.getElementById('cfg-insumos-lista');
+    // Os 5 Padrão aparecem com o badge "Padrão", sem botão de remover.
+    assert.ok(lista.innerHTML.includes('Padrão'), 'badge "Padrão" deveria aparecer na lista');
+    assert.equal((lista.innerHTML.match(/cfgRemoverInsumo/g) || []).length, 0, 'nenhum Padrão deveria ter botão de remover ainda (nenhum Custom cadastrado)');
+
+    // Adiciona um Custom.
+    document.getElementById('cfg-insumo-novo').value = 'Fibra de Teste';
+    window.cfgAdicionarInsumo();
+    await new Promise(r => setTimeout(r, 100));
+
+    assert.ok(lista.innerHTML.includes('Fibra de Teste'), 'Custom recém-adicionado deveria aparecer na lista');
+    assert.equal((lista.innerHTML.match(/cfgRemoverInsumo/g) || []).length, 1, 'só o Custom deveria ter botão de remover');
+
+    // cfgRemoverInsumo num índice de Padrão (0 = Cimento, sempre o
+    // primeiro da lista normalizada) não deve remover nada — defesa
+    // mesmo sem o botão estar visível pra ele.
+    window.LW.mostrarConfirmacao = async () => true; // auto-confirma, se chegar a perguntar
+    await window.cfgRemoverInsumo(0);
+    await new Promise(r => setTimeout(r, 100));
+    assert.ok(lista.innerHTML.includes('Cimento'), 'Padrão não deveria ter sido removido');
+
+    // Remove o Custom de verdade (índice 5 = depois dos 5 Padrão).
+    await window.cfgRemoverInsumo(5);
+    await new Promise(r => setTimeout(r, 100));
+    assert.ok(!lista.innerHTML.includes('Fibra de Teste'), 'Custom deveria ter sido removido');
+  } finally {
+    window.close();
+    await servidorLimpo.parar();
   }
 });

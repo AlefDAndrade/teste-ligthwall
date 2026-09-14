@@ -111,18 +111,32 @@ registro/edição/offline de traço, permissões por área, PDF, auth) sem
 regressão.
 
 
-### Fase 4 — Catálogo com categoria Padrão/Custom — 🔲 não iniciada
+### Fase 4 — Catálogo com categoria Padrão/Custom — ✅ concluída (branch `feat/insumos-dinamicos-formulario`)
 
-- `LW.INSUMO_RECEITA_OPTS` deixa de ser array de strings — vira array de
-  `{ nome, categoria: 'padrao' | 'custom' }`. Fallback (instalação sem
-  `config.json` customizado) nasce com os 5 Padrão.
-- `lib/itens-permissao.js`/`config.json`: schema do catálogo salvo passa a
-  guardar a categoria junto (migração leve do formato antigo pro novo, se
-  já existir alguma instalação com o formato só-string desde o diff
-  aplicado antes da Fase 1).
-- Config UI (`cfgAdicionarInsumo`/`cfgRemoverInsumo`, `modal-config.html`):
-  badge "Padrão" nos 5, sem botão de remover/editar nome pra eles; Custom
-  continuam com o fluxo atual (adicionar/remover).
+- `LW.INSUMO_RECEITA_OPTS` (`public/js/data.js`) deixou de ser array de
+  strings — agora é `{ nome, categoria: 'padrao' | 'custom' }[]`.
+  `_normalizarInsumosReceita()` (nova) aceita tanto o formato NOVO quanto
+  o ANTIGO (config.json salvo antes desta fase, array de strings) —
+  strings viram objeto, categoria decidida por `NOMES_INSUMOS_PADRAO`
+  (também novo, os 5 nomes canônicos, espelhando o lado servidor). Os 5
+  Padrão sempre entram no resultado, mesmo que o config.json salvo não os
+  liste (instalação bem antiga) — nunca somem, nunca viram "custom".
+- Config UI (`app-core.js`): lista renderiza badge "Padrão" (sem botão de
+  remover) pros 5; Custom continua com o fluxo de adicionar/remover de
+  sempre. `cfgAdicionarInsumo` só cria `categoria: 'custom'`;
+  `cfgRemoverInsumo` recusa (no-op) se o índice apontar pra um Padrão —
+  defesa mesmo sem o botão estar visível pra ele.
+
+**Nenhum dado de traço muda** — esta fase é só o catálogo/config; o
+formulário de Registrar Operação ainda não lê essa lista (isso é a Fase 5).
+
+Teste: `test/config-insumos-receita.test.js` atualizado pro formato novo
+(fallback só-Padrão, round-trip com config antigo migrando corretamente,
+UI com badge/sem-remover-Padrão/adicionar-remover-Custom). Suíte
+relevante ampliada (135 testes: as 3 fases anteriores + catálogo de
+permissões, perfis customizados/fixos, backup, importação, registro/edição
+de traço) sem regressão.
+
 
 ### Fase 5 — Formulário de traço dinâmico (Registrar Operação) — 🔲 não iniciada
 
