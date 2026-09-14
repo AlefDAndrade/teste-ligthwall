@@ -1,0 +1,158 @@
+# Insumos de Receitas dinâmicos no formulário de traço
+
+**Status: em andamento.** Fase 1 entregue e na `main`. Fases 2-5 ainda não
+implementadas — este arquivo é o plano de referência enquanto elas rodam,
+igual ao padrão de `PLANO-pdf-segundo-plano.md`.
+
+## O que foi pedido (recapitulando)
+
+Hoje "Configurações → Insumos de Receitas" (`config-insumos`) só cadastra um
+catálogo (`LW.INSUMO_RECEITA_OPTS`) — adicionar/remover um insumo ali **não**
+reflete no formulário de Registrar Operação, que continua com 5 campos fixos
+hardcoded (Cimento, Água, EPS, Superplastificante, Incorporador de Ar).
+
+Pedido: adicionar/mover um insumo no catálogo deve refletir de verdade no
+formulário de traço.
+
+## Decisões tomadas
+
+1. **Categoria "Padrão" vs "Custom".** Os 5 insumos que já existiam viram
+   categoria `padrao`; qualquer insumo novo cadastrado nasce `custom`.
+2. **Padrão é sempre fixo no traço** — sempre visível, sempre obrigatório,
+   exatamente como o formulário se comporta hoje. **Não pode ser removido
+   nem renomeado** em Configurações (fica travado, com badge "Padrão").
+3. **Custom começa escondido no formulário.** Um botão **"+"** abre a lista
+   dos Custom ainda não adicionados a ESSE traço específico; ao escolher um,
+   ele vira campo obrigatório só pra esse traço (não afeta outros traços).
+4. **Custom pode ser removido do formulário antes de salvar** — um "x" ao
+   lado do campo desfaz a adição.
+5. **Uma vez que o traço é salvo com um Custom, ele passa a valer pra TODO
+   ajuste/reaproveitamento futuro desse mesmo traço** (não varia ajuste a
+   ajuste — é uma característica do traço, não da rodada).
+6. **Remover um Custom do catálogo não apaga histórico.** Traços antigos que
+   já usaram esse insumo continuam com o dado gravado normalmente; ele só
+   some da lista do "+" pra traços NOVOS.
+7. **Dado bruto não distingue Padrão/Custom.** `traco_insumos`/`ajuste_insumos`
+   (Fase 1) guardam o valor de qualquer insumo do mesmo jeito — a distinção
+   Padrão/Custom mora só no catálogo (`config.json`), não na tabela de
+   valores. O formulário decide quais campos exigir combinando "é Padrão"
+   OU "já foi adicionado a este traço".
+
+## Fases
+
+### Fase 1 — Schema dinâmico + migração — ✅ concluída (`main`, commit `173a173`)
+
+- Tabelas `traco_insumos` (id_traco, insumo, valor) e `ajuste_insumos`
+  (id_ajuste, insumo, valor) — substituem as 5 colunas fixas.
+- `db.migrarInsumosFixosParaDinamico()`: migração idempotente no boot
+  (logo após `migrarRelatorioInjecaoSeNecessario`), copia dado das colunas
+  fixas pras tabelas novas sem apagar nada.
+- **Nenhum comportamento existente mudou** — leitura/escrita continuam nas
+  colunas fixas; as tabelas novas só ficam populadas em paralelo.
+- Teste: `test/insumos-dinamicos-migracao.test.js`.
+
+### Fase 2 — `lib/db/tracos.js` lendo/escrevendo insumos Custom — ✅ concluída (branch `feat/insumos-dinamicos-formulario`)
+
+**Escopo re-definido** (ver decisão na conversa que motivou isto): como os 5
+Padrão são fixos pra sempre, eles continuam só nas colunas fixas de sempre
+(`cimento_real`/`agua_real`/etc) — **nenhuma mudança** nelas, nem nas rotas
+que já escrevem lá. Só os insumos **Custom** passaram a usar
+`traco_insumos`/`ajuste_insumos` (as tabelas da Fase 1):
+
+- `rowParaTraco`/`todosOsTracos`/`todosOsAjustesTracosJSON`: ganharam a
+  chave opcional `insumos_custom` no JSON de saída (mesmo formato
+  original/ajustes de sempre) — só aparece quando o traço/ajuste tem
+  algum Custom. Um traço sem Custom nenhum não ganha a chave (não polui
+  quem não usa a feature).
+- `salvarInsumosCustomDoTraco(idTraco, insumosCustom)` e
+  `salvarInsumosCustomDoAjuste(idAjuste, insumosCustom)` (novas, exportadas)
+  — gravam em `traco_insumos`/`ajuste_insumos`; ignoram nomes que colidem
+  com um dos 5 Padrão (defesa contra payload malformado) e valores vazios.
+- `substituirTracosEAjustes` (Restaurar Backup de Dados) e
+  `mesclarTracosEAjustes` (Mesclar Backup de Dados): round-trip completo
+  do `insumos_custom` de cada traço/ajuste, usando as funções acima.
+- `NOMES_INSUMOS_PADRAO` exportado — os 5 nomes canônicos, pra Fase 3
+  usar na validação das rotas.
+
+**Nenhum comportamento existente mudou** — os 5 Padrão continuam vindo
+exatamente como sempre vieram, em todos os testes já existentes.
+
+Teste: `test/insumos-dinamicos-fase2.test.js` (round-trip via restaurar e
+mesclar backup, traço sem custom não ganha a chave, nome colidindo com
+Padrão é ignorado). Suíte relevante ampliada (149 testes: migração,
+backup, importação, registro/edição de traço, PDF, auth) sem regressão.
+
+
+### Fase 3 — Rotas — 🔲 não iniciada
+
+- `lib/rotas/registro-operacao.js`: aceitar um insumo QUALQUER no payload
+  (não só os 5), validando contra o catálogo (`config.insumos_receita`) —
+  Padrão sempre obrigatório, Custom só obrigatório se foi explicitamente
+  incluído no payload.
+- `lib/rotas/edicao.js`: edição avançada de traço precisa listar/editar
+  qualquer insumo que o traço tenha, não só os 5.
+- `lib/rotas/operacao-offline.js`: fila offline (PWA) grava localmente e
+  sincroniza depois — precisa carregar o mesmo formato dinâmico.
+- `lib/rotas/leitura-e-ajustes.js`: registrar um novo ajuste/reaproveitamento
+  precisa saber quais insumos Custom aquele traço específico já tem
+  (decisão 5, acima) e exigi-los de novo.
+
+### Fase 4 — Catálogo com categoria Padrão/Custom — 🔲 não iniciada
+
+- `LW.INSUMO_RECEITA_OPTS` deixa de ser array de strings — vira array de
+  `{ nome, categoria: 'padrao' | 'custom' }`. Fallback (instalação sem
+  `config.json` customizado) nasce com os 5 Padrão.
+- `lib/itens-permissao.js`/`config.json`: schema do catálogo salvo passa a
+  guardar a categoria junto (migração leve do formato antigo pro novo, se
+  já existir alguma instalação com o formato só-string desde o diff
+  aplicado antes da Fase 1).
+- Config UI (`cfgAdicionarInsumo`/`cfgRemoverInsumo`, `modal-config.html`):
+  badge "Padrão" nos 5, sem botão de remover/editar nome pra eles; Custom
+  continuam com o fluxo atual (adicionar/remover).
+
+### Fase 5 — Formulário de traço dinâmico (Registrar Operação) — 🔲 não iniciada
+
+- `public/js/operacao.js`: os 5 campos Padrão continuam fixos no HTML/JS
+  como já são. Botão **"+"** novo, ao lado dos campos de receita, abre um
+  dropdown/modal com os Custom do catálogo que ainda não foram adicionados
+  A ESTE traço.
+- Ao escolher um Custom: injeta um campo novo no formulário (obrigatório,
+  com "x" pra remover antes de salvar).
+- Ao reabrir um traço existente pra novo ajuste/reaproveitamento: carregar
+  automaticamente os campos Custom que esse traço já tem gravados (sem
+  botão "x" aqui — decisão 5, é obrigatório de novo, não opcional).
+- Validação de formulário: Custom adicionado (ou já existente no traço)
+  entra na mesma checagem de obrigatório que os 5 Padrão já têm hoje.
+
+### Fase 6 — Consumidores derivados — 🔲 não iniciada (escopo ainda a confirmar)
+
+Telas/relatórios que hoje assumem só os 5 campos fixos e vão precisar
+iterar uma lista variável de insumos por traço:
+
+- `public/js/dashboard.js`, `public/js/oee.js`, `public/js/tv.js`,
+  `public/js/bateria-atual.js`, `public/js/debriefing.js`,
+  `public/js/qualidade-tracos.js`, `public/js/consulta-tracos.js`.
+- PDF/Análise Focada (`test/analise-focada-*`, `test/exportar-pdf-*`) —
+  como exibir N insumos Custom variáveis numa página de PDF já desenhada
+  pros 5 fixos é uma decisão de layout que ainda não foi discutida.
+
+*Proposta: para esses consumidores, os 5 Padrão continuam exibidos do jeito
+que já são hoje (nenhuma mudança visual); os Custom aparecem numa seção
+genérica à parte ("Insumos adicionais"), só quando o traço em questão tiver
+algum. Isso evita redesenhar todo layout existente — mas precisa de sua
+confirmação antes de eu implementar, já que mexe em telas que hoje não têm
+esse conceito.*
+
+## Testes (visão geral, cresce por fase)
+
+- `test/insumos-dinamicos-migracao.test.js` — Fase 1, concluído.
+- `test/config-insumos-receita.test.js` — já existente (catálogo antes desta
+  feature); vai precisar de testes novos pra categoria Padrão/Custom (Fase 4).
+- Cada fase seguinte roda a suíte relevante (traços/backup/PDF/dashboard)
+  antes de mergear, mesmo padrão da Fase 1.
+
+## O que falta decidir antes da Fase 6
+
+- Como o PDF/Análise Focada exibe um número variável de insumos Custom por
+  traço (layout).
+- Se Padrão e Custom aparecem juntos ou em blocos separados no dashboard/TV.
