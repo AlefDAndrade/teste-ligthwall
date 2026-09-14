@@ -60,6 +60,17 @@ let TIPO_MANUTENCAO_OPTS = [];
 // pelo admin usam hexadecimal fixo (escolhido num color picker — ver
 // Configurações > Prioridades), sem essa integração com o tema.
 let PRIORIDADE_OPTS = [];
+// Insumos de Receita (Configurações → Insumos de Receitas) — mesmo
+// raciocínio de MOTIVO_PARADA_OPTS/TIPO_MANUTENCAO_OPTS, acima: catálogo
+// (lista de nomes) configurável pelo Administrador. Fallback (defaults
+// abaixo, em loadConfig) reflete os 5 insumos que sempre existiram como
+// colunas FIXAS das tabelas tracos/ajustes (ver lib/db/tracos.js,
+// ['cimento', 'agua', 'eps', 'superplast', 'incorporador']) — mas ESTE
+// catálogo, por enquanto, é só um REGISTRO independente (ex: consulta,
+// referência), ainda não plugado de volta no formulário de traço/ajuste
+// (que continua com os 5 campos fixos de sempre); ligar os dois um dia
+// exigiria mudar o schema do banco, não só esta lista.
+let INSUMO_RECEITA_OPTS = [];
 
 // Direcionamento de painéis por palete — qual dos 4 paletes-base recebe
 // cada QUADRANTE (metade da bateria × lado do berço). Configurável em
@@ -504,6 +515,16 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "motivos_parada.opcoes" válido — mantendo motivos já carregados.');
     }
 
+    // Insumos de Receita — mesmo padrão de Motivos de Parada, acima.
+    if (Array.isArray(cfg.insumos_receita?.opcoes) && cfg.insumos_receita.opcoes.length) {
+      INSUMO_RECEITA_OPTS = cfg.insumos_receita.opcoes;
+    } else if (!INSUMO_RECEITA_OPTS.length) {
+      console.warn('[LW] config.json sem "insumos_receita.opcoes" válido — usando fallback de insumos.');
+      INSUMO_RECEITA_OPTS = ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar'];
+    } else {
+      console.warn('[LW] config.json sem "insumos_receita.opcoes" válido — mantendo insumos já carregados.');
+    }
+
     // Tipos de Manutenção — mesmo padrão de Motivos de Parada, acima.
     if (Array.isArray(cfg.tipos_manutencao?.opcoes) && cfg.tipos_manutencao.opcoes.length) {
       TIPO_MANUTENCAO_OPTS = cfg.tipos_manutencao.opcoes;
@@ -615,6 +636,7 @@ async function loadConfig() {
       { label: 'MÉDIA', cor: 'var(--accent)' },
       { label: 'ALTA', cor: 'var(--red)' },
     ];
+    INSUMO_RECEITA_OPTS = ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar'];
   }
 
   // Se o admin salvou uma config customizada, ela tem prioridade
@@ -3006,6 +3028,7 @@ window.LW = {
   get MOTIVO_PARADA_OPTS() { return MOTIVO_PARADA_OPTS; },
   get TIPO_MANUTENCAO_OPTS() { return TIPO_MANUTENCAO_OPTS; },
   get PRIORIDADE_OPTS() { return PRIORIDADE_OPTS; },
+  get INSUMO_RECEITA_OPTS() { return INSUMO_RECEITA_OPTS; },
 
 
   // Config loader

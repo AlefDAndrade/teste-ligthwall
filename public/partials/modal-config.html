@@ -93,6 +93,9 @@
           <button type="button" id="cfg-nav-prioridades" class="cfg-nav-item" onclick="cfgMostrarSecao('prioridades')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>
             Prioridades</button>
+          <button type="button" id="cfg-nav-insumos" class="cfg-nav-item" onclick="cfgMostrarSecao('insumos')">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h9l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M13 3v6h6"/><line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>
+            Insumos de Receitas</button>
         </div>
 
         <!-- ---- Conteúdo ---- -->
@@ -707,6 +710,31 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Prioridades ========== -->
+
+          <!-- ========== SEÇÃO: Insumos de Receitas ========== -->
+          <div id="cfg-secao-insumos" style="display:none">
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h9l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M13 3v6h6"/><line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>Insumos de Receitas</div>
+            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
+              Catálogo dos insumos usados nas receitas de traço (Cimento, Água, Superplastificante e outros).
+              Adicionar, remover ou renomear aqui é só um registro de referência — os campos de Cimento/Água/EPS/
+              Superplastificante/Incorporador de Ar no formulário de traço continuam fixos, independente desta lista.
+            </p>
+            <div id="cfg-insumos-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+              <div
+                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
+                Novo Insumo</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
+                  <label class="form-label">Nome do Insumo</label>
+                  <input class="form-input" id="cfg-insumo-novo" placeholder="Ex: Superplastificante"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarInsumo();}">
+                </div>
+                <button class="btn btn-outline-accent" onclick="cfgAdicionarInsumo()">+ Adicionar</button>
+              </div>
+            </div>
+          </div>
+          <!-- ========== /SEÇÃO: Insumos de Receitas ========== -->
 
         </div>
       </div>

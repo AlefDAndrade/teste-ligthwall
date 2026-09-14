@@ -2733,7 +2733,7 @@
       // checagem fica explícita mesmo assim, não hardcoded pra um perfil
       // só, igual sempre foi (evita ficar obsoleta se um perfil novo
       // aparecer sem nenhuma aba de config no futuro).
-      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-operacoes-offline') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas') && !_paginaPermitida('config-tipos-manutencao') && !_paginaPermitida('config-prioridades')) return;
+      if (role !== 'Administrador' && !_paginaPermitida('config-atalhos') && !_paginaPermitida('config-dados') && !_paginaPermitida('config-automacao') && !_paginaPermitida('config-usuarios') && !_paginaPermitida('config-autorizados') && !_paginaPermitida('config-operacoes-offline') && !_paginaPermitida('config-sql') && !_paginaPermitida('config-notificacoes') && !_paginaPermitida('config-paradas') && !_paginaPermitida('config-tipos-manutencao') && !_paginaPermitida('config-prioridades') && !_paginaPermitida('config-insumos')) return;
 
       // Lê o estado atual das variáveis já carregadas pelo data.js
       // BATERIA_IDS agora é array de objetos {id, label, bercos}
@@ -2753,6 +2753,9 @@
         // _cfgDados.prioridades[i].cor (se um dia isso existir) mexeria
         // direto no objeto de LW.PRIORIDADE_OPTS.
         prioridades: LW.PRIORIDADE_OPTS.map(p => ({ ...p })),
+        // Insumos de Receitas (Configurações → Insumos de Receitas) —
+        // mesmo raciocínio de motivosParada, acima.
+        insumosReceita: [...LW.INSUMO_RECEITA_OPTS],
       };
       _cfgSnapshotInicial = JSON.stringify(_cfgDados);
       cfgEscolherModoMontagem('simples');
@@ -2772,7 +2775,7 @@
       // sempre "dados", que era o padrão fixo de antes (só fazia sentido
       // quando só o Administrador Master via este modal).
       const primeiraAbaPermitida = role === 'Administrador' ? 'dados'
-        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'operacoes-offline', 'automacao', 'sql', 'notificacoes', 'paradas', 'tipos-manutencao', 'prioridades'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
+        : ['dados', 'paletes', 'atalhos', 'usuarios', 'autorizados', 'operacoes-offline', 'automacao', 'sql', 'notificacoes', 'paradas', 'tipos-manutencao', 'prioridades', 'insumos'].find(s => _paginaPermitida('config-' + s)) || 'atalhos';
       cfgMostrarSecao(primeiraAbaPermitida);
       document.getElementById('config-modal').style.display = 'flex';
       if (typeof LWTour !== 'undefined') LWTour.aoAbrirModal('config');
@@ -2794,7 +2797,7 @@
       // 'autorizados' (Operação em Andamento) faltava aqui — a aba nunca
       // era escondida de ninguém, pra nenhum perfil (bug separado, pego
       // na mesma revisão do bug do cssText, acima).
-      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', 'operacoes-offline': 'cfg-nav-operacoes-offline', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas', 'tipos-manutencao': 'cfg-nav-tipos-manutencao', prioridades: 'cfg-nav-prioridades' };
+      const MAPA = { dados: 'cfg-nav-dados', paletes: 'cfg-nav-paletes', atalhos: 'cfg-nav-atalhos', usuarios: 'cfg-nav-usuarios', autorizados: 'cfg-nav-autorizados', 'operacoes-offline': 'cfg-nav-operacoes-offline', automacao: 'cfg-nav-automacao', sql: 'cfg-nav-sql', notificacoes: 'cfg-nav-notificacoes', paradas: 'cfg-nav-paradas', 'tipos-manutencao': 'cfg-nav-tipos-manutencao', prioridades: 'cfg-nav-prioridades', insumos: 'cfg-nav-insumos' };
       Object.entries(MAPA).forEach(([secao, navId]) => {
         const el = document.getElementById(navId);
         if (el) el.style.display = _paginaPermitida('config-' + secao) ? '' : 'none';
@@ -2848,7 +2851,7 @@
     const CFG_SECOES = [
       'dados', 'paletes', 'atalhos', 'usuarios', 'autorizados',
       'operacoes-offline', 'automacao', 'sql', 'notificacoes', 'paradas',
-      'tipos-manutencao', 'prioridades',
+      'tipos-manutencao', 'prioridades', 'insumos',
     ];
 
     function cfgMostrarSecao(secao) {
@@ -3373,6 +3376,19 @@
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhuma prioridade cadastrada.</span>';
       }
 
+      // Insumos de Receitas (Configurações → Insumos de Receitas) — mesmo
+      // padrão de Motivos de Parada/Tipos de Manutenção, acima: lista
+      // simples de strings.
+      const li = document.getElementById('cfg-insumos-lista');
+      if (li) {
+        li.innerHTML = _cfgDados.insumosReceita.map((n, i) => `
+    <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
+      <span style="font-size:.85rem;color:var(--text)">${n}</span>
+      <button onclick="cfgRemoverInsumo(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>
+    </div>
+  `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum insumo cadastrado.</span>';
+      }
+
       // "Definir Paletes" (ver public/js/paletes-config.js) — função
       // global definida naquele arquivo, chamável daqui porque scripts
       // sem módulo compartilham o mesmo escopo global da página (mesmo
@@ -3476,6 +3492,34 @@
       );
       if (!confirmou) return;
       _cfgDados.tiposManutencao.splice(i, 1);
+      cfgRenderTudo();
+    }
+
+    // ---- Insumos de Receitas (Configurações → Insumos de Receitas) ----
+    // Mesmo padrão de cfgAdicionarMotivoParada/cfgRemoverMotivoParada,
+    // acima — lista simples de strings, catálogo independente do
+    // formulário de traço (ver comentário de INSUMO_RECEITA_OPTS,
+    // data.js).
+    function cfgAdicionarInsumo() {
+      const input = document.getElementById('cfg-insumo-novo');
+      const nome = input.value.trim();
+      if (!nome) { LW.mostrarAlerta('Digite o nome do insumo (ex: Superplastificante).', { tipo: 'aviso' }); return; }
+      if (_cfgDados.insumosReceita.some(n => n.toLowerCase() === nome.toLowerCase())) {
+        LW.mostrarAlerta('Este insumo já existe.', { tipo: 'aviso' });
+        return;
+      }
+      _cfgDados.insumosReceita.push(nome);
+      input.value = '';
+      cfgRenderTudo();
+    }
+
+    async function cfgRemoverInsumo(i) {
+      const confirmou = await LW.mostrarConfirmacao(
+        `Remover o insumo "${_cfgDados.insumosReceita[i]}"?`,
+        { titulo: 'Remover insumo', textoConfirmar: 'Remover', tipo: 'perigo', icon: '🗑️' }
+      );
+      if (!confirmou) return;
+      _cfgDados.insumosReceita.splice(i, 1);
       cfgRenderTudo();
     }
 
@@ -3677,6 +3721,7 @@
       if (!_cfgDados.motivosParada.length) { LW.mostrarAlerta('Adicione ao menos um motivo de parada.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.tiposManutencao.length) { LW.mostrarAlerta('Adicione ao menos um tipo de manutenção.', { tipo: 'aviso' }); return; }
       if (!_cfgDados.prioridades.length) { LW.mostrarAlerta('Adicione ao menos uma prioridade.', { tipo: 'aviso' }); return; }
+      if (!_cfgDados.insumosReceita.length) { LW.mostrarAlerta('Adicione ao menos um insumo.', { tipo: 'aviso' }); return; }
 
       // "Definir Paletes" (ver public/js/paletes-config.js) — valida
       // ANTES de tentar salvar (mesmo raciocínio das duas checagens
@@ -3757,6 +3802,8 @@
           tipos_manutencao: { opcoes: _cfgDados.tiposManutencao },
           // Prioridades — mesmo raciocínio de tipos_manutencao, acima.
           prioridades: { opcoes: _cfgDados.prioridades },
+          // Insumos de Receitas — mesmo raciocínio de prioridades, acima.
+          insumos_receita: { opcoes: _cfgDados.insumosReceita },
           // Preserva volume_por_placa — usa o que acabou de vir do
           // servidor; LW.VOLUME_POR_PLACA só como rede de segurança caso
           // o fetch acima falhe e cfgAtual fique vazio.
