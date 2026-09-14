@@ -2080,6 +2080,35 @@
     if (!hex) return _afCorMontagemNeutra();
     return { ..._afCorCssDoHex(hex), hibrida: false };
   }
+  // Mesma lógica de corDoBercoPersonalizado (data.js), reimplementada aqui
+  // com o prefixo "_af" pelo mesmo motivo das funções acima (HTML
+  // exportado standalone não carrega data.js) — usada por _corPorTipoBerco
+  // (via LW.corDoBercoPersonalizado, ver "const LW = {...}" mais abaixo)
+  // pra resolver a cor de berços de Montagem Personalizada, inclusive
+  // "🔀 Berços Separados" (objeto {direita,esquerda}, gradiente 50/50).
+  // Sem esta função no LW fake do export, LW.corDoBercoPersonalizado(tipo)
+  // lançava TypeError dentro de _renderBercos e travava o <script> inline
+  // no meio da execução — quebrando toda a Exportação Interativa e o PDF
+  // (que reaproveita o mesmo HTML): nada depois do ponto onde o erro
+  // acontecia era renderizado (berços, receita, etc.), só as seções que já
+  // tinham innerHTML preenchido antes da chamada quebrada apareciam vazias.
+  function _afCorDoBercoPersonalizado(valor) {
+    if (!valor) return _afCorMontagemNeutra();
+    if (typeof valor !== 'object') return _afCorPorTipoSimples(valor);
+    const corDir = valor.direita ? _afCorPorTipoSimples(valor.direita) : null;
+    const corEsq = valor.esquerda ? _afCorPorTipoSimples(valor.esquerda) : null;
+    if (corDir && !corEsq) return corDir;
+    if (corEsq && !corDir) return corEsq;
+    if (!corDir && !corEsq) return _afCorMontagemNeutra();
+    if (valor.direita === valor.esquerda) return corDir;
+    return {
+      hibrida: true,
+      cor1: corDir.cor, cor2: corEsq.cor,
+      cor: corDir.cor,
+      bg: `linear-gradient(180deg, ${corDir.bg} 50%, ${corEsq.bg} 50%)`,
+      borda: corDir.borda,
+    };
+  }
 
   // CSS específico da Análise Focada, compartilhado por TODOS os exports
   // (interativo E o estático de PDF, ver _gerarHtmlAfEstaticoPdf mais
@@ -2466,6 +2495,7 @@ ${regras}`;
     TIPO_MONTAGEM_PERSONALIZADA: 'PERSONALIZADA',
     corPorTipoSimples: ${_afCorPorTipoSimples},
     corMontagemPorLabel: ${_afCorMontagemPorLabel},
+    corDoBercoPersonalizado: ${_afCorDoBercoPersonalizado},
     formatDateTime: ${_afFormatDateTime},
     formatarRelacaoAC: ${_afFormatarRelacaoAC},
     MONTAGEM_OPCOES: ${JSON.stringify(LW.MONTAGEM_OPCOES || [])},
@@ -2479,6 +2509,12 @@ ${regras}`;
   ${_afCorCssDoHex}
   ${_afCorMontagemNeutra}
   ${_afHexDoTipoSimples}
+  // Declarada aqui (além de servir de valor pra LW.corPorTipoSimples,
+  // acima) porque _afCorDoBercoPersonalizado (logo abaixo, via
+  // LW.corDoBercoPersonalizado) chama _afCorPorTipoSimples pelo nome
+  // direto, não por LW.corPorTipoSimples — precisa existir como função
+  // de verdade neste escopo, senão lança ReferenceError.
+  ${_afCorPorTipoSimples}
   const AF_CORES_PALETE = ${JSON.stringify(AF_CORES_PALETE)};
   // abrirDetalhesBerco (embaixo) lê _ultimoDetalhe por closure, igual à
   // tela ao vivo (ver comentário original da função) — aqui é sempre
