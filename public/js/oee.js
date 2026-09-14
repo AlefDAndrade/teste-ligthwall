@@ -51,7 +51,11 @@
   }
 
   function _tracoTemAjuste(t) {
-    return CAMPOS_INSUMO.some(campo => _normalizarInsumo(t[campo]).ajustes.length > 0);
+    if (CAMPOS_INSUMO.some(campo => _normalizarInsumo(t[campo]).ajustes.length > 0)) return true;
+    // Insumos CUSTOM (Fase 6, ver PLANO-insumos-dinamicos-receitas.md) —
+    // mesmo critério dos 5 Padrão acima: conta como "traço ajustado" se
+    // QUALQUER insumo (fixo ou custom) teve pelo menos 1 ajuste.
+    return Object.values(t.insumos_custom || {}).some(v => _normalizarInsumo(v).ajustes.length > 0);
   }
 
   // Mesma lógica de tempoMin usada em analise-operacional.js

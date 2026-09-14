@@ -231,7 +231,9 @@
     return { ajustes: [] };
   }
   function _tracoTemAjuste(t) {
-    return CAMPOS_INSUMO.some(campo => _normalizarInsumo(t[campo]).ajustes.length > 0);
+    if (CAMPOS_INSUMO.some(campo => _normalizarInsumo(t[campo]).ajustes.length > 0)) return true;
+    // Insumos CUSTOM (Fase 6) — mesmo critério de oee.js.
+    return Object.values(t.insumos_custom || {}).some(v => _normalizarInsumo(v).ajustes.length > 0);
   }
   function _tempoMin(rec) {
     if (rec.tempo_min && rec.tempo_min > 0) return rec.tempo_min;

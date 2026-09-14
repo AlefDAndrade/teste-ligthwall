@@ -1,8 +1,7 @@
 # Insumos de Receitas dinâmicos no formulário de traço
 
-**Status: em andamento.** Fase 1 entregue e na `main`. Fases 2-5 ainda não
-implementadas — este arquivo é o plano de referência enquanto elas rodam,
-igual ao padrão de `PLANO-pdf-segundo-plano.md`.
+**Status: ✅ concluído.** Todas as 6 fases entregues e commitadas na
+branch `feat/insumos-dinamicos-formulario`.
 
 ## O que foi pedido (recapitulando)
 
@@ -178,24 +177,57 @@ exige o valor do Custom). Suíte das 5 fases junto (21 testes) +
 testes de operação pré-existentes (30 testes) sem regressão.
 
 
-### Fase 6 — Consumidores derivados — 🔲 não iniciada (escopo ainda a confirmar)
+### Fase 6 — Consumidores derivados — ✅ concluída (branch `feat/insumos-dinamicos-formulario`, escopo ajustado)
 
-Telas/relatórios que hoje assumem só os 5 campos fixos e vão precisar
-iterar uma lista variável de insumos por traço:
+Telas/relatórios atualizados pra também exibir insumos Custom, sempre
+depois dos 5 Padrão (que continuam exatamente como sempre foram):
 
-- `public/js/dashboard.js`, `public/js/oee.js`, `public/js/tv.js`,
-  `public/js/bateria-atual.js`, `public/js/debriefing.js`,
-  `public/js/qualidade-tracos.js`, `public/js/consulta-tracos.js`.
-- PDF/Análise Focada (`test/analise-focada-*`, `test/exportar-pdf-*`) —
-  como exibir N insumos Custom variáveis numa página de PDF já desenhada
-  pros 5 fixos é uma decisão de layout que ainda não foi discutida.
+- `oee.js`/`tv.js` — `_tracoTemAjuste` (usada na métrica "Qualidade" do
+  OEE e no indicador "traço ajustado" da TV) passa a considerar ajustes
+  em insumos Custom também, não só os 5 Padrão.
+- `bateria-atual.js` — card de detalhe do berço mostra os Custom do
+  traço junto com os 5 Padrão.
+- `consulta-tracos.js` — total geral inclui Custom; modal de detalhe
+  ganha linhas extras; os dois exports Excel (período e traço individual)
+  ganham colunas de Custom (no export de período, união de todos os
+  nomes usados no intervalo — célula em branco pra quem não usou aquele
+  insumo naquele traço).
+- `lib/db/operacoes-qualidade.js` (`detalheOperacao`, usado pela Análise
+  Focada) — novo: `traco.insumos_custom` (originais, lido de
+  `traco_insumos`) e `ajuste.insumos_custom` (por ajuste, lido de
+  `ajuste_insumos`) — só entra a chave quando o traço/ajuste de fato tem
+  algum (mesmo critério do resto da feature).
+- `analise-focada.js` (PDF/tela de Análise Focada) — grade de receita
+  (modal de berço + listagem de traços) e linha de cada ajuste mostram os
+  Custom, sem alterar o layout dos 5 Padrão — decisão tomada no plano
+  ("Proposta" abaixo, confirmada ao executar): aparecem só quando o
+  traço realmente usa, junto no mesmo grid flexível (`.af-receita-grid`
+  já é `auto-fit`, não precisou de seção separada).
 
-*Proposta: para esses consumidores, os 5 Padrão continuam exibidos do jeito
-que já são hoje (nenhuma mudança visual); os Custom aparecem numa seção
-genérica à parte ("Insumos adicionais"), só quando o traço em questão tiver
-algum. Isso evita redesenhar todo layout existente — mas precisa de sua
-confirmação antes de eu implementar, já que mexe em telas que hoje não têm
-esse conceito.*
+**Fora do escopo, de propósito** (não é esquecimento — decisão explícita):
+- `qualidade-tracos.js` (CEP — "insumo mais ajustado", desvio %, taxa de
+  acerto): depende de uma referência "ideal" pros 5 Padrão que não existe
+  pra insumos Custom; estender exigiria inventar essa baseline, que não
+  foi pedido.
+- `debriefing.js`: usa cimento/água só pra calcular Relação A/C — Custom
+  não entra nessa conta.
+- `dashboard.js` (tabela principal do Relatório de Injeção, colunas
+  fixas): mantida como está — é exatamente por isso que a tela de
+  Consulta de Insumos por Traço existe (motivo já registrado no próprio
+  comentário de topo do arquivo, de antes desta feature).
+
+**Nenhum comportamento existente muda** para traços sem nenhum Custom —
+os 5 Padrão continuam vindo exatamente como sempre vieram em toda tela.
+
+Teste: `test/insumos-dinamicos-fase6.test.js` (foco no SQL novo de
+`detalheOperacao` — Padrão intocado, Custom original + por ajuste, traço
+sem Custom não ganha a chave, 2 Custom diferentes em ajustes distintos).
+Suíte relevante ampliada (≈80 testes: análise focada, exportação PDF/
+interativa, consulta de traços, bateria atual) sem regressão. Suíte das
+6 fases juntas (24 testes) sem regressão.
+
+**Plano concluído — todas as 6 fases entregues.**
+
 
 ## Testes (visão geral, cresce por fase)
 
