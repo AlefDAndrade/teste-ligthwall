@@ -138,19 +138,45 @@ permissões, perfis customizados/fixos, backup, importação, registro/edição
 de traço) sem regressão.
 
 
-### Fase 5 — Formulário de traço dinâmico (Registrar Operação) — 🔲 não iniciada
+### Fase 5 — Formulário de traço dinâmico (Registrar Operação) — ✅ concluída (branch `feat/insumos-dinamicos-formulario`)
 
-- `public/js/operacao.js`: os 5 campos Padrão continuam fixos no HTML/JS
-  como já são. Botão **"+"** novo, ao lado dos campos de receita, abre um
-  dropdown/modal com os Custom do catálogo que ainda não foram adicionados
-  A ESTE traço.
-- Ao escolher um Custom: injeta um campo novo no formulário (obrigatório,
-  com "x" pra remover antes de salvar).
-- Ao reabrir um traço existente pra novo ajuste/reaproveitamento: carregar
-  automaticamente os campos Custom que esse traço já tem gravados (sem
-  botão "x" aqui — decisão 5, é obrigatório de novo, não opcional).
-- Validação de formulário: Custom adicionado (ou já existente no traço)
-  entra na mesma checagem de obrigatório que os 5 Padrão já têm hoje.
+- `_criarEstruturaTraco`/`_adicionarTracoDeSobra` (traço novo/reaproveitado
+  de sobra): ganham `insumos_custom: {}`, mesmo formato `{nome:
+  {original, ajustes}}` dos 5 Padrão. `migrarTraco` garante a chave em
+  rascunhos salvos no localStorage antes desta fase.
+- `renderCampoInsumoCustom`/`renderInsumosCustomSecao` (novas): renderizam
+  os Custom já adicionados a ESTE traço + botão **"+"**, que abre um
+  `<select>` inline só com os Custom do catálogo (`LW.INSUMO_RECEITA_OPTS`,
+  categoria `custom`) que o traço ainda não tem. Traço reaproveitado
+  (`_reaproveitado`) não mostra o "+" — receita inteira travada, mesmo
+  raciocínio dos 5 Padrão.
+- Cada campo Custom tem um **"x"** pra desfazer a adição — só aparece
+  ANTES do primeiro ajuste registrado nele (depois, vira parte definitiva
+  do histórico do traço, mesma trava "readonly" que os Padrão já têm).
+- `tracoCompleto`/`_statusDoTraco`/`tracoTemAjusteSemTempoBatida`: todo
+  insumo em `insumos_custom` entra na validação de obrigatório, igual os
+  5 Padrão — é isso que faz o "+" virar de fato um campo obrigatório.
+- Modal "Ajustar Receita" (`_mostrarModalAjusteReceita`/
+  `_salvarAjusteReceita`): ganha uma seção **obrigatória** com 1 campo
+  por Custom que o traço já tem (diferente dos 5 Padrão ali, que
+  continuam opcionais) — decisão tomada na conversa ("vale pro traço
+  inteiro, todo ajuste pede de novo"). Recusa salvar (com mensagem
+  citando o nome do insumo) se algum ficar em branco.
+- Payload final (`finalizarInjecao`): achata `insumos_custom` de
+  `{nome: {original, ajustes}}` pra `{nome: valorOriginal}` antes de
+  enviar — formato que `db.salvarInsumosCustomDoTraco` (Fase 2/3) espera
+  (os ajustes já foram gravados um a um, ao vivo, via
+  `/registrar-ajuste-traco`, igual os 5 Padrão).
+
+**Nenhum comportamento existente muda** para traços sem nenhum Custom —
+os 5 Padrão continuam exatamente como sempre foram.
+
+Teste: `test/insumos-dinamicos-fase5.test.js` (traço novo sem Custom,
+picker só lista Custom disponível, adicionar torna obrigatório, "x"
+remove antes de ajuste, "x" some depois de 1 ajuste real via modal, modal
+exige o valor do Custom). Suíte das 5 fases junto (21 testes) +
+testes de operação pré-existentes (30 testes) sem regressão.
+
 
 ### Fase 6 — Consumidores derivados — 🔲 não iniciada (escopo ainda a confirmar)
 

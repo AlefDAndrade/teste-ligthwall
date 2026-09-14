@@ -43,6 +43,11 @@
 
   let timerInterval = null;
   let expandedTracoIndex = 0; // Índice do traço aberto (acordeão exclusivo)
+  // Insumos de Receitas dinâmicos (Fase 5) — índices de traço com o
+  // picker "+ Adicionar insumo" aberto no momento (ver
+  // renderInsumosCustomSecao/LWOp.toggleInsumoCustomPicker). Só UI
+  // transitória, não faz parte de `state` (não persiste/sincroniza).
+  const _insumoCustomPickerAberto = new Set();
 
   // Aviso de conexão AO VIVO (item 9 do plano de Registro Offline, ver
   // README) — true enquanto o monitor abaixo considera a rede fora, pra
@@ -808,6 +813,9 @@
         t[realKey] = { original: t[realKey], ajustes: [] };
       }
     });
+    // Insumos CUSTOM (Fase 5) — rascunho salvo no localStorage antes desta
+    // feature existir simplesmente não tem a chave; garante que exista.
+    if (!t.insumos_custom || typeof t.insumos_custom !== 'object') t.insumos_custom = {};
     // Migrar densidade e flow se necessário
     ['densidade', 'flow'].forEach(key => {
       const targetKey = key + '_insumo';
@@ -868,8 +876,7 @@
    * precisar mudar esse call site.
    */
   function tracoCompleto(t, i, tracos) {
-    const insumoPreenchido = (key) => {
-      const insumo = t[key];
+    const insumoPreenchidoValor = (insumo) => {
       if (!insumo) return false;
       // Preenchido se tem valor ORIGINAL ou pelo menos 1 AJUSTE — bug
       // relatado numa conversa: Flow/Densidade preenchidos só através do
@@ -884,6 +891,11 @@
       const temAjuste = Array.isArray(insumo.ajustes) && insumo.ajustes.length > 0;
       return temOriginal || temAjuste;
     };
+    const insumoPreenchido = (key) => insumoPreenchidoValor(t[key]);
+    // Insumos CUSTOM (Fase 5) — todo insumo que o traço tem (chave em
+    // insumos_custom) é obrigatório, mesmo critério dos 5 Padrão acima —
+    // é assim que o "+" vira de fato um campo obrigatório no formulário.
+    const customsOk = Object.values(t.insumos_custom || {}).every(insumoPreenchidoValor);
     const semErroBerco = tracos === undefined || !_erroBercos(tracos, i ?? 0);
     return !!t.berco_ini && !!t.berco_fim && !!t.silo && !!t.expansao && !!t.densidadeEPS
       && semErroBerco
@@ -894,7 +906,8 @@
       && insumoPreenchido('incorporador_real')
       && insumoPreenchido('tempo_batida')
       && insumoPreenchido('densidade_insumo')
-      && insumoPreenchido('flow_insumo');
+      && insumoPreenchido('flow_insumo')
+      && customsOk;
   }
 
   /**
@@ -916,13 +929,15 @@
     // ficava mostrando ⚪ (vazio) nesse campo específico, mesmo tendo
     // dado de verdade.
     const temAjuste = (campo) => Array.isArray(t[campo]?.ajustes) && t[campo].ajustes.length > 0;
+    const customTemDado = Object.values(t.insumos_custom || {}).some(ins => !!ins?.original || (Array.isArray(ins?.ajustes) && ins.ajustes.length > 0));
     const hasData = t.berco_ini || t.berco_fim || t.silo || t.expansao || t.densidadeEPS || t.obs
       || !!t.cimento_real?.original || !!t.agua_real?.original || !!t.eps_real?.original
       || !!t.superplast_real?.original || !!t.incorporador_real?.original
       || !!t.tempo_batida?.original || !!t.densidade_insumo?.original || !!t.flow_insumo?.original
       || temAjuste('cimento_real') || temAjuste('agua_real') || temAjuste('eps_real')
       || temAjuste('superplast_real') || temAjuste('incorporador_real')
-      || temAjuste('tempo_batida') || temAjuste('densidade_insumo') || temAjuste('flow_insumo');
+      || temAjuste('tempo_batida') || temAjuste('densidade_insumo') || temAjuste('flow_insumo')
+      || customTemDado;
     return {
       icon: isComplete ? '✅' : (hasData ? '⚠️' : '⚪'),
       cls: isComplete ? 'complete' : (hasData ? 'pending' : 'empty'),
@@ -995,7 +1010,12 @@
    */
   function tracoTemAjusteSemTempoBatida(t) {
     const camposInsumo = ['cimento_real', 'agua_real', 'eps_real', 'superplast_real', 'incorporador_real'];
-    const maxAjustesInsumo = Math.max(0, ...camposInsumo.map(c => (t[c]?.ajustes?.length) || 0));
+    const ajustesFixos = camposInsumo.map(c => (t[c]?.ajustes?.length) || 0);
+    // Insumos CUSTOM (Fase 5) — mesma contagem, contribuem pro máximo
+    // também (um ajuste de "Fibra" sem tempo de batida é a mesma
+    // inconsistência que um ajuste de Cimento sem tempo de batida).
+    const ajustesCustom = Object.values(t.insumos_custom || {}).map(ins => (ins?.ajustes?.length) || 0);
+    const maxAjustesInsumo = Math.max(0, ...ajustesFixos, ...ajustesCustom);
     const ajustesTempo = t.tempo_batida?.ajustes?.length || 0;
     return maxAjustesInsumo > ajustesTempo;
   }
@@ -1049,6 +1069,11 @@
       eps_real: { original: '', ajustes: [] },
       superplast_real: { original: '', ajustes: [] },
       incorporador_real: { original: '', ajustes: [] },
+      // Insumos CUSTOM (Fase 5, ver PLANO-insumos-dinamicos-receitas.md) —
+      // {nome: {original, ajustes}}, mesmo formato dos 5 Padrão acima.
+      // Começa vazio — só ganha uma chave quando o botão "+" adiciona um
+      // (ver LWOp.adicionarInsumoCustom).
+      insumos_custom: {},
       tempo_batida: { original: '', ajustes: [] },
       densidade_insumo: { original: '', ajustes: [] },
       flow_insumo: { original: '', ajustes: [] },
@@ -1088,6 +1113,9 @@
       eps_real: receita.eps_real || { original: '', ajustes: [] },
       superplast_real: receita.superplast_real || { original: '', ajustes: [] },
       incorporador_real: receita.incorporador_real || { original: '', ajustes: [] },
+      // Insumos CUSTOM — carregados da sobra (já readonly, mesmo raciocínio
+      // dos 5 Padrão acima: traço reaproveitado nunca reedita a receita).
+      insumos_custom: receita.insumos_custom || {},
       tempo_batida: receita.tempo_batida || { original: '', ajustes: [] },
       // Flow e densidade carregados — o operador pode registrar o novo resultado medido
       densidade_insumo: (sobra.densidade !== undefined && sobra.densidade !== null)
@@ -1468,6 +1496,13 @@
     const t = state.tracos[i];
     if (!t || t._reaproveitado) return;
 
+    // Insumos CUSTOM já gravados neste traço (Fase 5, ver
+    // PLANO-insumos-dinamicos-receitas.md) — diferente dos Padrão acima
+    // (opcionais em cada ajuste), esses são OBRIGATÓRIOS em todo ajuste:
+    // "vale pro traço inteiro" foi a decisão tomada (uma vez que o traço
+    // tem o insumo, todo reaproveitamento/ajuste dele também precisa).
+    const nomesCustomDoTraco = Object.keys(t.insumos_custom || {});
+
     const existente = document.getElementById('modal-ajuste-receita');
     if (existente) existente.remove();
 
@@ -1526,6 +1561,19 @@
           </div>
         </div>
 
+        ${nomesCustomDoTraco.length ? `
+        <div class="form-group" style="margin-bottom:6px">
+          <label class="form-label" style="margin-bottom:10px">Insumos deste traço <span style="color:var(--red);font-weight:400;text-transform:none">(obrigatório — este traço usa estes insumos)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            ${nomesCustomDoTraco.map((nome, idx) => `
+              <div class="form-group">
+                <label class="form-label">${nome} (kg) <span class="required">*</span></label>
+                <input class="form-input" type="number" step="0.01" id="ar-custom-${idx}" placeholder="0">
+              </div>
+            `).join('')}
+          </div>
+        </div>` : ''}
+
         <div class="form-group" style="margin-bottom:6px;margin-top:14px">
           <label class="form-label" style="margin-bottom:10px">Remedição <span style="color:var(--text-3);font-weight:400;text-transform:none">(opcional — sobrescreve o valor anterior)</span></label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1565,10 +1613,10 @@
     document.getElementById('ar-s-dn').addEventListener('click', () => incDecAr('ar-dur-s', 59, -1));
 
     document.getElementById('ar-btn-cancelar').addEventListener('click', () => modal.remove());
-    document.getElementById('ar-btn-salvar').addEventListener('click', () => _salvarAjusteReceita(i, modal));
+    document.getElementById('ar-btn-salvar').addEventListener('click', () => _salvarAjusteReceita(i, modal, nomesCustomDoTraco));
   }
 
-  async function _salvarAjusteReceita(i, modal) {
+  async function _salvarAjusteReceita(i, modal, nomesCustomDoTraco = []) {
     const t = state.tracos[i];
     if (!t) { modal.remove(); return; }
 
@@ -1586,8 +1634,25 @@
     }
     const minutos = Math.round((segundos / 60) * 100) / 100; // pro arquivo de auditoria (em minutos)
 
+    // Insumos CUSTOM deste traço — OBRIGATÓRIOS (decisão: vale pro traço
+    // inteiro, todo ajuste tem que informar de novo). Valida ANTES de
+    // aplicar qualquer coisa — tudo ou nada, mesmo padrão do tempo de
+    // batida acima.
+    const insumosCustomAjuste = {}; // { nome: valor }
+    for (let idx = 0; idx < nomesCustomDoTraco.length; idx++) {
+      const nome = nomesCustomDoTraco[idx];
+      const input = document.getElementById(`ar-custom-${idx}`);
+      const val = parseFloat(input?.value);
+      if (isNaN(val) || val <= 0) {
+        mostrarErroModal(`Informe "${nome}" — este traço usa esse insumo, obrigatório em todo ajuste.`);
+        return;
+      }
+      insumosCustomAjuste[nome] = val;
+    }
+
     const camposPreenchidos = {}; // { cimento_real: valor, ... } — pro state do traço
     const ajusteAudit = { tempo_batida: minutos }; // { tempo_batida, cimento, agua, densidade, flow, ... } — pro arquivo de auditoria
+    if (Object.keys(insumosCustomAjuste).length) ajusteAudit.insumos_custom = insumosCustomAjuste;
 
     // Insumos (somam ao total) — todos opcionais, preenche só o que entrou.
     CAMPOS_INSUMO_AJUSTE.forEach(c => {
@@ -1619,6 +1684,15 @@
     Object.entries(camposPreenchidos).forEach(([campo, valor]) => {
       if (!t[campo] || typeof t[campo] !== 'object') t[campo] = { original: '', ajustes: [] };
       t[campo].ajustes.push(valor);
+    });
+
+    // Insumos custom — mesma ideia, mas dentro de t.insumos_custom[nome].
+    Object.entries(insumosCustomAjuste).forEach(([nome, valor]) => {
+      if (!t.insumos_custom) t.insumos_custom = {};
+      if (!t.insumos_custom[nome] || typeof t.insumos_custom[nome] !== 'object') {
+        t.insumos_custom[nome] = { original: '', ajustes: [] };
+      }
+      t.insumos_custom[nome].ajustes.push(valor);
     });
 
     persist();
@@ -2179,6 +2253,7 @@
           eps_real: ultimoTraco.eps_real,
           superplast_real: ultimoTraco.superplast_real,
           incorporador_real: ultimoTraco.incorporador_real,
+          insumos_custom: ultimoTraco.insumos_custom,
           tempo_batida: ultimoTraco.tempo_batida,
           silo: ultimoTraco.silo,
           expansao: ultimoTraco.expansao,
@@ -2367,6 +2442,87 @@
   }
 
   // Renderiza campo de insumo (entrada do valor original + badge de ajustes)
+  // Insumos CUSTOM (Fase 5, ver PLANO-insumos-dinamicos-receitas.md) —
+  // mesma lógica visual de renderCampoInsumo, mas lendo/escrevendo em
+  // t.insumos_custom[nome] em vez de t[fieldKey] direto (chave dinâmica,
+  // não dá pra reaproveitar a função de cima sem mudar a assinatura dela).
+  // fieldKey fixo ('insumo_custom', não o nome) pro totalInsumo NUNCA
+  // cair no caso "isResultado" (densidade/flow) por coincidência de nome.
+  function renderCampoInsumoCustom(t, i, nome) {
+    const insumo = (t.insumos_custom && t.insumos_custom[nome]) || { original: '', ajustes: [] };
+    const temAjustes = insumo.ajustes && insumo.ajustes.length > 0;
+    const total = totalInsumo(insumo, 'insumo_custom');
+    const valorExibido = total !== '' ? parseFloat(total).toFixed(2) : '';
+    // Só pode desfazer a adição ANTES de qualquer ajuste — depois do
+    // primeiro ajuste, esse insumo já faz parte do histórico do traço
+    // (mesma trava de "readonly" que os 5 Padrão já têm), então some o
+    // "x" pra não sugerir que dá pra tirar sem mais nem menos.
+    const podeRemover = !t._reaproveitado && !temAjustes;
+    const nomeEscapado = nome.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+    return `
+      <div class="form-group insumo-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:6px">
+          ${nome} (kg) <span class="required">*</span>
+          ${podeRemover ? `<button type="button" onclick="LWOp.removerInsumoCustom(${i},'${nomeEscapado}')"
+              title="Remover este insumo do traço" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:.85rem;margin-left:auto">✕</button>` : ''}
+        </label>
+        <div class="insumo-input-row">
+          <input class="form-input ${(t._reaproveitado || temAjustes) ? 'readonly-reaproveitado' : ''}" type="number" step="0.01"
+            value="${valorExibido}"
+            oninput="LWOp.updateInsumoCustomOriginal(${i},'${nomeEscapado}',this.value)"
+            ${t._reaproveitado || temAjustes ? 'readonly' : ''}
+            placeholder="kg">
+        </div>
+        ${temAjustes ? `
+          <div class="insumo-ajustes-display">
+            <span class="ajustes-total-badge">Total: ${valorExibido || '—'}</span>
+          </div>` : ''}
+      </div>`;
+  }
+
+  // Botão "+" (adicionar insumo Custom) + picker inline — só oferece os
+  // Custom do catálogo (LW.INSUMO_RECEITA_OPTS) que ESTE traço ainda não
+  // tem. Estado de "picker aberto" é por índice de traço (Set módulo,
+  // abaixo), não fica em `state` — é só UI transitória, não precisa
+  // persistir/sincronizar entre abas.
+  function renderInsumosCustomSecao(t, i) {
+    const nomesAtuais = Object.keys(t.insumos_custom || {});
+    const camposExistentes = nomesAtuais.map(nome => renderCampoInsumoCustom(t, i, nome)).join('');
+
+    // Traço reaproveitado: receita inteira travada, sem botão "+" (mesmo
+    // raciocínio dos 5 Padrão — não dá pra editar a receita de novo).
+    if (t._reaproveitado) return camposExistentes;
+
+    const disponiveis = (LW.INSUMO_RECEITA_OPTS || [])
+      .filter(o => o.categoria === 'custom' && !nomesAtuais.includes(o.nome));
+    const pickerAberto = _insumoCustomPickerAberto.has(i);
+
+    let picker = '';
+    if (pickerAberto) {
+      picker = disponiveis.length ? `
+        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:center;margin-top:4px">
+          <select class="form-input" id="insumo-custom-select-${i}" style="flex:1">
+            ${disponiveis.map(o => `<option value="${o.nome.replace(/"/g, '&quot;')}">${o.nome}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-ghost" onclick="LWOp.confirmarAdicionarInsumoCustom(${i})">Adicionar</button>
+          <button type="button" class="btn btn-ghost" onclick="LWOp.toggleInsumoCustomPicker(${i})">Cancelar</button>
+        </div>` : `
+        <div style="grid-column:1/-1;color:var(--text-3);font-size:.8rem;margin-top:4px">
+          Nenhum insumo Custom disponível — cadastre em Configurações → Insumos de Receitas.
+        </div>`;
+    }
+
+    return `
+      ${camposExistentes}
+      <div style="grid-column:1/-1;display:flex;align-items:center">
+        ${!pickerAberto ? `<button type="button" onclick="LWOp.toggleInsumoCustomPicker(${i})"
+            style="background:none;border:1px dashed var(--border);color:var(--text-2);border-radius:var(--radius);
+                   padding:8px 14px;cursor:pointer;font-size:.82rem">+ Adicionar insumo</button>` : ''}
+      </div>
+      ${picker}`;
+  }
+
   function renderCampoInsumo(t, i, fieldKey, label, step, decimais, placeholder) {
     const insumo = t[fieldKey] || { original: '', ajustes: [] };
     const isResultado = fieldKey && (fieldKey.includes('densidade') || fieldKey.includes('flow'));
@@ -2532,6 +2688,7 @@
             ${renderCampoInsumo(t, i, 'superplast_real', 'Superplast. (kg)', '0.001', 2, 'kg', t._reaproveitado)}
             ${renderCampoInsumo(t, i, 'incorporador_real', 'Incorp. de Ar (kg)', '0.001', 2, 'kg', t._reaproveitado)}
             ${renderCampoTempoBatida(t, i, t._reaproveitado)}
+            ${renderInsumosCustomSecao(t, i)}
           </div>
           <div id="ac-relacao-${i}">${renderRelacaoAC(t)}</div>
 
@@ -2705,7 +2862,20 @@
         }
         return {
           ...t,
-          operacoes
+          operacoes,
+          // Insumos CUSTOM (Fase 5, ver PLANO-insumos-dinamicos-receitas.md)
+          // — diferente dos 5 Padrão (spread acima já manda {original,
+          // ajustes}, que o servidor sabe desmembrar via extrairOriginal),
+          // db.salvarInsumosCustomDoTraco espera um mapa CHATO
+          // {nome: valor} — só o original (os ajustes já foram gravados
+          // ao vivo, um por um, via /registrar-ajuste-traco, igual os
+          // Padrão). Achata aqui, sobrescrevendo o {original,ajustes}
+          // que o spread de "...t" acima colocou.
+          insumos_custom: Object.fromEntries(
+            Object.entries(t.insumos_custom || {})
+              .filter(([, v]) => v && v.original !== '' && v.original !== null && v.original !== undefined)
+              .map(([nome, v]) => [nome, Number(v.original)])
+          ),
         };
       }),
     };
@@ -3332,6 +3502,52 @@
         const el = document.getElementById(`ac-relacao-${i}`);
         if (el) el.innerHTML = renderRelacaoAC(state.tracos[i]);
       }
+    },
+    // Insumos CUSTOM (Fase 5, ver PLANO-insumos-dinamicos-receitas.md) —
+    // mesmo padrão de updateInsumoOriginal acima, mas em t.insumos_custom[nome].
+    updateInsumoCustomOriginal(i, nome, value) {
+      const t = state.tracos[i];
+      if (!t) return;
+      if (!t.insumos_custom) t.insumos_custom = {};
+      let insumo = t.insumos_custom[nome];
+      if (!insumo || typeof insumo !== 'object' || !('ajustes' in insumo)) {
+        insumo = { original: value, ajustes: [] };
+        t.insumos_custom[nome] = insumo;
+      } else {
+        insumo.original = value;
+      }
+      persist();
+    },
+    // Abre/fecha o picker "+ Adicionar insumo" pro traço `i`.
+    toggleInsumoCustomPicker(i) {
+      if (_insumoCustomPickerAberto.has(i)) _insumoCustomPickerAberto.delete(i);
+      else _insumoCustomPickerAberto.add(i);
+      renderTracos();
+    },
+    // Confirma a escolha do <select> do picker e adiciona o insumo ao traço
+    // — campo nasce vazio (obrigatório, ver tracoCompleto) até a pessoa
+    // preencher o valor.
+    confirmarAdicionarInsumoCustom(i) {
+      const select = document.getElementById(`insumo-custom-select-${i}`);
+      const nome = select && select.value;
+      if (!nome) return;
+      const t = state.tracos[i];
+      if (!t) return;
+      if (!t.insumos_custom) t.insumos_custom = {};
+      t.insumos_custom[nome] = { original: '', ajustes: [] };
+      _insumoCustomPickerAberto.delete(i);
+      persist();
+      renderTracos();
+    },
+    // Desfaz a adição de um insumo Custom — só chamável antes do primeiro
+    // ajuste (botão nem aparece depois, ver renderCampoInsumoCustom), mas
+    // a função em si não reforça essa trava: quem decide é o render.
+    removerInsumoCustom(i, nome) {
+      const t = state.tracos[i];
+      if (!t || !t.insumos_custom) return;
+      delete t.insumos_custom[nome];
+      persist();
+      renderTracos();
     },
     removeTraco,
     // Registro de Traço Descartado (Perda) — ver README, passo 3 do plano.
