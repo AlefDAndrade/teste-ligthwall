@@ -347,6 +347,11 @@ db.migrarContadorTracosSeNecessario(DB_DIR);
 // (a mais complexa; depende da Fase 2 já ter rodado, pra "operacoes" já
 // existir quando os usos forem conferidos — por isso vem por último).
 db.migrarRelatorioInjecaoSeNecessario(DB_DIR);
+// Insumos de Receitas dinâmicos — Fase 1 (ver README, "Insumos de
+// Receitas dinâmicos — plano"). Precisa vir DEPOIS da migração acima:
+// depende de "tracos"/"ajustes" já estarem preenchidos (seja de uma
+// instalação SQL nativa, seja recém-migrados do JSON legado agora mesmo).
+db.migrarInsumosFixosParaDinamico();
 
 // Migração da fila de avaliação (ver lib/fila-avaliacao.js) — precisa vir
 // DEPOIS das migrações do db.js acima: recalcula a partir de "operacoes"/
