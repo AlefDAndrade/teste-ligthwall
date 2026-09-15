@@ -2447,6 +2447,12 @@
     const temAjustes = insumo.ajustes && insumo.ajustes.length > 0;
     const total = totalInsumo(insumo, 'insumo_custom');
     const valorExibido = total !== '' ? parseFloat(total).toFixed(2) : '';
+    // Mesma fórmula "9,50 + 0,50 = 10,00" que os 5 Padrão já mostram (ver
+    // renderCampoInsumo) — faltou na primeira versão desta função, só
+    // tinha o badge do total. fieldKey 'insumo_custom' (mesmo sentinel de
+    // totalInsumo, acima) garante que formatAjustesDisplay nunca trata
+    // como "isResultado" (Densidade/Flow, que usa "→" em vez de "+").
+    const displayAjustes = temAjustes ? formatAjustesDisplay(insumo, 2, 'insumo_custom') : '';
     // Só pode desfazer a adição ANTES de qualquer ajuste — depois do
     // primeiro ajuste, esse insumo já faz parte do histórico do traço
     // (mesma trava de "readonly" que os 5 Padrão já têm), então some o
@@ -2470,6 +2476,7 @@
         </div>
         ${temAjustes ? `
           <div class="insumo-ajustes-display">
+            <span class="ajustes-formula">${displayAjustes}</span>
             <span class="ajustes-total-badge">Total: ${valorExibido || '—'}</span>
           </div>` : ''}
       </div>`;
