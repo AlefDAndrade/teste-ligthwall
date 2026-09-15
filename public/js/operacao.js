@@ -2221,8 +2221,21 @@
    * Pergunta se houve sobra no ÚLTIMO traço e persiste sobra.json se sim.
    * @param {object} record — registro já salvo da operação
    */
-  function _perguntarSobraAoFinalizar(record) {
-    const tracos = record.tracos || [];
+  function _perguntarSobraAoFinalizar(record, tracosOriginais) {
+    // `tracosOriginais` (novo parâmetro) — os traços em memória ANTES do
+    // achatamento pra envio E antes de resetState() limpar `state` (ver
+    // chamada desta função, mais abaixo: resetState() já rodou por lá
+    // antes desta função, então `state.tracos` não pode mais ser lido
+    // aqui — precisa vir capturado de fora). BUG CORRIGIDO (relatado:
+    // "insumos custom vindo vazios" na sobra): antes, esta função lia
+    // record.tracos — o fullRecord já ACHATADO pra envio ao servidor
+    // (ver finalizarInjecao), onde insumos_custom vira {nome:
+    // valorOriginal} (número simples — os ajustes já foram registrados
+    // ao vivo à parte). A sobra precisa do formato RICO
+    // {original, ajustes} de cada campo (mesmo que os 5 Padrão, que não
+    // sofrem esse achatamento) — por isso usa tracosOriginais aqui.
+    // record.id continua vindo do fullRecord (é só o id da operação).
+    const tracos = tracosOriginais || [];
     if (tracos.length === 0) return;
 
     const ultimoTraco = tracos[tracos.length - 1];
@@ -2939,6 +2952,11 @@
       return;
     }
 
+    // Captura a referência ANTES de resetState() limpar `state` (logo
+    // abaixo) — precisa sobreviver até a pergunta de sobra, depois do
+    // reset (ver comentário de _perguntarSobraAoFinalizar).
+    const tracosOriginaisParaSobra = state.tracos;
+
     Promise.all([
       LW.registrarOperacao(historyRecord, state.modo_teste),
       LW.registrarRelatorioInjecao(fullRecord, state.modo_teste),
@@ -2951,7 +2969,7 @@
         resetState();
         renderAll();
         // Pergunta sobre sobra ANTES de mostrar o modal de sucesso
-        _perguntarSobraAoFinalizar(fullRecord);
+        _perguntarSobraAoFinalizar(fullRecord, tracosOriginaisParaSobra);
       })
       .catch(err => {
         // TypeError é o que o fetch() do navegador lança quando não
