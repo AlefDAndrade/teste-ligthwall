@@ -259,6 +259,24 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    reescreve), mas um insumo genuinamente novo agora consegue entrar.
    Teste: `test/insumos-dinamicos-fase3.test.js` ("BUG CORRIGIDO: insumo
    Custom adicionado... depois que o traço já existe").
+4. **Relatório de Injeção (dashboard.js) — painel de detalhe ganha
+   Custom.** Pedido explícito numa conversa, revendo a decisão original
+   de deixar `dashboard.js` inteiramente de fora do escopo (Fase 6). A
+   TABELA principal (colunas fixas do `<tr>`) continua só com os 5
+   Padrão — decisão mantida, ainda é papel da Consulta de Insumos por
+   Traço mostrar Custom em tabela. O que mudou foi o **painel expansível
+   de detalhe** de cada linha (`colspan`, sem colunas fixas):
+   - `_construirTabelaAjustesPorEvento`: coluna dinâmica por nome de
+     Custom usado em qualquer ajuste do traço (união, mesmo critério já
+     usado pros 5 Padrão ali — "só mostra coluna com valor").
+   - `_tracoTemAjuste` (filtro "Apenas com reajustes"): passa a
+     considerar ajustes em Custom também.
+   - `_construirDetalheRelatorio` (fallback pra dado anterior à migração
+     de eventos): itera `l.insumos_custom` igual aos 5 Padrão.
+   Teste: `test/insumos-dinamicos-relatorio-injecao.test.js` (estrutural,
+   mesmo padrão de `atalho-ctrl-clique-consulta-tracos.test.js` pra este
+   arquivo — a lógica de dado já está coberta pelas Fases 2/3/6, o risco
+   novo é só a integração no render).
 
 ## Testes (visão geral, cresce por fase)
 
