@@ -344,6 +344,22 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    `calcularIndicadores` direto com fixtures — Custom aparece em CEP,
    consumo planejado×real, ranking de ajustes, tendência mensal e pode
    até ganhar o card de "maior desvio").
+8. **BUG CORRIGIDO: insumo Custom com valor só via AJUSTE não aparecia
+   na Receita Utilizada da Análise Focada.** Relatado: "aparece nos
+   ajustes, mas não na receita". Causa: diferente de `rowParaTraco`
+   (`lib/db/tracos.js`, usado por Consulta de Traços/Relatório de
+   Injeção), que já unia nomes de `traco_insumos` E `ajuste_insumos` pra
+   decidir quais insumos Custom mostrar (ver `montarInsumosCustom`),
+   `detalheOperacao` (`lib/db/operacoes-qualidade.js`, usado só pela
+   Análise Focada) olhava SÓ `traco_insumos` — um insumo Custom cujo
+   campo "original" nunca foi preenchido no formulário principal (só
+   ganhou valor via "Ajustar Receita") nunca teria linha em
+   `traco_insumos`, então a chave `insumos_custom` do traço nem existia,
+   mesmo com o ajuste visível do lado. Corrigido: `detalheOperacao`
+   agora une os nomes das duas tabelas, igual `rowParaTraco` já fazia —
+   um Custom só-por-ajuste aparece com `original: null`.
+   Teste: `test/insumos-dinamicos-fase6.test.js` ("BUG CORRIGIDO: insumo
+   Custom com valor só via AJUSTE...").
 
 ## Testes (visão geral, cresce por fase)
 
