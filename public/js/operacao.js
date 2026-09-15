@@ -791,17 +791,23 @@
   // original + todos os ajustes. Densidade e Flow são remedição: cada
   // ajuste SOBRESCREVE o valor anterior — vale o último valor registrado.
   function totalInsumo(insumo, fieldKey) {
-    const temOriginal = insumo.original !== '' && insumo.original !== null;
-    const temAjustes = insumo.ajustes && insumo.ajustes.length > 0;
+    // Blindagem (bug relatado: "Utilizar Sobra" travava sem erro visível)
+    // — `ajustes` pode faltar ou vir malformado em dados antigos/encadeados
+    // (ex: sobra reaproveitada de outra sobra); trata como [] em vez de
+    // deixar `.reduce`/`.length` estourar com "Cannot read properties of
+    // undefined" e travar o render inteiro no meio do caminho.
+    const ajustes = Array.isArray(insumo?.ajustes) ? insumo.ajustes : [];
+    const temOriginal = insumo?.original !== '' && insumo?.original !== null && insumo?.original !== undefined;
+    const temAjustes = ajustes.length > 0;
     if (!temOriginal && !temAjustes) return '';
 
     const isResultado = fieldKey && (fieldKey.includes('densidade') || fieldKey.includes('flow'));
     if (isResultado) {
-      if (temAjustes) return insumo.ajustes[insumo.ajustes.length - 1];
+      if (temAjustes) return ajustes[ajustes.length - 1];
       return parseFloat(insumo.original) || 0;
     }
 
-    return insumo.ajustes.reduce((s, a) => s + a, parseFloat(insumo.original) || 0);
+    return ajustes.reduce((s, a) => s + a, parseFloat(insumo.original) || 0);
   }
 
   // Migra traços antigos (campos _real simples) para nova estrutura com ajustes
@@ -1099,6 +1105,19 @@
     const prevTraco = state.tracos[state.tracos.length - 1];
     const sugeridoIni = prevTraco?.berco_fim ? String(Number(prevTraco.berco_fim) + 1) : '1';
 
+    // Normaliza um campo de insumo {original, ajustes} vindo da sobra —
+    // defesa em profundidade (mesmo raciocínio de totalInsumo, acima):
+    // uma sobra reaproveitada de OUTRA sobra pode ter encadeado um campo
+    // malformado (sem `ajustes`, por exemplo); garante a forma esperada
+    // ANTES de virar o state do traço, não só na hora de exibir.
+    const normalizarCampoInsumo = (campo) => {
+      if (!campo || typeof campo !== 'object') return { original: '', ajustes: [] };
+      return {
+        original: campo.original ?? '',
+        ajustes: Array.isArray(campo.ajustes) ? campo.ajustes : [],
+      };
+    };
+
     // Reconstrói o traço a partir dos dados persistidos na sobra
     const receita = sobra.receita || {};
     const traco = {
@@ -1108,15 +1127,18 @@
       berco_ini: sugeridoIni,
       berco_fim: '',
       // Receita carregada da sobra
-      cimento_real: receita.cimento_real || { original: '', ajustes: [] },
-      agua_real: receita.agua_real || { original: '', ajustes: [] },
-      eps_real: receita.eps_real || { original: '', ajustes: [] },
-      superplast_real: receita.superplast_real || { original: '', ajustes: [] },
-      incorporador_real: receita.incorporador_real || { original: '', ajustes: [] },
+      cimento_real: normalizarCampoInsumo(receita.cimento_real),
+      agua_real: normalizarCampoInsumo(receita.agua_real),
+      eps_real: normalizarCampoInsumo(receita.eps_real),
+      superplast_real: normalizarCampoInsumo(receita.superplast_real),
+      incorporador_real: normalizarCampoInsumo(receita.incorporador_real),
       // Insumos CUSTOM — carregados da sobra (já readonly, mesmo raciocínio
       // dos 5 Padrão acima: traço reaproveitado nunca reedita a receita).
-      insumos_custom: receita.insumos_custom || {},
-      tempo_batida: receita.tempo_batida || { original: '', ajustes: [] },
+      // Cada entrada também passa por normalizarCampoInsumo — mesma defesa.
+      insumos_custom: Object.fromEntries(
+        Object.entries(receita.insumos_custom || {}).map(([nome, campo]) => [nome, normalizarCampoInsumo(campo)])
+      ),
+      tempo_batida: normalizarCampoInsumo(receita.tempo_batida),
       // Flow e densidade carregados — o operador pode registrar o novo resultado medido
       densidade_insumo: (sobra.densidade !== undefined && sobra.densidade !== null)
         ? { original: String(sobra.densidade), ajustes: [] }
@@ -1238,13 +1260,27 @@
 
     document.getElementById('btn-utilizar-sobra').addEventListener('click', async () => {
       modal.remove();
-      // Garante que a base do contador diário esteja definida nesta operação,
-      // mesmo que o primeiro traço adicionado seja um reaproveitado de sobra.
-      await _garantirBaseNumTraco();
-      // Adiciona o traço reaproveitado ao state
-      _adicionarTracoDeSobra(sobra);
-      // Marca sobra como utilizada (em segundo plano para não travar a UI)
-      try { await LW.desativarSobra('utilizada', state.modo_teste); } catch (_) { }
+      // Blindagem contra falha silenciosa (relatada numa conversa: "clico e
+      // não acontece nada", sem eu conseguir reproduzir em teste) — se
+      // QUALQUER passo abaixo falhar, mostra um alerta explícito em vez de
+      // simplesmente não fazer nada; ajuda tanto o operador (sabe que
+      // precisa tentar de novo/chamar suporte) quanto a próxima investigação
+      // (a mensagem de erro fica visível, não só no console).
+      try {
+        // Garante que a base do contador diário esteja definida nesta operação,
+        // mesmo que o primeiro traço adicionado seja um reaproveitado de sobra.
+        await _garantirBaseNumTraco();
+        // Adiciona o traço reaproveitado ao state
+        _adicionarTracoDeSobra(sobra);
+        // Marca sobra como utilizada (em segundo plano para não travar a UI)
+        try { await LW.desativarSobra('utilizada', state.modo_teste); } catch (_) { }
+      } catch (err) {
+        console.error('[LW] Falha ao utilizar sobra:', err);
+        LW.mostrarAlerta(
+          `Não consegui carregar a sobra deste traço (${err.message || 'erro desconhecido'}). Tente de novo — se persistir, use "+ Criar Novo Traço" e avise o suporte.`,
+          { tipo: 'erro' }
+        );
+      }
     });
 
     document.getElementById('btn-criar-novo-traco').addEventListener('click', () => {
