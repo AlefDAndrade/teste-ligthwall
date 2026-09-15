@@ -375,6 +375,22 @@
     return ajustes.reduce((soma, a) => soma + (parseFloat(a[campo]) || 0), isNaN(base) ? 0 : base);
   }
 
+  // Insumos CUSTOM (ver PLANO-insumos-dinamicos-receitas.md) — mesma soma
+  // de _afTotalInsumo, acima, mas pra um insumo identificado por NOME (não
+  // um campo fixo): a base vem de traco.insumos_custom[nome] (pode ser
+  // null — nunca preenchido, só apareceu via ajuste) e cada ajuste pode
+  // ou não ter esse nome dentro de a.insumos_custom. Diferente dos 5
+  // Padrão (que a grade mostra só o ORIGINAL, de propósito, com os
+  // ajustes listados à parte, abaixo) — pedido explícito numa conversa:
+  // pro Custom, a grade mostra o TOTAL (original+ajustes), pra bater com
+  // o que dashboards/tabela/CEP já mostram desde a correção anterior
+  // (sem isso, o valor aqui parecia "não somar" o ajuste).
+  function _afTotalInsumoCustom(traco, nome) {
+    const base = parseFloat(traco.insumos_custom?.[nome]);
+    const ajustes = Array.isArray(traco.ajustes) ? traco.ajustes : [];
+    return ajustes.reduce((soma, a) => soma + (parseFloat(a.insumos_custom?.[nome]) || 0), isNaN(base) ? 0 : base);
+  }
+
   // Painel avaliado que caiu na posição (pallet+posicao) informada —
   // mesmo cruzamento que _afPaleteDoBerco já faz pra desenhar o mini
   // palete (acima), só que aqui contra avaliacao.paineis em vez de só
@@ -484,7 +500,7 @@
         // — mesma grade dos Padrão acima, em número variável; só aparece
         // o que ESTE traço de fato usa (ver detalheOperacao,
         // lib/db/operacoes-qualidade.js).
-        ...Object.entries(traco.insumos_custom || {}).map(([nome, valor]) => [nome, _fmtKg(valor), 'kg']),
+        ...Object.entries(traco.insumos_custom || {}).map(([nome]) => [nome, _fmtKg(_afTotalInsumoCustom(traco, nome)), 'kg']),
       ];
       // Relação A/C fora da faixa ideal (0,35–0,40) ganha destaque em
       // vermelho — mesmo critério de LW.classificarRelacaoAC (data.js),
@@ -813,7 +829,7 @@
         // Insumos CUSTOM (Fase 6) — mesmo critério do modal de detalhe de
         // berço, acima (_afPainelDoBerco/receitaHtml): só entra o que
         // este traço de fato tem.
-        ...Object.entries(t.insumos_custom || {}).map(([nome, valor]) => [nome, _fmtKg(valor), 'kg']),
+        ...Object.entries(t.insumos_custom || {}).map(([nome]) => [nome, _fmtKg(_afTotalInsumoCustom(t, nome)), 'kg']),
       ];
       const infoBercos = _bercosEnchidosDoTraco(bercosVisuais, t.berco_inicio, t.berco_finalizacao);
       camposReceita.push(['Berços Enchidos', infoBercos ? `${infoBercos.enchidos}/${infoBercos.total}` : null, '']);
@@ -2925,6 +2941,12 @@ ${_afScriptAjustePaginaUnica()}
     // original, ignorando ajustes feitos depois (ver comentário de
     // _afTotalInsumo, acima).
     totalInsumo: _afTotalInsumo,
+    // Exposto só pra teste (ver test/insumos-dinamicos-analise-focada-total.test.js)
+    // — mesma regressão de totalInsumo, acima, mas pra insumos Custom:
+    // "Receita Utilizada" mostrava só o original (nunca somava o ajuste),
+    // dando a impressão de que o ajuste "não tinha efeito" — ver
+    // comentário de _afTotalInsumoCustom, acima.
+    totalInsumoCustom: _afTotalInsumoCustom,
     // Expostos só pra teste (ver test/analise-focada-berco-personalizado-separado.test.js)
     // — regressão do bug relatado: berços de Montagem Personalizada com
     // "🔀 Berços Separados" (um tipo por lado) apareciam cinza na grade

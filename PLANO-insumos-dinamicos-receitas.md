@@ -384,6 +384,27 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    autorizado, bateria/montagem/timer, "+", "Ajustar Receita", clique no
    botão) e confere tanto o payload capturado quanto o dado final salvo
    no servidor.
+10. **Análise Focada — "Receita Utilizada" não somava o ajuste do
+    Custom.** Relatado com print de tela: Traço com ajuste em "Fibra" e
+    "Cerragem" (+3,00kg em cada), mas a grade principal continuava
+    mostrando só o original — dando a impressão de que o ajuste "não
+    tinha efeito" ali (mesmo aparecendo certo na lista de ajustes, logo
+    abaixo). Mesma classe de bug já corrigida antes pra Relação A/C (ver
+    item de teste `analise-focada-relacao-ac.test.js`, década anterior
+    desta feature) — a Análise Focada usava `traco.insumos_custom[nome]`
+    direto (só o original, nunca somado com
+    `traco.ajustes[i].insumos_custom[nome]`). **Decisão tomada nesta
+    correção:** diferente dos 5 Padrão (grade mostra só o ORIGINAL, de
+    propósito, com ajustes listados à parte) — pro Custom, a grade passa
+    a mostrar o TOTAL (original+ajustes), pra bater com o que
+    dashboards/tabela/CEP já mostram desde a correção anterior (item 9).
+    Corrigido com `_afTotalInsumoCustom` (nova, mesmo padrão de
+    `_afTotalInsumo` já existente pros 5 Padrão), usada nos 2 lugares que
+    montam a grade "Receita Utilizada" (modal de berço e listagem de
+    traços).
+    Teste: `test/insumos-dinamicos-analise-focada-total.test.js` (4
+    testes: soma exata do cenário relatado, múltiplos ajustes, original
+    null tratado como 0, ajuste que não mexeu no insumo não soma à toa).
 
 ## Testes (visão geral, cresce por fase)
 
