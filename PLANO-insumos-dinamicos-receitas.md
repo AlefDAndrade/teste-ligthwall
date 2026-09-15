@@ -25,9 +25,13 @@ formulário de traço.
    ele vira campo obrigatório só pra esse traço (não afeta outros traços).
 4. **Custom pode ser removido do formulário antes de salvar** — um "x" ao
    lado do campo desfaz a adição.
-5. **Uma vez que o traço é salvo com um Custom, ele passa a valer pra TODO
-   ajuste/reaproveitamento futuro desse mesmo traço** (não varia ajuste a
-   ajuste — é uma característica do traço, não da rodada).
+5. ~~Uma vez que o traço é salvo com um Custom, ele passa a valer pra TODO
+   ajuste/reaproveitamento futuro desse mesmo traço (obrigatório de
+   novo em cada ajuste)~~ — **revisto depois da Fase 6, em uso real**: no
+   modal "Ajustar Receita", um insumo Custom do traço é **opcional**,
+   igual os 5 Padrão ali — preenche só se estiver sendo ajustado agora,
+   não precisa repetir todo ajuste. (A obrigatoriedade continua valendo
+   só na PRIMEIRA vez, no formulário principal — ver decisão 3.)
 6. **Remover um Custom do catálogo não apaga histórico.** Traços antigos que
    já usaram esse insumo continuam com o dado gravado normalmente; ele só
    some da lista do "+" pra traços NOVOS.
@@ -156,11 +160,11 @@ de traço) sem regressão.
   insumo em `insumos_custom` entra na validação de obrigatório, igual os
   5 Padrão — é isso que faz o "+" virar de fato um campo obrigatório.
 - Modal "Ajustar Receita" (`_mostrarModalAjusteReceita`/
-  `_salvarAjusteReceita`): ganha uma seção **obrigatória** com 1 campo
-  por Custom que o traço já tem (diferente dos 5 Padrão ali, que
-  continuam opcionais) — decisão tomada na conversa ("vale pro traço
-  inteiro, todo ajuste pede de novo"). Recusa salvar (com mensagem
-  citando o nome do insumo) se algum ficar em branco.
+  `_salvarAjusteReceita`): ganha uma seção com 1 campo por Custom que o
+  traço já tem. **Correção pós-Fase-6** (uso real revelou que a decisão 5
+  original — obrigatório em todo ajuste — atrapalhava): agora é
+  **opcional**, igual os 5 Padrão ali — preenche só o que foi ajustado,
+  não bloqueia salvar se ficar em branco.
 - Payload final (`finalizarInjecao`): achata `insumos_custom` de
   `{nome: {original, ajustes}}` pra `{nome: valorOriginal}` antes de
   enviar — formato que `db.salvarInsumosCustomDoTraco` (Fase 2/3) espera

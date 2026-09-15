@@ -16,9 +16,9 @@
 //      ajuste) — o traço volta a ficar completo sem ele.
 //   5. Depois de 1 ajuste registrado nesse insumo Custom, o "x" some do
 //      render (não dá mais pra desfazer a adição).
-//   6. O modal "Ajustar Receita" exige (obrigatório) o valor de todo
-//      insumo Custom que o traço já tem — diferente dos 5 Padrão, que
-//      continuam opcionais ali.
+//   6. O modal "Ajustar Receita" trata um insumo Custom do traço como
+//      OPCIONAL (mesmo critério dos 5 Padrão ali) — só some se for
+//      preenchido, não bloqueia salvar se ficar em branco.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -196,24 +196,21 @@ test('depois de 1 ajuste real (via modal "Ajustar Receita"), o botão de remover
   assert.ok(!lista.includes('removerInsumoCustom'), 'com 1 ajuste já registrado, o botão de remover não deveria mais aparecer');
 });
 
-test('modal "Ajustar Receita" exige o valor de "Fibra" (obrigatório) — Padrão continuam opcionais', async () => {
+test('modal "Ajustar Receita" trata "Fibra" como opcional — salva mesmo em branco, só com tempo de batida', async () => {
   window.LWOp.abrirAjusteReceita(0);
   await new Promise(r => setTimeout(r, 150));
 
   const modal = document.getElementById('modal-ajuste-receita');
   assert.ok(modal, 'modal deveria ter aberto');
   assert.ok(modal.innerHTML.includes('Fibra'), 'modal deveria ter um campo pra Fibra');
-  assert.ok(modal.innerHTML.includes('obrigatório'), 'a seção de insumos do traço deveria estar marcada como obrigatória');
+  assert.ok(modal.innerHTML.includes('opcional'), 'a seção de insumos do traço deveria estar marcada como opcional, não obrigatória');
+  assert.ok(!modal.innerHTML.includes('obrigatório — este traço'), 'não deveria mais existir o texto antigo de obrigatoriedade');
 
-  // Preenche só o tempo de batida (obrigatório de sempre) — deixa "Fibra"
-  // em branco de propósito, pra confirmar que o salvar recusa.
+  // Preenche só o tempo de batida — deixa "Fibra" em branco de propósito;
+  // diferente do comportamento antigo, isso NÃO deveria bloquear o salvar.
   document.getElementById('ar-m-up').click();
   document.getElementById('ar-btn-salvar').click();
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 150));
 
-  const erro = document.getElementById('ar-erro');
-  assert.equal(erro.style.display, 'block', 'deveria mostrar erro por "Fibra" não estar preenchida');
-  assert.ok(erro.textContent.includes('Fibra'), 'a mensagem de erro deveria citar "Fibra" especificamente');
-
-  document.getElementById('ar-btn-cancelar').click();
+  assert.equal(document.getElementById('modal-ajuste-receita'), null, 'modal deveria ter fechado — Fibra em branco não bloqueia mais o salvar');
 });
