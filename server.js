@@ -18,7 +18,7 @@ const logger = require('./lib/logger');
 // logo abaixo pelas próprias rotas ainda não extraídas deste arquivo, e
 // todayBrasiliaServer/horaMinutoBrasiliaServer são injetadas em
 // notificacoesPush poucas linhas depois.
-const { todayBrasiliaServer, horaMinutoBrasiliaServer, numOuNulo } = require('./lib/tempo.js');
+const { todayBrasiliaServer, horaMinutoBrasiliaServer, agoraBrasiliaISOServer, numOuNulo } = require('./lib/tempo.js');
 
 const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
 // HOST: por padrão só escuta em localhost (127.0.0.1) — quando há um
@@ -293,8 +293,8 @@ const rotasOperacaoAndamento = require('./lib/rotas/operacao-andamento.js')({
 });
 const rotasAutenticacao = require('./lib/rotas/autenticacao.js')({ fs, path, DB_DIR, SECURITY_PATH, auth, sessao });
 const rotasImportacao = require('./lib/rotas/importacao.js')({ db, podeUsarItem, negarAcesso, numOuNulo });
-const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica });
-const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo });
+const rotasLeituraEAjustes = require('./lib/rotas/leitura-e-ajustes.js')({ fs, path, db, DB_DIR, dirParaModoTeste, broadcastLeituraAutomatica, agoraBrasiliaISOServer });
+const rotasEdicao = require('./lib/rotas/edicao.js')({ db, podeEditarArea, negarEdicao, numOuNulo, agoraBrasiliaISOServer });
 const rotasRegistroOperacao = require('./lib/rotas/registro-operacao.js')({
   db, fs, path, dirParaModoTeste,
   podeControlarOperacao, negarControleDeOperacao,
