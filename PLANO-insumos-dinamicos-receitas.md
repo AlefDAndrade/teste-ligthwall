@@ -405,6 +405,29 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
     Teste: `test/insumos-dinamicos-analise-focada-total.test.js` (4
     testes: soma exata do cenário relatado, múltiplos ajustes, original
     null tratado como 0, ajuste que não mexeu no insumo não soma à toa).
+11. **"Utilizar Sobra" travava sem erro visível quando a receita salva
+    tinha um campo malformado.** Relatado ("clico e não acontece nada")
+    — não reproduzido com uma sobra "normal" mesmo depois de bastante
+    tentativa; a investigação achou uma causa raiz plausível e concreta
+    de qualquer forma: `totalInsumo()` (usada em TODO campo de receita,
+    inclusive os herdados de uma sobra) acessava `insumo.ajustes` sem
+    checar se era de fato um array — um campo com `original` mas SEM
+    `ajustes` (cenário mais provável: sobra reaproveitada de OUTRA
+    sobra, encadeamento) estourava "Cannot read properties of
+    undefined" no meio do render do traço, sem alerta nenhum pro
+    operador. Corrigido em 2 camadas (defesa em profundidade):
+    - `totalInsumo()`: trata `ajustes` ausente/não-array como `[]` em
+      vez de estourar.
+    - `_adicionarTracoDeSobra()`: normaliza CADA campo de insumo (Padrão
+      e Custom) ao carregar da sobra (`normalizarCampoInsumo`),
+      garantindo `{original, ajustes:[]}` mesmo com dado malformado.
+    - Além disso, o clique em "Utilizar Sobra" agora está protegido por
+      try/catch com um alerta explícito em caso de falha — antes, uma
+      exceção nesse fluxo específico não tinha nenhum tratamento, dando
+      a impressão de "nada acontece".
+    Teste: `test/insumos-dinamicos-sobra-malformada.test.js` (força o
+    campo malformado — Padrão e Custom — e confirma que completa sem
+    erro, com o traço carregado corretamente).
 
 ## Testes (visão geral, cresce por fase)
 
