@@ -1373,6 +1373,14 @@
     const colunasInsumo = _CAMPOS_AJUSTE_EVENTO.filter(def =>
       eventos.some(aj => aj && aj[def.nome] !== undefined && aj[def.nome] !== null && aj[def.nome] !== ''));
 
+    // Insumos CUSTOM (ver PLANO-insumos-dinamicos-receitas.md) — mesmo
+    // critério das colunas fixas acima ("só entra se algum ajuste deste
+    // traço específico usou"), mas em número variável: união de todos os
+    // nomes que aparecem em QUALQUER evento[i].insumos_custom.
+    const nomesCustom = [...new Set(
+      eventos.flatMap(aj => Object.keys(aj?.insumos_custom || {}))
+    )];
+
     const linhas = [];
     for (let i = 0; i < maxLinhas; i++) {
       const aj = eventos[i];
@@ -1382,6 +1390,12 @@
         const num = parseFloat(v);
         const texto = def.formatador ? def.formatador(num) : `${_fmtNumDetalhe(num)}${def.unidade || ''}`;
         return `<td class="mono">${texto}</td>`;
+      }).join('');
+
+      const celulasCustom = nomesCustom.map(nome => {
+        const v = aj?.insumos_custom?.[nome];
+        if (v === undefined || v === null || v === '') return `<td class="relatorio-ajusteN-vazio">—</td>`;
+        return `<td class="mono">${_fmtNumDetalhe(parseFloat(v))}kg</td>`;
       }).join('');
 
       const celulaDensidade = densidadeLeituras.length
@@ -1396,6 +1410,7 @@
           <td class="relatorio-ajusteN-num">${i + 1}º ajuste</td>
           <td class="relatorio-ajusteN-quando">${aj?.registrado_em ? LW.formatDateTime(aj.registrado_em) : '—'}</td>
           ${celulasInsumo}
+          ${celulasCustom}
           ${celulaDensidade}
           ${celulaFlow}
         </tr>`);
@@ -1408,6 +1423,7 @@
             <th>Ajuste</th>
             <th>Quando</th>
             ${colunasInsumo.map(def => `<th>${def.label}</th>`).join('')}
+            ${nomesCustom.map(nome => `<th>${LW.escaparHtml(nome)}</th>`).join('')}
             ${densidadeLeituras.length ? '<th>Densidade</th>' : ''}
             ${flowLeituras.length ? '<th>Flow</th>' : ''}
           </tr>
@@ -1453,6 +1469,14 @@
       .filter(def => !def.resultado)
       .map(def => _linhaDetalheCampo(def, l[def.campo]))
       .filter(Boolean);
+    // Insumos CUSTOM (ver PLANO-insumos-dinamicos-receitas.md) — mesmo
+    // fallback, mas em número variável; `l.insumos_custom[nome]` já vem
+    // no mesmo formato {original, ajustes} dos 5 Padrão (ver rowParaTraco,
+    // lib/db/tracos.js), então reaproveita _linhaDetalheCampo direto.
+    Object.entries(l.insumos_custom || {}).forEach(([nome, valorBruto]) => {
+      const item = _linhaDetalheCampo({ campo: nome, label: nome, unidade: 'kg', resultado: false }, valorBruto);
+      if (item) itens.push(item);
+    });
 
     if (!itens.length) {
       return `<div class="relatorio-ajuste-vazio">Nenhum reajuste de receita foi registrado para este traço — os valores aplicados na injeção foram exatamente os planejados.</div>`;
@@ -1466,10 +1490,15 @@
   // pelo filtro rápido "Apenas com reajustes". Usa a mesma lista de campos
   // do painel de detalhamento, então sempre fica em sincronia com ele.
   function _tracoTemAjuste(l) {
-    return _CAMPOS_DETALHE_RELATORIO.some(def => {
+    const temAjusteFixo = _CAMPOS_DETALHE_RELATORIO.some(def => {
       const v = l[def.campo];
       return v && typeof v === 'object' && Array.isArray(v.ajustes) && v.ajustes.length > 0;
     });
+    if (temAjusteFixo) return true;
+    // Insumos CUSTOM — mesmo critério acima, mas em número variável (ver
+    // PLANO-insumos-dinamicos-receitas.md).
+    return Object.values(l.insumos_custom || {}).some(v =>
+      v && typeof v === 'object' && Array.isArray(v.ajustes) && v.ajustes.length > 0);
   }
 
   // Abre/fecha a linha de detalhe associada a uma linha do Relatório de
@@ -1481,6 +1510,33 @@
     const estavaAberta = detalhe.style.display !== 'none';
     detalhe.style.display = estavaAberta ? 'none' : '';
     if (icone) icone.textContent = estavaAberta ? '▸' : '▾';
+  }
+
+  // Injeta/remove dinamicamente as colunas de insumo CUSTOM na tabela
+  // principal do Relatório de Injeção (ver PLANO-insumos-dinamicos-
+  // receitas.md) — pedido explícito numa conversa, revendo a decisão
+  // original de manter só os 5 Padrão nas colunas fixas. Diferente de
+  // _garantirColunasDinamicasTipo (Registro de Baterias, acima), que só
+  // CRESCE (tipo de placa novo nunca some): aqui a lista de nomes é
+  // recalculada em TODO render a partir dos traços atualmente visíveis
+  // (já filtrados) — então limpa as colunas custom do render anterior
+  // antes de reinserir, pra um filtro que esconde um traço Custom também
+  // esconder a coluna dele, e a tabela nunca acumular coluna "fantasma".
+  function _garantirColunasCustomRelatorio(nomes) {
+    const thead = document.querySelector('#relatorio-thead tr');
+    if (!thead) return;
+    thead.querySelectorAll('th[data-custom-col]').forEach(th => th.remove());
+
+    // Âncora: insere as colunas Custom logo ANTES de "Tempo de Batida" —
+    // mesma posição das <td> na linha (ver renderRelatorio, tdsCustom).
+    const thAncora = thead.querySelector('th[data-col="tempo_batida"]');
+    if (!thAncora) return;
+    nomes.forEach(nome => {
+      const th = document.createElement('th');
+      th.setAttribute('data-custom-col', '1');
+      th.textContent = nome;
+      thead.insertBefore(th, thAncora);
+    });
   }
 
   async function renderRelatorio() {
@@ -1509,6 +1565,18 @@
     if (f.expansao.size) linhas = linhas.filter(l => f.expansao.has(l.expansao));
     if (f.apenas_com_ajuste) linhas = linhas.filter(l => _tracoTemAjuste(l));
     document.getElementById('rel-count').textContent = linhas.length + ' registros';
+
+    // Insumos CUSTOM (ver PLANO-insumos-dinamicos-receitas.md) — união de
+    // todos os nomes usados por QUALQUER traço atualmente visível (já
+    // filtrado, acima) — colunas variam com o filtro aplicado, mesmo
+    // critério das colunas de Custom no painel de detalhe
+    // (_construirTabelaAjustesPorEvento). Precisa vir ANTES do "if
+    // (!linhas.length) return" pra garantir que a tabela some as colunas
+    // extras (via _garantirColunasCustomRelatorio) quando um filtro deixa
+    // a lista vazia, em vez de manter colunas "fantasma" do render anterior.
+    const nomesCustomTabela = [...new Set(linhas.flatMap(l => Object.keys(l.insumos_custom || {})))].sort();
+    _garantirColunasCustomRelatorio(nomesCustomTabela);
+    const colspanTotal = 17 + nomesCustomTabela.length;
 
     _ligarOrdenacaoTabela('relatorio-thead', _ordenacaoRelatorio, renderRelatorio);
     _atualizarSetaOrdenacao('relatorio-thead', _ordenacaoRelatorio);
@@ -1587,6 +1655,7 @@
         <td>${_valRel(l.eps_real)}</td>
         <td>${_valRel(l.superplast_real)}</td>
         <td>${_valRel(l.incorporador_real)}</td>
+        ${nomesCustomTabela.map(nome => `<td>${_valRel(l.insumos_custom?.[nome])}</td>`).join('')}
         <td>${(() => {
         let v = _valRel(l.tempo_batida, 'tempo_batida');
         if (v === '—') return '—';
@@ -1598,7 +1667,7 @@
       })()}</td>
       </tr>
       <tr class="relatorio-detalhe-row" id="detalhe-${rowId}" style="display:none">
-        <td colspan="17">${_construirDetalheRelatorio(l, mapaAjustesPorTraco.get(l.id_traco))}</td>
+        <td colspan="${colspanTotal}">${_construirDetalheRelatorio(l, mapaAjustesPorTraco.get(l.id_traco))}</td>
       </tr>
     `;
       }).join('');
