@@ -1,18 +1,21 @@
 // ─── test/insumos-dinamicos-relatorio-injecao.test.js ───────────────────────
 // Insumos de Receitas dinâmicos (ver PLANO-insumos-dinamicos-receitas.md) no
-// painel de detalhe do Relatório de Injeção (dashboard.js) — pedido feito
-// numa conversa depois da Fase 6 ("vamos para o relatório de traço"): a
-// tabela principal (colunas fixas) continua só com os 5 Padrão, de
-// propósito (decisão registrada no plano — é papel da Consulta de Insumos
-// por Traço mostrar Custom numa tabela). O que MUDA aqui é o painel
-// expansível de detalhe de cada linha (colspan, sem colunas fixas), que
-// ganha os insumos Custom:
-//   1. _construirTabelaAjustesPorEvento: coluna dinâmica por nome de
-//      insumo Custom usado em QUALQUER ajuste deste traço (união).
-//   2. _tracoTemAjuste (filtro "Apenas com reajustes"): também considera
-//      ajustes em insumos Custom, não só os 5 Padrão.
-//   3. _construirDetalheRelatorio (fallback, dado anterior à migração de
-//      eventos): itera l.insumos_custom igual aos 5 Padrão.
+// Relatório de Injeção (dashboard.js). Cobre 2 pedidos feitos em conversas
+// separadas, depois da Fase 6:
+//   1º pedido — painel expansível de detalhe de cada linha (colspan, sem
+//      colunas fixas):
+//      - _construirTabelaAjustesPorEvento: coluna dinâmica por nome de
+//        insumo Custom usado em QUALQUER ajuste deste traço (união).
+//      - _tracoTemAjuste (filtro "Apenas com reajustes"): também considera
+//        ajustes em insumos Custom, não só os 5 Padrão.
+//      - _construirDetalheRelatorio: itera l.insumos_custom igual aos
+//        5 Padrão.
+//   2º pedido — revendo a decisão original de manter a TABELA principal
+//      (colunas fixas) só com os 5 Padrão: agora ela também ganha 1
+//      coluna por insumo Custom usado por QUALQUER traço atualmente
+//      visível (já filtrado) — _garantirColunasCustomRelatorio injeta/
+//      remove os <th> dinamicamente a cada render, e renderRelatorio monta
+//      a célula correspondente + ajusta o colspan do painel de detalhe.
 //
 // Teste ESTRUTURAL (lê o código-fonte, sem boot da SPA inteira via jsdom)
 // — mesmo padrão já usado em
@@ -77,15 +80,19 @@ test('_construirDetalheRelatorio (fallback pré-migração): itera l.insumos_cus
   assert.match(corpo, /_linhaDetalheCampo\(\{ campo: nome, label: nome, unidade: 'kg', resultado: false \}, valorBruto\)/);
 });
 
-test('a tabela principal (colunas fixas do <tr>) continua só com os 5 Padrão — decisão de escopo do plano', () => {
-  // Não deveria ter nenhuma referência a insumos_custom na parte que
-  // monta as células FIXAS da linha principal (<td>${_valRel(l.cimento_real)}</td>
-  // etc.) — só no painel de detalhe (colspan), que é o que os testes
-  // acima cobrem. Ver PLANO-insumos-dinamicos-receitas.md, decisão de
-  // manter a tabela principal com colunas fixas.
-  const inicioLinhaFixa = DASHBOARD_JS.indexOf('<td>${_valRel(l.cimento_real)}</td>');
-  const fimLinhaFixa = DASHBOARD_JS.indexOf('</tr>', inicioLinhaFixa);
-  assert.ok(inicioLinhaFixa >= 0 && fimLinhaFixa > inicioLinhaFixa);
-  const trechoLinhaFixa = DASHBOARD_JS.slice(inicioLinhaFixa, fimLinhaFixa);
-  assert.ok(!trechoLinhaFixa.includes('insumos_custom'), 'a linha principal (colunas fixas) não deveria ganhar colunas de Custom');
+test('_garantirColunasCustomRelatorio: injeta 1 <th data-custom-col> por nome, antes de "Tempo de Batida"', () => {
+  const corpo = corpoDaFuncao(DASHBOARD_JS, '_garantirColunasCustomRelatorio');
+  assert.match(corpo, /th\.setAttribute\('data-custom-col', '1'\)/);
+  assert.match(corpo, /th\[data-col="tempo_batida"\]/, 'âncora deveria ser a coluna Tempo de Batida (posição das <td> na linha)');
+  assert.match(corpo, /querySelectorAll\('th\[data-custom-col\]'\)\.forEach\(th => th\.remove\(\)\)/, 'precisa limpar as colunas do render anterior antes de reinjetar (lista pode mudar com o filtro)');
+});
+
+test('renderRelatorio: monta nomesCustomTabela (união dos traços filtrados) e usa nas células e no colspan do detalhe', () => {
+  const corpo = corpoDaFuncao(DASHBOARD_JS, 'renderRelatorio');
+  assert.match(corpo, /nomesCustomTabela\s*=\s*\[\.\.\.new Set\(\s*linhas\.flatMap\(l => Object\.keys\(l\.insumos_custom \|\| \{\}\)\)/);
+  assert.match(corpo, /_garantirColunasCustomRelatorio\(nomesCustomTabela\)/);
+  assert.match(corpo, /colspanTotal\s*=\s*17 \+ nomesCustomTabela\.length/);
+  assert.match(corpo, /nomesCustomTabela\.map\(nome => `<td>\$\{_valRel\(l\.insumos_custom\?\.\[nome\]\)\}<\/td>`\)/,
+    'célula da tabela principal deveria reaproveitar _valRel, igual os 5 Padrão');
+  assert.match(corpo, /colspan="\$\{colspanTotal\}"/, 'colspan do painel de detalhe precisa crescer junto com as colunas custom');
 });

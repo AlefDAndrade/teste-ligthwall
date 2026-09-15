@@ -263,8 +263,9 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    Custom.** Pedido explícito numa conversa, revendo a decisão original
    de deixar `dashboard.js` inteiramente de fora do escopo (Fase 6). A
    TABELA principal (colunas fixas do `<tr>`) continua só com os 5
-   Padrão — decisão mantida, ainda é papel da Consulta de Insumos por
-   Traço mostrar Custom em tabela. O que mudou foi o **painel expansível
+   Padrão — decisão mantida NESTA rodada, ainda é papel da Consulta de
+   Insumos por Traço mostrar Custom em tabela *(revisto no item 5, logo
+   abaixo, na MESMA conversa)*. O que mudou foi o **painel expansível
    de detalhe** de cada linha (`colspan`, sem colunas fixas):
    - `_construirTabelaAjustesPorEvento`: coluna dinâmica por nome de
      Custom usado em qualquer ajuste do traço (união, mesmo critério já
@@ -273,6 +274,23 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
      considerar ajustes em Custom também.
    - `_construirDetalheRelatorio` (fallback pra dado anterior à migração
      de eventos): itera `l.insumos_custom` igual aos 5 Padrão.
+5. **Relatório de Injeção — a TABELA principal também ganha coluna de
+   Custom.** Pedido de seguida, na mesma conversa, revendo o item 4:
+   agora a tabela de colunas fixas também mostra 1 coluna por insumo
+   Custom usado por QUALQUER traço atualmente visível (já filtrado).
+   - `_garantirColunasCustomRelatorio` (nova): injeta/remove os `<th
+     data-custom-col>` no `<thead>` a cada render (union recalculada do
+     zero — ao contrário de `_garantirColunasDinamicasTipo`, do Registro
+     de Baterias, que só CRESCE, aqui a lista pode diminuir se um filtro
+     escender os traços que usavam aquele Custom). Posição: logo antes
+     de "Tempo de Batida".
+   - `renderRelatorio`: monta `nomesCustomTabela` (união pós-filtro),
+     chama a função acima, gera 1 `<td>` por nome (reaproveitando
+     `_valRel`, igual os 5 Padrão) e ajusta o `colspan` do painel de
+     detalhe (`17 + nomesCustomTabela.length`).
+   - Sem ordenação por clique nessas colunas (de propósito, por ora —
+     `data-custom-col` é um atributo DIFERENTE de `data-col`, que é o
+     que o sistema de ordenação por clique já existente procura).
    Teste: `test/insumos-dinamicos-relatorio-injecao.test.js` (estrutural,
    mesmo padrão de `atalho-ctrl-clique-consulta-tracos.test.js` pra este
    arquivo — a lógica de dado já está coberta pelas Fases 2/3/6, o risco
