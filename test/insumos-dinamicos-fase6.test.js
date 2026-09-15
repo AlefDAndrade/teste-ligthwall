@@ -150,3 +150,29 @@ test('detalheOperacao: 2 insumos Custom diferentes no mesmo traço, cada um em s
   assert.deepEqual(t.ajustes[0].insumos_custom, { 'Fibra': 0.4 });
   assert.deepEqual(t.ajustes[1].insumos_custom, { 'Aditivo Y': 0.1 });
 });
+
+test('BUG CORRIGIDO: insumo Custom com valor só via AJUSTE (original nunca preenchido) ainda assim aparece em insumos_custom (com original null)', async () => {
+  // Reprodução do bug relatado: "aparece nos ajustes da Receita
+  // Utilizada, mas não aparece no campo da receita em si" — o traço tem
+  // "Fibra" adicionada (aparece em ajuste_insumos, via um ajuste ao
+  // vivo), mas o campo ORIGINAL nunca foi preenchido no formulário
+  // principal (nenhuma linha em traco_insumos pra "Fibra" — só o valor
+  // do ajuste). Antes da correção, detalheOperacao só olhava
+  // traco_insumos pra decidir se a chave insumos_custom existia —
+  // "Fibra" nunca aparecia na Receita Utilizada, mesmo com o ajuste
+  // visível do lado.
+  const idTraco = 'traco-fase6-so-ajuste-' + Date.now();
+  const idOperacao = 'op-fase6-so-ajuste-' + Date.now();
+  criarOperacaoMinima(idOperacao);
+
+  await registrarAjuste(idTraco, { tempo_batida: 4, insumos_custom: { 'Fibra': 0.6 } });
+  // Registra o traço SEM "Fibra" no insumos_custom (simula original nunca
+  // preenchido) — só o ajuste ao vivo acima tem o dado.
+  await registrarTraco(traco(idTraco, idOperacao));
+
+  const detalhe = await buscarDetalheOperacao(idOperacao);
+  const t = detalhe.tracos[0];
+  assert.ok(t.insumos_custom, 'insumos_custom deveria existir (união com ajuste_insumos)');
+  assert.equal(t.insumos_custom['Fibra'], null, 'original de Fibra deveria ser null — nunca foi preenchido, só o ajuste tem valor');
+  assert.deepEqual(t.ajustes[0].insumos_custom, { 'Fibra': 0.6 });
+});
