@@ -232,6 +232,33 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
 
 **Plano concluído — todas as 6 fases entregues.**
 
+## Correções pós-lançamento (uso real)
+
+1. **Insumo Custom vira opcional no modal "Ajustar Receita".** A decisão 5
+   original (obrigatório em todo ajuste) atrapalhava o fluxo real — ver
+   seção de decisões, acima (revista). Corrigido: opcional, igual os 5
+   Padrão ali.
+2. **Fórmula de ajustes (não só o total) no campo Custom.** Faltava a
+   linha `9,50 + 0,50 = 10,00` (só tinha o badge de total) — corrigido em
+   `renderCampoInsumoCustom` (reaproveita `formatAjustesDisplay`).
+3. **BUG: insumo Custom adicionado depois que o traço já existe (2º+ uso)
+   nunca era salvo.** Sintoma relatado: na Análise Focada, os AJUSTES do
+   insumo novo apareciam, mas o campo da receita (valor original) não.
+   Causa raiz: `salvarInsumosCustomDoTraco` só era chamada dentro do
+   `if (!tracoExiste)` (registro-operacao.js/operacao-offline.js) — a
+   MESMA guarda que protege os 5 Padrão contra reescrita. Pros Padrão
+   isso nunca foi problema (sempre preenchidos desde o início do
+   formulário); pro Custom, o botão "+" permite adicionar um insumo
+   NOVO a um traço que JÁ foi submetido uma vez (ex: mesmo traço usado em
+   2+ baterias da mesma operação) — nesse caso a função inteira era
+   pulada, então o valor original nunca ia pro banco (só os ajustes ao
+   vivo via `/registrar-ajuste-traco`, que não tem essa guarda).
+   Corrigido: `salvarInsumosCustomDoTraco` agora usa `INSERT OR IGNORE`
+   (chave primária id_traco+insumo) e é chamada em TODA submissão, não só
+   na primeira — quem já tem linha gravada continua protegido (nunca
+   reescreve), mas um insumo genuinamente novo agora consegue entrar.
+   Teste: `test/insumos-dinamicos-fase3.test.js` ("BUG CORRIGIDO: insumo
+   Custom adicionado... depois que o traço já existe").
 
 ## Testes (visão geral, cresce por fase)
 
