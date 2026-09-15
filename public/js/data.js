@@ -1878,6 +1878,14 @@ async function registrarRelatorioInjecao(record, modoTeste = false) {
     silo: t.silo || '',
     expansao: t.expansao || '',
     densidade_eps: t.densidadeEPS || '',
+    // Insumos CUSTOM (ver PLANO-insumos-dinamicos-receitas.md) — BUG
+    // CORRIGIDO: esta função reconstrói cada linha do zero, campo por
+    // campo, e esquecia de incluir insumos_custom (só ia pros ajustes,
+    // registrados à parte e ao vivo via registrarAjusteTraco — por isso
+    // eles sempre chegavam certos no servidor, mas o valor ORIGINAL da
+    // receita nunca ia junto: dashboards/tabela/CEP acabavam somando só
+    // o ajuste (ex: 3), nunca original+ajuste (ex: 1+3=4).
+    ...(t.insumos_custom ? { insumos_custom: t.insumos_custom } : {}),
   }));
 
   if (!linhas.length) return;

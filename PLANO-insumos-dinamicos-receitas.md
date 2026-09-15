@@ -360,6 +360,30 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    um Custom só-por-ajuste aparece com `original: null`.
    Teste: `test/insumos-dinamicos-fase6.test.js` ("BUG CORRIGIDO: insumo
    Custom com valor só via AJUSTE...").
+9. **BUG CRÍTICO CORRIGIDO: original de insumo Custom nunca ia pro
+   servidor — dashboards/tabela/CEP mostravam só o ajuste, nunca
+   original+ajuste.** Relatado com prints de tela (2 insumos Custom,
+   original 1 em cada, 1 ajuste somando +3 em cada — total devia ser 4,
+   aparecia 3). Causa raiz, achada só depois de simular o clique real em
+   "Registrar Operação" ponta a ponta (todo teste anterior testava só a
+   lógica de achatamento em `operacao.js` OU a rota do servidor,
+   isoladas — nunca as duas juntas): `LW.registrarRelatorioInjecao`
+   (`public/js/data.js`) reconstrói cada linha do payload campo por
+   campo, na mão, e **nunca incluía `insumos_custom`** nessa lista — a
+   Fase 5 achatava `insumos_custom` certinho dentro de
+   `fullRecord.tracos[i]` (`operacao.js`), mas essa função descartava o
+   campo silenciosamente antes do POST sair. Os ajustes ao vivo (rota
+   separada, `/registrar-ajuste-traco`) sempre chegavam certos, dando a
+   falsa impressão de que só a soma estava errada, quando na verdade o
+   original nunca tinha ido junto (virava 0 implícito no cálculo do
+   total). Fix: uma linha (`...(t.insumos_custom ? {insumos_custom:
+   t.insumos_custom} : {})`) na construção de `linhas`.
+   Teste: `test/insumos-dinamicos-payload-registro.test.js` — o único
+   teste desta feature inteira que sobe a SPA de verdade e clica no
+   botão "Registrar Operação" de ponta a ponta (login real, deviceId
+   autorizado, bateria/montagem/timer, "+", "Ajustar Receita", clique no
+   botão) e confere tanto o payload capturado quanto o dado final salvo
+   no servidor.
 
 ## Testes (visão geral, cresce por fase)
 
