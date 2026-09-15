@@ -194,6 +194,10 @@ test('depois de 1 ajuste real (via modal "Ajustar Receita"), o botão de remover
   const lista = document.getElementById('tracos-container').innerHTML;
   assert.ok(lista.includes('Fibra'), 'o campo de Fibra deveria continuar aparecendo');
   assert.ok(!lista.includes('removerInsumoCustom'), 'com 1 ajuste já registrado, o botão de remover não deveria mais aparecer');
+  // Mesma fórmula que os 5 Padrão já mostram (ver renderCampoInsumo) —
+  // "1.00 + 0.30 = 1.30" (original + ajuste = total; toFixed() usa ponto,
+  // não vírgula, mesma formatação que os Padrão já usam ali).
+  assert.ok(lista.includes('1.00 + 0.30 = 1.30'), 'deveria mostrar a fórmula original + ajuste = total, igual os Padrão');
 });
 
 test('modal "Ajustar Receita" trata "Fibra" como opcional — salva mesmo em branco, só com tempo de batida', async () => {
