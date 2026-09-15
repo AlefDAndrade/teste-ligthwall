@@ -241,25 +241,25 @@
       const camposInsumo = Object.keys(INSUMOS_LABELS);
       let totalCimentoTraco = NaN, totalAguaTraco = NaN;
 
-      for (const campo of camposInsumo) {
-        const raw = t[campo];
-        if (raw === undefined) continue;
-
+      // Acumula estatística (ajustes/reais/originais) de 1 insumo — helper
+      // local reaproveitado pros 5 Padrão (camposInsumo, abaixo) E pros
+      // insumos CUSTOM (t.insumos_custom, ver PLANO-insumos-dinamicos-
+      // receitas.md) — mesmo tratamento estatístico pras duas categorias
+      // (taxa de acerto, desvio planejado×real, CEP por insumo): "desvio"
+      // aqui é original×total DENTRO do mesmo traço (planejado vs.
+      // realmente usado, depois dos ajustes), não uma referência externa
+      // "ideal" — por isso generaliza pra Custom sem precisar inventar
+      // nenhuma baseline nova.
+      const acumularInsumo = (raw, label) => {
+        if (raw === undefined) return null;
         const insumo = normalizarInsumo(raw);
-        const label  = INSUMOS_LABELS[campo];
-        const nAj    = insumo.ajustes.length;
+        const nAj = insumo.ajustes.length;
 
-        if (campo === 'cimento_real') totalCimentoTraco = insumo.total;
-        if (campo === 'agua_real') totalAguaTraco = insumo.total;
-
-        // Contabiliza ajustes
         if (nAj > 0) {
           ajustesPorInsumo[label] = (ajustesPorInsumo[label] || 0) + nAj;
           totalAjustesGeral += nAj;
           tracoTemAjuste = true;
         }
-
-        // Acumula valores para estatística
         if (!isNaN(insumo.total)) {
           if (!valoresReaisPorInsumo[label]) valoresReaisPorInsumo[label] = [];
           valoresReaisPorInsumo[label].push(insumo.total);
@@ -268,6 +268,22 @@
           if (!valoresOrigPorInsumo[label]) valoresOrigPorInsumo[label] = [];
           valoresOrigPorInsumo[label].push(insumo.original);
         }
+        return insumo;
+      };
+
+      for (const campo of camposInsumo) {
+        const raw = t[campo];
+        const insumo = acumularInsumo(raw, INSUMOS_LABELS[campo]);
+        if (!insumo) continue;
+        if (campo === 'cimento_real') totalCimentoTraco = insumo.total;
+        if (campo === 'agua_real') totalAguaTraco = insumo.total;
+      }
+
+      // Insumos CUSTOM — mesmo raciocínio do comentário de acumularInsumo,
+      // acima; nunca entram no cálculo de Relação A/C (só cimento/água,
+      // sempre Padrão).
+      for (const [nome, raw] of Object.entries(t.insumos_custom || {})) {
+        acumularInsumo(raw, nome);
       }
 
       const relacaoACTraco = LW.calcularRelacaoAC(totalCimentoTraco, totalAguaTraco);
@@ -335,9 +351,12 @@
     const receitaMaisEstavel   = rankingReceitas[0] || null;
     const receitaMaisInstavel  = rankingReceitas[rankingReceitas.length - 1] || null;
 
-    // Consumo planejado × real
+    // Consumo planejado × real — itera a UNIÃO das chaves que de fato
+    // acumularam algo (Padrão + Custom, ver acumularInsumo acima), não só
+    // os 5 Padrão fixos de INSUMOS_LABELS.
     const consumoPorInsumo = {};
-    for (const label of Object.keys(INSUMOS_LABELS).map(k => INSUMOS_LABELS[k])) {
+    const nomesInsumoComDado = new Set([...Object.keys(valoresReaisPorInsumo), ...Object.keys(valoresOrigPorInsumo)]);
+    for (const label of nomesInsumoComDado) {
       const reais = valoresReaisPorInsumo[label] || [];
       const origs = valoresOrigPorInsumo[label]  || [];
       if (!reais.length && !origs.length) continue;
@@ -356,9 +375,9 @@
       }
     }
 
-    // Estatísticas CEP por insumo
+    // Estatísticas CEP por insumo — mesma união de nomes (Padrão + Custom).
     const cepPorInsumo = {};
-    for (const [campo, label] of Object.entries(INSUMOS_LABELS)) {
+    for (const label of nomesInsumoComDado) {
       const reais = valoresReaisPorInsumo[label] || [];
       cepPorInsumo[label] = estatisticas(reais);
     }
@@ -385,20 +404,22 @@
     });
     const slopeTaxa = tendencia(taxasMensais);
 
-    // Tendência por insumo (quantidade de ajustes por mês)
+    // Tendência por insumo (quantidade de ajustes por mês) — Padrão +
+    // Custom, mesmo raciocínio de acumularInsumo acima.
     const ajustesPorInsumoMes = {}; // label → { mes: count }
     for (const t of tracos) {
       if (!t.data || t.data.length < 7) continue;
       const mes = t.data.substring(0, 7);
-      for (const [campo, label] of Object.entries(INSUMOS_LABELS)) {
-        const raw = t[campo];
-        if (raw === undefined) continue;
+      const contarAjustesMes = (raw, label) => {
+        if (raw === undefined) return;
         const nAj = normalizarInsumo(raw).ajustes.length;
         if (nAj > 0) {
           if (!ajustesPorInsumoMes[label]) ajustesPorInsumoMes[label] = {};
           ajustesPorInsumoMes[label][mes] = (ajustesPorInsumoMes[label][mes] || 0) + nAj;
         }
-      }
+      };
+      for (const [campo, label] of Object.entries(INSUMOS_LABELS)) contarAjustesMes(t[campo], label);
+      for (const [nome, raw] of Object.entries(t.insumos_custom || {})) contarAjustesMes(raw, nome);
     }
 
     return {
@@ -1451,6 +1472,6 @@
     popularFiltros().then(() => render());
   }
 
-  window.LWQualidade = { init, render, exportarInterativo, exportarPDF };
+  window.LWQualidade = { init, render, exportarInterativo, exportarPDF, calcularIndicadores };
 
 })();

@@ -321,6 +321,29 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    Teste: `test/ajustes-traco-fuso-horario.test.js` (relógio do servidor
    congelado via `LW_TEST_RELOGIO_ISO`, confirma que o horário salvo é o
    de Brasília, não o UTC real).
+7. **Dashboard de CEP (qualidade-tracos.js) também ganha os insumos
+   Custom.** Pedido numa conversa, revendo a decisão original da Fase 6
+   de deixar este arquivo de fora (o motivo dado então — depender de uma
+   referência "ideal" que não existiria pra Custom — estava ERRADO:
+   investigando o código, "Desvio Planejado×Real" é ORIGINAL×TOTAL
+   DENTRO do mesmo traço, não uma referência externa fixa; generaliza
+   pra Custom sem inventar nenhuma baseline nova). Mudança: o loop
+   principal de `calcularIndicadores` ganhou `acumularInsumo` (helper
+   extraído, reaproveitado pros 5 Padrão E pra `t.insumos_custom`) — daí
+   pra frente, `ajustesPorInsumo` (ranking "insumo mais ajustado"),
+   `consumoPorInsumo`/`maiorDesvioLabel` (planejado×real), `cepPorInsumo`
+   (Média/Mediana/Desvio/CV) e `ajustesPorInsumoMes` (tendência mensal)
+   passam a iterar a UNIÃO Padrão+Custom em vez de só `INSUMOS_LABELS`
+   fixo — os `render*` já iteravam esses objetos genericamente
+   (`Object.entries`), não precisaram mudar. O export standalone
+   (HTML offline) reaproveita as MESMAS funções via `${calcularIndicadores}`/
+   `${renderCEP}` (stringificadas), então ganha o mesmo suporte de
+   graça. `calcularIndicadores` exposta em `window.LWQualidade` só pra
+   viabilizar teste direto (era 100% interna antes).
+   Teste: `test/insumos-dinamicos-cep.test.js` (6 testes, chama
+   `calcularIndicadores` direto com fixtures — Custom aparece em CEP,
+   consumo planejado×real, ranking de ajustes, tendência mensal e pode
+   até ganhar o card de "maior desvio").
 
 ## Testes (visão geral, cresce por fase)
 
