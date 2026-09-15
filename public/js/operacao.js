@@ -1496,11 +1496,10 @@
     const t = state.tracos[i];
     if (!t || t._reaproveitado) return;
 
-    // Insumos CUSTOM já gravados neste traço (Fase 5, ver
-    // PLANO-insumos-dinamicos-receitas.md) — diferente dos Padrão acima
-    // (opcionais em cada ajuste), esses são OBRIGATÓRIOS em todo ajuste:
-    // "vale pro traço inteiro" foi a decisão tomada (uma vez que o traço
-    // tem o insumo, todo reaproveitamento/ajuste dele também precisa).
+    // Insumos CUSTOM já gravados neste traço (Fase 5/correção posterior,
+    // ver PLANO-insumos-dinamicos-receitas.md) — assim como os 5 Padrão
+    // acima, são OPCIONAIS em cada ajuste: preenche só se estiver sendo
+    // ajustado agora, não precisa repetir todo ajuste.
     const nomesCustomDoTraco = Object.keys(t.insumos_custom || {});
 
     const existente = document.getElementById('modal-ajuste-receita');
@@ -1563,11 +1562,11 @@
 
         ${nomesCustomDoTraco.length ? `
         <div class="form-group" style="margin-bottom:6px">
-          <label class="form-label" style="margin-bottom:10px">Insumos deste traço <span style="color:var(--red);font-weight:400;text-transform:none">(obrigatório — este traço usa estes insumos)</span></label>
+          <label class="form-label" style="margin-bottom:10px">Insumos deste traço <span style="color:var(--text-3);font-weight:400;text-transform:none">(opcional — preencha só o que foi adicionado)</span></label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             ${nomesCustomDoTraco.map((nome, idx) => `
               <div class="form-group">
-                <label class="form-label">${nome} (kg) <span class="required">*</span></label>
+                <label class="form-label">${nome} (kg)</label>
                 <input class="form-input" type="number" step="0.01" id="ar-custom-${idx}" placeholder="0">
               </div>
             `).join('')}
@@ -1634,20 +1633,15 @@
     }
     const minutos = Math.round((segundos / 60) * 100) / 100; // pro arquivo de auditoria (em minutos)
 
-    // Insumos CUSTOM deste traço — OBRIGATÓRIOS (decisão: vale pro traço
-    // inteiro, todo ajuste tem que informar de novo). Valida ANTES de
-    // aplicar qualquer coisa — tudo ou nada, mesmo padrão do tempo de
-    // batida acima.
+    // Insumos CUSTOM deste traço — OPCIONAIS, mesmo critério dos 5 Padrão
+    // (CAMPOS_INSUMO_AJUSTE, abaixo): preenche só o que entrou, sem
+    // bloquear o salvar se ficar em branco.
     const insumosCustomAjuste = {}; // { nome: valor }
     for (let idx = 0; idx < nomesCustomDoTraco.length; idx++) {
       const nome = nomesCustomDoTraco[idx];
       const input = document.getElementById(`ar-custom-${idx}`);
       const val = parseFloat(input?.value);
-      if (isNaN(val) || val <= 0) {
-        mostrarErroModal(`Informe "${nome}" — este traço usa esse insumo, obrigatório em todo ajuste.`);
-        return;
-      }
-      insumosCustomAjuste[nome] = val;
+      if (!isNaN(val) && val > 0) insumosCustomAjuste[nome] = val;
     }
 
     const camposPreenchidos = {}; // { cimento_real: valor, ... } — pro state do traço
