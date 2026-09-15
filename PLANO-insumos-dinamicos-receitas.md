@@ -295,6 +295,32 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
    mesmo padrão de `atalho-ctrl-clique-consulta-tracos.test.js` pra este
    arquivo — a lógica de dado já está coberta pelas Fases 2/3/6, o risco
    novo é só a integração no render).
+6. **BUG DE FUSO HORÁRIO: "Quando" dos ajustes vinha adiantado em 3h.**
+   Mesma classe de bug já vista antes no projeto (ver
+   `test/analise-focada-fuso-horario.test.js`, um caso relacionado mas
+   inverso — lá era conversão em DOBRO, aqui era NENHUMA conversão).
+   Causa: `registrado_em` (o "quando" de um ajuste) era gravado com
+   `new Date().toISOString()` — UTC de verdade — mas o front
+   (`LW.formatDateTime`) assume a convenção "fake-UTC-como-Brasília"
+   (mesma de `nowBrasilia()`) e exibe os componentes numéricos direto,
+   sem reconverter. Brasília é UTC-3 (sem horário de verão desde 2019),
+   então UTC de verdade aparecia 3h adiantado. Corrigido com
+   `agoraBrasiliaISOServer()` (nova, `lib/tempo.js`) — mesma técnica de
+   `nowBrasilia()` (front) só que calculada no servidor, e injetada via
+   ctx nos 3 lugares que geravam `registrado_em`: registro ao vivo do
+   ajuste (`/registrar-ajuste-traco`), edição de traço
+   (`/editar-traco-relatorio`) e os fallbacks de restaurar/mesclar
+   backup + migração do JSON legado (`lib/db/tracos.js`).
+   **Escopo:** corrigido só pra `registrado_em` de ajustes (o que foi
+   relatado) — o projeto tem MUITOS outros usos de
+   `new Date().toISOString()` espalhados (`criado_em`, `atualizado_em`,
+   `validado_em` etc. em outras dezenas de arquivos) que podem ter o
+   MESMO bug se algum dia forem exibidos via `formatDateTime`/
+   `formatTime` sem já passar por essa conversão — não auditados nesta
+   correção, fora do escopo do que foi pedido.
+   Teste: `test/ajustes-traco-fuso-horario.test.js` (relógio do servidor
+   congelado via `LW_TEST_RELOGIO_ISO`, confirma que o horário salvo é o
+   de Brasília, não o UTC real).
 
 ## Testes (visão geral, cresce por fase)
 
