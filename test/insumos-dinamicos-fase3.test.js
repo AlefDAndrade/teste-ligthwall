@@ -151,6 +151,33 @@ test('reaproveitar um traço existente NUNCA reescreve os insumos_custom já gra
   assert.equal(salvo.ultilizado.operacao.length, 2, 'os 2 usos deveriam estar registrados');
 });
 
+test('BUG CORRIGIDO: insumo Custom adicionado (botão "+") DEPOIS que o traço já existe (2º uso) ainda assim é salvo', async () => {
+  // Reprodução do bug relatado: operador registra o traço na 1ª bateria
+  // SEM nenhum Custom, depois adiciona um Custom novo (botão "+") antes
+  // de reaproveitar o mesmo traço numa 2ª bateria da mesma operação —
+  // antes da correção, a guarda `if (!tracoExiste)` em
+  // registro-operacao.js/operacao-offline.js bloqueava
+  // salvarInsumosCustomDoTraco inteiro nessa 2ª chamada (traço já
+  // existia), então o valor ORIGINAL do Custom nunca era salvo — só os
+  // ajustes ao vivo (/registrar-ajuste-traco, sem essa guarda) apareciam
+  // na Análise Focada, nunca a receita em si.
+  const idTraco = 'traco-fase3-custom-tardio-' + Date.now();
+
+  await registrarTracos([
+    traco(idTraco, { id_operacao: 'op-fase3-tardio-a', id_bateria: 'B5', berco_inicio: '1', berco_finalizacao: '4' }),
+  ]); // sem insumos_custom nenhum
+
+  await registrarTracos([
+    traco(idTraco, { id_operacao: 'op-fase3-tardio-b', id_bateria: 'B6', berco_inicio: '5', berco_finalizacao: '8' }, {
+      insumos_custom: { 'Fibra': 2.5 }, // Custom novo, adicionado só agora
+    }),
+  ]);
+
+  const salvo = await buscarTraco(idTraco);
+  assert.deepEqual(salvo.insumos_custom, { 'Fibra': 2.5 }, 'Custom adicionado no 2º uso deveria ter sido salvo mesmo com o traço já existindo');
+  assert.equal(salvo.ultilizado.operacao.length, 2);
+});
+
 test('editar-traco-relatorio substitui insumos_custom (original e por ajuste), inclusive removendo um que existia', async () => {
   const idTraco = 'traco-fase3-editar-' + Date.now();
   const idOp = 'op-fase3-editar-' + Date.now();
