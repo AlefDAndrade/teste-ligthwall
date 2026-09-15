@@ -428,6 +428,27 @@ interativa, consulta de traços, bateria atual) sem regressão. Suíte das
     Teste: `test/insumos-dinamicos-sobra-malformada.test.js` (força o
     campo malformado — Padrão e Custom — e confirma que completa sem
     erro, com o traço carregado corretamente).
+12. **BUG CORRIGIDO: valores dos insumos Custom vinham VAZIOS ao
+    reaproveitar uma sobra.** Relatado logo depois da correção anterior
+    (a trava parou, mas os campos vinham em branco). Causa raiz:
+    `_perguntarSobraAoFinalizar(record)` lia `record.tracos` — o
+    `fullRecord` já ACHATADO pra envio ao servidor (ver
+    `finalizarInjecao`, Fase 5), onde `insumos_custom` vira `{nome:
+    valorOriginal}` (número simples — os ajustes já foram registrados
+    ao vivo à parte). A sobra precisa do formato RICO `{original,
+    ajustes}` de cada campo pra poder recarregar depois; recebendo um
+    número simples, `normalizarCampoInsumo` (correção anterior)
+    corretamente reconhecia "não é o formato esperado" e substituía por
+    vazio — os 5 Padrão nunca tiveram esse problema porque não passam
+    pelo achatamento (só `insumos_custom` é achatado). Fix:
+    `_perguntarSobraAoFinalizar` agora recebe também os traços
+    ORIGINAIS (não achatados) como parâmetro extra, capturados ANTES de
+    `resetState()` limpar `state` (que já rodava antes dela).
+    Teste: `test/insumos-dinamicos-sobra-com-custom.test.js` — vai até
+    o fim de verdade: registra a operação, diz "Sim" pra guardar a
+    sobra, confere o `sobra.json` salvo no servidor (formato rico
+    preservado) e reaproveita numa operação nova, confirmando que o
+    campo chega preenchido.
 
 ## Testes (visão geral, cresce por fase)
 
