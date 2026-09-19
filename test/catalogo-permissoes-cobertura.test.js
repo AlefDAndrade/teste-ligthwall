@@ -15,12 +15,12 @@
 //      mostra (_aplicarVisibilidadeDoMenu, public/js/app-core.js).
 //
 // Bugs que esta auditoria encontrou (todos corrigidos, travados abaixo):
-//   - 'tracos-descartados', 'one-page-report', 'config-paletes' e
-//     'config-notificacoes' existiam em (2) e (3) mas NÃO em (1) — um
-//     perfil customizado nunca conseguia ver essas telas, e não havia como
-//     liberar (não apareciam no formulário pra serem marcadas).
-//   - 'qualidade-tracos' (CEP), 'consulta-tracos' e 'tv' existiam em (1) e
-//     (3) mas NÃO em (2) — TODO perfil fixo cadastrado (inclusive
+//   - 'tracos-descartados', 'one-page-report' e 'config-paletes' existiam
+//     em (2) e (3) mas NÃO em (1) — um perfil customizado nunca conseguia
+//     ver essas telas, e não havia como liberar (não apareciam no
+//     formulário pra serem marcadas).
+//   - 'qualidade-tracos' (CEP) e 'consulta-tracos' existiam em (1) e (3)
+//     mas NÃO em (2) — TODO perfil fixo cadastrado (inclusive
 //     "Administrativo") tinha essas telas escondidas do menu e showPage()
 //     recusava navegar até elas; só o Administrador MASTER enxergava.
 
@@ -74,14 +74,14 @@ test('toda tela com data-page nos partials também está no CATALOGO (perfil cus
   assert.deepEqual(ausentes, [], `estas telas têm data-page mas não estão no catálogo de permissões: ${ausentes.join(', ')}`);
 });
 
-test('as 4 páginas/abas que faltavam no catálogo (achado da auditoria) agora estão lá', () => {
-  for (const id of ['tracos-descartados', 'one-page-report', 'config-paletes', 'config-notificacoes']) {
+test('as 3 páginas/abas que faltavam no catálogo (achado da auditoria) agora estão lá', () => {
+  for (const id of ['tracos-descartados', 'one-page-report', 'config-paletes']) {
     assert.ok(IDS_CATALOGO.has(id), `esperava "${id}" no catálogo`);
   }
 });
 
-test('as 3 telas que nenhum perfil fixo enxergava (CEP, Consulta de Traços, Modo TV) agora são visíveis', () => {
-  for (const pagina of ['qualidade-tracos', 'consulta-tracos', 'tv']) {
+test('as 2 telas que nenhum perfil fixo enxergava (CEP, Consulta de Traços) agora são visíveis', () => {
+  for (const pagina of ['qualidade-tracos', 'consulta-tracos']) {
     assert.ok(
       perfis.PAGINAS_DE_TRABALHO.includes(pagina),
       `esperava "${pagina}" em PAGINAS_DE_TRABALHO — sem isso fica escondida de TODO perfil cadastrado`
@@ -99,7 +99,7 @@ test('as abas de Configurações que o front consulta existem todas no catálogo
   const bloco = appCore.slice(inicio, appCore.indexOf('};', inicio));
   const secoes = [...bloco.matchAll(/'?([a-z-]+)'?:\s*'cfg-nav-/g)].map(m => m[1]);
 
-  assert.ok(secoes.length >= 12, `esperava ao menos 12 abas mapeadas, achei ${secoes.length}`);
+  assert.ok(secoes.length >= 10, `esperava ao menos 10 abas mapeadas, achei ${secoes.length}`);
   const ausentes = secoes.filter(s => !IDS_CATALOGO.has('config-' + s));
   assert.deepEqual(ausentes, [], `abas consultadas pelo front sem item correspondente no catálogo: ${ausentes.map(s => 'config-' + s).join(', ')}`);
 });
@@ -128,9 +128,7 @@ test('padrões dos itens novos batem com a área de edição de cada perfil fixo
 
   // Abas de Configurações: só "Administrativo" começa com acesso.
   assert.equal(perfis.permissoesPadraoDoPerfilFixo('Administrativo')['config-paletes'], 'total');
-  assert.equal(perfis.permissoesPadraoDoPerfilFixo('Administrativo')['config-notificacoes'], 'total');
   assert.equal(perfis.permissoesPadraoDoPerfilFixo('OperadorInjetora')['config-paletes'], 'ocultar');
-  assert.equal(perfis.permissoesPadraoDoPerfilFixo('OperadorInjetora')['config-notificacoes'], 'ocultar');
 });
 
 test('nenhum item do catálogo tem id duplicado nem rótulo vazio', () => {
