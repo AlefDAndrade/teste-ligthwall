@@ -56,7 +56,6 @@ test('GET /catalogo-permissoes é público e lista os itens', async () => {
   assert.equal(data.ok, true);
   assert.deepEqual(data.niveis, ['total', 'visualizar', 'ocultar']);
   assert.ok(data.catalogo.some(i => i.id === 'operacao'));
-  assert.ok(data.catalogo.some(i => i.id === 'manutencao-abertura' && i.pai === 'manutencao-corretiva'));
   assert.ok(data.catalogo.some(i => i.id === 'qualidade-avaliacao' && i.pai === 'setor-qualidade'));
 });
 

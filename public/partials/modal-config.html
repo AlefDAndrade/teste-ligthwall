@@ -81,18 +81,9 @@
           <button type="button" id="cfg-nav-sql" class="cfg-nav-item" onclick="cfgMostrarSecao('sql')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5V12c0 1.7 3.6 3 8 3s8-1.3 8-3V5.5"/><path d="M4 12v6.5c0 1.7 3.6 3 8 3s8-1.3 8-3V12"/></svg>
             Dados SQL</button>
-          <button type="button" id="cfg-nav-notificacoes" class="cfg-nav-item" onclick="cfgMostrarSecao('notificacoes')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>
-            Notificações</button>
           <button type="button" id="cfg-nav-paradas" class="cfg-nav-item" onclick="cfgMostrarSecao('paradas')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             Motivos de Parada</button>
-          <button type="button" id="cfg-nav-tipos-manutencao" class="cfg-nav-item" onclick="cfgMostrarSecao('tipos-manutencao')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>
-            Tipos de Manutenção</button>
-          <button type="button" id="cfg-nav-prioridades" class="cfg-nav-item" onclick="cfgMostrarSecao('prioridades')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>
-            Prioridades</button>
           <button type="button" id="cfg-nav-insumos" class="cfg-nav-item" onclick="cfgMostrarSecao('insumos')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h9l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M13 3v6h6"/><line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>
             Insumos de Receitas</button>
@@ -609,27 +600,6 @@
           </div>
           <!-- ========== /SEÇÃO: Dados SQL ========== -->
 
-          <!-- ========== SEÇÃO: Notificações ========== -->
-          <div id="cfg-secao-notificacoes" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>Notificações</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Escolha, perfil a perfil, quem recebe as notificações push de Manutenção — <strong>Abertura de
-              Chamado</strong> (novo chamado corretivo aberto) e <strong>Pedido de Peça</strong> (chamado já em
-              execução ficou aguardando peça). Cada pessoa também precisa ter clicado em "Ativar notificações"
-              (🔔 na barra superior) no próprio dispositivo para receber de verdade.
-            </p>
-            <p style="font-size:.74rem;color:var(--text-3);margin-bottom:18px;line-height:1.5;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
-              ℹ️ O <strong>Administrador Master</strong> (senha mestra da tela de login) não aparece nesta lista —
-              ele nunca é um usuário cadastrado, então não tem como se inscrever para receber push. Se quiser que
-              quem usa a senha mestra também seja avisado, crie um usuário cadastrado com perfil "Administrador"
-              (aba Usuários) e ative as notificações logado com ele.
-            </p>
-            <div id="cfg-notificacoes-lista" style="display:flex;flex-direction:column;gap:8px">
-              <span style="color:var(--text-3);font-size:.82rem">Carregando…</span>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Notificações ========== -->
-
           <!-- ========== SEÇÃO: Motivos de Parada ========== -->
           <div id="cfg-secao-paradas" style="display:none">
             <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Motivos de Parada</div>
@@ -653,63 +623,6 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Motivos de Parada ========== -->
-
-          <!-- ========== SEÇÃO: Tipos de Manutenção ========== -->
-          <div id="cfg-secao-tipos-manutencao" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>Tipos de Manutenção</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Tipos disponíveis para escolher ao abrir um chamado corretivo ou agendar uma manutenção programada
-              (Registro de Manutenção). Adicionar, remover ou renomear aqui reflete na hora nos 3 selects daquela
-              tela (filtro, chamado corretivo e manutenção programada).
-            </p>
-            <div id="cfg-tipos-manutencao-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-            </div>
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div
-                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Novo Tipo</div>
-              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
-                  <label class="form-label">Descrição do Tipo</label>
-                  <input class="form-input" id="cfg-tipo-manutencao-novo" placeholder="Ex: Hidráulica"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarTipoManutencao();}">
-                </div>
-                <button class="btn btn-outline-accent" onclick="cfgAdicionarTipoManutencao()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Tipos de Manutenção ========== -->
-
-          <!-- ========== SEÇÃO: Prioridades ========== -->
-          <div id="cfg-secao-prioridades" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>Prioridades</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Níveis de prioridade disponíveis ao abrir um chamado corretivo, cada um com sua própria cor (usada nos
-              botões de seleção, no painel de chamados e no filtro). Adicionar, remover ou renomear aqui reflete na
-              hora na tela de Manutenção.
-            </p>
-            <div id="cfg-prioridades-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-            </div>
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div
-                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Nova Prioridade</div>
-              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-                  <label class="form-label">Descrição</label>
-                  <input class="form-input" id="cfg-prioridade-label-novo" placeholder="Ex: URGENTE"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarPrioridade();}">
-                </div>
-                <div class="form-group" style="margin-bottom:0">
-                  <label class="form-label">Cor</label>
-                  <input type="color" id="cfg-prioridade-cor-novo" value="#f59e0b"
-                    style="width:44px;height:38px;padding:2px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-3);cursor:pointer">
-                </div>
-                <button class="btn btn-outline-accent" onclick="cfgAdicionarPrioridade()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Prioridades ========== -->
 
           <!-- ========== SEÇÃO: Insumos de Receitas ========== -->
           <div id="cfg-secao-insumos" style="display:none">

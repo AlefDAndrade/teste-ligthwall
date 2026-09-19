@@ -5,14 +5,12 @@
 // (rótulo "Administrador" na tela) — + o Administrador Master (senha única,
 // sem cadastro, continua como sempre foi). TODA página é aberta pra
 // visualização a todo perfil; o que muda por perfil agora é a ÁREA DE EDIÇÃO
-// (injetora/paradas/qualidade/manutencao/manutencao-chamado), não mais
-// "quais páginas cada um vê".
+// (injetora/paradas/qualidade), não mais "quais páginas cada um vê".
 //
 // Cobre: rotas de backend (GET /perfis, POST /login-usuario,
 // POST /salvar-usuarios, GET /usuarios, GET /minha-sessao,
 // POST /logout-usuario) via HTTP direto, e o boot da SPA (visualização
-// aberta pra todo perfil, Configurações restrita) via servidor real + jsdom
-// — mesmo padrão de test/manutencao-pagina.test.js.
+// aberta pra todo perfil, Configurações restrita) via servidor real + jsdom.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -69,12 +67,12 @@ test('GET /perfis expõe os 6 perfis cadastráveis e suas áreas de edição', a
   assert.ok(data.paginasPorPerfil.AssistenteQualidade.includes('operacao'), 'visualização é aberta, mesmo sem poder editar');
 
   // Áreas de edição — a permissão de verdade no modelo novo.
-  assert.deepEqual(data.areasEdicaoPorPerfil.OperadorInjetora, ['injetora', 'paradas', 'manutencao']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.OperadorInjetora, ['injetora', 'paradas']);
   assert.deepEqual(data.areasEdicaoPorPerfil.AssistenteQualidade, ['qualidade', 'paradas']);
-  assert.deepEqual(data.areasEdicaoPorPerfil.Encarregado, ['injetora', 'qualidade', 'paradas', 'manutencao']);
-  assert.deepEqual(data.areasEdicaoPorPerfil.Manutencao, ['manutencao', 'paradas']);
-  assert.deepEqual(data.areasEdicaoPorPerfil.Supervisao, ['injetora', 'qualidade', 'paradas', 'manutencao']);
-  assert.deepEqual(data.areasEdicaoPorPerfil.Administrativo, ['injetora', 'paradas', 'qualidade', 'manutencao', 'manutencao-chamado']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Encarregado, ['injetora', 'qualidade', 'paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Manutencao, ['paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Supervisao, ['injetora', 'qualidade', 'paradas']);
+  assert.deepEqual(data.areasEdicaoPorPerfil.Administrativo, ['injetora', 'paradas', 'qualidade']);
 
   // Configurações: só o Administrador (perfil Administrativo) tem tudo;
   // os demais só Atalhos.
@@ -344,9 +342,7 @@ test('boot da SPA como OperadorInjetora: entra direto em Registrar Operação, v
     const paginaAtiva = document.querySelector('.main.active');
     assert.equal(paginaAtiva?.id, 'page-operacao');
 
-    const itemManutencao = document.querySelector('[data-page="manutencao"]');
     const itemQualidade = document.querySelector('[data-page="setor-qualidade"]');
-    assert.notEqual(itemManutencao.style.display, 'none');
     assert.notEqual(itemQualidade.style.display, 'none', 'visualização é aberta, mesmo sem poder editar');
   } finally {
     window.close();
@@ -359,9 +355,9 @@ test('boot da SPA como Manutencao: vê tudo, botão de Configurações aparece (
   const document = window.document;
 
   try {
-    const itemManutencao = document.querySelector('[data-page="manutencao"]');
+    const itemQualidade = document.querySelector('[data-page="setor-qualidade"]');
     const itemOperacao = document.querySelector('[data-page="operacao"]');
-    assert.notEqual(itemManutencao.style.display, 'none');
+    assert.notEqual(itemQualidade.style.display, 'none');
     assert.notEqual(itemOperacao.style.display, 'none', 'visualização é aberta, mesmo sem poder editar');
 
     const btnConfig = document.getElementById('btn-config');

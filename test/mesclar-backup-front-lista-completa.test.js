@@ -70,10 +70,10 @@ test('MESCLAR_DEFAULT_SE_VAZIO e MESCLAR_LABELS têm entrada pra TODO arquivo de
   }
 });
 
-test('os 7 arquivos que estavam faltando nesta conversa (berços visuais e companhia) agora aparecem nas 3 listas do front', () => {
+test('os 5 arquivos que estavam faltando nesta conversa (berços visuais e companhia) agora aparecem nas 3 listas do front', () => {
   const chavesEsperadas = [
     'tracos_descartados.json', 'bercos_visuais.json', 'avaliacoes_qualidade.json',
-    'operacoes_avaliadas.json', 'relatorio_edicoes.json', 'manutencao_corretiva.json', 'manutencao_programada.json',
+    'operacoes_avaliadas.json', 'relatorio_edicoes.json',
   ];
   const validacoes = extrairChavesDoObjeto(APP_CORE, 'MESCLAR_VALIDACOES');
   for (const chave of chavesEsperadas) {

@@ -17,29 +17,20 @@
        próprio (setor-qualidade-app.html); agora que a tela roda como
        mais uma página do app, entra aqui igual a qualquer outra. -->
   <link rel="stylesheet" href="css/setor-qualidade.css">
-  <!-- CSS/fontes da Manutenção — mesmo raciocínio do Setor de Qualidade
-       acima: extraído do protótipo standalone "Etiqueta - Manutenção.html"
-       (rodava sozinho, fora da SPA), agora entra como mais uma página. -->
-  <link rel="stylesheet" href="css/manutencao.css">
   <!-- CSS da aba "Operações a Validar" (Configurações → Registro
        Offline) — extraído do estilo inline que havia em app-core.js,
        ver public/css/operacoes-offline.css. -->
   <link rel="stylesheet" href="css/operacoes-offline.css">
   <!-- CSS do One Page Report — mesmo raciocínio do Setor de Qualidade
-       e da Manutenção acima: tela com paleta própria (--opr-*, ver o
-       arquivo), extraída pra fora de styles.css. -->
+       acima: tela com paleta própria (--opr-*, ver o arquivo), extraída
+       pra fora de styles.css. -->
   <link rel="stylesheet" href="css/one-page-report.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
-       resto do app não usa nenhum ícone fas/far); antes só era carregado
+  <!-- Font Awesome — usado pelos ícones do Setor de Qualidade (o resto
+       do app não usa nenhum ícone fas/far); antes só era carregado
        dentro do iframe próprio. -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Chart.js — usado só pelo gráfico "Evolução de Chamados" da
-       Manutenção (o resto do app desenha gráficos em SVG puro, ver
-       comentário nos gráficos de setor-qualidade.js — mas o protótipo
-       original da Manutenção já usava Chart.js, mantido aqui igual). -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -87,7 +78,6 @@
 <!-- INCLUDE:page-paradas.html -->
 <!-- INCLUDE:page-tracos-descartados.html -->
 <!-- INCLUDE:page-setor-qualidade.html -->
-<!-- INCLUDE:page-manutencao.html -->
 <!-- INCLUDE:page-one-page-report.html -->
 
   </div><!-- .app-shell -->
@@ -98,22 +88,15 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="/js/vendor/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- Pako — usado só por decompressPDF (js/manutencao.js), pra abrir PDFs
-       antigos que porventura tenham sido salvos comprimidos com GZIP por
-       uma versão anterior do protótipo (novos PDFs não são mais
-       comprimidos, ver compressPDF). -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/setor-qualidade.js"></script>
-  <script src="js/manutencao.js"></script>
   <script src="js/one-page-report.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/perfis-customizados.js"></script>
-  <script src="js/notificacoes-config.js"></script>
   <script src="js/paletes-config.js"></script>
   <script src="js/paletes-ordem.js"></script>
   <script src="js/paletes-combinacoes.js"></script>
