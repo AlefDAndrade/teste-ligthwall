@@ -41,27 +41,8 @@ let VOLUME_POR_PLACA = []; // [{ label: 'S/P - 7,5 cm', volume: 0.1373 }, ...]
 // motivos que sempre existiram, pra instalações de antes desta mudança
 // não perderem nenhum motivo já em uso.
 let MOTIVO_PARADA_OPTS = [];
-// Tipos de Manutenção (Registro de Chamado/Manutenção Programada →
-// Configurações → Tipos de Manutenção) — mesmo raciocínio de
-// MOTIVO_PARADA_OPTS, acima: antes fixo em 2 valores ("Elétrica"/
-// "Mecânica") em page-manutencao.html, agora configurável. Fallback
-// (defaults abaixo, em loadConfig) mantém os mesmos 2 tipos de sempre.
-let TIPO_MANUTENCAO_OPTS = [];
-// Prioridade de Chamado (Registro de Manutenção → Configurações →
-// Prioridades) — mesmo raciocínio de TIPO_MANUTENCAO_OPTS, acima, só
-// que cada item é um objeto { label, cor } (não só uma string): cada
-// nível de prioridade tem uma cor própria (usada nas bolinhas do
-// kanban, badges e botões de seleção — ver _corPrioridade,
-// manutencao.js). Fallback (defaults abaixo, em loadConfig) mantém os
-// mesmos 3 níveis/cores de sempre (BAIXA=verde, MÉDIA=azul,
-// ALTA=vermelho) — cor em var(--...) de propósito nos 3 defaults
-// (nunca hexadecimal fixo), pra continuar acompanhando o tema
-// claro/escuro como sempre acompanhou; prioridades novas cadastradas
-// pelo admin usam hexadecimal fixo (escolhido num color picker — ver
-// Configurações > Prioridades), sem essa integração com o tema.
-let PRIORIDADE_OPTS = [];
 // Insumos de Receita (Configurações → Insumos de Receitas) — mesmo
-// raciocínio de MOTIVO_PARADA_OPTS/TIPO_MANUTENCAO_OPTS, acima: catálogo
+// raciocínio de MOTIVO_PARADA_OPTS, acima: catálogo
 // (lista de nomes) configurável pelo Administrador. Cada item é
 // { nome, categoria: 'padrao' | 'custom' } — ver PLANO-insumos-dinamicos-
 // receitas.md, Fase 4. "Padrão" são os 5 insumos que sempre existiram
@@ -561,32 +542,6 @@ async function loadConfig() {
       console.warn('[LW] config.json sem "insumos_receita.opcoes" válido — mantendo insumos já carregados.');
     }
 
-    // Tipos de Manutenção — mesmo padrão de Motivos de Parada, acima.
-    if (Array.isArray(cfg.tipos_manutencao?.opcoes) && cfg.tipos_manutencao.opcoes.length) {
-      TIPO_MANUTENCAO_OPTS = cfg.tipos_manutencao.opcoes;
-    } else if (!TIPO_MANUTENCAO_OPTS.length) {
-      console.warn('[LW] config.json sem "tipos_manutencao.opcoes" válido — usando fallback de tipos de manutenção.');
-      TIPO_MANUTENCAO_OPTS = ['Elétrica', 'Mecânica'];
-    } else {
-      console.warn('[LW] config.json sem "tipos_manutencao.opcoes" válido — mantendo tipos de manutenção já carregados.');
-    }
-
-    // Prioridade de Chamado — mesmo padrão de Tipos de Manutenção,
-    // acima, validando também que cada item tenha 'label' e 'cor'.
-    if (Array.isArray(cfg.prioridades?.opcoes) && cfg.prioridades.opcoes.length &&
-        cfg.prioridades.opcoes.every(o => o && typeof o.label === 'string' && typeof o.cor === 'string')) {
-      PRIORIDADE_OPTS = cfg.prioridades.opcoes;
-    } else if (!PRIORIDADE_OPTS.length) {
-      console.warn('[LW] config.json sem "prioridades.opcoes" válido — usando fallback de prioridades.');
-      PRIORIDADE_OPTS = [
-        { label: 'BAIXA', cor: 'var(--green)' },
-        { label: 'MÉDIA', cor: 'var(--accent)' },
-        { label: 'ALTA', cor: 'var(--red)' },
-      ];
-    } else {
-      console.warn('[LW] config.json sem "prioridades.opcoes" válido — mantendo prioridades já carregadas.');
-    }
-
 
     if (Array.isArray(cfg.volume_por_placa)) {
       VOLUME_POR_PLACA = cfg.volume_por_placa.map(v => ({ label: v.label, volume: v.volume }));
@@ -665,12 +620,6 @@ async function loadConfig() {
       'Problema Mecânico', 'Problema Hidráulico', 'Limpeza / Organização',
       'Reunião / Treinamento', 'Parada de Qualidade', 'Aguardando Liberação',
       'Pausa de Descanso', 'Outro',
-    ];
-    TIPO_MANUTENCAO_OPTS = ['Elétrica', 'Mecânica'];
-    PRIORIDADE_OPTS = [
-      { label: 'BAIXA', cor: 'var(--green)' },
-      { label: 'MÉDIA', cor: 'var(--accent)' },
-      { label: 'ALTA', cor: 'var(--red)' },
     ];
     INSUMO_RECEITA_OPTS = _normalizarInsumosReceita([]);
   }
@@ -3070,8 +3019,6 @@ window.LW = {
   get BATERIA_IDS() { return BATERIA_IDS; },
   get VOLUME_POR_PLACA() { return VOLUME_POR_PLACA; },
   get MOTIVO_PARADA_OPTS() { return MOTIVO_PARADA_OPTS; },
-  get TIPO_MANUTENCAO_OPTS() { return TIPO_MANUTENCAO_OPTS; },
-  get PRIORIDADE_OPTS() { return PRIORIDADE_OPTS; },
   get INSUMO_RECEITA_OPTS() { return INSUMO_RECEITA_OPTS; },
   // Nomes canônicos dos 5 Padrão — Fase 5 usa pra saber quais campos do
   // formulário de traço são sempre fixos (nunca passam pelo botão "+").

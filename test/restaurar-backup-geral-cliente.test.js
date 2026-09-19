@@ -101,7 +101,6 @@ test('avisa quais arquivos novos estão faltando, sem bloquear a restauração',
   const preview = window.document.getElementById('restaurar-geral-preview').innerHTML;
   assert.match(preview, /sistema mais antigo/i, 'deveria avisar que é um backup de sistema mais antigo');
   assert.match(preview, /metas\.json/, 'deveria listar metas.json entre os que faltam');
-  assert.match(preview, /manutencao_corretiva\.json/, 'deveria listar manutencao_corretiva.json entre os que faltam');
   assert.match(preview, /usuarios\.json/, 'deveria listar usuarios.json entre os que faltam');
 
   // O botão de avançar/confirmar continua disponível — não travou nada.
@@ -130,8 +129,6 @@ test('com todos os arquivos presentes (backup atual, completo), não mostra avis
     'avaliacoes_qualidade.json': '[]',
     'operacoes_avaliadas.json': '[]',
     'operacoes_nao_avaliadas.json': '[]',
-    'manutencao_corretiva.json': '[]',
-    'manutencao_programada.json': '[]',
     'security.json': JSON.stringify({ passwordHash: HASH_ADMIN, recoveryKeyHash: null }),
     'usuarios.json': '[]',
   });

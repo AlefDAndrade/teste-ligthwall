@@ -4,10 +4,9 @@
 // separada da do servidor (RESTAURAR_VALIDACOES/OPCIONAIS) que tinha ficado
 // desatualizada: faltava metas.json na lista de OPCIONAIS (o navegador
 // recusava o arquivo como "incompleto" mesmo depois do servidor já ter
-// parado de exigir esse arquivo), e faltavam os validadores inteiros de
-// operacoes_nao_avaliadas.json/manutencao_corretiva.json/
-// manutencao_programada.json (esses 3 nunca eram lidos do .zip nem
-// mandados pro servidor).
+// parado de exigir esse arquivo), e faltava o validador inteiro de
+// operacoes_nao_avaliadas.json (nunca era lido do .zip nem mandado pro
+// servidor).
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -94,20 +93,6 @@ test('handleRestaurarArquivo aceita um .zip de Backup de Dados SEM metas.json (n
   assert.equal(erro.style.display, 'none', `não deveria ter erro, mas apareceu: "${erro.textContent}"`);
   // Deveria ter avançado pro passo de confirmação (preview preenchido).
   assert.equal(window.document.getElementById('restaurar-step-1').style.display, 'block');
-});
-
-test('handleRestaurarArquivo lê e envia manutencao_corretiva.json/manutencao_programada.json quando presentes no .zip', async () => {
-  const buffer = await gerarZipMinimo({
-    'manutencao_corretiva.json': '[{"id":"MAN-1"}]',
-    'manutencao_programada.json': '[]',
-  });
-  buffer.name = 'backup.zip';
-  await window.handleRestaurarArquivo(buffer);
-  await new Promise(r => setTimeout(r, 100));
-
-  const preview = window.document.getElementById('restaurar-preview').textContent;
-  assert.match(preview, /manutencao_corretiva\.json/, 'manutencao_corretiva.json deveria aparecer no preview (lido do zip)');
-  assert.match(preview, /manutencao_programada\.json/, 'manutencao_programada.json deveria aparecer no preview (lido do zip)');
 });
 
 test('handleRestaurarArquivo com metas.json presente também funciona (lido e enviado)', async () => {

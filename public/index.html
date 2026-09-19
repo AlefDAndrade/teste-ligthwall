@@ -17,29 +17,20 @@
        próprio (setor-qualidade-app.html); agora que a tela roda como
        mais uma página do app, entra aqui igual a qualquer outra. -->
   <link rel="stylesheet" href="css/setor-qualidade.css">
-  <!-- CSS/fontes da Manutenção — mesmo raciocínio do Setor de Qualidade
-       acima: extraído do protótipo standalone "Etiqueta - Manutenção.html"
-       (rodava sozinho, fora da SPA), agora entra como mais uma página. -->
-  <link rel="stylesheet" href="css/manutencao.css">
   <!-- CSS da aba "Operações a Validar" (Configurações → Registro
        Offline) — extraído do estilo inline que havia em app-core.js,
        ver public/css/operacoes-offline.css. -->
   <link rel="stylesheet" href="css/operacoes-offline.css">
   <!-- CSS do One Page Report — mesmo raciocínio do Setor de Qualidade
-       e da Manutenção acima: tela com paleta própria (--opr-*, ver o
-       arquivo), extraída pra fora de styles.css. -->
+       acima: tela com paleta própria (--opr-*, ver o arquivo), extraída
+       pra fora de styles.css. -->
   <link rel="stylesheet" href="css/one-page-report.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <!-- Font Awesome — usado só pelos ícones do Setor de Qualidade (o
-       resto do app não usa nenhum ícone fas/far); antes só era carregado
+  <!-- Font Awesome — usado pelos ícones do Setor de Qualidade (o resto
+       do app não usa nenhum ícone fas/far); antes só era carregado
        dentro do iframe próprio. -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Chart.js — usado só pelo gráfico "Evolução de Chamados" da
-       Manutenção (o resto do app desenha gráficos em SVG puro, ver
-       comentário nos gráficos de setor-qualidade.js — mas o protótipo
-       original da Manutenção já usava Chart.js, mantido aqui igual). -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -318,13 +309,6 @@
           <span class="nav-text">Setor de Qualidade</span>
         </button>
 
-        <button class="nav-item" title="Manutenção" data-page="manutencao" onclick="showPage('manutencao',this)">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          <span class="nav-text">Manutenção</span>
-        </button>
-
         <button class="nav-item" title="One Page Report" data-page="one-page-report" onclick="showPage('one-page-report',this)">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -395,11 +379,6 @@
             <div class="menu-card-icon">🧪</div>
             <div class="menu-card-title">Setor de Qualidade</div>
             <div class="menu-card-desc">Avaliação de baterias e classificação de painéis (aprovado/reprovado), com dashboard de refugo e recorrência de defeitos.</div>
-          </div>
-          <div class="menu-card" tabindex="0" role="button" data-page="manutencao" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('manutencao')">
-            <div class="menu-card-icon">🔧</div>
-            <div class="menu-card-title">Manutenção</div>
-            <div class="menu-card-desc">Chamados corretivos, manutenção programada, compra de peças e almoxarifado — com visão executiva de custos e MTTR.</div>
           </div>
           <div class="menu-card" tabindex="0" role="button" data-page="one-page-report" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" onclick="showPage('one-page-report')">
             <div class="menu-card-icon">📊</div>
@@ -3294,625 +3273,6 @@
       <div class="sq-toast-container" id="sq-toastContainer"></div>
       </div>
     </main>
-<!-- ============ PAGE: MANUTENÇÃO ============ -->
-    <main class="main" id="page-manutencao">
-      <div class="page-header">
-        <h1 class="page-title">Manuten<span>ção</span></h1>
-        <p class="page-desc">Chamados Corretivos · Manutenção Programada</p>
-      </div>
-      <div class="page-body" style="padding:0;">
-<div class="man-container">
-  <!-- Barra de ações da página — a marca "LIGHTWALL" do protótipo
-       original foi removida daqui: já aparece no topbar global da SPA
-       (nav-topbar.html), ficaria duplicada. Mantido só como barra de
-       ações + abas internas, mesmo padrão do Setor de Qualidade
-       (ver .sq-topbar/.sq-nav, page-setor-qualidade.html). -->
-  <div class="man-topbar man-no-print">
-    <div class="man-brand">
-      <div style="width:4px; height:24px; background:var(--accent); border-radius:2px;"></div>
-      Gestão de Manutenção
-    </div>
-    <div class="man-actions">
-      <button class="man-btn man-btn-primary" data-manut-area="manutencao-chamado" onclick="novoChamado()"><i class="fas fa-plus-circle"></i> Novo Chamado</button>
-      <button class="man-btn man-btn-outline" onclick="exportarCSV()"><i class="fas fa-file-excel"></i> Exportar Excel</button>
-    </div>
-  </div>
-
-  <!-- NAVEGAÇÃO -->
-  <div class="man-nav-tabs man-no-print">
-    <button class="man-btn active" onclick="navegar('manutencao')"><i class="fas fa-wrench"></i> Corretiva</button>
-    <button class="man-btn" onclick="navegar('programada')"><i class="fas fa-calendar-alt"></i> Programada</button>
-    <button class="man-btn" onclick="navegar('dashboard')"><i class="fas fa-chart-pie"></i> Visão Executiva</button>
-  </div>
-
-  <!-- PÁGINA: MANUTENÇÃO CORRETIVA -->
-  <div id="man-manutencao" class="man-page active">
-
-    <!-- PAINEL DE CHAMADOS — acordeão de fases (ver conversa: "kanban pra
-         cima" + "cada card vira tipo um select"). Fica ANTES do
-         formulário de propósito — é a primeira coisa que a pessoa vê ao
-         entrar na aba, pra bater o olho no que está pendente antes de
-         abrir qualquer chamado específico. Clicar num cartão dentro de
-         uma fase aberta ainda abre o mesmo formulário/assistente de
-         sempre (editarManutencao) — a área de ação continua sendo aqui;
-         a tabela lá embaixo é só consulta. -->
-    <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-wrench"></i> Painel de Chamados Corretivos</div>
-      <div class="man-kanban-accordion" id="man-corretivaAccordion"></div>
-    </div>
-
-    <!-- FILTROS -->
-    <div class="man-filters man-no-print">
-      <div class="man-filter-group"><label><i class="fas fa-search"></i> ID</label><input type="text" id="man-filtroID" placeholder="Buscar ID..." oninput="aplicarFiltrosCorretiva()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-industry"></i> Máquina</label><input type="text" id="man-filtroMaquina" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-building"></i> Setor</label><input type="text" id="man-filtroSetor" placeholder="Buscar..." oninput="aplicarFiltrosCorretiva()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-bolt"></i> Tipo</label>
-        <!-- Fallback estático — MAN.carregarOpcoesTipoManutencao()
-             (manutencao.js) regenera a partir de config.json
-             (LW.TIPO_MANUTENCAO_OPTS, configurável em Configurações >
-             Tipos de Manutenção) assim que carregar; isto só cobre o
-             instante antes disso. -->
-        <select id="man-filtroTipo" onchange="aplicarFiltrosCorretiva()">
-          <option value="">Todos</option>
-          <option value="Elétrica">Elétrica</option>
-          <option value="Mecânica">Mecânica</option>
-        </select>
-      </div>
-      <div class="man-filter-group"><label><i class="fas fa-exclamation-triangle"></i> Prioridade</label>
-        <!-- Fallback estático — MAN.carregarOpcoesPrioridade()
-             (manutencao.js) regenera a partir de config.json
-             (LW.PRIORIDADE_OPTS, configurável em Configurações >
-             Prioridades) assim que carregar. -->
-        <select id="man-filtroPrioridade" onchange="aplicarFiltrosCorretiva()">
-          <option value="">Todas</option>
-          <option value="BAIXA">Baixa</option>
-          <option value="MÉDIA">Média</option>
-          <option value="ALTA">Alta</option>
-        </select>
-      </div>
-      <div class="man-filter-group"><label><i class="fas fa-check-circle"></i> Status</label>
-        <select id="man-filtroStatus" onchange="aplicarFiltrosCorretiva()">
-          <option value="">Todos</option>
-          <option value="Aguardando">Aguardando</option>
-          <option value="Em Manutencao">Em Manutenção</option>
-          <option value="Concluido">Concluído</option>
-        </select>
-      </div>
-      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroData" onchange="aplicarFiltrosCorretiva()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-user"></i> Observador</label><input type="text" id="man-filtroObservador" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosCorretiva()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Responsável</label><input type="text" id="man-filtroResponsavel" placeholder="Quem executou..." oninput="aplicarFiltrosCorretiva()"></div>
-      <button class="man-btn man-btn-outline" onclick="limparFiltrosCorretiva()"><i class="fas fa-undo-alt"></i> Limpar</button>
-    </div>
-
-    <!-- FORMULÁRIO -->
-    <div id="man-formCard" class="man-card" style="display: none;">
-      <div class="man-card-title">
-        <span id="man-formTitle"><i class="fas fa-edit"></i> Registro de Solicitação</span>
-        <span id="man-formIdDisplay" style="color:var(--text-3); font-family: 'JetBrains Mono'; font-size:12px;"></span>
-        <span id="man-formAceiteInfo" style="color:var(--text-3); font-size:12px; margin-left:8px;"></span>
-      </div>
-      <form id="man-manForm" class="man-form-paper" onsubmit="return false;">
-        <input type="hidden" id="man-manId"><input type="hidden" id="man-manEtiquetaFechada" value="false">
-
-        <!-- NAVEGAÇÃO DO ASSISTENTE — troca de qual das 4 zonas abaixo
-             fica visível (ver _manIrParaStep()/_manAplicarStepAtual(),
-             manutencao.js). Pílulas desabilitadas = etapa ainda não faz
-             sentido agora (ex: chamado novo, ainda não salvo; ou "Peça",
-             quando ninguém marcou "Aguardando peças? = Sim"). -->
-        <div class="man-wizard-nav man-no-print" id="man-wizardNav">
-          <button type="button" class="man-wizard-step" data-step="abertura" onclick="_manIrParaStep('abertura')"><span class="num">1</span> Abertura</button>
-          <button type="button" class="man-wizard-step" data-step="execucao" onclick="_manIrParaStep('execucao')"><span class="num">2</span> Execução</button>
-          <button type="button" class="man-wizard-step" data-step="peca" id="man-wizardStepPeca" onclick="_manIrParaStep('peca')" style="display:none;"><span class="num">3</span> Peça</button>
-          <button type="button" class="man-wizard-step" data-step="fechamento" onclick="_manIrParaStep('fechamento')"><span class="num">4</span> Fechamento</button>
-        </div>
-
-        <div id="man-zonaAbertura">
-
-        <!-- SEÇÃO 1: ABERTURA -->
-        <div style="background:var(--red-dim); border-left:4px solid var(--red); padding:10px 0; margin:0;">
-          <div style="padding:0 16px 8px 16px; color:var(--red); font-weight:600;"><i class="fas fa-user"></i> 1. Abertura do Chamado</div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-manSetor" placeholder="Ex: Injetora"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-manMaquina" placeholder="Ex: M01"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
-            <div class="man-form-field">
-              <select id="man-manTurno">
-                <option value="1º TURNO">1º TURNO</option>
-                <option value="2º TURNO">2º TURNO</option>
-                <option value="3º TURNO">3º TURNO</option>
-              </select>
-            </div>
-          </div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data</div><div class="man-form-field"><input type="date" id="man-manData"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Observador</div><div class="man-form-field"><input type="text" id="man-manObservador" placeholder="Nome do operador"></div></div>
-        </div>
-
-        <!-- SEÇÃO 2: DETALHES DO PROBLEMA -->
-        <div style="background:var(--blue-dim); border-left:4px solid var(--blue); padding:10px 0; margin:0;">
-          <div style="padding:0 16px 8px 16px; color:var(--blue); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> 2. Detalhes do Problema</div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-file-alt"></i> Anomalia</div><div class="man-form-field"><textarea id="man-manAnomalia" placeholder="Descreva o problema..."></textarea></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-map-pin"></i> Local</div><div class="man-form-field"><input type="text" id="man-manLocal" placeholder="Ex: EM FRENTE AO PAINEL"></div></div>
-          <div class="man-form-row">
-            <div class="man-form-label"><i class="fas fa-list-ul"></i> Tipos de Anomalia</div>
-            <div class="man-form-field">
-              <div class="man-tipos-anomalia" id="man-tiposContainer">
-                <span class="man-tag-anomalia S" data-type="S" onclick="toggleTipo('S')">S</span>
-                <span class="man-tag-anomalia Q" data-type="Q" onclick="toggleTipo('Q')">Q</span>
-                <span class="man-tag-anomalia CB" data-type="CB" onclick="toggleTipo('CB')">CB</span>
-                <span class="man-tag-anomalia LDA" data-type="LDA" onclick="toggleTipo('LDA')">LDA</span>
-                <span class="man-tag-anomalia FS" data-type="FS" onclick="toggleTipo('FS')">FS</span>
-                <span class="man-tag-anomalia FM" data-type="FM" onclick="toggleTipo('FM')">FM</span>
-                <span class="man-tag-anomalia ID" data-type="ID" onclick="toggleTipo('ID')">ID</span>
-              </div>
-              <input type="hidden" id="man-manTipos" value="[]">
-            </div>
-          </div>
-          <div class="man-form-row">
-            <div class="man-form-label"><i class="fas fa-exclamation-circle"></i> Prioridade</div>
-            <div class="man-form-field">
-              <!-- Fallback estático — MAN.carregarOpcoesPrioridade()
-                   (manutencao.js) RECONSTRÓI este bloco inteiro a partir
-                   de config.json assim que carregar (mesmo motivo do
-                   filtro, acima — cada nível tem uma cor própria
-                   configurável, não dá pra manter isso em CSS fixo). -->
-              <div class="man-prioridade-box">
-                <button type="button" class="man-prioridade-btn" data-value="BAIXA" onclick="setPrioridade('BAIXA')">BAIXA</button>
-                <button type="button" class="man-prioridade-btn" data-value="MÉDIA" onclick="setPrioridade('MÉDIA')">MÉDIA</button>
-                <button type="button" class="man-prioridade-btn" data-value="ALTA" onclick="setPrioridade('ALTA')">ALTA</button>
-              </div>
-              <input type="hidden" id="man-manPrioridade">
-            </div>
-          </div>
-          <!-- Fallback estático — ver comentário em man-filtroTipo, acima. -->
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-manTipoManutencao"><option value="">Selecione...</option><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
-          <div class="man-form-row">
-            <div class="man-form-label"><i class="fas fa-tag"></i> Tipo de Etiqueta</div>
-            <div class="man-form-field">
-              <select id="man-manTipoEtiqueta">
-                <option value="Azul"><i class="fas fa-circle" style="color:var(--blue);"></i> Azul (Autônoma)</option>
-                <option value="Vermelho"><i class="fas fa-circle" style="color:var(--red);"></i> Vermelho (Técnica)</option>
-              </select>
-            </div>
-          </div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera"></i> Fotos do Problema</div><div class="man-form-field"><div class="man-foto-grid" id="man-fotosOperadorGrid"></div><div class="man-foto-botoes"><button type="button" class="man-btn man-btn-outline" onclick="_manAbrirCameraFoto('operador')"><i class="fas fa-camera"></i> Câmera</button><button type="button" class="man-btn man-btn-outline" onclick="_manAbrirGaleriaFoto('operador')"><i class="fas fa-images"></i> Galeria</button></div><span class="man-upload-hint">Fotos são comprimidas automaticamente; pode adicionar quantas precisar.</span></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-file-pdf"></i> Documento (PDF)</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoOperador" accept="application/pdf" onchange="previewArquivo(this, 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')"><div id="man-fotoOperadorPreview" style="display:none;"></div><button id="man-btnRemoverFotoOp" style="display:none;" onclick="removerArquivo('man-manFotoOperador', 'man-fotoOperadorPreview', 'man-btnRemoverFotoOp')">Remover</button></div><span class="man-upload-hint">Opcional — um único PDF, anexado sem compressão.</span></div></div></div>
-        </div>
-        <!-- /man-zonaAbertura -->
-
-        <!-- SEÇÃO 3: EXECUÇÃO (MANUTENÇÃO) -->
-        <div id="man-techSection">
-          <div style="background:var(--accent-dim); border-left:4px solid var(--accent); padding:10px 0; margin:0;">
-            <div style="padding:0 16px 8px 16px; color:var(--accent); font-weight:600;"><i class="fas fa-hard-hat"></i> 3. Execução (Manutenção)</div>
-            <div id="man-aceitarChamadoBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--accent); border-radius:6px; background:var(--accent-dim);">
-              <div id="man-aceitarChamadoNormal">
-                <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarChamadoTexto">Este chamado ainda não foi aceito. Os campos de execução só aparecem depois que alguém aceitar.</span></p>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                  <button type="button" id="man-btnAceitarChamado" class="man-btn man-btn-warning" onclick="aceitarChamado()"><i class="fas fa-hand-paper"></i> Aceitar Chamado</button>
-                  <button type="button" id="man-btnRecusarChamado" class="man-btn man-btn-outline" style="border-color:var(--red); color:var(--red);" onclick="abrirModalRecusaChamado()"><i class="fas fa-times-circle"></i> Recusar Chamado</button>
-                  <!-- "Renotificar" — visível só pra Encarregado/Supervisão/Admin (ver
-                       _podeRenotificarAtual, manutencao.js); exibido/ocultado em
-                       _atualizarGateExecucao(). -->
-                  <button type="button" id="man-btnRenotificarChamado" class="man-btn man-btn-outline" style="display:none;" onclick="renotificarChamado()"><i class="fas fa-bell"></i> Renotificar</button>
-                </div>
-              </div>
-              <div id="man-recusaPendenteBox" style="display:none;">
-                <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-exclamation-triangle" style="color:var(--red);"></i> Recusa solicitada por <strong id="man-recusaInfoSolicitante"></strong>: <em id="man-recusaInfoMotivo"></em></p>
-                <div id="man-recusaBotoesRevisor" style="display:none; gap:10px; flex-wrap:wrap;">
-                  <button type="button" class="man-btn man-btn-danger" onclick="responderRecusaChamado(true)"><i class="fas fa-lock"></i> Aceitar Recusa (encerra o chamado)</button>
-                  <button type="button" class="man-btn man-btn-outline" onclick="responderRecusaChamado(false)"><i class="fas fa-undo-alt"></i> Negar Recusa (volta para Manutenção)</button>
-                </div>
-              </div>
-            </div>
-            <div id="man-techCampos">
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataInicio" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraInicio" onchange="calcularTempoGasto()"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-manDataFim" onchange="calcularTempoGasto()"><label>Hora</label><input type="time" id="man-manHoraFim" onchange="calcularTempoGasto()"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo gasto</div><div class="man-form-field"><input type="text" id="man-manTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--accent); font-weight:600;"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-cog"></i> Responsável pela Execução</div>
-              <div class="man-form-field">
-                <select id="man-manTipoExecucao" onchange="toggleEmpresaExterna()">
-                  <option value="Interno">Interno</option>
-                  <option value="Externo">Empresa Externa</option>
-                </select>
-              </div>
-            </div>
-            <div class="man-form-row" id="man-manEmpresaExternaRow" style="display:none;"><div class="man-form-label"><i class="fas fa-building"></i> Nome da Empresa</div><div class="man-form-field"><input type="text" id="man-manEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-tie"></i> Responsável Técnico</div><div class="man-form-field"><input type="text" id="man-manResponsavel" placeholder="Nome do técnico"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-info-circle"></i> Situação</div><div class="man-form-field"><select id="man-manSituacao" onchange="aoMudarSituacao()"><option value="Aguardando">Aguardando Atendimento</option><option value="Em Manutencao">Em Manutenção</option><option value="Concluido">Concluído</option></select></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-pause-circle"></i> Em manutenção?</div><div class="man-form-field"><select id="man-manEmManutencao"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-boxes"></i> Aguardando peças?</div><div class="man-form-field"><select id="man-manAguardandoPecas" onchange="toggleSupervisorSection()"><option value="Nao">Não</option><option value="Sim">Sim</option></select></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Peças avariadas</div><div class="man-form-field"><input type="text" id="man-manPecasAvariadas" placeholder="Ex: Válvulas"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shopping-cart"></i> Peças a comprar</div><div class="man-form-field"><input type="text" id="man-manPecasComprar" placeholder="Ex: Conector em L"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clipboard-list"></i> Rotina executada</div><div class="man-form-field"><textarea id="man-manRotina" placeholder="Descreva o procedimento..."></textarea></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-camera-retro"></i> Fotos do Serviço</div><div class="man-form-field"><div class="man-foto-grid" id="man-fotosTecnicoGrid"></div><div class="man-foto-botoes"><button type="button" class="man-btn man-btn-outline" onclick="_manAbrirCameraFoto('tecnico')"><i class="fas fa-camera"></i> Câmera</button><button type="button" class="man-btn man-btn-outline" onclick="_manAbrirGaleriaFoto('tecnico')"><i class="fas fa-images"></i> Galeria</button></div><span class="man-upload-hint">Fotos são comprimidas automaticamente; pode adicionar quantas precisar.</span></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-file-pdf"></i> Documento (PDF)</div><div class="man-form-field"><div class="man-upload-area"><input type="file" id="man-manFotoTecnico" accept="application/pdf" onchange="previewArquivo(this, 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')"><div id="man-fotoTecnicoPreview" style="display:none;"></div><button id="man-btnRemoverFotoTec" style="display:none;" onclick="removerArquivo('man-manFotoTecnico', 'man-fotoTecnicoPreview', 'man-btnRemoverFotoTec')">Remover</button></div><span class="man-upload-hint">Opcional — um único PDF, anexado sem compressão.</span></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-clock"></i> Custo Mão de Obra (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoMaoObra" step="0.01" placeholder="0,00"></div></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- SEÇÃO 4: ACOMPANHAMENTO DA SUPERVISÃO ("Peça" no assistente) -->
-        <div id="man-supervisorSection">
-          <div style="background:var(--green-dim); border-left:4px solid var(--green); padding:10px 0; margin:0;">
-            <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-user-shield"></i> Acompanhamento (Supervisão)</div>
-            <div id="man-aceitarPedidoPecaBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--green); border-radius:6px; background:var(--green-dim);">
-              <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-info-circle"></i> <span id="man-aceitarPedidoPecaTexto">Há um pedido de peça pendente. Os campos de acompanhamento só aparecem depois que Supervisão, Encarregado ou Administrador aceitarem o pedido.</span></p>
-              <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <button type="button" id="man-btnAceitarPedidoPeca" class="man-btn man-btn-success" onclick="aceitarPedidoPeca()"><i class="fas fa-hand-paper"></i> Aceitar Pedido de Peça</button>
-                <!-- "Renotificar" — visível só pra Encarregado/Supervisão/Admin (ver
-                     _podeRenotificarAtual, manutencao.js); exibido/ocultado em
-                     _atualizarGateAcompanhamento(). -->
-                <button type="button" id="man-btnRenotificarPedidoPeca" class="man-btn man-btn-outline" style="display:none;" onclick="renotificarPedidoPeca()"><i class="fas fa-bell"></i> Renotificar</button>
-              </div>
-            </div>
-            <!-- 3º portão do fluxo de peça (ver conversa que motivou isso):
-                 depois que a Supervisão marca "Status da Compra = Peça
-                 recebida", o formulário de Execução NÃO reabre direto —
-                 a Manutenção precisa confirmar aqui que recebeu a peça de
-                 verdade nas mãos. Visível só quando
-                 _pecaAguardandoConfirmacao() é true (ver
-                 _atualizarGateAcompanhamento, manutencao.js). -->
-            <div id="man-confirmarRecebimentoBox" style="display:none; margin:0 16px 12px 16px; padding:14px; border:1px dashed var(--green); border-radius:6px; background:var(--green-dim);">
-              <p style="margin:0 0 10px 0; color:var(--text-2); font-size:13px;"><i class="fas fa-box-open"></i> A Supervisão marcou a peça como <strong>recebida</strong>. Antes de continuar a manutenção, confirme que a peça chegou de verdade nas mãos.</p>
-              <button type="button" id="man-btnConfirmarRecebimento" class="man-btn man-btn-success" onclick="confirmarRecebimentoPeca()"><i class="fas fa-check-double"></i> Confirmar Recebimento da Peça</button>
-            </div>
-            <div id="man-supCampos">
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-play"></i> Início (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataInicio" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraInicio" onchange="calcularTempoSupervisao()"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-stop"></i> Fim (Data/Hora)</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-supDataFim" onchange="calcularTempoSupervisao()"><label>Hora</label><input type="time" id="man-supHoraFim" onchange="calcularTempoSupervisao()"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-hourglass-half"></i> Tempo de atuação</div><div class="man-form-field"><input type="text" id="man-supTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--green); font-weight:600;"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-shipping-fast"></i> Status da Compra</div><div class="man-form-field"><select id="man-manStatusCompra"><option value="">Selecione...</option><option value="Em Análise">Em Análise</option><option value="Cotação em andamento">Cotação em andamento</option><option value="Pedido efetuado">Pedido efetuado</option><option value="Peça em transporte">Peça em transporte</option><option value="Peça recebida">Peça recebida</option></select></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-check"></i> Previsão de Chegada</div><div class="man-form-field"><input type="date" id="man-manPrevisaoChegada"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-truck"></i> Nº Pedido / Fornecedor</div><div class="man-form-field"><input type="text" id="man-manFornecedor" placeholder="Pedido #123 - Fornecedor A"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-dollar-sign"></i> Custo Peças (R$)</div><div class="man-form-field"><input type="number" id="man-manCustoPecas" step="0.01" placeholder="0,00"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user-check"></i> Responsável pela Análise</div><div class="man-form-field"><input type="text" id="man-manRespSupervisor" placeholder="Nome do supervisor"></div></div>
-            <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações da Supervisão</div><div class="man-form-field"><textarea id="man-manObsSupervisor" placeholder="Informações adicionais sobre prazos, negociações ou justificativas..."></textarea></div></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 4ª ETAPA DO ASSISTENTE: FECHAMENTO — nova (antes só existia
-             como botão solto + modal). _manRenderizarFechamento()
-             (manutencao.js) decide o conteúdo: aviso (situação ainda não
-             é "Concluído"), resumo + botão (pronto pra fechar), ou
-             confirmação (já fechado). O botão continua abrindo o MESMO
-             modal de sempre (abrirModalFechamento/confirmarFechamento) —
-             só mudou ONDE o botão mora. -->
-        <div id="man-zonaFechamento" style="display:none;">
-          <div style="background:var(--green-dim); border-left:4px solid var(--green); padding:10px 0; margin:0;">
-            <div style="padding:0 16px 8px 16px; color:var(--green); font-weight:600;"><i class="fas fa-lock"></i> Fechamento</div>
-            <div id="man-fechamentoConteudo"></div>
-          </div>
-        </div>
-
-        <!-- BOTÕES INFERIORES — sempre visíveis, independente da etapa
-             atual do assistente (salva o que estiver preenchido, onde
-             quer que a pessoa esteja navegando). -->
-        <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-          <button type="button" id="man-btnSalvarManutencao" class="man-btn man-btn-success" data-manut-area="manutencao-chamado" onclick="salvarManutencao()"><i class="fas fa-save"></i> Salvar Chamado</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharFormulario()"><i class="fas fa-times"></i> Cancelar</button>
-        </div>
-      </form>
-    </div>
-
-    <!-- TODOS OS CHAMADOS — tabela somente-leitura (ver conversa: "sem a
-         opção de editar, só pra visualizar todos os chamados tipo numa
-         tabela"). Clique na linha abre a trajetória completa
-         (abrirHistorico) — não abre o formulário/assistente de edição;
-         quem quer agir usa o acordeão lá em cima. Mesmos filtros da
-         página se aplicam aqui também (mesmo conjunto de dados
-         filtrados de renderCorretiva()). -->
-    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
-         por uma topbar de abas — critério é SEMPRE etiquetaFechada (ver
-         _preencherTabelaCorretiva()/_manToggleListaCorretiva(),
-         manutencao.js): etiquetaFechada=false → Pendentes;
-         etiquetaFechada=true → Concluídos. Os dois <tbody> são sempre
-         preenchidos por renderCorretiva(); só a visibilidade alterna. -->
-    <div class="man-card">
-      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
-        <span><i class="fas fa-list"></i> Chamados (consulta)</span>
-        <div class="man-subtabs" id="man-corretivaSubtabs">
-          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaCorretiva('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-corretivaCountPendentes">0</span></button>
-          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaCorretiva('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-corretivaCountConcluidos">0</span></button>
-        </div>
-      </div>
-      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaPendentes">
-        <table>
-          <thead><tr>
-            <th style="width: 9%;">Nº</th>
-            <th style="width: 11%;">Máquina</th>
-            <th style="width: 8%;">Setor</th>
-            <th style="width: 9%;">Turno</th>
-            <th style="width: 10%;">Observador</th>
-            <th style="width: 8%;">Tipo</th>
-            <th style="width: 8%;">Prioridade</th>
-            <th style="width: 8%;">Etiqueta</th>
-            <th style="width: 11%;">Status</th>
-            <th style="width: 12%;">Supervisão</th>
-            <th style="width: 6%;">Ações</th>
-          </tr></thead>
-          <tbody id="man-corretivaTableBodyPendentes"></tbody>
-        </table>
-      </div>
-      <div class="man-table-wrap man-table-wrap--linha-unica" id="man-corretivaListaConcluidos" style="display:none;">
-        <table>
-          <thead><tr>
-            <th style="width: 9%;">Nº</th>
-            <th style="width: 11%;">Máquina</th>
-            <th style="width: 8%;">Setor</th>
-            <th style="width: 9%;">Turno</th>
-            <th style="width: 10%;">Observador</th>
-            <th style="width: 8%;">Tipo</th>
-            <th style="width: 8%;">Prioridade</th>
-            <th style="width: 8%;">Etiqueta</th>
-            <th style="width: 11%;">Status</th>
-            <th style="width: 12%;">Supervisão</th>
-            <th style="width: 6%;">Ações</th>
-          </tr></thead>
-          <tbody id="man-corretivaTableBodyConcluidos"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- PÁGINA: MANUTENÇÃO PROGRAMADA -->
-  <div id="man-programada" class="man-page">
-    <div class="man-dashboard-kpis man-no-print">
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progTotal">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Total</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progPendentes" style="color:var(--accent);">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Pendentes</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progAprovados" style="color:var(--green);">0</div><div class="man-kpi-label"><i class="fas fa-check-circle"></i> Aprovados</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-progReprovados" style="color:var(--red);">0</div><div class="man-kpi-label"><i class="fas fa-times-circle"></i> Reprovados</div></div>
-    </div>
-
-    <div class="man-card">
-      <div class="man-card-title"><i class="fas fa-pen-square"></i> Solicitar Manutenção Programada</div>
-      <form class="man-form-paper" onsubmit="return false;">
-        <!-- SEÇÃO 1: DADOS DA SOLICITAÇÃO -->
-        <div style="background:var(--blue-dim); border-left:4px solid var(--blue); padding:10px 0; margin:0;">
-          <div style="padding:0 16px 8px 16px; color:var(--blue); font-weight:600;"><i class="fas fa-file-alt"></i> 1. Dados da Solicitação</div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-building"></i> Setor</div><div class="man-form-field"><input type="text" id="man-progSetor" placeholder="Ex: Injetora"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-industry"></i> Máquina</div><div class="man-form-field"><input type="text" id="man-progMaquina" placeholder="Ex: M01"></div></div>
-          <!-- Fallback estático — ver comentário em man-filtroTipo, acima. -->
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-tools"></i> Tipo de Manutenção</div><div class="man-form-field"><select id="man-progTipo"><option value="Elétrica">Elétrica</option><option value="Mecânica">Mecânica</option></select></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-user"></i> Solicitante</div><div class="man-form-field"><input type="text" id="man-progSolicitante" placeholder="Seu nome"></div></div>
-        </div>
-        <!-- SEÇÃO 2: PLANEJAMENTO -->
-        <div style="background:var(--accent-dim); border-left:4px solid var(--accent); padding:10px 0; margin:0;">
-          <div style="padding:0 16px 8px 16px; color:var(--accent); font-weight:600;"><i class="fas fa-calendar-check"></i> 2. Planejamento</div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-calendar-day"></i> Data Programada</div><div class="man-form-field"><input type="date" id="man-progData"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Turno</div>
-            <div class="man-form-field">
-              <select id="man-progTurno">
-                <option value="1º TURNO">1º TURNO</option>
-                <option value="2º TURNO">2º TURNO</option>
-                <option value="3º TURNO">3º TURNO</option>
-              </select>
-            </div>
-          </div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Sugestão de Horário</div><div class="man-form-field"><input type="time" id="man-progHora"></div></div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sync-alt"></i> Recorrência</div>
-            <div class="man-form-field">
-              <select id="man-progRecorrencia">
-                <option value="Nenhuma">Nenhuma</option>
-                <option value="Diário">Diário</option>
-                <option value="Semanal">Semanal</option>
-                <option value="Mensal">Mensal</option>
-              </select>
-            </div>
-          </div>
-          <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Observações</div><div class="man-form-field"><textarea id="man-progObs" placeholder="Descreva o motivo ou necessidade..."></textarea></div></div>
-          <div style="display:flex; gap:12px; margin:16px; padding:10px; flex-wrap:wrap;">
-            <button type="button" class="man-btn man-btn-primary" data-manut-area="manutencao" onclick="verificarEAgendiar()"><i class="fas fa-calendar-check"></i> Verificar e Agendar</button>
-            <div id="man-progMensagem" style="font-size:13px; display:flex; align-items:center; color:var(--text-2);"></div>
-          </div>
-        </div>
-      </form>
-    </div>
-
-    <!-- Duas listas em vez de uma tabela única — mesma lógica visual/
-         colunas de sempre, só separadas por status (ver
-         _agendamentoConcluido(), manutencao.js): Pendente/Aprovado/Em
-         Execução → Painel de Aprovação & Execução (ainda precisa de
-         ação); Concluído/Reprovado/Não Executado → lista de Concluídos
-         (só consulta, fim do fluxo). Paginação independente pra cada
-         uma (pageProgramadaPendentes/pageProgramadaConcluidos). -->
-    <!-- Duas listas (Pendentes/Concluídos) dentro do MESMO card, alternadas
-         por uma topbar de abas — critério é SEMPRE o status atual (ver
-         _agendamentoConcluido()/_manToggleListaProgramada(), manutencao.js):
-         Pendente/Aprovado/Em Execução → Pendentes (ainda precisa de ação);
-         Concluído/Reprovado/Não Executado → Concluídos (só consulta, fim
-         do fluxo). Paginação independente pra cada lista continua
-         existindo (pageProgramadaPendentes/pageProgramadaConcluidos); só
-         a visibilidade das duas listas alterna, os dois <tbody> continuam
-         sempre preenchidos por renderProgramada(). -->
-    <!-- Filtros do Painel de Aprovação & Execução — mesmo padrão visual dos
-         filtros da Corretiva (.man-filters/.man-filter-group) lá em cima.
-         Filtra por Data (a.data), Solicitante (a.solicitante, quem abriu o
-         chamado) e Executor (a.execucao.tecnicoResponsavel, quem executou —
-         só existe depois que a execução é finalizada; itens ainda sem
-         execução simplesmente não batem com esse filtro). Ver
-         aplicarFiltrosProgramada()/renderProgramada() em manutencao.js. -->
-    <div class="man-filters man-no-print">
-      <div class="man-filter-group"><label><i class="fas fa-calendar-day"></i> Data</label><input type="date" id="man-filtroProgData" onchange="aplicarFiltrosProgramada()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-user"></i> Solicitante</label><input type="text" id="man-filtroProgSolicitante" placeholder="Quem abriu o chamado..." oninput="aplicarFiltrosProgramada()"></div>
-      <div class="man-filter-group"><label><i class="fas fa-user-cog"></i> Executor</label><input type="text" id="man-filtroProgExecutor" placeholder="Quem executou..." oninput="aplicarFiltrosProgramada()"></div>
-      <div class="man-filter-group"><label>&nbsp;</label><button type="button" class="man-btn man-btn-outline" onclick="limparFiltrosProgramada()"><i class="fas fa-eraser"></i> Limpar</button></div>
-    </div>
-
-    <div class="man-card">
-      <div class="man-card-title" style="justify-content:flex-start; gap:16px;">
-        <span><i class="fas fa-user-cog"></i> Painel de Aprovação & Execução</span>
-        <div class="man-subtabs" id="man-programadaSubtabs">
-          <button type="button" class="man-subtab active" data-subtab="pendentes" onclick="_manToggleListaProgramada('pendentes')"><i class="fas fa-hourglass-half"></i> Pendentes <span class="count" id="man-programadaCountPendentes">0</span></button>
-          <button type="button" class="man-subtab" data-subtab="concluidos" onclick="_manToggleListaProgramada('concluidos')"><i class="fas fa-check-circle"></i> Concluídos <span class="count" id="man-programadaCountConcluidos">0</span></button>
-        </div>
-      </div>
-      <div id="man-programadaListaPendentes">
-        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBody"></tbody></table></div>
-        <div id="man-pagProgramada" class="man-pagination man-no-print"></div>
-      </div>
-      <div id="man-programadaListaConcluidos" style="display:none;">
-        <div class="man-table-wrap"><table><thead><tr><th style="width:8%;">Nº</th><th style="width:10%;">Máquina</th><th style="width:9%;">Solicitante</th><th style="width:8%;">Turno</th><th style="width:11%;">Data</th><th style="width:9%;">Sugestão</th><th style="width:14%;">Horário Estimado</th><th style="width:9%;">Status</th><th style="width:22%;">Ações</th></tr></thead><tbody id="man-programadaTableBodyConcluidos"></tbody></table></div>
-        <div id="man-pagProgramadaConcluidos" class="man-pagination man-no-print"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PÁGINA: VISÃO EXECUTIVA -->
-  <div id="man-dashboard" class="man-page">
-    <div class="man-dashboard-kpis">
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalAbertos">0</div><div class="man-kpi-label"><i class="fas fa-folder-open"></i> Chamados Abertos</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiTotalFechados" style="color:var(--green);">0</div><div class="man-kpi-label"><i class="fas fa-check-double"></i> Chamados Fechados</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgMes">0</div><div class="man-kpi-label"><i class="fas fa-calendar-alt"></i> Programadas no Mês</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgHoje">0</div><div class="man-kpi-label"><i class="fas fa-calendar-day"></i> Manut. Hoje</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiProgPend">0</div><div class="man-kpi-label"><i class="fas fa-hourglass-start"></i> Agend. Pendentes</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoPecas" style="color:var(--accent);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-cogs"></i> Custo Peças</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoMaoObra" style="color:var(--blue);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-user-clock"></i> Mão de Obra</div></div>
-      <div class="man-kpi-card"><div class="man-kpi-number" id="man-kpiCustoTotal" style="color:var(--accent);">R$ 0</div><div class="man-kpi-label"><i class="fas fa-coins"></i> Custo Total</div></div>
-    </div>
-    <div class="man-card"><div class="man-card-title"><i class="fas fa-chart-bar"></i> Evolução de Chamados (últimos 6 meses)</div><canvas id="man-chartManutencao" height="150"></canvas></div>
-    <div class="man-card"><div class="man-card-title"><i class="fas fa-clock"></i> MTTR (Tempo Médio de Reparo) por Máquina</div><div id="man-mttrContainer"></div></div>
-    <div class="man-card"><div class="man-card-title"><i class="fas fa-folder-open"></i> Últimos Chamados Abertos</div><div id="man-dashboardAbertos" style="font-size:13px; color:var(--text-2);">Nenhum chamado aberto recente.</div></div>
-    <div class="man-card"><div class="man-card-title"><i class="fas fa-check-double"></i> Últimos Chamados Fechados</div><div id="man-dashboardFechados" style="font-size:13px; color:var(--text-2);">Nenhum chamado fechado recente.</div></div>
-  </div>
-
-  <!-- MODAIS EXISTENTES -->
-  <div id="man-modalRecusaChamado" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-times-circle"></i> Recusar Chamado</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Explique por que este chamado deveria ser recusado. Isso vira uma solicitação para Supervisão, Encarregado ou Administrador revisarem.</p>
-      <form class="man-form-paper" onsubmit="return false;">
-        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-comment-alt"></i> Motivo</div><div class="man-form-field"><textarea id="man-recusaMotivoInput" placeholder="Ex: Chamado duplicado, fora do escopo da Manutenção, etc."></textarea></div></div>
-        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-danger" onclick="confirmarRecusaChamado()"><i class="fas fa-times-circle"></i> Confirmar Recusa</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalRecusaChamado()">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="man-modalFechamento" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-lock"></i> Confirmar Fechamento do Chamado</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Revise o resumo antes de finalizar:</p>
-      <div id="man-modalResumoBody"></div>
-      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-        <button class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarFechamento()"><i class="fas fa-check"></i> Confirmar e Fechar</button>
-        <button class="man-btn man-btn-outline" onclick="fecharModal()">Cancelar</button>
-      </div>
-    </div>
-  </div>
-  
-  <div id="man-modalHistorico" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-eye"></i> Trajetória do Chamado</h2>
-      <div class="man-trajetoria-painel">
-        <div class="man-trajetoria-titulo"><i class="fas fa-route"></i> Progresso do Chamado</div>
-        <div id="man-progressoChamado" class="man-trajetoria-wrap"></div>
-      </div>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Linha do tempo visual do chamado:</p>
-      <div id="man-historicoBody" style="font-size: 14px; line-height: 1.6; max-height: 400px; overflow-y: auto;"></div>
-      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-        <button class="man-btn man-btn-outline" onclick="fecharModalHistorico()">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="man-modalInicioProgramada" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-play"></i> Iniciar Execução da Tarefa</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Registre o horário de início da execução.</p>
-      <form id="man-inicioForm" class="man-form-paper" onsubmit="return false;">
-        <input type="hidden" id="man-inicioId">
-        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-clock"></i> Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-inicioData" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-inicioHora" onchange="calcularTempoEstimado()"></div></div>
-        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarInicio()"><i class="fas fa-check"></i> Confirmar Início</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalInicio()">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="man-modalFinalizarProgramada" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-stopwatch"></i> Finalizar Execução da Tarefa</h2>
-      <div id="man-execucaoAvisoAtraso" style="display:none; padding:10px; margin-bottom:12px; border:1px solid var(--red); background:var(--red-dim); border-radius:6px; color:var(--red); font-weight:600;"><i class="fas fa-exclamation-triangle"></i> Esta tarefa está ATRASADA! Por favor, informe o motivo do atraso ou da não execução no campo abaixo.</div>
-      <form id="man-execForm" class="man-form-paper" onsubmit="return false;">
-        <input type="hidden" id="man-execId">
-        <div class="man-form-row" style="background:var(--bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Período de Execução</div></div>
-        <div class="man-form-row"><div class="man-form-label">Início (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataInicio" readonly style="opacity:0.7; cursor:not-allowed;"><label>Hora</label><input type="time" id="man-execHoraInicio" readonly style="opacity:0.7; cursor:not-allowed;"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Fim (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-execDataFim" onchange="calcularTempoExecucao()"><label>Hora</label><input type="time" id="man-execHoraFim" onchange="calcularTempoExecucao()"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Tempo gasto:</div><div class="man-form-field"><input type="text" id="man-execTempoGasto" readonly placeholder="Calculado automaticamente" style="color:var(--accent); font-weight:600; width:100%;"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Responsável pela Execução:</div>
-          <div class="man-form-field">
-            <select id="man-execTipoExecucao" onchange="toggleExecEmpresaExterna()">
-              <option value="Interno">Interno</option>
-              <option value="Externo">Empresa Externa</option>
-            </select>
-          </div>
-        </div>
-        <div class="man-form-row" id="man-execEmpresaExternaRow" style="display:none;"><div class="man-form-label">Nome da Empresa:</div><div class="man-form-field"><input type="text" id="man-execEmpresaExterna" placeholder="Ex: Manutenção Ltda."></div></div>
-        <div class="man-form-row"><div class="man-form-label">Tarefa executada?</div><div class="man-form-field"><select id="man-execExecutado" onchange="toggleExecucaoCampos()"><option value="Sim">Sim</option><option value="Nao">Não</option></select></div></div>
-        <div class="man-form-row" id="man-execMotivoGroup" style="display:none;"><div class="man-form-label">Motivo da não execução:</div><div class="man-form-field"><textarea id="man-execMotivo" placeholder="Descreva o motivo pelo qual a tarefa não foi executada..." style="width:100%;"></textarea></div></div>
-        <div class="man-form-row"><div class="man-form-label">Técnico Responsável:</div><div class="man-form-field"><input type="text" id="man-execTecnico" placeholder="Nome do técnico que executou" style="width:100%;"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Observações:</div><div class="man-form-field"><textarea id="man-execObs" placeholder="Informações adicionais sobre a execução..." style="width:100%;"></textarea></div></div>
-        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="salvarExecucao()"><i class="fas fa-save"></i> Finalizar e Salvar</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalFinalizar()">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="man-modalAprovacaoProgramada" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-check-circle"></i> Aprovar Tarefa e Definir Horário</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Defina o horário de início e fim estimados para a execução da tarefa.</p>
-      <form id="man-aprForm" class="man-form-paper" onsubmit="return false;">
-        <input type="hidden" id="man-aprId">
-        <div class="man-form-row" style="background:var(--bg-card); border-radius:6px; margin-bottom:6px;"><div class="man-form-label" style="grid-column: span 2; border-right:none; background:transparent;"><i class="fas fa-clock"></i> Sugestão do Operador: <span id="man-aprSugestaoDisplay" style="color:var(--text); font-weight:600;">--:--</span></div></div>
-        <div class="man-form-row"><div class="man-form-label">Início Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataInicio" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraInicio" onchange="calcularTempoEstimado()"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Fim Previsto (Data/Hora):</div><div class="man-form-datetime-group"><label>Data</label><input type="date" id="man-aprDataFim" onchange="calcularTempoEstimado()"><label>Hora</label><input type="time" id="man-aprHoraFim" onchange="calcularTempoEstimado()"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Duração Estimada:</div><div class="man-form-field"><input type="text" id="man-aprTempoEstimado" readonly placeholder="Calculado automaticamente" style="color:var(--accent); font-weight:600; width:100%;"></div></div>
-        <div class="man-form-row"><div class="man-form-label">Responsável pela Aprovação:</div><div class="man-form-field"><input type="text" id="man-aprResponsavel" placeholder="Nome do técnico/supervisor que aprova" style="width:100%;"></div></div>
-        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-success" data-manut-area="manutencao" onclick="confirmarAprovacao()"><i class="fas fa-check"></i> Confirmar Aprovação</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalAprovacao()">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="man-modalDetalhesProgramada" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-file-alt"></i> Detalhes da Solicitação</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Visualização completa dos dados:</p>
-      <div id="man-detalhesProgramadaBody"></div>
-      <div class="man-modal-actions" style="display:flex; gap:12px; margin-top:24px; justify-content:flex-end;">
-        <button class="man-btn man-btn-outline" onclick="fecharModalDetalhesProgramada()">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- NOVO MODAL: REPROVAÇÃO DE AGENDAMENTO -->
-  <div id="man-modalReprovacaoProgramada" class="man-modal-overlay" style="display: none;">
-    <div class="man-modal-content">
-      <h2><i class="fas fa-times-circle" style="color:var(--red);"></i> Reprovar Agendamento</h2>
-      <p style="color: var(--text-2); margin-bottom: 16px; font-size: 14px;">Por favor, informe o motivo da reprovação do agendamento para registro no histórico.</p>
-      <form id="man-reprovacaoForm" class="man-form-paper" onsubmit="return false;">
-        <input type="hidden" id="man-reprovacaoId">
-        <div class="man-form-row"><div class="man-form-label"><i class="fas fa-sticky-note"></i> Justificativa</div><div class="man-form-field"><textarea id="man-reprovacaoJustificativa" placeholder="Ex: Não será possível realizar nesta data devido a falta de peças..."></textarea></div></div>
-        <div style="display:flex; gap:12px; margin-top:16px; padding:10px; justify-content:flex-end;">
-          <button type="button" class="man-btn man-btn-danger" data-manut-area="manutencao" onclick="confirmarReprovacao()"><i class="fas fa-check"></i> Confirmar Reprovação</button>
-          <button type="button" class="man-btn man-btn-outline" onclick="fecharModalReprovacao()">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- TOAST -->
-  <div class="man-toast-container man-no-print" id="man-toastContainer"></div>
-</div>
-
-      </div>
-    </main>
 <!-- ============ PAGE: ONE PAGE REPORT LW SC ============
      Fase 5 do plano (ver README, "Nova página: One Page Report
      (planejamento)"). Dados vêm de public/js/one-page-report.js —
@@ -4200,18 +3560,9 @@
           <button type="button" id="cfg-nav-sql" class="cfg-nav-item" onclick="cfgMostrarSecao('sql')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5V12c0 1.7 3.6 3 8 3s8-1.3 8-3V5.5"/><path d="M4 12v6.5c0 1.7 3.6 3 8 3s8-1.3 8-3V12"/></svg>
             Dados SQL</button>
-          <button type="button" id="cfg-nav-notificacoes" class="cfg-nav-item" onclick="cfgMostrarSecao('notificacoes')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>
-            Notificações</button>
           <button type="button" id="cfg-nav-paradas" class="cfg-nav-item" onclick="cfgMostrarSecao('paradas')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             Motivos de Parada</button>
-          <button type="button" id="cfg-nav-tipos-manutencao" class="cfg-nav-item" onclick="cfgMostrarSecao('tipos-manutencao')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>
-            Tipos de Manutenção</button>
-          <button type="button" id="cfg-nav-prioridades" class="cfg-nav-item" onclick="cfgMostrarSecao('prioridades')">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>
-            Prioridades</button>
           <button type="button" id="cfg-nav-insumos" class="cfg-nav-item" onclick="cfgMostrarSecao('insumos')">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h9l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M13 3v6h6"/><line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>
             Insumos de Receitas</button>
@@ -4728,27 +4079,6 @@
           </div>
           <!-- ========== /SEÇÃO: Dados SQL ========== -->
 
-          <!-- ========== SEÇÃO: Notificações ========== -->
-          <div id="cfg-secao-notificacoes" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0"/></svg>Notificações</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Escolha, perfil a perfil, quem recebe as notificações push de Manutenção — <strong>Abertura de
-              Chamado</strong> (novo chamado corretivo aberto) e <strong>Pedido de Peça</strong> (chamado já em
-              execução ficou aguardando peça). Cada pessoa também precisa ter clicado em "Ativar notificações"
-              (🔔 na barra superior) no próprio dispositivo para receber de verdade.
-            </p>
-            <p style="font-size:.74rem;color:var(--text-3);margin-bottom:18px;line-height:1.5;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
-              ℹ️ O <strong>Administrador Master</strong> (senha mestra da tela de login) não aparece nesta lista —
-              ele nunca é um usuário cadastrado, então não tem como se inscrever para receber push. Se quiser que
-              quem usa a senha mestra também seja avisado, crie um usuário cadastrado com perfil "Administrador"
-              (aba Usuários) e ative as notificações logado com ele.
-            </p>
-            <div id="cfg-notificacoes-lista" style="display:flex;flex-direction:column;gap:8px">
-              <span style="color:var(--text-3);font-size:.82rem">Carregando…</span>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Notificações ========== -->
-
           <!-- ========== SEÇÃO: Motivos de Parada ========== -->
           <div id="cfg-secao-paradas" style="display:none">
             <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Motivos de Parada</div>
@@ -4772,63 +4102,6 @@
             </div>
           </div>
           <!-- ========== /SEÇÃO: Motivos de Parada ========== -->
-
-          <!-- ========== SEÇÃO: Tipos de Manutenção ========== -->
-          <div id="cfg-secao-tipos-manutencao" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0-5.4 4.6L3 17.2V21h3.8l6-6.1a4 4 0 0 0 4.6-5.4l-2.7 2.7-2-.5-.5-2 2.7-2.7Z"/></svg>Tipos de Manutenção</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Tipos disponíveis para escolher ao abrir um chamado corretivo ou agendar uma manutenção programada
-              (Registro de Manutenção). Adicionar, remover ou renomear aqui reflete na hora nos 3 selects daquela
-              tela (filtro, chamado corretivo e manutenção programada).
-            </p>
-            <div id="cfg-tipos-manutencao-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-            </div>
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div
-                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Novo Tipo</div>
-              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:220px">
-                  <label class="form-label">Descrição do Tipo</label>
-                  <input class="form-input" id="cfg-tipo-manutencao-novo" placeholder="Ex: Hidráulica"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarTipoManutencao();}">
-                </div>
-                <button class="btn btn-outline-accent" onclick="cfgAdicionarTipoManutencao()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Tipos de Manutenção ========== -->
-
-          <!-- ========== SEÇÃO: Prioridades ========== -->
-          <div id="cfg-secao-prioridades" style="display:none">
-            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4.5c1.5-1 3.5-1 5 0s3.5 1 5 0v9c-1.5 1-3.5 1-5 0s-3.5-1-5 0Z"/></svg>Prioridades</div>
-            <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
-              Níveis de prioridade disponíveis ao abrir um chamado corretivo, cada um com sua própria cor (usada nos
-              botões de seleção, no painel de chamados e no filtro). Adicionar, remover ou renomear aqui reflete na
-              hora na tela de Manutenção.
-            </p>
-            <div id="cfg-prioridades-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-            </div>
-            <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-              <div
-                style="font-size:.75rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">
-                Nova Prioridade</div>
-              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                <div class="form-group" style="margin-bottom:0;flex:1;min-width:180px">
-                  <label class="form-label">Descrição</label>
-                  <input class="form-input" id="cfg-prioridade-label-novo" placeholder="Ex: URGENTE"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();cfgAdicionarPrioridade();}">
-                </div>
-                <div class="form-group" style="margin-bottom:0">
-                  <label class="form-label">Cor</label>
-                  <input type="color" id="cfg-prioridade-cor-novo" value="#f59e0b"
-                    style="width:44px;height:38px;padding:2px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-3);cursor:pointer">
-                </div>
-                <button class="btn btn-outline-accent" onclick="cfgAdicionarPrioridade()">+ Adicionar</button>
-              </div>
-            </div>
-          </div>
-          <!-- ========== /SEÇÃO: Prioridades ========== -->
 
           <!-- ========== SEÇÃO: Insumos de Receitas ========== -->
           <div id="cfg-secao-insumos" style="display:none">
@@ -4949,22 +4222,15 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="/js/vendor/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- Pako — usado só por decompressPDF (js/manutencao.js), pra abrir PDFs
-       antigos que porventura tenham sido salvos comprimidos com GZIP por
-       uma versão anterior do protótipo (novos PDFs não são mais
-       comprimidos, ver compressPDF). -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script src="js/admin-auth.js"></script>
   <script src="js/data.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/operacao.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/setor-qualidade.js"></script>
-  <script src="js/manutencao.js"></script>
   <script src="js/one-page-report.js"></script>
   <script src="js/app-core.js"></script>
   <script src="js/perfis-customizados.js"></script>
-  <script src="js/notificacoes-config.js"></script>
   <script src="js/paletes-config.js"></script>
   <script src="js/paletes-ordem.js"></script>
   <script src="js/paletes-combinacoes.js"></script>

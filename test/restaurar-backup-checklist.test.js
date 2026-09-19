@@ -28,10 +28,9 @@ after(async () => {
 });
 
 // Só os OBRIGATÓRIOS do Backup de Dados — de propósito SEM metas.json,
-// avaliacoes_qualidade.json, manutencao_corretiva.json etc. (todos
-// opcionais), pra confirmar que eles aparecem no checklist como
-// "restaurado: false", em vez de travar a restauração ou simplesmente
-// não aparecerem na lista.
+// avaliacoes_qualidade.json etc. (todos opcionais), pra confirmar que
+// eles aparecem no checklist como "restaurado: false", em vez de travar
+// a restauração ou simplesmente não aparecerem na lista.
 const ARQUIVOS_SO_OBRIGATORIOS = {
   'config.json': JSON.stringify({ baterias: { ids: [] }, tipos_montagem: { opcoes: [] } }),
   'historico.json': '[]',
@@ -67,8 +66,6 @@ test('POST /restaurar-backup-dados devolve checklist com TODOS os arquivos esper
   assert.equal(porNome['avaliacoes_qualidade.json'], false);
   assert.equal(porNome['operacoes_avaliadas.json'], false);
   assert.equal(porNome['operacoes_nao_avaliadas.json'], false);
-  assert.equal(porNome['manutencao_corretiva.json'], false);
-  assert.equal(porNome['manutencao_programada.json'], false);
   assert.equal(porNome['bercos_visuais.json'], false);
 });
 

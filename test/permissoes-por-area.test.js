@@ -1,19 +1,19 @@
 // ─── test/permissoes-por-area.test.js ───────────────────────────────────────
 // Testa a matriz de permissões do modelo NOVO (ver lib/perfis.js): toda
 // página é aberta pra VISUALIZAÇÃO a qualquer perfil; o que muda por perfil
-// é a área de EDIÇÃO — 'injetora', 'paradas', 'qualidade', 'manutencao',
-// 'manutencao-chamado'. Cada perfil (ver PERFIS, lib/perfis.js):
+// é a área de EDIÇÃO — 'injetora', 'paradas', 'qualidade'. Cada perfil (ver
+// PERFIS, lib/perfis.js):
 //
-//   OperadorInjetora ..... injetora, paradas, manutencao (completa)
-//   AssistenteQualidade .. qualidade, paradas (nenhuma área de manutenção)
-//   Encarregado .......... injetora, qualidade, paradas, manutencao (completa)
-//   Manutencao ........... manutencao (completa), paradas
-//   Supervisao ........... injetora, qualidade, paradas, manutencao (completa)
+//   OperadorInjetora ..... injetora, paradas
+//   AssistenteQualidade .. qualidade, paradas
+//   Encarregado .......... injetora, qualidade, paradas
+//   Manutencao ........... paradas (só — Setor de Manutenção descontinuado)
+//   Supervisao ........... injetora, qualidade, paradas
 //   Administrativo ....... tudo (igual ao Administrador Master)
 //
 // Testa as rotas de ESCRITA de cada domínio (paradas, setor de qualidade,
-// histórico de injetora, manutenção) via HTTP direto contra o servidor
-// real — mesmo padrão de test/permissao-controlar-operacao.test.js.
+// histórico de injetora) via HTTP direto contra o servidor real — mesmo
+// padrão de test/permissao-controlar-operacao.test.js.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -213,155 +213,6 @@ test('AssistenteQualidade (sem área injetora) é recusada em GET /pausas-operac
   const cookie = await cadastrarELogar('paula.qual.pausas', 'AssistenteQualidade');
   const resp = await fetch(`${servidor.baseUrl}/pausas-operacao/op-qualquer`, { headers: { Cookie: cookie } });
   assert.equal(resp.status, 403);
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// Área 'manutencao' — hoje TODOS os perfis cadastráveis têm acesso
-// completo (chamados + programada + fechamento), EXCETO
-// AssistenteQualidade (só qualidade + paradas — pedido do usuário nas
-// conversas que motivaram isso, ver comentário em lib/perfis.js).
-// 'manutencao-chamado' (só abrir chamado, subconjunto de 'manutencao')
-// não é mais usado por nenhum perfil sozinho — quem não tem 'manutencao'
-// completa também não tem 'manutencao-chamado'.
-// ═══════════════════════════════════════════════════════════════════════
-
-test('Encarregado consegue abrir um chamado corretivo novo', async () => {
-  const cookie = await cadastrarELogar('elisa.encarregada', 'Encarregado');
-  const id = 'MAN-encarregado-' + Date.now();
-  const resp = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 9',
-      observador: 'Elisa', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-    }),
-  });
-  assert.equal(resp.status, 200);
-});
-
-test('AssistenteQualidade (sem nenhuma área de manutenção) é recusada ao tentar fechar um chamado', async () => {
-  // Abre o chamado como Admin (bypassa a checagem de abertura, que não é
-  // o que este teste quer isolar) — só a tentativa de FECHAR é testada
-  // com o perfil sem permissão.
-  const cookieAdmin = await logarComoAdminMaster();
-  const id = 'MAN-fechar-qualidade-' + Date.now();
-  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 8',
-      observador: 'Felipe', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-    }),
-  });
-
-  const cookie = await cadastrarELogar('felipe.qualidade.fechar', 'AssistenteQualidade');
-  const respFechar = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 8',
-      observador: 'Felipe', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true,
-    }),
-  });
-  assert.equal(respFechar.status, 403);
-});
-
-test('AssistenteQualidade (sem nenhuma área de manutenção) é recusada em POST /manutencao/programada', async () => {
-  const cookie = await cadastrarELogar('gustavo.qualidade', 'AssistenteQualidade');
-  const resp = await fetch(`${servidor.baseUrl}/manutencao/programada`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ id: 'PRG-qualidade', data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 7', solicitante: 'Gustavo' }),
-  });
-  assert.equal(resp.status, 403);
-});
-
-test('Encarregado TEM acesso completo à manutenção hoje (consegue fechar chamado e usar programada)', async () => {
-  const cookie = await cadastrarELogar('encarregado.completo', 'Encarregado');
-  const id = 'MAN-encarregado-completo-' + Date.now();
-  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 8',
-      observador: 'Encarregado', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-    }),
-  });
-  const respFechar = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 8',
-      observador: 'Encarregado', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
-    }),
-  });
-  assert.equal(respFechar.status, 200, 'Encarregado tem manutencao completa hoje — deveria conseguir fechar');
-
-  const respProg = await fetch(`${servidor.baseUrl}/manutencao/programada`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ id: 'PRG-encarregado-' + Date.now(), data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 7', solicitante: 'Encarregado' }),
-  });
-  assert.equal(respProg.status, 200, 'Encarregado tem manutencao completa hoje — deveria conseguir usar programada');
-});
-
-test('Manutencao consegue fechar um chamado corretivo (área manutencao completa)', async () => {
-  const cookie = await cadastrarELogar('helena.manutencao', 'Manutencao');
-  const id = 'MAN-fechar-manut-' + Date.now();
-  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 6',
-      observador: 'Helena', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-    }),
-  });
-
-  const respFechar = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 6',
-      observador: 'Helena', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
-    }),
-  });
-  assert.equal(respFechar.status, 200);
-});
-
-test('Supervisao tem acesso completo à manutenção (programada)', async () => {
-  const cookie = await cadastrarELogar('ivo.supervisor', 'Supervisao');
-  const respProg = await fetch(`${servidor.baseUrl}/manutencao/programada`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ id: 'PRG-supervisao-' + Date.now(), data: '2026-07-20', setor: 'Producao', maquina: 'Injetora 5', solicitante: 'Ivo' }),
-  });
-  assert.equal(respProg.status, 200);
-});
-
-test('Administrativo tem acesso completo à manutenção, igual ao master', async () => {
-  const cookie = await cadastrarELogar('julia.admin', 'Administrativo');
-  const id = 'MAN-admin-' + Date.now();
-  await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 4',
-      observador: 'Julia', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-    }),
-  });
-  const respFechar = await fetch(`${servidor.baseUrl}/manutencao/corretiva`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({
-      id, data: '2026-07-12', setor: 'Producao', maquina: 'Injetora 4',
-      observador: 'Julia', prioridade: 'Alta', anomalia: 'Teste', tipoManutencao: 'Mecanica',
-      situacao: 'Concluido', etiquetaFechada: true, dataFim: '2026-07-12',
-    }),
-  });
-  assert.equal(respFechar.status, 200);
 });
 
 // ═══════════════════════════════════════════════════════════════════════

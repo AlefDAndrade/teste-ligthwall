@@ -197,8 +197,6 @@ test('cards do Menu Principal respeitam a visibilidade por perfil customizado', 
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({
       nome: 'Perfil So Paradas',
-      // Só 'paradas' visível — todo o resto (operacao, manutencao,
-      // setor-qualidade, etc.) fica 'ocultar' por padrão.
       permissoes: { paradas: 'visualizar' },
     }),
   });
@@ -239,11 +237,11 @@ test('cards do Menu Principal respeitam a visibilidade por perfil customizado', 
     const document = window.document;
     const cardParadas = document.querySelector('.menu-card[data-page="paradas"]');
     const cardOperacao = document.querySelector('.menu-card[data-page="operacao"]');
-    const cardManutencao = document.querySelector('.menu-card[data-page="manutencao"]');
+    const cardSetorQualidade = document.querySelector('.menu-card[data-page="setor-qualidade"]');
 
     assert.notEqual(cardParadas.style.display, 'none', 'card de Paradas deveria aparecer — perfil tem esse item visível');
     assert.equal(cardOperacao.style.display, 'none', 'card de Registrar Operação deveria estar oculto — não foi marcado no perfil');
-    assert.equal(cardManutencao.style.display, 'none', 'card de Manutenção deveria estar oculto — não foi marcado no perfil');
+    assert.equal(cardSetorQualidade.style.display, 'none', 'card de Setor de Qualidade deveria estar oculto — não foi marcado no perfil');
   } finally {
     window.close();
   }

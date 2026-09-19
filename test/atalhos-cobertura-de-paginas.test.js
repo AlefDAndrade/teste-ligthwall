@@ -3,19 +3,15 @@
 // atalho e não estão na lista de teclas de atalho": de 17 páginas do app,
 // 5 não tinham NENHUMA presença em keyboard-shortcuts.js (nem NAV_CONFIG
 // nem REFERENCIA_CONFIG) — One Page Report, Traços Descartados, Análise
-// Focada, Consulta de Insumos por Traço e Manutenção. Desta última, a
-// auditoria também achou um atalho REAL já em produção (Ctrl + hover na
-// tabela, mostra preview de trajetória) que nunca tinha sido catalogado —
-// documentado agora sem mudar o comportamento em si.
+// Focada, Consulta de Insumos por Traço e Manutenção (esta última removida
+// do produto depois, junto com o Setor de Manutenção inteiro — ver
+// histórico do git se precisar resgatar os testes específicos dela).
 //
-// Resolvido: One Page Report, Traços Descartados e Manutenção (esta
-// última achada numa conversa SEGUINTE — ver teste "toda página com botão
-// de navegação..." abaixo) ganharam Alt+dígito de navegação de verdade
-// (Alt+R/Alt+T/Alt+N); Manutenção também ganhou a entrada de referência
-// do Ctrl+hover. Análise Focada e Consulta de Insumos por Traço também
-// ganharam o delas (Alt+F/Alt+I) — decisão revista numa conversa AINDA
-// seguinte: percebeu-se que as 2 têm botão próprio no dropdown "Traços"
-// da nav-tabbar (não são só destino de Ctrl+clique, que continua
+// Resolvido: One Page Report e Traços Descartados ganharam Alt+dígito de
+// navegação de verdade (Alt+R/Alt+T). Análise Focada e Consulta de Insumos
+// por Traço também ganharam o delas (Alt+F/Alt+I) — decisão revista numa
+// conversa seguinte: percebeu-se que as 2 têm botão próprio no dropdown
+// "Traços" da nav-tabbar (não são só destino de Ctrl+clique, que continua
 // funcionando do mesmo jeito como atalho secundário a partir de Registro
 // de Baterias/Relatório de Injeção), então por consistência com as
 // demais páginas do mesmo dropdown ganharam navegação direta também.
@@ -89,20 +85,6 @@ test('nenhum combo Alt+ colide entre si (nav + ações) — cada tecla usada só
   assert.deepEqual(duplicados, [], `combo(s) Alt+ duplicado(s), colidindo entre páginas/ações: ${duplicados.join(', ')}`);
 });
 
-test('Manutenção ganhou entrada em REFERENCIA_CONFIG documentando o Ctrl+hover que já existia (achado da auditoria)', () => {
-  const referenciaConfig = extrairBloco('REFERENCIA_CONFIG');
-  assert.match(referenciaConfig, /contexto: 'Manutenção'/);
-  const inicioEntrada = referenciaConfig.indexOf("contexto: 'Manutenção'");
-  const trechoEntrada = referenciaConfig.slice(inicioEntrada - 100, inicioEntrada + 300);
-  assert.match(trechoEntrada, /page: 'manutencao'/);
-  assert.match(trechoEntrada, /trajet[oó]ria/i);
-});
-
-test('o Ctrl+hover documentado bate com o comportamento real em manutencao.js (nunca documentar algo que não existe)', () => {
-  const MANUTENCAO_JS = fs.readFileSync(path.join(__dirname, '..', 'public/js/manutencao.js'), 'utf8');
-  assert.match(MANUTENCAO_JS, /if \(!evt\.ctrlKey\) \{ _esconderPreviewTrajetoria\(\); return; \}/);
-});
-
 test('as 5 páginas identificadas na auditoria estão contempladas de algum jeito: nav direta (novo) ou drill-down documentado (já existia)', () => {
   const navConfig = extrairBloco('NAV_CONFIG');
   const referenciaConfig = extrairBloco('REFERENCIA_CONFIG');
@@ -110,7 +92,6 @@ test('as 5 páginas identificadas na auditoria estão contempladas de algum jeit
 
   assert.ok(paginasComNav.has('one-page-report'), 'One Page Report deveria ter ganhado Alt+dígito');
   assert.ok(paginasComNav.has('tracos-descartados'), 'Traços Descartados deveria ter ganhado Alt+dígito');
-  assert.match(referenciaConfig, /contexto: 'Manutenção'/, 'Manutenção deveria ter o Ctrl+hover documentado');
   // Análise Focada/Consulta de Insumos por Traço: decisão consciente de
   // NÃO ganhar Alt+dígito (são destino de drill-down) — só confirma que
   // o Ctrl+clique que leva até elas continua documentado.

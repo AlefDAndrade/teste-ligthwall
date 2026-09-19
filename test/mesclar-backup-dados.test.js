@@ -25,14 +25,14 @@
 //     domínio filtrado pelo seu próprio campo de data ("data" pra
 //     operações/traços; "inicio" pra paradas); datas inválidas/invertidas
 //     são recusadas; sem filtro, comportamento idêntico a sempre.
-//   - 6 domínios "satélite" adicionados numa conversa posterior ("não
+//   - 4 domínios "satélite" adicionados numa conversa posterior ("não
 //     abarca alguns dados, como berço visual"): bercos_visuais.json,
 //     avaliacoes_qualidade.json, operacoes_avaliadas.json,
-//     relatorio_edicoes.json (edições de traço), manutencao_corretiva.json
-//     e manutencao_programada.json — todos amarrados a uma operação/traço
-//     já existente (no destino OU trazida na mesma mesclagem), nunca
-//     criam um registro órfão; dedup por id (ou pela chave natural
-//     traço+data, no caso de edições de traço — "id" é autoincrement,
+//     relatorio_edicoes.json (edições de traço) — todos amarrados a uma
+//     operação/traço já existente (no destino OU trazida na mesma
+//     mesclagem), nunca criam um registro órfão; dedup por id (ou pela
+//     chave natural traço+data, no caso de edições de traço — "id" é
+//     autoincrement,
 //     não confiável entre instalações diferentes).
 
 const { test, before, after } = require('node:test');
@@ -367,21 +367,6 @@ function edicaoTracoDoBackup(idTraco, idOp, dataEdicao) {
   return { id_traco: idTraco, id_operacao: idOp, data_edicao: dataEdicao, campos_alterados: [{ campo: 'cimento_real', de: 300, para: 310 }] };
 }
 
-function manutencaoCorretivaDoBackup(id, extras = {}) {
-  return {
-    id, data: '2026-07-20', setor: 'Injetora', maquina: 'Injetora 1', turno: '1° TURNO',
-    observador: 'Backup', prioridade: 'Media', anomalia: 'Ruído estranho', tipoManutencao: 'Mecânica',
-    ...extras,
-  };
-}
-
-function manutencaoProgramadaDoBackup(id, extras = {}) {
-  return {
-    id, data: '2026-07-20', setor: 'Injetora', maquina: 'Injetora 1', solicitante: 'Backup',
-    ...extras,
-  };
-}
-
 async function contarLinhas(nomeArquivo) {
   const resp = await fetch(`${servidor.baseUrl}/db/${nomeArquivo}`);
   return (await resp.json()).length;
@@ -538,54 +523,6 @@ test('relatorio_edicoes.json: SEM relatorio_injecao.json no mesmo backup, é ign
   });
   const data = await resp.json();
   assert.equal(data.resultado.edicoes_traco.inseridos, 0);
-});
-
-test('manutencao_corretiva: insere por id novo, ignora duplicata, respeita filtro de data quando pedido', async () => {
-  const idChamado = 'manut-corretiva-' + Date.now();
-  const resp = await mesclar({
-    senha: SENHA_ADMIN,
-    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idChamado)]) },
-  });
-  const data = await resp.json();
-  assert.equal(data.resultado.manutencao_corretiva.inseridos, 1);
-
-  const respDup = await mesclar({
-    senha: SENHA_ADMIN,
-    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idChamado, { anomalia: 'Anomalia diferente' })]) },
-  });
-  const dataDup = await respDup.json();
-  assert.equal(dataDup.resultado.manutencao_corretiva.inseridos, 0);
-  assert.equal(dataDup.resultado.manutencao_corretiva.duplicatas, 1);
-
-  // Filtro de data — chamado de outro dia fica de fora.
-  const idFora = 'manut-corretiva-fora-' + Date.now();
-  const respFiltro = await mesclar({
-    senha: SENHA_ADMIN,
-    arquivos: { 'manutencao_corretiva.json': JSON.stringify([manutencaoCorretivaDoBackup(idFora, { data: '2026-01-01' })]) },
-    filtroDataInicio: '2026-07-20',
-    filtroDataFim: '2026-07-20',
-  });
-  const dataFiltro = await respFiltro.json();
-  assert.equal(dataFiltro.resultado.manutencao_corretiva.inseridos, 0);
-  assert.equal(dataFiltro.resultado.filtroData.ignorados, 1);
-});
-
-test('manutencao_programada: insere por id novo, ignora duplicata', async () => {
-  const idAgendamento = 'manut-programada-' + Date.now();
-  const resp = await mesclar({
-    senha: SENHA_ADMIN,
-    arquivos: { 'manutencao_programada.json': JSON.stringify([manutencaoProgramadaDoBackup(idAgendamento)]) },
-  });
-  const data = await resp.json();
-  assert.equal(data.resultado.manutencao_programada.inseridos, 1);
-
-  const respDup = await mesclar({
-    senha: SENHA_ADMIN,
-    arquivos: { 'manutencao_programada.json': JSON.stringify([manutencaoProgramadaDoBackup(idAgendamento)]) },
-  });
-  const dataDup = await respDup.json();
-  assert.equal(dataDup.resultado.manutencao_programada.inseridos, 0);
-  assert.equal(dataDup.resultado.manutencao_programada.duplicatas, 1);
 });
 
 // ═══════════════════════════════════════════════════════════════════════

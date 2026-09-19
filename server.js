@@ -97,29 +97,16 @@ const perfisCustomizados = require('./lib/perfis-customizados.js')({ fs, path, P
 // consultam isto ANTES de cair no hardcoded.
 const perfisFixosOverrides = require('./lib/perfis-fixos-overrides.js')({ fs, path, PRIVATE_DIR, itensPermissao });
 
-// Notificações push (ver lib/notificacoes-push.js) — "toda vez que um
-// chamado for aberto, quem tem a permissão 'Notificar Abertura de
-// Chamado' marcada no perfil é notificado" (PC e celular, via Web
-// Push/PWA). Depende de perfis/perfisCustomizados/perfisFixosOverrides
-// (acima) pra resolver, na hora de notificar, quem tem a permissão
-// marcada — mesma cascata fixo/override/customizado de podeEditarArea.
-const notificacoesPush = require('./lib/notificacoes-push.js')({
-  fs, path, PRIVATE_DIR, db, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao,
-  // Injetados também pro job do lembrete diário de manutenção programada
-  // (ver executarLembreteManutencaoProgramadaSeNecessario,
-  // lib/notificacoes-push.js) — mesmas funções de relógio já usadas pelo
-  // backup automático, importadas de lib/tempo.js lá no topo deste arquivo.
-  todayBrasiliaServer, horaMinutoBrasiliaServer,
-});
+// Notificações push (ver lib/notificacoes-push.js) — infraestrutura VAPID
+// genérica + notificação de "PDF pronto".
+const notificacoesPush = require('./lib/notificacoes-push.js')({ fs, path, PRIVATE_DIR, db });
 
-// ─── PERMISSÕES DE ÁREA / MANUTENÇÃO — Fase 16 do fatiamento, ver README ──
+// ─── PERMISSÕES DE ÁREA — Fase 16 do fatiamento, ver README ──────────────
 // podeEditarArea/negarEdicao/temPoderesDeAdmin/sessaoOuAdmin/
 // podeUsarItem/negarAcesso/podeControlarOperacao/negarControleDeOperacao/
-// podeExcluirChamado/nomeDeQuemAceita/nomeParaVisualizacao/
-// podeEditarAberturaChamado/podeAceitarChamado/podeAceitarPedidoPeca/
-// podeRenotificarManutencao/podeConfirmarRecebimentoPeca agora vivem em
-// lib/permissoes-area.js. Precisa vir ANTES das factories logo abaixo,
-// que já usam essas funções — mesma posição de sempre, logo após
+// nomeDeQuemAceita agora vivem em lib/permissoes-area.js. Precisa vir
+// ANTES das factories logo abaixo, que já usam essas funções — mesma
+// posição de sempre, logo após
 // sessao/sessaoUsuario/perfis/perfisFixosOverrides/perfisCustomizados já
 // definidos.
 //
@@ -139,14 +126,7 @@ const {
   negarAcesso,
   podeControlarOperacao,
   negarControleDeOperacao,
-  podeExcluirChamado,
   nomeDeQuemAceita,
-  nomeParaVisualizacao,
-  podeEditarAberturaChamado,
-  podeAceitarChamado,
-  podeAceitarPedidoPeca,
-  podeRenotificarManutencao,
-  podeConfirmarRecebimentoPeca,
 } = require('./lib/permissoes-area.js')({ sessao, sessaoUsuario, perfis, perfisFixosOverrides, perfisCustomizados });
 
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
@@ -243,18 +223,6 @@ const {
 const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao });
 const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ fs, path, PRIVATE_DIR, sessao: sessaoOuAdmin, perfisCustomizados, itensPermissao });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
-const rotasManutencao = require('./lib/rotas/manutencao.js')({
-  db, podeEditarArea, negarEdicao, podeExcluirChamado,
-  podeEditarAberturaChamado, podeAceitarChamado, podeAceitarPedidoPeca,
-  podeRenotificarManutencao, podeConfirmarRecebimentoPeca, nomeDeQuemAceita,
-  nomeParaVisualizacao, notificarAberturaChamado: notificacoesPush.notificarAberturaChamado,
-  notificarPedidoPeca: notificacoesPush.notificarPedidoPeca,
-  notificarPecaRecebida: notificacoesPush.notificarPecaRecebida,
-  notificarManutencaoProgramada: notificacoesPush.notificarManutencaoProgramada,
-  notificarAceiteChamado: notificacoesPush.notificarAceiteChamado,
-  notificarAtualizacaoChamadoCorretivo: notificacoesPush.notificarAtualizacaoChamadoCorretivo,
-  notificarAtualizacaoManutencaoProgramada: notificacoesPush.notificarAtualizacaoManutencaoProgramada,
-});
 const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemAceita });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
@@ -331,7 +299,7 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
 });
-const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasManutencao, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
+const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 
 // Migração automática Fase 2 (ver db.js) — só faz algo na primeira vez
 // que sobe com a tabela "operacoes" vazia E historico.json ainda existir
@@ -546,23 +514,6 @@ const server = http.createServer((req, res) => {
     if (modulo(req, res, urlPath, queryParams)) return;
   }
 
-  // Rota INTERNA só pra testes automatizados (ver
-  // test/manutencao-programada-lembrete.test.js) — dispara na hora o job
-  // do lembrete diário (normalmente só chamado pelo setInterval de 60s
-  // ou no boot, ver server.listen abaixo), pra não precisar esperar até
-  // 1 minuto de verdade em cada teste. SÓ existe (registrada) quando
-  // LW_TEST_RELOGIO_ISO está setada (mesma variável que já congela o
-  // relógio do servidor, ver _agoraServer() em lib/tempo.js) — nunca ativa numa
-  // instalação normal (`npm start`), então nunca é uma rota alcançável
-  // em produção.
-  if (process.env.LW_TEST_RELOGIO_ISO && req.method === 'POST' && urlPath === '/__test__/executar-lembrete-programada') {
-    notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario().then(() => {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    });
-    return;
-  }
-
   // Servir arquivos estáticos normalmente
   let filePath = path.join(DIR, urlPath === '/' ? 'login.html' : urlPath);
   const ext = path.extname(filePath);
@@ -642,15 +593,4 @@ server.listen(PORT, HOST, () => {
   // chamada por uma rota HTTP, só por este setInterval.
   setInterval(rotasBackup.executarBackupAutomaticoSeNecessario, 60 * 1000);
   rotasBackup.executarBackupAutomaticoSeNecessario();
-
-  // Checa a cada minuto se já é 09h da manhã e existe alguma manutenção
-  // PROGRAMADA (status='Aprovado') marcada pra HOJE que ainda não teve o
-  // lembrete do dia disparado — pedido do usuário: "agendamento pro dia
-  // 12, quero um lembrete no dia 12 às 09h". Roda também uma vez já no
-  // boot, mesmo raciocínio do backup automático acima (servidor subindo
-  // depois das 09h não pode perder o lembrete do dia). A função em si
-  // vive em lib/notificacoes-push.js (executarLembreteManutencaoProgramadaSeNecessario)
-  // — nunca é chamada por uma rota HTTP, só por este setInterval.
-  setInterval(notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario, 60 * 1000);
-  notificacoesPush.executarLembreteManutencaoProgramadaSeNecessario();
 });

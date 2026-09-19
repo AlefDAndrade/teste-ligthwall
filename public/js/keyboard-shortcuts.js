@@ -33,14 +33,6 @@
     { id: 'nav_analise_bercos', comboPadrao: 'Alt+0', page: 'analise-bercos', label: 'Análise de Berços', icon: '💧' },
     { id: 'nav_paradas', comboPadrao: 'Alt+P', page: 'paradas', label: 'Registro de Paradas', icon: '⏸' },
     { id: 'nav_setor_qualidade', comboPadrao: 'Alt+Q', page: 'setor-qualidade', label: 'Setor de Qualidade', icon: '🛡' },
-    // Faltava — mesma categoria de 'setor-qualidade', acima (página de
-    // menu de nível superior, com data-page no nav-tabbar E no
-    // page-menu.html), mas ficou de fora da auditoria anterior porque já
-    // tinha uma entrada em REFERENCIA_CONFIG (o Ctrl+hover) e pareceu
-    // "coberta" — só que aquilo documenta uma AÇÃO dentro da página, não
-    // dá o atalho de NAVEGAÇÃO até ela (achado numa conversa seguinte:
-    // "o setor de manutenção ficou sem atalho").
-    { id: 'nav_manutencao', comboPadrao: 'Alt+N', page: 'manutencao', label: 'Manutenção', icon: '🔧' },
     { id: 'nav_metas', comboPadrao: 'Alt+M', page: 'metas', label: 'Metas', icon: '🏁' },
     // ─── Mais 2 páginas sem atalho de navegação (auditoria numa conversa
     // — "quais pages ainda não têm teclas de atalho"): letras livres
@@ -203,13 +195,6 @@
     // aparece em Configurações → Atalhos de Teclado / no modal de
     // ajuda. Comportamento em si não mudou — só passou a ser
     // documentado.
-    {
-      icon: '👁',
-      combo: 'Ctrl + passar o mouse',
-      contexto: 'Manutenção',
-      page: 'manutencao',
-      descricao: 'Mostra um preview flutuante da trajetória daquele item, sem abrir o modal completo — só desktop (não existe em toque).',
-    },
     {
       icon: '🖱',
       combo: 'Segurar Ctrl',
