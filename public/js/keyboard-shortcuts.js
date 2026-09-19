@@ -22,7 +22,6 @@
     { id: 'nav_relatorio', comboPadrao: 'Alt+3', page: 'relatorio', label: 'Relatório de Injeção', icon: '🧾' },
     { id: 'nav_qualidade', comboPadrao: 'Alt+4', page: 'qualidade-tracos', label: 'Qualidade dos Traços', icon: '📐' },
     { id: 'nav_analise', comboPadrao: 'Alt+5', page: 'analise-operacional', label: 'Análise Operacional', icon: '📊' },
-    { id: 'nav_turnos', comboPadrao: 'Alt+6', page: 'turnos', label: 'Turnos', icon: '⏳' },
     { id: 'nav_menu', comboPadrao: 'Alt+7', page: 'menu', label: 'Menu Principal', icon: '⬡' },
     { id: 'nav_oee', comboPadrao: 'Alt+8', page: 'oee', label: 'OEE', icon: '🎯' },
     // ─── Adicionados: estas 4 páginas existiam no menu (nav-sidebar.html)
@@ -693,7 +692,6 @@
     const refreshMap = {
       menu: () => null,
       operacao: () => typeof LWOp !== 'undefined' && LWOp.init?.(),
-      turnos: () => typeof LWDash !== 'undefined' && LWDash.initTurnos?.(),
       registro: () => typeof LWDash !== 'undefined' && LWDash.initRegistro?.(),
       relatorio: () => typeof LWDash !== 'undefined' && LWDash.initRelatorio?.(),
       'relatorio-bercos': () => typeof LWBercos !== 'undefined' && LWBercos.render?.(),
@@ -720,7 +718,7 @@
     // interativo standalone, ou nem tem exportação) — mapeia pra função
     // certa de cada uma. Cobre tanto os "⬇ Exportar Excel (.xlsx)"
     // (Registro/Relatório de Injeção) quanto os "🌐 Exportar Interativo"
-    // espalhados pelos dashboards (Turnos, Berços, Focada, Traços, OEE,
+    // espalhados pelos dashboards (Berços, Focada, Traços, OEE,
     // Operacional, Setor de Qualidade).
     const active = document.querySelector('.main.active');
     const pageId = active?.id?.replace('page-', '');
@@ -728,7 +726,6 @@
     const exportMap = {
       registro: () => typeof LWDash !== 'undefined' && LWDash.abrirExportModal?.(),
       relatorio: () => typeof LWDash !== 'undefined' && LWDash.abrirExportModalRelatorio?.(),
-      turnos: () => typeof LWDash !== 'undefined' && LWDash.exportarTurnosInterativo?.(),
       'analise-bercos': () => typeof ABercos !== 'undefined' && ABercos.exportarInterativo?.(),
       'analise-focada': () => typeof LWFocada !== 'undefined' && LWFocada.exportarInterativo?.(),
       'qualidade-tracos': () => typeof LWQualidade !== 'undefined' && LWQualidade.exportarInterativo?.(),
