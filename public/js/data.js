@@ -2188,28 +2188,6 @@ async function getStats(filtros = {}) {
     por_data[b.data].m2 += (b.m2_total || 0);
   });
 
-  // By turno
-  const por_turno = {};
-  ['1º TURNO', '2º TURNO', '3º TURNO'].forEach(t => {
-    const td = data.filter(b => b.turno === t);
-    const paineisPorTipoTurno = somarPorTipo(td, 'paineis_por_tipo');
-    const m2PorTipoTurno = somarPorTipo(td, 'm2_por_tipo');
-    por_turno[t] = {
-      total: td.length,
-      atraso: td.filter(b => b.houve_atraso === 'SIM').length,
-      m2: td.reduce((s, b) => s + (b.m2_total || 0), 0),
-      tempo_medio: td.length ? td.reduce((s, b) => s + (b.tempo_min || 0), 0) / td.length : 0,
-      paineis: td.reduce((s, b) => s + (b.total_paineis || 0), 0),
-      paineis_por_tipo: paineisPorTipoTurno,
-      m2_por_tipo: m2PorTipoTurno,
-      // Aliases de compatibilidade:
-      paineis_2p: paineisPorTipoTurno['2p'] || 0,
-      paineis_sp: paineisPorTipoTurno['sp'] || 0,
-      m2_2p: m2PorTipoTurno['2p'] || 0,
-      m2_sp: m2PorTipoTurno['sp'] || 0,
-    };
-  });
-
   // Motivos de atraso
   const motivos = {};
   data.filter(b => b.houve_atraso === 'SIM' && b.motivo_atraso)
@@ -2222,7 +2200,7 @@ async function getStats(filtros = {}) {
     total_baterias, total_paineis, total_paineis_2p, total_paineis_sp,
     total_m2, total_m2_2p, total_m2_sp,
     baterias_atraso, pct_atraso, media_tempo, media_tracos,
-    dias_producao, por_data, por_turno, motivos, data
+    dias_producao, por_data, motivos, data
   };
 }
 

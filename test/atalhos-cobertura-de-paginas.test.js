@@ -62,7 +62,7 @@ test('NAV_CONFIG ganhou navegação pra One Page Report e Traços Descartados', 
 test('toda página com botão de navegação em nav-tabbar.html tem um Alt+dígito em NAV_CONFIG', () => {
   const NAV_TABBAR = fs.readFileSync(path.join(__dirname, '..', 'public/partials/nav-tabbar.html'), 'utf8');
   const paginasDaNavbar = [...NAV_TABBAR.matchAll(/class="nav-(?:item|dropdown-item)"[^>]*data-page="([a-z-]+)"/g)].map(m => m[1]);
-  assert.ok(paginasDaNavbar.length >= 15, `esperava pelo menos 15 botões de navegação, achei ${paginasDaNavbar.length}`);
+  assert.ok(paginasDaNavbar.length >= 14, `esperava pelo menos 14 botões de navegação, achei ${paginasDaNavbar.length}`);
 
   const navConfig = extrairBloco('NAV_CONFIG');
   const paginasComAtalho = new Set(extrairPaginas(navConfig));

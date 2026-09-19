@@ -433,10 +433,6 @@
         window._dashInit = true;
         LWDash.initDashboard();
       }
-      if (pageId === 'turnos' && !window._turnosInit) {
-        window._turnosInit = true;
-        LWDash.initTurnos();
-      }
       if (pageId === 'registro') {
         LWDash.initRegistro();
       }

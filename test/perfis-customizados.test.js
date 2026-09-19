@@ -79,7 +79,7 @@ test('criar um perfil customizado, listar e ver refletido em GET /perfis', async
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
     body: JSON.stringify({
       nome: 'Líder de Turno',
-      permissoes: { operacao: 'total', paradas: 'total', turnos: 'visualizar' },
+      permissoes: { operacao: 'total', paradas: 'total', relatorio: 'visualizar' },
     }),
   });
   const dataCriar = await respCriar.json();
@@ -102,7 +102,7 @@ test('criar um perfil customizado, listar e ver refletido em GET /perfis', async
   assert.equal(dataPerfis.rotulosPorPerfil[idCriado], 'Líder de Turno');
   // paginasPorPerfil: só os itens != 'ocultar' aparecem.
   assert.ok(dataPerfis.paginasPorPerfil[idCriado].includes('operacao'));
-  assert.ok(dataPerfis.paginasPorPerfil[idCriado].includes('turnos'));
+  assert.ok(dataPerfis.paginasPorPerfil[idCriado].includes('relatorio'));
   assert.ok(!dataPerfis.paginasPorPerfil[idCriado].includes('metas'), '"metas" não foi marcado, deveria estar oculto');
   // areasEdicaoPorPerfil: só os itens 'total' concedem a área.
   assert.ok(dataPerfis.areasEdicaoPorPerfil[idCriado].includes('injetora'), '"operacao" total concede a área injetora');
@@ -287,7 +287,7 @@ test('perfil customizado SEM o item "paradas" total é recusado em POST /salvar-
   const respCriar = await fetch(`${servidor.baseUrl}/criar-perfil-customizado`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookieAdmin },
-    body: JSON.stringify({ nome: 'Perfil Sem Paradas', permissoes: { paradas: 'visualizar', turnos: 'total' } }),
+    body: JSON.stringify({ nome: 'Perfil Sem Paradas', permissoes: { paradas: 'visualizar', relatorio: 'total' } }),
   });
   const { perfil } = await respCriar.json();
 
