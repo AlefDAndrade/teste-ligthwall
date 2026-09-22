@@ -39,6 +39,15 @@
     // abaixo) — editar por lá NUNCA mais mexe em state.dimensao, só
     // nesta posição específica.
     bercos_dimensoes: null,
+    // Override do NÚMERO de berços — null = usa o `bercos` cadastrado da
+    // bateria selecionada (LW.BATERIA_IDS), igual sempre foi. Só recebe
+    // valor quando a pessoa confirma uma Dimensão manual e responde "sim"
+    // à pergunta "isso muda o número de berços?" (ver
+    // _perguntarMudancaBercos()/_confirmarDimensaoManual, abaixo). Vale
+    // SÓ para esta operação — nunca altera o cadastro fixo da bateria em
+    // Configurações. Volta a null ao trocar de bateria (novo `bercos` de
+    // referência) ou ao limpar a Dimensão manual (volta tudo a automático).
+    bercos_override: null,
   };
 
   let timerInterval = null;
@@ -226,6 +235,12 @@
       }
 
       state.id_bateria = novoId;
+      // Um override de berços (ver _aplicarNovaCapacidadeBercos, abaixo)
+      // foi calculado em cima da bateria ANTERIOR — trocar de bateria
+      // sempre volta a usar o `bercos` cadastrado da bateria nova, de
+      // propósito (sem isso, um override "8 berços" setado pra uma B1
+      // continuaria valendo mesmo trocando pra uma bateria de 22 berços).
+      state.bercos_override = null;
       // Preserva o que já foi configurado berço a berço, redimensionando
       // pra capacidade da bateria nova (pode ser maior ou menor) em vez de
       // jogar tudo fora — mesma lógica de redimensionamento já usada ao
@@ -302,6 +317,20 @@
     if (el) el.textContent = LW.formatTime(nowBrasilia());
   }
 
+  // Número de berços EFETIVO desta operação: o override local (ver
+  // state.bercos_override, declarado acima) quando existe, senão o
+  // `bercos` cadastrado da bateria selecionada — mesmo valor de sempre.
+  // Único ponto de leitura da capacidade; updateCapacidade(),
+  // recalcPaineis() e abrirGradeMontagemPersonalizada() usam este helper
+  // em vez de ler `bateria.bercos` direto, pra nunca ficarem
+  // dessincronizados entre si depois de um override.
+  function _capacidadeAtual() {
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    const override = Number(state.bercos_override);
+    if (Number.isFinite(override) && override > 0) return override;
+    return bateria?.bercos || 0;
+  }
+
   function updateCapacidade() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
     if (bateria) {
@@ -314,7 +343,13 @@
         state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
         if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
       }
-      $('op-capacidade').value = `${bateria.bercos} berços`;
+      // Com override ativo (ver _aplicarNovaCapacidadeBercos, abaixo),
+      // mostra o número customizado — com um sinalizador visual (nunca
+      // silencioso) pra ficar claro que não é mais o valor cadastrado da
+      // bateria.
+      $('op-capacidade').value = state.bercos_override
+        ? `${_capacidadeAtual()} berços (customizado)`
+        : `${bateria.bercos} berços`;
     } else {
       if (!state.dimensaoManual) {
         state.dimensao = '';
@@ -387,11 +422,12 @@
   // Trava o campo de novo e grava o valor digitado como definitivo pra
   // esta operação — chamado ao clicar de novo no ✓, apertar Enter, ou
   // sair do campo (blur), o que vier primeiro.
-  function _confirmarDimensaoManual() {
+  async function _confirmarDimensaoManual() {
     const input = $('op-dimensao');
     const btn = $('btn-editar-dimensao');
     if (!input || input.readOnly) return; // já estava travado — nada a confirmar
 
+    const valorAnterior = state.dimensao;
     const valor = _formatarDimensaoLive(input.value.trim(), true);
     input.value = valor;
     state.dimensao = valor;
@@ -406,8 +442,92 @@
     input.classList.toggle('auto-filled', !state.dimensaoManual);
     if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica para esta operação'; }
 
-    if (!state.dimensaoManual) updateCapacidade(); // reaplica o automático na hora
+    if (!state.dimensaoManual) {
+      // Volta a automático: some junto qualquer override de berços que
+      // essa dimensão manual tivesse trazido (state.bercos_override) —
+      // sem uma dimensão específica não faz sentido manter uma
+      // capacidade customizada em cima dela.
+      state.bercos_override = null;
+      updateCapacidade(); // reaplica o automático na hora
+      recalcPaineis();
+    } else if (valor !== valorAnterior && LW.BATERIA_IDS.find(b => b.id === state.id_bateria)) {
+      // Só pergunta quando a dimensão de fato mudou (evita perguntar de
+      // novo se a pessoa só clicou em ✏️/✓ sem alterar nada) e quando já
+      // existe uma bateria selecionada (sem ela não há "berços atuais"
+      // pra comparar/editar).
+      await _perguntarMudancaBercos();
+    }
     persist();
+  }
+
+  /**
+   * Chamada sempre que uma Dimensão manual É REALMENTE alterada (ver
+   * _confirmarDimensaoManual, acima) — uma dimensão diferente pode mudar
+   * fisicamente quantos berços cabem na bateria (molde mais largo/mais
+   * estreito). Pergunta se é o caso e, se sim, pede o novo número —
+   * vira um OVERRIDE só desta operação (state.bercos_override), NUNCA
+   * mexe no cadastro fixo da bateria em Configurações (decisão tomada
+   * na conversa que motivou esta função).
+   */
+  async function _perguntarMudancaBercos() {
+    const mudou = await LW.mostrarConfirmacao(
+      `Dimensão definida: ${state.dimensao}. Isso muda o número de berços desta bateria (só nesta operação)?`,
+      {
+        titulo: 'A dimensão mudou o número de berços?',
+        textoConfirmar: 'Sim, mudou',
+        textoCancelar: 'Não, continua igual',
+        icon: '📐',
+      }
+    );
+    if (!mudou) return;
+
+    const capacidadeAtual = _capacidadeAtual();
+    let novoValor = null;
+    while (novoValor === null) {
+      // eslint-disable-next-line no-await-in-loop -- pede de novo só quando o valor digitado é inválido; cada iteração depende da anterior.
+      const digitado = await LW.mostrarPrompt(
+        `Berços atuais: ${capacidadeAtual}. Qual vai ser o novo número de berços?`,
+        { titulo: 'Novo número de berços', placeholder: 'Ex: 18', icon: '🔢', textoConfirmar: 'Aplicar' }
+      );
+      if (digitado === null) return; // cancelou — mantém a capacidade como estava
+
+      const n = Number(String(digitado).trim().replace(',', '.'));
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+        // eslint-disable-next-line no-await-in-loop -- alerta bloqueante antes de perguntar de novo, de propósito.
+        await LW.mostrarAlerta('Informe um número inteiro de berços, maior que zero.', { tipo: 'aviso' });
+        continue;
+      }
+      novoValor = n;
+    }
+
+    _aplicarNovaCapacidadeBercos(novoValor);
+  }
+
+  /**
+   * Aplica o novo número de berços (override local, ver
+   * _perguntarMudancaBercos, acima) ao state inteiro: redimensiona os
+   * arrays já preenchidos berço a berço — Montagem Personalizada
+   * (bercos_personalizados) e override de Dimensão por berço
+   * (bercos_dimensoes) — mesma lógica de redimensionamento já usada ao
+   * trocar de bateria (ver listener de 'op-id-bateria', acima: berços que
+   * sobrarem são descartados, berços novos nascem vazios/null). Depois
+   * atualiza a tela ("Capacidade (Berços)") e os cálculos de Painéis.
+   */
+  function _aplicarNovaCapacidadeBercos(novaCapacidade) {
+    state.bercos_override = novaCapacidade;
+
+    if (state.tipo_montagem === LW.TIPO_MONTAGEM_PERSONALIZADA && Array.isArray(state.bercos_personalizados)) {
+      const atual = state.bercos_personalizados;
+      state.bercos_personalizados = Array.from({ length: novaCapacidade }, (_, i) => atual[i] || null);
+    }
+    if (Array.isArray(state.bercos_dimensoes)) {
+      const atualDim = state.bercos_dimensoes;
+      const redimensionado = Array.from({ length: novaCapacidade }, (_, i) => atualDim[i] || null);
+      state.bercos_dimensoes = redimensionado.some(Boolean) ? redimensionado : null;
+    }
+
+    updateCapacidade();
+    recalcPaineis();
   }
 
 
@@ -447,8 +567,10 @@
   }
 
   function recalcPaineis() {
-    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const bercos = bateria?.bercos || 0;
+    // Usa _capacidadeAtual() (respeita state.bercos_override quando
+    // existe) em vez de ler bateria.bercos direto — ver comentário na
+    // declaração do helper, acima.
+    const bercos = _capacidadeAtual();
 
     const elPaineisTipo = $('op-cards-paineis-tipo');
     const elM2Tipo = $('op-cards-m2-tipo');
@@ -1803,7 +1925,11 @@
           resolve(false);
           return;
         }
-        capacidade = bateria.bercos || 0;
+        // Respeita o override local de berços (ver _capacidadeAtual,
+        // acima) — sem isso, a grade de Montagem Personalizada abriria
+        // sempre com o número cadastrado da bateria, ignorando a
+        // capacidade customizada desta operação.
+        capacidade = _capacidadeAtual();
         tituloBateria = bateria.id;
       }
 
@@ -3296,6 +3422,7 @@
       modo_teste: false,
       bercos_personalizados: null,
       bercos_dimensoes: null,
+      bercos_override: null,
     };
     // Sem operação em andamento, o monitor de conexão ao vivo (item 9 do
     // plano de Registro Offline) não se aplica mais — zera pra não
