@@ -4114,6 +4114,21 @@
 
       <div style="margin-bottom:12px">
         <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Dimensão</label>
+          <div style="display:flex;gap:6px;align-items:stretch">
+            <input class="form-input auto-filled" id="eo-dimensao" style="flex:1;min-width:0" readonly
+              onblur="_eoConfirmarDimensaoManual()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+            <button type="button" id="eo-btn-editar-dimensao"
+              style="flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
+              class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica para esta operação"
+              onclick="_eoEditarDimensao()">✏️</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Tipo de Montagem</label>
           <div style="display:flex;gap:6px;align-items:stretch">
             <select class="form-select" id="eo-tipo-montagem" style="flex:1;min-width:0" onchange="_eoAtualizarPreview()"></select>
@@ -4121,6 +4136,10 @@
               style="display:none;flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
               class="btn btn-outline-accent btn-sm" title="Ver/editar os berços da Montagem Personalizada"
               onclick="_eoAbrirGradeMontagem()">🔧</button>
+            <button type="button" id="eo-btn-bercos-visuais"
+              style="flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
+              class="btn btn-outline-accent btn-sm" title="Ver/editar os berços marcados como Vazou/Não Enchido"
+              onclick="_eoAbrirBercosVisuais()">🔲</button>
           </div>
         </div>
       </div>

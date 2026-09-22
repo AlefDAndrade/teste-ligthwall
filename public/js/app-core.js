@@ -4741,6 +4741,32 @@
     // clicar "Salvar Alterações" (ver salvarEdicaoOperacao).
     let _eoBercosPersonalizados = [];
 
+    // Dimensão manual desta edição — mesmo padrão de state.dimensao/
+    // dimensaoManual em Registrar Operação (operacao.js): true depois que
+    // a pessoa confirma um valor digitado à mão (✏️, ver
+    // _eoConfirmarDimensaoManual), impede _eoAtualizarPreview() de
+    // sobrescrever com o label automático da bateria selecionada.
+    let _eoDimensao = '';
+    let _eoDimensaoManual = false;
+    // Override do NÚMERO de berços desta operação — mesmo padrão de
+    // state.bercos_override (operacao.js): null = usa o `bercos`
+    // cadastrado da bateria selecionada. Só recebe valor ao confirmar uma
+    // Dimensão manual DIFERENTE da anterior e responder "sim" pra "isso
+    // mudou o número de berços?" (ver _eoPerguntarMudancaBercos, abaixo).
+    // Vale só pra esta operação — nunca mexe no cadastro da bateria em
+    // Configurações.
+    let _eoBercosOverride = null;
+    // Berços marcados como Vazou/Não Enchido nesta operação (mesmo
+    // vocabulário de bercos_visuais, db.js) — null até o admin abrir o
+    // editor "🔲 Berços" pela 1ª vez nesta sessão do modal (busca do
+    // servidor só então, ver _eoAbrirBercosVisuais); depois disso, cópia
+    // de trabalho editada em memória, só vai pro servidor junto com o
+    // resto ao clicar "Salvar Alterações" (mesmo espírito de
+    // _eoBercosPersonalizados, acima).
+    let _eoBercosVisuais = null;
+    let _eoBercosVisuaisOriginal = null; // snapshot da busca — vira o "de" do diff de auditoria
+    let _eoBercosVisuaisModoNaoEnchido = false; // toggle local do modo de marcação, igual bateria-atual.js
+
     function abrirEdicaoOperacao(bateria) {
       if (!_perfilTemAcao('edicao-dados')) return;
       _eoRegistroOriginal = JSON.parse(JSON.stringify(bateria));
@@ -4748,7 +4774,34 @@
         ? [...bateria.bercos_personalizados]
         : [];
 
+      // Dimensão/berços já gravados nesta operação (bateria.dimensao/
+      // capacidade) — só tratados como "manual" (preservados ao trocar de
+      // bateria/recalcular) se DIFERIREM do que a bateria cadastrada HOJE
+      // diria automaticamente. Cobre tanto uma dimensão manual definida
+      // na hora do registro quanto o cadastro da bateria ter mudado
+      // depois (Configurações) sem que esta operação antiga devesse
+      // mudar junto.
+      const bateriaObjAtual = LW.BATERIA_IDS.find(b => b.id === bateria.id_bateria);
+      _eoDimensao = bateria.dimensao || bateriaObjAtual?.label || '';
+      _eoDimensaoManual = !!bateria.dimensao && bateria.dimensao !== bateriaObjAtual?.label;
+      _eoBercosOverride = (bateria.capacidade && bateriaObjAtual && bateria.capacidade !== bateriaObjAtual.bercos)
+        ? bateria.capacidade
+        : null;
+      // Berços visuais sempre recomeçam null — busca do zero na 1ª vez
+      // que "🔲 Berços" for aberto NESTA sessão do modal (nunca reaproveita
+      // o que ficou na memória de uma operação diferente editada antes).
+      _eoBercosVisuais = null;
+      _eoBercosVisuaisOriginal = null;
+      _eoBercosVisuaisModoNaoEnchido = false;
+
       document.getElementById('eo-erro').style.display = 'none';
+
+      const inputDimensao = document.getElementById('eo-dimensao');
+      inputDimensao.value = _eoDimensao;
+      inputDimensao.readOnly = true;
+      inputDimensao.classList.toggle('auto-filled', !_eoDimensaoManual);
+      const btnEditarDimensao = document.getElementById('eo-btn-editar-dimensao');
+      if (btnEditarDimensao) { btnEditarDimensao.textContent = '✏️'; btnEditarDimensao.title = 'Definir uma dimensão específica para esta operação'; }
 
       document.getElementById('eo-ro-data').textContent = bateria.data ? bateria.data.split('-').reverse().join('/') : '—';
       document.getElementById('eo-ro-inicio').textContent = bateria.inicio ? LW.formatTime(bateria.inicio) : '—';
@@ -4790,13 +4843,123 @@
     function fecharEdicaoOperacao() {
       document.getElementById('editar-operacao-modal').style.display = 'none';
       _eoRegistroOriginal = null;
+      _eoBercosVisuais = null;
+      _eoBercosVisuaisOriginal = null;
     }
 
     // Ao trocar a bateria, o preview (painéis/m²/cimentícia) recalcula com
     // a capacidade da bateria nova selecionada — cobre o caso "registrei B1
-    // mas era B6".
+    // mas era B6". Um override de berços (ver _eoBercosOverride, acima) foi
+    // calculado em cima da bateria ANTERIOR — trocar de bateria sempre
+    // volta a usar o `bercos` cadastrado da bateria nova, de propósito
+    // (mesma decisão de state.bercos_override em operacao.js). A dimensão
+    // também sincroniza de novo, a menos que tenha sido definida
+    // manualmente pra esta edição.
     function _eoAoMudarBateria() {
+      _eoBercosOverride = null;
+      if (!_eoDimensaoManual) {
+        const bateriaObj = LW.BATERIA_IDS.find(b => b.id === document.getElementById('eo-id-bateria').value);
+        _eoDimensao = bateriaObj?.label || '';
+        const inputDimensao = document.getElementById('eo-dimensao');
+        if (inputDimensao) inputDimensao.value = _eoDimensao;
+      }
       _eoAtualizarPreview();
+    }
+
+    // Número de berços EFETIVO desta edição — o override local quando
+    // existe (ver _eoBercosOverride, acima), senão o `bercos` cadastrado
+    // da bateria selecionada. Único ponto de leitura da capacidade nesta
+    // tela — mesmo papel de _capacidadeAtual() em operacao.js.
+    function _eoCapacidadeAtual() {
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === document.getElementById('eo-id-bateria').value);
+      const override = Number(_eoBercosOverride);
+      if (Number.isFinite(override) && override > 0) return override;
+      return bateriaObj?.bercos || 0;
+    }
+
+    // Destrava/confirma o campo Dimensão — mesma interação de Registrar
+    // Operação (ver editarDimensao, operacao.js): 1º clique destrava e
+    // foca, 2º clique (ou Enter/blur) confirma.
+    function _eoEditarDimensao() {
+      const input = document.getElementById('eo-dimensao');
+      const btn = document.getElementById('eo-btn-editar-dimensao');
+      if (!input) return;
+      if (input.readOnly) {
+        input.readOnly = false;
+        input.focus();
+        input.select();
+        if (btn) { btn.textContent = '✓'; btn.title = 'Confirmar esta dimensão'; }
+      } else {
+        _eoConfirmarDimensaoManual();
+      }
+    }
+
+    // Trava o campo de novo e grava o valor digitado como definitivo pra
+    // esta edição — chamado ao clicar de novo no ✓, apertar Enter, ou
+    // sair do campo (blur). Mesmo fluxo de _confirmarDimensaoManual
+    // (operacao.js): dimensão diferente da anterior + bateria já
+    // selecionada -> pergunta se isso mudou o número de berços.
+    async function _eoConfirmarDimensaoManual() {
+      const input = document.getElementById('eo-dimensao');
+      const btn = document.getElementById('eo-btn-editar-dimensao');
+      if (!input || input.readOnly) return; // já estava travado — nada a confirmar
+
+      const valorAnterior = _eoDimensao;
+      const valor = LW.formatarDimensaoLive(input.value.trim(), true);
+      input.value = valor;
+      _eoDimensao = valor;
+      _eoDimensaoManual = valor !== '';
+      input.readOnly = true;
+      input.classList.toggle('auto-filled', !_eoDimensaoManual);
+      if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica para esta operação'; }
+
+      if (!_eoDimensaoManual) {
+        // Volta a automático: some junto qualquer override de berços que
+        // essa dimensão manual tivesse trazido.
+        _eoBercosOverride = null;
+      } else if (valor !== valorAnterior && document.getElementById('eo-id-bateria').value) {
+        await _eoPerguntarMudancaBercos();
+      }
+      _eoAtualizarPreview();
+    }
+
+    // Chamada sempre que uma Dimensão manual É REALMENTE alterada (ver
+    // _eoConfirmarDimensaoManual, acima) — mesmo texto/fluxo de
+    // _perguntarMudancaBercos (operacao.js). O número vira um OVERRIDE só
+    // desta edição (_eoBercosOverride), NUNCA mexe no cadastro fixo da
+    // bateria em Configurações.
+    async function _eoPerguntarMudancaBercos() {
+      const mudou = await LW.mostrarConfirmacao(
+        `Dimensão definida: ${_eoDimensao}. Isso muda o número de berços desta bateria (só nesta operação)?`,
+        {
+          titulo: 'A dimensão mudou o número de berços?',
+          textoConfirmar: 'Sim, mudou',
+          textoCancelar: 'Não, continua igual',
+          icon: '📐',
+        }
+      );
+      if (!mudou) return;
+
+      const capacidadeAtual = _eoCapacidadeAtual();
+      let novoValor = null;
+      while (novoValor === null) {
+        // eslint-disable-next-line no-await-in-loop -- pede de novo só quando o valor digitado é inválido; cada iteração depende da anterior.
+        const digitado = await LW.mostrarPrompt(
+          `Berços atuais: ${capacidadeAtual}. Qual vai ser o novo número de berços?`,
+          { titulo: 'Novo número de berços', placeholder: 'Ex: 18', icon: '🔢', textoConfirmar: 'Aplicar' }
+        );
+        if (digitado === null) return; // cancelou — mantém a capacidade como estava
+
+        const n = Number(String(digitado).trim().replace(',', '.'));
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+          // eslint-disable-next-line no-await-in-loop -- alerta bloqueante antes de perguntar de novo, de propósito.
+          await LW.mostrarAlerta('Informe um número inteiro de berços, maior que zero.', { tipo: 'aviso' });
+          continue;
+        }
+        novoValor = n;
+      }
+
+      _eoBercosOverride = novoValor;
     }
 
     // Recalcula painéis/m²/cimentícia em tempo real (mesma fórmula de
@@ -4844,7 +5007,11 @@
         return;
       }
       await LWOp.abrirGradeMontagem({
-        capacidade: bateriaObj.bercos || 0,
+        // Respeita o override local de berços (ver _eoCapacidadeAtual,
+        // acima) — sem isso, a grade abriria sempre com o número
+        // cadastrado da bateria, ignorando a capacidade customizada desta
+        // edição.
+        capacidade: _eoCapacidadeAtual(),
         valoresIniciais: _eoBercosPersonalizados,
         tituloBateria: bateriaObj.id,
         onConfirmar(resultado) {
@@ -4855,16 +5022,15 @@
     }
 
     function _eoAtualizarPreview() {
-      const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
-      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
-      const bercos = bateriaObj?.bercos || 0;
+      const bercos = _eoCapacidadeAtual();
 
       _eoAtualizarBotaoBercos();
 
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
       document.getElementById('eo-preview').innerHTML = `
-        <div>Dimensão: <strong style="color:var(--text)">${bateriaObj?.label || '—'}</strong></div>
+        <div>Dimensão: <strong style="color:var(--text)">${_eoDimensao || '—'}</strong></div>
+        <div>Berços: <strong style="color:var(--text)">${bercos}${_eoBercosOverride ? ' (customizado)' : ''}</strong></div>
         <div>Painéis Total: <strong style="color:var(--text)">${calc.total_paineis}</strong></div>
         <div>m² Total: <strong style="color:var(--text)">${calc.m2_total.toFixed(2)}</strong></div>
         <div>Placas Cimentícia: <strong style="color:var(--text)">${calc.placas_cimenticia}</strong></div>
@@ -4891,14 +5057,13 @@
         return;
       }
 
-      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === idBateria);
-      const bercos = bateriaObj?.bercos || 0;
+      const bercos = _eoCapacidadeAtual();
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
 
       const novosValores = {
         id_bateria: idBateria,
-        dimensao: bateriaObj?.label || _eoRegistroOriginal.dimensao,
-        capacidade: bateriaObj?.bercos || _eoRegistroOriginal.capacidade,
+        dimensao: _eoDimensao || _eoRegistroOriginal.dimensao,
+        capacidade: bercos || _eoRegistroOriginal.capacidade,
         tipo_montagem: tipoMontagem,
         turno,
         motivo_atraso: motivoAtraso,
@@ -4917,6 +5082,33 @@
           : de !== para;
         if (mudou) diff.push({ campo, de: de ?? null, para: para ?? null });
       });
+
+      // Berços visuais (Vazou/Não Enchido, ver bercos_visuais) — tabela à
+      // parte de "operacoes", só entra no payload se o admin efetivamente
+      // abriu e mexeu no editor "🔲 Berços" (_eoBercosVisuais continua
+      // null até isso acontecer, ver _eoAbrirBercosVisuais). Redimensiona
+      // pro número de berços FINAL desta edição antes de comparar/enviar
+      // — cobre o caso de a Dimensão ter sido editada (e a capacidade
+      // mudado) DEPOIS de já ter aberto e mexido no editor de berços.
+      let bercosVisuais;
+      if (_eoBercosVisuais) {
+        const porBerco = {};
+        _eoBercosVisuais.forEach(b => { porBerco[b.berco] = b; });
+        bercosVisuais = Array.from({ length: bercos }, (_x, i) => {
+          const berco = 'B' + (i + 1);
+          const existente = porBerco[berco];
+          return {
+            berco, ordem: i + 1,
+            estado_esquerda: existente?.estado_esquerda || 'okay',
+            estado_direita: existente?.estado_direita || 'okay',
+          };
+        });
+        if (JSON.stringify(bercosVisuais) !== JSON.stringify(_eoBercosVisuaisOriginal || [])) {
+          diff.push({ campo: 'bercos_visuais', de: _eoBercosVisuaisOriginal || [], para: bercosVisuais });
+        } else {
+          bercosVisuais = undefined; // nada mudou de fato — não manda (evita reescrever atualizado_em à toa)
+        }
+      }
 
       if (!diff.length) {
         LW.mostrarAlerta('Nenhuma alteração foi feita.', { tipo: 'aviso' });
@@ -4937,7 +5129,7 @@
         const res = await fetch('/editar-operacao', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: _eoRegistroOriginal.id, novosValores, diff }),
+          body: JSON.stringify({ id: _eoRegistroOriginal.id, novosValores, diff, bercosVisuais }),
         });
         const json = await res.json();
         if (!json.ok) throw new Error(json.erro || 'Erro ao salvar edição.');
@@ -4953,6 +5145,188 @@
         btn.disabled = false;
         btn.textContent = textoOriginal;
       }
+    }
+
+    // ================================================================
+    //  BERÇOS VISUAIS (Vazou / Não Enchido) — editor retroativo, dentro
+    //  de Editar Operação
+    // ================================================================
+    // Em Registrar Operação, essas marcações só podem ser feitas AO VIVO
+    // (ver bateria-atual.js, GET/POST /bercos-andamento) — uma vez a
+    // operação registrada, não havia mais como corrigir um clique errado
+    // ou marcar algo que só foi percebido depois (ex: no Setor de
+    // Qualidade). Este editor cobre esse buraco: mesma grade visual
+    // (reaproveita as classes .ba-grid/.ba-celula/.ba-dot, já usadas em
+    // bateria-atual.js e relatorio-bercos.js), mas operando direto em
+    // cima da tabela bercos_visuais de UMA operação já finalizada — sem
+    // sincronização entre dispositivos, sem fila de pendentes offline
+    // (não faz sentido aqui: é uma correção administrativa pontual, não
+    // um acompanhamento ao vivo). Só grava de verdade junto com o resto
+    // da edição, ao clicar "Salvar Alterações" (ver salvarEdicaoOperacao,
+    // acima) — "Aplicar" aqui dentro só fecha este sub-modal, mantendo o
+    // resultado em _eoBercosVisuais.
+
+    // Tipo (código simples ou label) de CADA berço, na ordem — mesma
+    // lógica de _baTiposPorBerco (bateria-atual.js)/_tipoDoBerco
+    // (relatorio-bercos.js), duplicada aqui por serem 3 telas com fontes
+    // de dados ligeiramente diferentes (state ao vivo x _eoBercosPersonalizados
+    // x linha de histórico) — só a COR/resolução do tipo (LW.corDoBercoPersonalizado/
+    // corMontagemPorLabel) é de fato compartilhada (data.js).
+    function _eoTiposPorBerco(tipoMontagem, capacidade) {
+      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
+        return Array.from({ length: capacidade }, (_x, i) => _eoBercosPersonalizados[i] || null);
+      }
+      return Array.from({ length: capacidade }, () => tipoMontagem || null);
+    }
+
+    async function _eoAbrirBercosVisuais() {
+      if (!_eoRegistroOriginal) return;
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      const capacidade = _eoCapacidadeAtual();
+      if (!capacidade) {
+        LW.mostrarAlerta('Selecione a bateria antes de editar os berços.', { tipo: 'aviso' });
+        return;
+      }
+
+      // Busca do servidor só na 1ª vez que abre nesta sessão do modal —
+      // depois disso reaproveita a cópia de trabalho já em memória
+      // (_eoBercosVisuais), pra não perder edições ainda não salvas ao
+      // fechar/reabrir este sub-modal várias vezes.
+      if (!_eoBercosVisuais) {
+        let bercosServidor = [];
+        try {
+          const res = await fetch(`/bercos-visuais-operacao/${encodeURIComponent(_eoRegistroOriginal.id)}`);
+          const json = await res.json();
+          if (json.ok && Array.isArray(json.bercos)) bercosServidor = json.bercos;
+        } catch {
+          LW.mostrarAlerta('Não foi possível carregar os berços salvos — abrindo tudo como "okay".', { tipo: 'aviso' });
+        }
+        _eoBercosVisuaisOriginal = JSON.parse(JSON.stringify(bercosServidor));
+        const porBerco = {};
+        bercosServidor.forEach(b => { porBerco[b.berco] = b; });
+        _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
+          const berco = 'B' + (i + 1);
+          const existente = porBerco[berco];
+          return {
+            berco, ordem: i + 1,
+            estado_esquerda: existente?.estado_esquerda || 'okay',
+            estado_direita: existente?.estado_direita || 'okay',
+          };
+        });
+      } else if (_eoBercosVisuais.length !== capacidade) {
+        // Capacidade mudou (edição de Dimensão) desde a última vez que
+        // este editor foi aberto — redimensiona preservando o que já
+        // tinha sido marcado nos berços que continuam existindo.
+        const porBerco = {};
+        _eoBercosVisuais.forEach(b => { porBerco[b.berco] = b; });
+        _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
+          const berco = 'B' + (i + 1);
+          const existente = porBerco[berco];
+          return {
+            berco, ordem: i + 1,
+            estado_esquerda: existente?.estado_esquerda || 'okay',
+            estado_direita: existente?.estado_direita || 'okay',
+          };
+        });
+      }
+
+      _eoRenderBercosVisuais(tipoMontagem, capacidade);
+    }
+
+    function _eoRenderBercosVisuais(tipoMontagem, capacidade) {
+      const existente = document.getElementById('eo-bv-modal');
+      if (existente) existente.remove();
+
+      const ehPersonalizada = tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA;
+      const tipos = _eoTiposPorBerco(tipoMontagem, capacidade);
+
+      const modal = document.createElement('div');
+      modal.id = 'eo-bv-modal';
+      modal.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1001;align-items:center;justify-content:center;padding:20px';
+      modal.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <h2 style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);letter-spacing:.05em">🔲 BERÇOS — VAZOU / NÃO ENCHIDO</h2>
+            <button type="button" id="eo-bv-fechar" style="background:none;border:none;color:var(--text-3);font-size:1.4rem;cursor:pointer;line-height:1">✕</button>
+          </div>
+          <div id="eo-bv-dica" style="margin-bottom:12px;font-size:.82rem;color:var(--text-2)"></div>
+          <div style="margin-bottom:12px">
+            <button type="button" id="eo-bv-btn-modo" class="btn btn-sm"></button>
+          </div>
+          <div id="eo-bv-grid" class="ba-grid" style="overflow-x:auto"></div>
+          <div style="margin-top:16px;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid var(--yellow-dim,#a16207);border-radius:var(--radius);color:var(--text-2);font-size:.78rem">
+            ⚠ Só grava de verdade ao clicar "Salvar Alterações" no modal de Editar Operação — "Aplicar" aqui só fecha este editor, mantendo o que foi marcado.
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:12px;margin-top:16px">
+            <button type="button" class="btn btn-ghost" id="eo-bv-cancelar">Cancelar</button>
+            <button type="button" class="btn btn-danger" id="eo-bv-confirmar">Aplicar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+
+      // Snapshot pra "Cancelar" descartar qualquer clique feito nesta
+      // sessão do editor, sem afetar o que já estava em _eoBercosVisuais
+      // antes de abrir (de uma sessão anterior deste mesmo sub-modal).
+      const antesDeAbrir = JSON.parse(JSON.stringify(_eoBercosVisuais));
+
+      function atualizarBotaoModo() {
+        const btn = document.getElementById('eo-bv-btn-modo');
+        btn.className = `btn btn-sm ${_eoBercosVisuaisModoNaoEnchido ? 'btn-danger' : 'btn-ghost'}`;
+        btn.textContent = _eoBercosVisuaisModoNaoEnchido
+          ? '✕ Marcando Não Enchido — clique p/ desligar'
+          : '🚫 Marcar Não Enchido';
+        document.getElementById('eo-bv-dica').textContent = _eoBercosVisuaisModoNaoEnchido
+          ? '✕ Clique num indicador para marcar aquele lado como não enchido (o painel nunca existiu).'
+          : '🖱️ Clique num indicador (• em cima = direito, ● embaixo = esquerdo) para marcar que aquele lado baixou/vazou.';
+      }
+
+      function desenharGrid() {
+        const grid = document.getElementById('eo-bv-grid');
+        grid.innerHTML = _eoBercosVisuais.map((b, i) => {
+          const tipo = tipos[i];
+          const cor = tipo ? (ehPersonalizada ? LW.corDoBercoPersonalizado(tipo) : LW.corMontagemPorLabel(tipo)) : null;
+          const numero = String(i + 1).padStart(2, '0');
+          const dirNaoEnchido = b.estado_direita === 'nao_enchido';
+          const esqNaoEnchido = b.estado_esquerda === 'nao_enchido';
+          const dirMarcado = b.estado_direita === 'baixou' || dirNaoEnchido;
+          const esqMarcado = b.estado_esquerda === 'baixou' || esqNaoEnchido;
+          return `
+            <div class="ba-celula" style="background:${cor ? cor.bg : 'var(--bg-2)'};color:${cor ? cor.cor : 'var(--text-3)'};border:1px solid ${cor ? cor.borda : 'var(--border)'}">
+              <span class="ba-dot ba-dot-topo${dirMarcado ? ' ba-dot-marcado' : ''}${dirNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${b.berco}" data-lado="direita" title="${dirNaoEnchido ? 'Direito — Não enchido' : dirMarcado ? 'Direito — Baixou/Vazou' : 'Direito'}">${dirNaoEnchido ? '✕' : '•'}</span>
+              <span class="ba-numero">${LW.escaparHtml(b.berco || ('B' + numero))}</span>
+              <span class="ba-dot ba-dot-base${esqMarcado ? ' ba-dot-marcado' : ''}${esqNaoEnchido ? ' ba-dot-nao-enchido' : ''}" data-berco="${b.berco}" data-lado="esquerda" title="${esqNaoEnchido ? 'Esquerdo — Não enchido' : esqMarcado ? 'Esquerdo — Baixou/Vazou' : 'Esquerdo'}">${esqNaoEnchido ? '✕' : '•'}</span>
+            </div>`;
+        }).join('');
+
+        grid.querySelectorAll('.ba-dot').forEach(dot => {
+          dot.addEventListener('click', () => {
+            const berco = dot.getAttribute('data-berco');
+            const lado = dot.getAttribute('data-lado');
+            const item = _eoBercosVisuais.find(b => b.berco === berco);
+            if (!item) return;
+            const campo = lado === 'direita' ? 'estado_direita' : 'estado_esquerda';
+            const desejado = _eoBercosVisuaisModoNaoEnchido ? 'nao_enchido' : 'baixou';
+            // Clique de novo no mesmo estado desmarca (volta a 'okay') —
+            // mesmo comportamento de _baCliqueDot (bateria-atual.js).
+            item[campo] = item[campo] === desejado ? 'okay' : desejado;
+            desenharGrid();
+          });
+        });
+      }
+
+      atualizarBotaoModo();
+      desenharGrid();
+
+      document.getElementById('eo-bv-btn-modo').addEventListener('click', () => {
+        _eoBercosVisuaisModoNaoEnchido = !_eoBercosVisuaisModoNaoEnchido;
+        atualizarBotaoModo();
+      });
+      document.getElementById('eo-bv-fechar').addEventListener('click', () => modal.remove());
+      document.getElementById('eo-bv-cancelar').addEventListener('click', () => {
+        _eoBercosVisuais = antesDeAbrir; // descarta os cliques desta sessão do sub-modal
+        modal.remove();
+      });
+      document.getElementById('eo-bv-confirmar').addEventListener('click', () => modal.remove());
     }
 
     // ================================================================
