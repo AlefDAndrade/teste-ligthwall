@@ -161,7 +161,7 @@ self.addEventListener('push', (event) => {
       body: dados.corpo,
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
-      tag: dados.tag || undefined, // mesma tag = navegador AGRUPA/substitui em vez de empilhar notificação repetida do mesmo chamado
+      tag: dados.tag || undefined, // mesma tag = navegador AGRUPA/substitui em vez de empilhar notificação repetida do mesmo PDF (ver notificarPdfPronto, lib/notificacoes-push.js)
       data: { url: dados.url || '/index.html' },
     })
   );
@@ -175,8 +175,8 @@ self.addEventListener('push', (event) => {
 // URL da aba faria um reload completo, perdendo o estado da tela) —
 // por isso manda uma mensagem pro app (ver listener 'message' em
 // app-core.js) com a MESMA url que iria pra uma aba nova, pra ele
-// decidir sozinho como levar a pessoa até o chamado certo sem recarregar
-// a página.
+// decidir sozinho como levar a pessoa até o PDF certo sem recarregar a
+// página.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const urlAlvo = (event.notification.data && event.notification.data.url) || '/index.html';

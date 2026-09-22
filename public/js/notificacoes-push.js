@@ -2,19 +2,26 @@
 //  LIGHTWALL SC — SISTEMA DE INJEÇÃO
 //  notificacoes-push.js — Notificações Push (PC e celular)
 // ============================================================
-// Ativa/desativa notificações push no ESTE dispositivo/navegador —
-// "toda vez que um chamado for aberto, quem tem a permissão 'Notificar
-// Abertura de Chamado' marcada no perfil é notificado" (ver
-// lib/notificacoes-push.js, lib/itens-permissao.js, no servidor).
+// Ativa/desativa notificações push NESTE dispositivo/navegador — hoje a
+// única coisa que isso avisa é "seu PDF (Análise Focada) ficou pronto",
+// pra quem pediu a exportação e saiu da tela enquanto esperava (ver
+// notificarPdfPronto, lib/notificacoes-push.js).
+//
+// Histórico: este botão já serviu pra um sistema bem maior de
+// notificações do Setor de Manutenção (abertura de chamado, pedido/
+// recebimento de peça, lembrete de manutenção programada, cada uma
+// dependendo de uma permissão diferente marcada no perfil) — removido
+// junto com a descontinuação do Setor de Manutenção (ver histórico do
+// git se precisar resgatar). Sobrou só a infraestrutura de inscrição
+// abaixo, hoje usada só pelo PDF — sem permissão nenhuma envolvida:
+// qualquer usuário logado pode ativar, pra receber o aviso do PDF que
+// ELE MESMO pediu.
 //
 // Fluxo: usuário clica no sino da topbar -> pede permissão ao navegador
 // (Notification.requestPermission) -> inscreve o Service Worker já
 // registrado (pwa-register.js) num PushManager, usando a chave pública
 // VAPID do servidor (GET /push/config) -> manda a inscrição pro servidor
-// (POST /push/inscrever), amarrada ao usuário logado agora. O próprio
-// SERVIDOR decide, na hora de cada chamado aberto, se o PERFIL de quem
-// está logado tem a permissão marcada — este arquivo só cuida do
-// "aceitar receber neste aparelho", nunca decide QUEM recebe.
+// (POST /push/inscrever), amarrada ao usuário logado agora.
 //
 // Em iPhone/iPad (Safari), Web Push só funciona com o app ADICIONADO À
 // TELA DE INÍCIO (PWA instalado) — iOS 16.4+. Em Android/desktop
@@ -77,11 +84,11 @@ window.LWPush = (function () {
     const inscrito = !!(await _inscricaoAtual());
     if (inscrito) {
       btn.textContent = '🔔 Notificações ativadas';
-      btn.title = 'Clique para desativar notificações de novo chamado de manutenção neste dispositivo.';
+      btn.title = 'Clique para desativar o aviso de "PDF pronto" neste dispositivo.';
       btn.classList.add('btn-push-ativo');
     } else {
       btn.textContent = '🔔 Ativar notificações';
-      btn.title = 'Receba um aviso neste dispositivo (PC ou celular) sempre que um chamado de manutenção for aberto — se o seu perfil tiver essa permissão.';
+      btn.title = 'Receba um aviso neste dispositivo (PC ou celular) quando um PDF que você pediu (Análise Focada) terminar de ser gerado.';
       btn.classList.remove('btn-push-ativo');
     }
   }

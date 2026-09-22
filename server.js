@@ -104,7 +104,7 @@ const notificacoesPush = require('./lib/notificacoes-push.js')({ fs, path, PRIVA
 // ─── PERMISSÕES DE ÁREA — Fase 16 do fatiamento, ver README ──────────────
 // podeEditarArea/negarEdicao/temPoderesDeAdmin/sessaoOuAdmin/
 // podeUsarItem/negarAcesso/podeControlarOperacao/negarControleDeOperacao/
-// nomeDeQuemAceita agora vivem em lib/permissoes-area.js. Precisa vir
+// nomeDeQuemEstaLogado agora vivem em lib/permissoes-area.js. Precisa vir
 // ANTES das factories logo abaixo, que já usam essas funções — mesma
 // posição de sempre, logo após
 // sessao/sessaoUsuario/perfis/perfisFixosOverrides/perfisCustomizados já
@@ -126,7 +126,7 @@ const {
   negarAcesso,
   podeControlarOperacao,
   negarControleDeOperacao,
-  nomeDeQuemAceita,
+  nomeDeQuemEstaLogado,
 } = require('./lib/permissoes-area.js')({ sessao, sessaoUsuario, perfis, perfisFixosOverrides, perfisCustomizados });
 
 // ─── WEBSOCKET BROADCAST — Fase 13 do fatiamento, ver README ─────────────
@@ -223,7 +223,7 @@ const {
 const rotasUsuarios = require('./lib/rotas/usuarios.js')({ fs, path, PRIVATE_DIR, auth, sessao: sessaoOuAdmin, sessaoUsuario, perfis, perfisCustomizados, perfisFixosOverrides, itensPermissao });
 const rotasPerfisCustomizados = require('./lib/rotas/perfis-customizados.js')({ fs, path, PRIVATE_DIR, sessao: sessaoOuAdmin, perfisCustomizados, itensPermissao });
 const rotasParadas = require('./lib/rotas/paradas.js')({ db, podeEditarArea, negarEdicao });
-const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemAceita });
+const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificacoesPush, nomeDeQuemEstaLogado });
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
