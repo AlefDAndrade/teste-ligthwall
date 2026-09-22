@@ -168,3 +168,28 @@ test('override sobrevive a um render completo da tela (persiste no rascunho loca
   const salvo = JSON.parse(window.localStorage.getItem('lw_op_current'));
   assert.equal(salvo.bercos_override, 8);
 });
+
+// BUG CORRIGIDO (relatado pelo usuário): a "bateria visual" (card Bateria
+// Atual, bateria-atual.js) continuava desenhando os 20 berços cadastrados
+// da B7, ignorando o override — _baCapacidadeConfigurada lia só
+// `bateria.bercos`, nunca `dados.bercos_override`. O preview de painéis
+// (acima) já estava certo; só o desenho da grade em si tinha ficado pra
+// trás.
+test('grid visual da Bateria Atual (#bateria-atual-content) redesenha com o novo número de berços', async () => {
+  // Antes do override: 20 células (capacidade cadastrada de B7).
+  assert.equal(
+    document.querySelectorAll('#bateria-atual-content .ba-celula').length,
+    20
+  );
+
+  window.LW.mostrarConfirmacao = async () => true;
+  window.LW.mostrarPrompt = async () => '8';
+  await editarDimensaoPara('7,5');
+  await new Promise(r => setTimeout(r, 100));
+
+  assert.equal(
+    document.querySelectorAll('#bateria-atual-content .ba-celula').length,
+    8,
+    'a grade visual deveria ter redesenhado com 8 células, não continuar com as 20 da bateria cadastrada'
+  );
+});

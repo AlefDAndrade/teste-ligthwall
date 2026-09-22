@@ -2321,8 +2321,12 @@
    * @returns {Promise<boolean>} true = pode prosseguir com o registro agora
    */
   async function _reconciliarMontagemPersonalizada() {
-    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const capacidade = bateria?.bercos || 0;
+    // _capacidadeAtual() (não bateria.bercos direto) — respeita o
+    // override local de berços definido ao editar a Dimensão (ver
+    // _aplicarNovaCapacidadeBercos, acima); sem isso, esta função exigia
+    // preencher a grade até o número CADASTRADO da bateria mesmo depois
+    // de reduzir a capacidade pra esta operação.
+    const capacidade = _capacidadeAtual();
     const grade = Array.isArray(state.bercos_personalizados) ? state.bercos_personalizados : [];
     const preenchidos = grade.filter(t => !!t).length;
 
@@ -2959,8 +2963,13 @@
   }
 
   async function _registrarOperacaoInterna() {
-    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const bercos = bateria?.bercos || 0;
+    // _capacidadeAtual() (não bateria.bercos direto) — respeita o
+    // override local de berços (ver _aplicarNovaCapacidadeBercos, acima).
+    // Sem isso, o PREVIEW em tela (recalcPaineis) já mostrava os números
+    // certos com o override aplicado, mas o registro FINAL salvo no banco
+    // recalculava tudo de novo em cima do `bercos` cadastrado da
+    // bateria, desfazendo o override bem na hora que mais importava.
+    const bercos = _capacidadeAtual();
 
     // Marcações de "🚫 Não Enchido" (Bateria Atual) — busca uma cópia
     // FRESCA do servidor (em vez do cache local de bateria-atual.js, que
@@ -2997,7 +3006,7 @@
       data: dataLocal,
       turno: state.turno,
       dimensao: state.dimensao,
-      capacidade: bateria?.bercos || 0,
+      capacidade: bercos,
       id_bateria: state.id_bateria,
       inicio: state.inicio,
       fim: state.fim,
@@ -3571,8 +3580,9 @@
    */
   function aplicarDetalhesBerco(numeroBerco, novoTipo, novaDimensao) {
     let mudouAlgo = false;
-    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
-    const capacidade = bateria?.bercos || 0;
+    // _capacidadeAtual() — respeita o override local de berços (ver
+    // comentário em _reconciliarMontagemPersonalizada, acima).
+    const capacidade = _capacidadeAtual();
 
     if (typeof novaDimensao === 'string' && novaDimensao.trim() !== '') {
       const valorFormatado = LW.formatarDimensaoLive(novaDimensao.trim(), true);

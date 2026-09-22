@@ -127,15 +127,22 @@
   }
 
   // ── Posição no Palete ───────────────────────────────────────────────
-  // SEMPRE o nº de berços CADASTRADO pra bateria — não existe mais uma
-  // capacidade "declarada" separada (bercos_reais foi removido; um berço
-  // que não vai ser usado agora se marca individualmente como 🚫 Não
-  // Enchido, logo abaixo, não muda o total da bateria). O direcionamento
-  // é sobre ONDE FISICAMENTE cada berço empilha (a grade do molde), que
-  // não muda numa operação parcial, só a quantidade de painéis muda.
-  // Mesma distinção já documentada em _paleteDoBerco (setor-qualidade.js).
+  // Normalmente o nº de berços CADASTRADO pra bateria — não existe uma
+  // capacidade "declarada" separada pra marcar berço que não vai ser
+  // usado (isso se marca individualmente como 🚫 Não Enchido, logo
+  // abaixo, sem mudar o total). A EXCEÇÃO é um override local de berços
+  // (dados.bercos_override, ver _aplicarNovaCapacidadeBercos,
+  // operacao.js) — definido quando editar a Dimensão manualmente muda
+  // fisicamente quantos berços cabem na bateria (molde mais largo/mais
+  // estreito): aí o total FÍSICO da bateria mudou de verdade pra esta
+  // operação, então o grid tem que refletir isso, diferente de um berço
+  // simplesmente não usado (mesma distinção já documentada em
+  // _paleteDoBerco, setor-qualidade.js — que sim, continua olhando só o
+  // "não enchido").
   function _baCapacidadeConfigurada(dados) {
     const bateria = (LW.BATERIA_IDS || []).find(b => b.id === dados.id_bateria);
+    const override = Number(dados.bercos_override);
+    if (Number.isFinite(override) && override > 0) return override;
     return bateria?.bercos || 0;
   }
 
