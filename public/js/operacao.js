@@ -74,9 +74,18 @@
 
       // Só existe UMA operação em andamento por vez, na fábrica inteira —
       // a fonte de verdade passa a ser o servidor, não mais só o
-      // localStorage deste navegador. Sem conexão, cai pro rascunho local
-      // salvo aqui (mesmo comportamento de antes desta sincronização
-      // existir).
+      // localStorage deste navegador, DEPOIS de "Iniciar Injeção" (ver
+      // persist(), abaixo — só transmite a partir daí). Sem conexão, cai
+      // pro rascunho local salvo aqui, seja qual for o status (mesmo
+      // comportamento de sempre — base do Registro Offline, ver README).
+      // Quando o servidor RESPONDE dizendo que não tem nada em andamento
+      // (não é erro, é o normal antes de alguém iniciar algo), quem
+      // decide se um rascunho 'idle' local sobrevive ou não é
+      // _aplicarEstadoExterno (abaixo) — mesma regra vale tanto pra esta
+      // carga inicial quanto pro "handshake" do WebSocket ao vivo (ver
+      // LW.conectarOperacaoAndamento, logo abaixo: o servidor manda o
+      // estado atual assim que a conexão abre, e ele também pode vir
+      // null).
       let estadoInicial;
       try {
         estadoInicial = await LW.getOperacaoAndamento();
@@ -118,6 +127,30 @@
     // sem aviso o teste em andamento aqui.
     if (state.modo_teste) return;
     clearInterval(timerInterval);
+    if (!dados) {
+      // Servidor diz que não tem NENHUMA operação em andamento — seja no
+      // boot da página (ver init(), acima) ou no "handshake" que o
+      // WebSocket manda assim que conecta (servidor sempre manda o
+      // estado atual nessa hora, ver server.js — e ele também pode vir
+      // null). ANTES de esvaziar tudo (resetState, abaixo), dá uma
+      // chance pro rascunho LOCAL sobreviver, mas só se ele ainda não
+      // tiver sido "iniciado" (status 'idle'): campos preenchidos ANTES
+      // de "Iniciar Injeção" nunca chegaram a ser transmitidos pro
+      // servidor (ver persist(), abaixo — só a partir daí), então o
+      // servidor genuinamente não tem como saber deles — sem esta
+      // exceção, um refresh (ou até só a reconexão do WebSocket, alguns
+      // segundos depois do boot) apagava silenciosamente bateria, tipo
+      // de montagem, dimensão, turno e traços já digitados (ver
+      // conversa que motivou esta mudança).
+      // Um rascunho local já 'running'/'paused' é IGNORADO aqui de
+      // propósito: a partir do momento em que uma operação é iniciada, o
+      // servidor É quem manda — pode ter sido finalizada ou assumida por
+      // OUTRO dispositivo nesse meio tempo, e reviver um rascunho local
+      // desatualizado nesse caso arriscaria mostrar como "em andamento"
+      // uma operação que já foi registrada de verdade por outra tela.
+      const rascunhoLocal = LW.getOperacaoAtual();
+      if (rascunhoLocal && rascunhoLocal.status === 'idle') dados = rascunhoLocal;
+    }
     if (dados) {
       state = dados;
       // Compat: rascunhos salvos antes deste campo existir não têm
