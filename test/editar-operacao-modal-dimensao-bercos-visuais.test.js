@@ -98,6 +98,13 @@ test('abrirEdicaoOperacao: campo Dimensão nasce com o label automático da bate
   const operacao = await registrarOperacaoEBuscar(idOp);
 
   window.abrirEdicaoOperacao(operacao);
+  // Espera a busca de berços visuais (_eoCarregarBercosVisuais, disparada
+  // ao abrir o modal) terminar antes do teste acabar — senão o
+  // beforeEach do próximo teste fecha esta janela com essa promise ainda
+  // no ar, e o test runner reclama de "atividade assíncrona após o
+  // teste terminar" (só ruído de ambiente de teste; não acontece de
+  // verdade num navegador, onde a página só é fechada de propósito).
+  await new Promise(r => setTimeout(r, 150));
 
   assert.equal(document.getElementById('editar-operacao-modal').style.display, 'flex');
   assert.equal(document.getElementById('eo-dimensao').value, '9 cm');
@@ -236,4 +243,53 @@ test('Cancelar no editor de berços visuais descarta o clique feito nesta sessã
   const bv = await window.fetch(`/bercos-visuais-operacao/${idOp}`).then(r => r.json());
   const b1 = bv.bercos.find(b => b.berco === 'B1');
   assert.equal(b1.estado_direita, 'okay');
+});
+
+// BUG CORRIGIDO (relatado pelo usuário): o cálculo de Painéis em Editar
+// Operação sempre usava a capacidade MÁXIMA da bateria, nunca descontava
+// os berços já marcados como Vazou/Não Enchido — então salvar qualquer
+// edição não relacionada (ex: só o turno) apagava silenciosamente esse
+// desconto, sobrescrevendo total_paineis/m2_total pelo valor cheio.
+// Corrigido: _eoCalcularPaineis agora aplica LW.aplicarNaoEnchidosNoCalc
+// (mesma função usada no registro original em Registrar Operação) em
+// cima dos berços já salvos em bercos_visuais (busca automática ao abrir
+// o modal, ver _eoCarregarBercosVisuais).
+test('salvar uma edição não relacionada (ex: só o turno) preserva o desconto de berços já marcados Não Enchido', async () => {
+  const idOp = 'op-eo-modal-preserva-desconto-' + Date.now();
+  const operacao = await registrarOperacaoEBuscar(idOp); // B7: 20 berços, S/P -> 40 painéis "cheios"
+
+  // Pré-condição (setup direto no servidor, não é o que este teste
+  // exercita): 2 berços já marcados como Não Enchido, como se tivessem
+  // sido marcados desde o registro original — 40 - 2 = 38 painéis
+  // esperados dali em diante.
+  const bercosVisuais = Array.from({ length: 20 }, (_, i) => ({
+    berco: 'B' + (i + 1), ordem: i + 1,
+    estado_esquerda: i < 2 ? 'nao_enchido' : 'okay',
+    estado_direita: 'okay',
+  }));
+  await fetch(`${servidor.baseUrl}/editar-operacao`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({
+      id: idOp,
+      novosValores: {},
+      diff: [{ campo: 'bercos_visuais', de: [], para: bercosVisuais }],
+      bercosVisuais,
+    }),
+  });
+
+  // Abre a edição e muda só o turno — nada relacionado a berços/painéis.
+  window.abrirEdicaoOperacao(operacao);
+  await new Promise(r => setTimeout(r, 200)); // _eoCarregarBercosVisuais busca os 2 nao_enchido acima
+  document.getElementById('eo-turno').value = '2º TURNO';
+  document.getElementById('eo-turno').dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  window.LW.mostrarConfirmacao = async () => true;
+  await window.salvarEdicaoOperacao();
+  await new Promise(r => setTimeout(r, 200));
+
+  const historico = await window.fetch('/db/historico.json').then(r => r.json());
+  const atualizado = historico.find(o => o.id === idOp);
+  assert.equal(atualizado.turno, '2º TURNO'); // a edição pedida foi aplicada
+  assert.equal(atualizado.total_paineis, 38, 'deveria continuar descontando os 2 berços Não Enchido (40-2), não voltar pra 40');
 });

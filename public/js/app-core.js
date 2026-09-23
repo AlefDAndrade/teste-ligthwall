@@ -4838,6 +4838,18 @@
       _eoAtualizarPreview();
 
       document.getElementById('editar-operacao-modal').style.display = 'flex';
+
+      // Busca os berços marcados como Vazou/Não Enchido desta operação
+      // (bercos_visuais) assim que o modal abre — não só quando o admin
+      // abre manualmente o editor "🔲 Berços" — porque o cálculo de
+      // Painéis (_eoCalcularPaineis, abaixo) PRECISA descontar esses
+      // berços do total sempre, mesmo que ninguém toque no editor visual
+      // nesta sessão de edição. Sem isso, uma operação que já tinha
+      // berços não usados desde o registro original perderia esse
+      // desconto silenciosamente ao salvar qualquer outra alteração (ver
+      // conversa que motivou esta mudança). Assíncrono e não bloqueia a
+      // abertura do modal — re-chama _eoAtualizarPreview() quando termina.
+      _eoCarregarBercosVisuais();
     }
 
     function fecharEdicaoOperacao() {
@@ -4863,6 +4875,7 @@
         const inputDimensao = document.getElementById('eo-dimensao');
         if (inputDimensao) inputDimensao.value = _eoDimensao;
       }
+      _eoAtualizarCapacidadeBercosVisuais();
       _eoAtualizarPreview();
     }
 
@@ -4917,6 +4930,7 @@
         // Volta a automático: some junto qualquer override de berços que
         // essa dimensão manual tivesse trazido.
         _eoBercosOverride = null;
+        _eoAtualizarCapacidadeBercosVisuais();
       } else if (valor !== valorAnterior && document.getElementById('eo-id-bateria').value) {
         await _eoPerguntarMudancaBercos();
       }
@@ -4960,6 +4974,7 @@
       }
 
       _eoBercosOverride = novoValor;
+      _eoAtualizarCapacidadeBercosVisuais();
     }
 
     // Recalcula painéis/m²/cimentícia em tempo real (mesma fórmula de
@@ -4978,10 +4993,102 @@
     // verdade dos totais era a única opção; agora que dá pra editar,
     // precisa refletir o que está sendo editado nesta tela.
     function _eoCalcularPaineis(tipoMontagem, bercos) {
-      if (tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA) {
-        return LW.calcPaineisPersonalizado(_eoBercosPersonalizados);
+      const calcBase = tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA
+        ? LW.calcPaineisPersonalizado(_eoBercosPersonalizados)
+        : LW.calcPaineis(tipoMontagem, bercos);
+      // Desconta os berços marcados como Vazou/Não Enchido (ver
+      // _eoCarregarBercosVisuais/_eoBercosVisuais, abaixo) — mesma função
+      // que Registrar Operação usa (LW.aplicarNaoEnchidosNoCalc, data.js).
+      // Sem isso, o preview E o que é gravado ao clicar "Salvar
+      // Alterações" sempre mostravam/salvavam a capacidade MÁXIMA, mesmo
+      // quando a operação já tinha berços conhecidamente não usados desde
+      // o registro original — bug relatado pelo usuário. _eoBercosVisuais
+      // ainda null (busca em andamento ou falhou) = sem desconto nenhum
+      // por enquanto; _eoAtualizarPreview() é re-chamado assim que a
+      // busca (_eoCarregarBercosVisuais) terminar.
+      const marcacoes = _eoConverterBercosVisuaisParaMarcacoes(_eoBercosVisuais);
+      return LW.aplicarNaoEnchidosNoCalc(calcBase, tipoMontagem, _eoBercosPersonalizados, marcacoes);
+    }
+
+    // Converte o formato salvo em bercos_visuais (SQL — ver GET
+    // /bercos-visuais-operacao/:id: [{berco, estado_esquerda,
+    // estado_direita}]) pro formato que LW.aplicarNaoEnchidosNoCalc
+    // espera ({ B1: {esquerda, direita}, ... }, mesmo formato de GET
+    // /bercos-andamento em operacao.js — é a MESMA função compartilhada
+    // pelas duas telas). Nunca inclui `tipos` (o tipo FIXADO no instante
+    // da marcação) — esse detalhe só existe no formato AO VIVO mais
+    // recente; aqui cai no fallback documentado da própria função:
+    // resolve o tipo pela montagem/grade ATUAIS desta edição.
+    function _eoConverterBercosVisuaisParaMarcacoes(lista) {
+      const marcacoes = {};
+      (lista || []).forEach(b => {
+        const entry = {};
+        if (b.estado_esquerda === 'nao_enchido' || b.estado_esquerda === 'baixou') entry.esquerda = b.estado_esquerda;
+        if (b.estado_direita === 'nao_enchido' || b.estado_direita === 'baixou') entry.direita = b.estado_direita;
+        if (Object.keys(entry).length) marcacoes[b.berco] = entry;
+      });
+      return marcacoes;
+    }
+
+    // Redimensiona _eoBercosVisuais pra bater com a capacidade ATUAL desta
+    // edição (pode ter mudado por causa de um override de berços, ver
+    // _eoBercosOverride) — preserva o que já tinha sido marcado nos
+    // berços que continuam existindo, berços novos nascem 'okay'. Só
+    // mexe se já havia algo carregado (_eoBercosVisuais não-null); antes
+    // disso não há o que redimensionar — _eoCarregarBercosVisuais (abaixo)
+    // cuida do carregamento inicial.
+    function _eoAtualizarCapacidadeBercosVisuais() {
+      if (!_eoBercosVisuais) return;
+      const capacidade = _eoCapacidadeAtual();
+      const porBerco = {};
+      _eoBercosVisuais.forEach(b => { porBerco[b.berco] = b; });
+      _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
+        const berco = 'B' + (i + 1);
+        const existente = porBerco[berco];
+        return {
+          berco, ordem: i + 1,
+          estado_esquerda: existente?.estado_esquerda || 'okay',
+          estado_direita: existente?.estado_direita || 'okay',
+        };
+      });
+    }
+
+    // Busca (1x, ao abrir a edição — ver abrirEdicaoOperacao, acima) os
+    // berços marcados como Vazou/Não Enchido desta operação. Alimenta
+    // tanto o editor visual "🔲 Berços" (_eoAbrirBercosVisuais, abaixo)
+    // quanto o cálculo de Painéis (_eoCalcularPaineis, acima) — por isso
+    // roda sempre, não só quando o admin abre o editor manualmente.
+    async function _eoCarregarBercosVisuais() {
+      if (!_eoRegistroOriginal) return;
+      const idOperacao = _eoRegistroOriginal.id;
+      let bercosServidor = [];
+      try {
+        const res = await fetch(`/bercos-visuais-operacao/${encodeURIComponent(idOperacao)}`);
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.bercos)) bercosServidor = json.bercos;
+      } catch {
+        // Sem conexão agora — segue sem marcações conhecidas (nenhum
+        // desconto aplicado até a próxima tentativa). Não interrompe a
+        // edição: outros campos continuam editáveis normalmente.
       }
-      return LW.calcPaineis(tipoMontagem, bercos);
+      // A pessoa pode ter fechado o modal (ou aberto outra operação)
+      // enquanto esta busca ainda estava no ar — descarta o resultado se
+      // não for mais sobre a operação atual.
+      if (!_eoRegistroOriginal || _eoRegistroOriginal.id !== idOperacao) return;
+      _eoBercosVisuaisOriginal = JSON.parse(JSON.stringify(bercosServidor));
+      const porBerco = {};
+      bercosServidor.forEach(b => { porBerco[b.berco] = b; });
+      const capacidade = _eoCapacidadeAtual();
+      _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
+        const berco = 'B' + (i + 1);
+        const existente = porBerco[berco];
+        return {
+          berco, ordem: i + 1,
+          estado_esquerda: existente?.estado_esquerda || 'okay',
+          estado_direita: existente?.estado_direita || 'okay',
+        };
+      });
+      _eoAtualizarPreview(); // agora com o desconto de não enchidos já aplicado
     }
 
     // Mostra/esconde o botão "Configurar Berços" (grade da Montagem
@@ -5041,6 +5148,14 @@
       if (!_eoRegistroOriginal) return;
       document.getElementById('eo-erro').style.display = 'none';
 
+      // Garante que a busca de berços visuais (ver _eoCarregarBercosVisuais,
+      // disparada ao abrir o modal) já terminou antes de calcular os
+      // painéis — sem isso, clicar "Salvar Alterações" rápido demais
+      // (antes da busca resolver) recalcularia o total pela capacidade
+      // MÁXIMA, sem o desconto de Não Enchido, exatamente o bug que esta
+      // mudança corrige. Se já carregou, é um no-op (não busca de novo).
+      if (!_eoBercosVisuais) await _eoCarregarBercosVisuais();
+
       const idBateria = document.getElementById('eo-id-bateria').value;
       const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
       const turno = document.getElementById('eo-turno').value;
@@ -5084,11 +5199,13 @@
       });
 
       // Berços visuais (Vazou/Não Enchido, ver bercos_visuais) — tabela à
-      // parte de "operacoes", só entra no payload se o admin efetivamente
-      // abriu e mexeu no editor "🔲 Berços" (_eoBercosVisuais continua
-      // null até isso acontecer, ver _eoAbrirBercosVisuais). Redimensiona
-      // pro número de berços FINAL desta edição antes de comparar/enviar
-      // — cobre o caso de a Dimensão ter sido editada (e a capacidade
+      // parte de "operacoes". _eoBercosVisuais já vem carregado desde a
+      // abertura do modal (ver _eoCarregarBercosVisuais/garantia logo
+      // acima) — só NÃO entra no payload se mesmo assim não tiver
+      // carregado (offline agora) OU se nada de fato mudou nele nesta
+      // edição, pra não reescrever atualizado_em à toa. Redimensiona pro
+      // número de berços FINAL desta edição antes de comparar/enviar —
+      // cobre o caso de a Dimensão ter sido editada (e a capacidade
       // mudado) DEPOIS de já ter aberto e mexido no editor de berços.
       let bercosVisuais;
       if (_eoBercosVisuais) {
@@ -5188,46 +5305,26 @@
         return;
       }
 
-      // Busca do servidor só na 1ª vez que abre nesta sessão do modal —
-      // depois disso reaproveita a cópia de trabalho já em memória
-      // (_eoBercosVisuais), pra não perder edições ainda não salvas ao
-      // fechar/reabrir este sub-modal várias vezes.
+      // A busca em si já roda 1x, ao abrir a edição (ver
+      // _eoCarregarBercosVisuais, chamada por abrirEdicaoOperacao) —
+      // aqui só espera ela terminar, se ainda estiver em andamento (rede
+      // lenta), sem repetir a chamada.
       if (!_eoBercosVisuais) {
-        let bercosServidor = [];
-        try {
-          const res = await fetch(`/bercos-visuais-operacao/${encodeURIComponent(_eoRegistroOriginal.id)}`);
-          const json = await res.json();
-          if (json.ok && Array.isArray(json.bercos)) bercosServidor = json.bercos;
-        } catch {
+        await _eoCarregarBercosVisuais();
+        if (!_eoBercosVisuais) {
           LW.mostrarAlerta('Não foi possível carregar os berços salvos — abrindo tudo como "okay".', { tipo: 'aviso' });
+          _eoBercosVisuaisOriginal = [];
+          _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => ({
+            berco: 'B' + (i + 1), ordem: i + 1, estado_esquerda: 'okay', estado_direita: 'okay',
+          }));
         }
-        _eoBercosVisuaisOriginal = JSON.parse(JSON.stringify(bercosServidor));
-        const porBerco = {};
-        bercosServidor.forEach(b => { porBerco[b.berco] = b; });
-        _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
-          const berco = 'B' + (i + 1);
-          const existente = porBerco[berco];
-          return {
-            berco, ordem: i + 1,
-            estado_esquerda: existente?.estado_esquerda || 'okay',
-            estado_direita: existente?.estado_direita || 'okay',
-          };
-        });
       } else if (_eoBercosVisuais.length !== capacidade) {
         // Capacidade mudou (edição de Dimensão) desde a última vez que
         // este editor foi aberto — redimensiona preservando o que já
-        // tinha sido marcado nos berços que continuam existindo.
-        const porBerco = {};
-        _eoBercosVisuais.forEach(b => { porBerco[b.berco] = b; });
-        _eoBercosVisuais = Array.from({ length: capacidade }, (_x, i) => {
-          const berco = 'B' + (i + 1);
-          const existente = porBerco[berco];
-          return {
-            berco, ordem: i + 1,
-            estado_esquerda: existente?.estado_esquerda || 'okay',
-            estado_direita: existente?.estado_direita || 'okay',
-          };
-        });
+        // tinha sido marcado nos berços que continuam existindo (mesmo
+        // helper usado sempre que a capacidade muda, ver
+        // _eoAtualizarCapacidadeBercosVisuais, acima).
+        _eoAtualizarCapacidadeBercosVisuais();
       }
 
       _eoRenderBercosVisuais(tipoMontagem, capacidade);
