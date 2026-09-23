@@ -5402,10 +5402,20 @@
             const item = _eoBercosVisuais.find(b => b.berco === berco);
             if (!item) return;
             const campo = lado === 'direita' ? 'estado_direita' : 'estado_esquerda';
+            // BUG CORRIGIDO (relatado pelo usuário): um lado JÁ marcado
+            // (com QUALQUER estado — 'baixou' OU 'nao_enchido') sempre
+            // desmarca (volta a 'okay') ao ser clicado de novo, INDEPENDENTE
+            // do modo atual — mesmo comportamento de _baCliqueDot
+            // (bateria-atual.js). Antes, só desmarcava se o modo atual
+            // coincidisse com o estado já marcado; um berço 'nao_enchido'
+            // clicado no modo padrão "Vazou" virava 'baixou' em vez de
+            // desmarcar — quem precisava corrigir um "Não Enchido" marcado
+            // por engano (o cenário mais comum de editar isso depois do
+            // registro) tinha que primeiro adivinhar que precisava trocar
+            // de modo antes.
+            const estavaMarcado = item[campo] === 'baixou' || item[campo] === 'nao_enchido';
             const desejado = _eoBercosVisuaisModoNaoEnchido ? 'nao_enchido' : 'baixou';
-            // Clique de novo no mesmo estado desmarca (volta a 'okay') —
-            // mesmo comportamento de _baCliqueDot (bateria-atual.js).
-            item[campo] = item[campo] === desejado ? 'okay' : desejado;
+            item[campo] = estavaMarcado ? 'okay' : desejado;
             desenharGrid();
           });
         });

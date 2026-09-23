@@ -293,3 +293,60 @@ test('salvar uma edição não relacionada (ex: só o turno) preserva o desconto
   assert.equal(atualizado.turno, '2º TURNO'); // a edição pedida foi aplicada
   assert.equal(atualizado.total_paineis, 38, 'deveria continuar descontando os 2 berços Não Enchido (40-2), não voltar pra 40');
 });
+
+// BUG CORRIGIDO (relatado pelo usuário): desmarcar um "Não Enchido" já
+// existente (ex: marcado por engano na hora do registro) não tinha
+// efeito — clicar no indicador ✕ no MODO PADRÃO (🚫 Marcar Não Enchido
+// desligado, ou seja, modo "Vazou") sobrescrevia o berço pra 'baixou' em
+// vez de limpar pra 'okay', porque o clique só desmarcava se o modo
+// atual coincidisse com o estado já marcado. Corrigido: um lado já
+// marcado com QUALQUER estado sempre desmarca ao ser clicado de novo,
+// independente do modo (mesmo comportamento de _baCliqueDot,
+// bateria-atual.js).
+test('desmarcar um berço já "Não Enchido" (clicando no modo padrão "Vazou", sem trocar de modo) limpa pra okay e devolve o painel ao total', async () => {
+  const idOp = 'op-eo-modal-desmarcar-nao-enchido-' + Date.now();
+  const operacao = await registrarOperacaoEBuscar(idOp); // 20 berços, S/P -> 40 painéis "cheios"
+
+  // Pré-condição: B3 (lado esquerdo) já marcado como Não Enchido, como
+  // se tivesse sido um engano no registro original.
+  const bercosVisuais = Array.from({ length: 20 }, (_, i) => ({
+    berco: 'B' + (i + 1), ordem: i + 1,
+    estado_esquerda: i === 2 ? 'nao_enchido' : 'okay',
+    estado_direita: 'okay',
+  }));
+  await fetch(`${servidor.baseUrl}/editar-operacao`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({
+      id: idOp,
+      novosValores: {},
+      diff: [{ campo: 'bercos_visuais', de: [], para: bercosVisuais }],
+      bercosVisuais,
+    }),
+  });
+
+  window.abrirEdicaoOperacao(operacao);
+  await window._eoAbrirBercosVisuais();
+  await new Promise(r => setTimeout(r, 100));
+
+  // NÃO troca de modo — o editor abre sempre no modo padrão ("Vazou",
+  // _eoBercosVisuaisModoNaoEnchido === false). Clica direto no indicador
+  // ✕ do B3 (esquerda), que já está "Não Enchido", pra desmarcar.
+  const dotB3 = document.querySelector('#eo-bv-modal .ba-dot[data-berco="B3"][data-lado="esquerda"]');
+  assert.equal(dotB3.textContent, '✕', 'B3 deveria abrir já mostrando a marcação Não Enchido existente');
+  dotB3.dispatchEvent(new window.Event('click', { bubbles: true }));
+  document.getElementById('eo-bv-confirmar').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 100));
+
+  window.LW.mostrarConfirmacao = async () => true;
+  await window.salvarEdicaoOperacao();
+  await new Promise(r => setTimeout(r, 200));
+
+  const bv = await window.fetch(`/bercos-visuais-operacao/${idOp}`).then(r => r.json());
+  const b3 = bv.bercos.find(b => b.berco === 'B3');
+  assert.equal(b3.estado_esquerda, 'okay', 'deveria ter voltado a "okay", não virado "baixou"');
+
+  const historico = await window.fetch('/db/historico.json').then(r => r.json());
+  const atualizado = historico.find(o => o.id === idOp);
+  assert.equal(atualizado.total_paineis, 40, 'o painel do B3 desmarcado deveria voltar a contar no total (40, não mais 39)');
+});
