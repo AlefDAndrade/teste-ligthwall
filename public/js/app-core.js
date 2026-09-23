@@ -5428,12 +5428,26 @@
         _eoBercosVisuaisModoNaoEnchido = !_eoBercosVisuaisModoNaoEnchido;
         atualizarBotaoModo();
       });
-      document.getElementById('eo-bv-fechar').addEventListener('click', () => modal.remove());
+      // "Aplicar"/✕ (fechar) mantêm o que foi clicado nesta sessão do
+      // sub-modal e atualizam o preview principal (Painéis Total/m²/
+      // Cimentícia) NA HORA — antes, só recalculava ao clicar "Salvar
+      // Alterações" no modal de fora, dando a impressão de que marcar/
+      // desmarcar um berço "não fazia efeito" até salvar de verdade
+      // (pedido do usuário, pensando em usabilidade: ver o resultado
+      // antes de salvar).
+      document.getElementById('eo-bv-fechar').addEventListener('click', () => {
+        modal.remove();
+        _eoAtualizarPreview();
+      });
       document.getElementById('eo-bv-cancelar').addEventListener('click', () => {
         _eoBercosVisuais = antesDeAbrir; // descarta os cliques desta sessão do sub-modal
         modal.remove();
+        _eoAtualizarPreview(); // garante que o preview reflita o estado revertido (caso já tivesse sido atualizado antes)
       });
-      document.getElementById('eo-bv-confirmar').addEventListener('click', () => modal.remove());
+      document.getElementById('eo-bv-confirmar').addEventListener('click', () => {
+        modal.remove();
+        _eoAtualizarPreview();
+      });
     }
 
     // ================================================================

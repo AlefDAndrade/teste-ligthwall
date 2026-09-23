@@ -350,3 +350,33 @@ test('desmarcar um berço já "Não Enchido" (clicando no modo padrão "Vazou", 
   const atualizado = historico.find(o => o.id === idOp);
   assert.equal(atualizado.total_paineis, 40, 'o painel do B3 desmarcado deveria voltar a contar no total (40, não mais 39)');
 });
+
+// Pedido do usuário (usabilidade): ver o efeito de marcar/desmarcar um
+// berço no preview de Painéis Total ANTES de clicar "Salvar Alterações"
+// — antes, "Aplicar" só fechava o sub-modal sem atualizar o preview
+// principal, dando a impressão de que o clique "não fazia efeito" até
+// salvar de verdade.
+test('marcar um berço como Não Enchido e clicar "Aplicar" atualiza o preview de Painéis ANTES de salvar', async () => {
+  const idOp = 'op-eo-modal-preview-ao-vivo-' + Date.now();
+  const operacao = await registrarOperacaoEBuscar(idOp); // 20 berços, S/P -> 40 painéis
+  window.abrirEdicaoOperacao(operacao);
+  await new Promise(r => setTimeout(r, 200));
+
+  assert.match(document.getElementById('eo-preview').textContent, /40/, 'preview deveria começar em 40 (nada marcado ainda)');
+
+  await window._eoAbrirBercosVisuais();
+  await new Promise(r => setTimeout(r, 100));
+  document.getElementById('eo-bv-btn-modo').dispatchEvent(new window.Event('click', { bubbles: true })); // liga modo "Não Enchido"
+  document.querySelector('#eo-bv-modal .ba-dot[data-berco="B1"][data-lado="direita"]')
+    .dispatchEvent(new window.Event('click', { bubbles: true }));
+  document.getElementById('eo-bv-confirmar').dispatchEvent(new window.Event('click', { bubbles: true })); // "Aplicar" — SEM salvar
+  await new Promise(r => setTimeout(r, 100));
+
+  // Preview já reflete os 39 painéis (40-1) mesmo sem ter clicado
+  // "Salvar Alterações" ainda — é o ponto central deste teste.
+  assert.match(document.getElementById('eo-preview').textContent, /39/, 'preview deveria já mostrar 39 painéis antes de salvar');
+
+  // E o servidor ainda não sabe de nada (nada foi salvo de verdade).
+  const bvAntesDeSalvar = await window.fetch(`/bercos-visuais-operacao/${idOp}`).then(r => r.json());
+  assert.equal(bvAntesDeSalvar.bercos.find(b => b.berco === 'B1').estado_direita, 'okay');
+});
