@@ -1466,7 +1466,8 @@
   // Lista efetiva usada pela UI de export — recalculada em abrirExportModal()
   let EXPORT_COLUNAS = [...EXPORT_COLUNAS_BASE];
 
-  function gerarDownloadXLSX(dados, colsSel, sufixo, opcoes = {}) {
+  async function gerarDownloadXLSX(dados, colsSel, sufixo, opcoes = {}) {
+    await LW.carregarXlsx(); // biblioteca carregada sob demanda (ver data.js)
     const { nomeAba = 'Produção', prefixoArquivo = 'lightwall_baterias_' } = opcoes;
     // _gerarExportColunas() cria colunas dinâmicas como "paineis_3t"/"m2_3t" pra
     // tipos não nativos, mas o registro só guarda esses valores DENTRO de
@@ -1536,7 +1537,7 @@
   async function exportXLSX() {
     const s = await LW.getStats();
     EXPORT_COLUNAS = _gerarExportColunas(s.data);
-    gerarDownloadXLSX(s.data, EXPORT_COLUNAS.filter(c => c.padrao), todayBrasilia());
+    await gerarDownloadXLSX(s.data, EXPORT_COLUNAS.filter(c => c.padrao), todayBrasilia());
   }
 
   async function abrirExportModal() {
@@ -1611,7 +1612,7 @@
       return el && el.checked;
     });
     if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
-    gerarDownloadXLSX(dados, colsSel, sufixo);
+    await gerarDownloadXLSX(dados, colsSel, sufixo);
     fecharExportModal();
   }
 
@@ -1766,7 +1767,7 @@
     if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
 
     const linhasExport = _gerarLinhasExportRelatorio(dados);
-    gerarDownloadXLSX(linhasExport, colsSel, sufixo, { nomeAba: 'Traços', prefixoArquivo: 'lightwall_relatorio_injecao_' });
+    await gerarDownloadXLSX(linhasExport, colsSel, sufixo, { nomeAba: 'Traços', prefixoArquivo: 'lightwall_relatorio_injecao_' });
     fecharExportModalRelatorio();
   }
 

@@ -241,9 +241,9 @@
     return wb;
   }
 
-  function exportarPeriodo() {
-    if (typeof XLSX === 'undefined') {
-      LW.mostrarAlerta('Biblioteca de exportação (XLSX) não carregou. Recarregue a página e tente de novo.', { tipo: 'erro' });
+  async function exportarPeriodo() {
+    try { await LW.carregarXlsx(); } catch (e) {
+      LW.mostrarAlerta(e.message, { tipo: 'erro' });
       return;
     }
     if (!_tracosFiltrados.length) {
@@ -262,9 +262,9 @@
     XLSX.writeFile(wb, `lightwall_insumos_por_traco_${sufixo}.xlsx`);
   }
 
-  function exportarTracoSelecionado() {
-    if (typeof XLSX === 'undefined') {
-      LW.mostrarAlerta('Biblioteca de exportação (XLSX) não carregou. Recarregue a página e tente de novo.', { tipo: 'erro' });
+  async function exportarTracoSelecionado() {
+    try { await LW.carregarXlsx(); } catch (e) {
+      LW.mostrarAlerta(e.message, { tipo: 'erro' });
       return;
     }
     const traco = _tracosFiltrados.find(t => t.id_traco === _tracoSelecionadoId);

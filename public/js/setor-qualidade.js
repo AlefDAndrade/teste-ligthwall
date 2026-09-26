@@ -3828,9 +3828,9 @@
     };
   }
 
-  function abrirExportModal(origem) {
-    if (typeof XLSX === 'undefined') {
-      showAlert('Erro', 'Biblioteca de exportação (XLSX) não carregou. Recarregue a página e tente de novo.');
+  async function abrirExportModal(origem) {
+    try { await LW.carregarXlsx(); } catch (e) {
+      showAlert('Erro', e.message);
       return;
     }
     _sqExportOrigem = origem === 'dashboard' ? 'dashboard' : 'history';

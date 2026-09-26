@@ -3020,7 +3020,30 @@ const TOOLTIP_JS_FONTE = `
   })();
 `;
 
+// ─── Biblioteca de Excel (SheetJS) sob demanda ─────────────────────────────
+// xlsx.full.min.js tem ~930 KB (335 KB com gzip) e era carregado em TODA
+// abertura do sistema, mas só é usado ao exportar/importar planilha.
+// Agora é injetado na primeira vez que alguém precisa dele; chamadas
+// seguidas reaproveitam a mesma promessa. Se falhar (ex.: sem rede), a
+// próxima tentativa tenta de novo.
+let _promessaXlsx = null;
+function carregarXlsx() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
+  if (_promessaXlsx) return _promessaXlsx;
+  _promessaXlsx = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/js/vendor/xlsx.full.min.js';
+    script.onload = () => (typeof XLSX !== 'undefined'
+      ? resolve(XLSX)
+      : reject(new Error('Biblioteca de planilhas (XLSX) carregou incompleta.')));
+    script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca de planilhas (XLSX). Verifique a conexão e tente de novo.'));
+    document.head.appendChild(script);
+  }).catch((e) => { _promessaXlsx = null; throw e; });
+  return _promessaXlsx;
+}
+
 window.LW = {
+  carregarXlsx,
   // Constantes fixas
   TURNO_OPTS,
   M2_POR_PAINEL,
