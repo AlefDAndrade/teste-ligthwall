@@ -1578,6 +1578,15 @@
         return;
       }
 
+      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
+      try { await LW.carregarJszip(); } catch (e) { mostrarErroRestaurar(e.message); return; }
+
+      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
+      try { await LW.carregarJszip(); } catch (e) { mostrarErroMesclar(e.message); return; }
+
+      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
+      try { await LW.carregarJszip(); } catch (e) { mostrarErroRestaurarGeral(e.message); return; }
+
       try {
         const zip = await JSZip.loadAsync(file);
         const esperados = Object.keys(RESTAURAR_VALIDACOES);

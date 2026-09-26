@@ -16,15 +16,15 @@ const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').diges
 
 let servidor, dom, window, document;
 
-// A tela abre com os últimos 30 dias (ver _aplicarPeriodoPadrao em
+// A tela abre com os últimos 10 dias (ver _aplicarPeriodoPadrao em
 // relatorio-bercos.js) — as operações "atuais" do teste são registradas
-// 3 dias atrás, e uma operação ANTIGA (60 dias atrás) serve pra conferir
+// 3 dias atrás, e uma operação ANTIGA (20 dias atrás) serve pra conferir
 // que o período padrão a esconde e o "✕ Limpar" a traz de volta.
 function diasAtras(n) {
   return new Date(Date.now() - 3 * 3600 * 1000 - n * 86400 * 1000).toISOString().split('T')[0];
 }
 const DATA_RECENTE = diasAtras(3);
-const DATA_ANTIGA = diasAtras(60);
+const DATA_ANTIGA = diasAtras(20); // fora dos 10 dias do período padrão
 
 function extrairCookie(resposta) {
   const setCookie = resposta.headers.get('set-cookie') || '';
@@ -131,10 +131,10 @@ function limparFiltros() {
   document.getElementById('rb-id-operacao').value = '';
 }
 
-test('ao abrir, só os últimos 30 dias: as 3 operações recentes aparecem, a antiga não', () => {
+test('ao abrir, só os últimos 10 dias: as 3 operações recentes aparecem, a antiga não', () => {
   assert.equal(idsVisiveis().length, 3);
   assert.ok(!idsVisiveis().includes('op-filtro-antiga'));
-  assert.equal(document.getElementById('rb-data-inicio').value, diasAtras(30));
+  assert.equal(document.getElementById('rb-data-inicio').value, diasAtras(10));
   assert.equal(document.getElementById('rb-data-fim').value, diasAtras(0));
 });
 

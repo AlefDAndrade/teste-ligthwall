@@ -37,26 +37,20 @@
   // ajustes (ver onClickLinhaRelatorio()).
   let _modoEdicaoRelatorio = false;
 
-  // Controla se o intervalo padrão de 30 dias já foi aplicado nesta sessão
+  // Controla se o intervalo padrão (LW.DIAS_PERIODO_PADRAO dias, data.js) já foi aplicado nesta sessão
   // — só entra em ação na PRIMEIRA vez que cada tela é aberta (ver
   // initRegistro/initRelatorio, abaixo). Sem isso, "✕ Limpar Todos"
   // (que também passa por initRegistro/initRelatorio pra reconstruir a
-  // tela) reaplicaria os 30 dias por cima do que deveria ficar
+  // tela) reaplicaria o período padrão por cima do que deveria ficar
   // genuinamente sem filtro de data nenhum.
   let _dataInicialRegistroAplicada = false;
   let _dataInicialRelatorioAplicada = false;
 
-  // Calcula { inicio, fim } do intervalo padrão: hoje e 30 dias atrás,
-  // sempre em Brasília (ver nowBrasilia(), data.js) — mesmo fuso usado em
-  // todo o resto do sistema, pra não desalinhar com "Hoje" (aplicarFiltroRapido).
-  function _intervaloPadrao30Dias() {
-    const fim = nowBrasilia();
-    const inicio = new Date(fim);
-    inicio.setUTCDate(inicio.getUTCDate() - 30);
-    return {
-      inicio: inicio.toISOString().split('T')[0],
-      fim: fim.toISOString().split('T')[0],
-    };
+  // { inicio, fim } do período padrão: hoje e LW.DIAS_PERIODO_PADRAO dias
+  // atrás, em Brasília — ver intervaloPeriodoPadrao() em data.js (mesmo
+  // cálculo usado pelo Relatório de Berços).
+  function _intervaloPadrao() {
+    return LW.intervaloPeriodoPadrao();
   }
 
   const _filtrosRelatorio = {
@@ -411,7 +405,7 @@
     if (!_dataInicialRegistroAplicada) {
       _dataInicialRegistroAplicada = true;
       if (_filtrosRegistro.data_inicio === null && _filtrosRegistro.data_fim === null) {
-        const { inicio, fim } = _intervaloPadrao30Dias();
+        const { inicio, fim } = _intervaloPadrao();
         _filtrosRegistro.data_inicio = inicio;
         _filtrosRegistro.data_fim = fim;
         const elIni = document.getElementById('reg-data-inicio');
@@ -852,7 +846,7 @@
     if (!_dataInicialRelatorioAplicada) {
       _dataInicialRelatorioAplicada = true;
       if (_filtrosRelatorio.data_inicio === null && _filtrosRelatorio.data_fim === null) {
-        const { inicio, fim } = _intervaloPadrao30Dias();
+        const { inicio, fim } = _intervaloPadrao();
         _filtrosRelatorio.data_inicio = inicio;
         _filtrosRelatorio.data_fim = fim;
         const elIni = document.getElementById('rel-data-inicio');
@@ -1211,10 +1205,23 @@
 
   // Abre/fecha a linha de detalhe associada a uma linha do Relatório de
   // Injeção. rowId é o mesmo usado em data-traco-row-id / id="detalhe-...".
+  //
+  // O CONTEÚDO do detalhe (tabela de ajustes/leituras) é montado só na
+  // primeira vez que a linha é aberta — antes era montado pra TODAS as
+  // linhas a cada render, escondido com display:none. Medido com backup
+  // real (set/2026): era a maior parte dos ~58 mil elementos da tela, e
+  // quase ninguém abre mais que um punhado de linhas.
+  let _mapaAjustesRelatorio = new Map(); // atualizado a cada renderRelatorio()
   function toggleDetalheRelatorio(rowId) {
     const detalhe = document.getElementById('detalhe-' + rowId);
     const icone = document.getElementById('icone-' + rowId);
     if (!detalhe) return;
+    const celula = detalhe.firstElementChild;
+    if (celula && !celula.dataset.montado) {
+      const dados = window._lwRelatorioMapTemp && window._lwRelatorioMapTemp[rowId];
+      if (dados) celula.innerHTML = _construirDetalheRelatorio(dados.traco, _mapaAjustesRelatorio.get(dados.traco.id_traco));
+      celula.dataset.montado = '1';
+    }
     const estavaAberta = detalhe.style.display !== 'none';
     detalhe.style.display = estavaAberta ? 'none' : '';
     if (icone) icone.textContent = estavaAberta ? '▸' : '▾';
@@ -1258,6 +1265,7 @@
     // usada no painel de detalhe pra agrupar por AÇÃO, não por campo.
     const todosAjustes = await LW.getAjustesTracos();
     const mapaAjustesPorTraco = new Map(todosAjustes.map(a => [a.id_traco, a]));
+    _mapaAjustesRelatorio = mapaAjustesPorTraco; // usado ao abrir um detalhe (toggleDetalheRelatorio)
 
     const f = _filtrosRelatorio;
     if (f.data_inicio) linhas = linhas.filter(l => l.data >= f.data_inicio);
@@ -1310,7 +1318,7 @@
         return (Number(b.num_traco) || 0) - (Number(a.num_traco) || 0);
       });
     window._lwRelatorioMapTemp = {};
-    tbody.innerHTML = sorted.map((l, lIdx) => {
+    const htmlDoTraco = (l, lIdx) => {
       // Um traço pode ter sido reaproveitado em mais de uma bateria — cada uso
       // fica registrado em l.ultilizado.operacao. Aqui geramos UMA LINHA VISUAL
       // por uso (bateria/berço inicial/berço final mudam a cada reaproveitamento),
@@ -1375,11 +1383,42 @@
       })()}</td>
       </tr>
       <tr class="relatorio-detalhe-row" id="detalhe-${rowId}" style="display:none">
-        <td colspan="${colspanTotal}">${_construirDetalheRelatorio(l, mapaAjustesPorTraco.get(l.id_traco))}</td>
+        <td colspan="${colspanTotal}"></td>
       </tr>
     `;
       }).join('');
-    }).join('');
+    };
+
+    // Desenha os primeiros LOTE_RELATORIO traços; o resto entra pelo botão
+    // "Mostrar mais" no fim da tabela (_mostrarMaisRelatorio), sem buscar
+    // nada de novo. Com o período padrão (10 dias) quase sempre cabe tudo
+    // no 1º lote; o limite só age quando alguém abre um período grande
+    // ("Todos") — medido com backup real (set/2026): 736 traços levavam
+    // ~4 s pra desenhar num tablet. Contagem, ordenação, filtros e
+    // exportação continuam considerando TODOS os traços filtrados.
+    _relatorioPendente = { sorted, htmlDoTraco, proximo: 0, colspanTotal };
+    tbody.innerHTML = '';
+    _mostrarMaisRelatorio();
+  }
+
+  const LOTE_RELATORIO = 200;
+  let _relatorioPendente = null;
+  function _mostrarMaisRelatorio() {
+    const tbody = document.getElementById('relatorio-tbody');
+    const p = _relatorioPendente;
+    if (!tbody || !p) return;
+    tbody.querySelector('tr.relatorio-mostrar-mais')?.remove();
+    const fim = Math.min(p.proximo + LOTE_RELATORIO, p.sorted.length);
+    let html = '';
+    for (let i = p.proximo; i < fim; i++) html += p.htmlDoTraco(p.sorted[i], i);
+    p.proximo = fim;
+    const restantes = p.sorted.length - fim;
+    if (restantes > 0) {
+      html += `<tr class="relatorio-mostrar-mais"><td colspan="${p.colspanTotal}" style="text-align:center;padding:14px">
+        <button class="btn btn-ghost btn-sm" onclick="LWDash.mostrarMaisRelatorio()">Mostrar mais ${Math.min(LOTE_RELATORIO, restantes)} traços (${restantes} restantes)</button>
+      </td></tr>`;
+    }
+    tbody.insertAdjacentHTML('beforeend', html);
   }
 
 
@@ -1984,6 +2023,7 @@
     onClickLinhaRegistro,
     toggleModoEdicaoRelatorio,
     onClickLinhaRelatorio,
+    mostrarMaisRelatorio: _mostrarMaisRelatorio,
     toggleDetalheRelatorio,
     exportCSV: exportXLSX, abrirExportModal, fecharExportModal, onExportPeriodoChange,
     selecionarTodasColunas, atualizarPreviewCount, confirmarExport,

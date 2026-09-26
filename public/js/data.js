@@ -3020,30 +3020,60 @@ const TOOLTIP_JS_FONTE = `
   })();
 `;
 
-// ─── Biblioteca de Excel (SheetJS) sob demanda ─────────────────────────────
-// xlsx.full.min.js tem ~930 KB (335 KB com gzip) e era carregado em TODA
-// abertura do sistema, mas só é usado ao exportar/importar planilha.
-// Agora é injetado na primeira vez que alguém precisa dele; chamadas
-// seguidas reaproveitam a mesma promessa. Se falhar (ex.: sem rede), a
+// ─── Período padrão das telas de histórico ─────────────────────────────────
+// Registro de Baterias, Relatório de Injeção e Relatório de Berços abrem
+// com este intervalo (hoje e N dias atrás, em Brasília) em vez de todo o
+// histórico — era 30 dias; reduzido pra 10 a pedido (set/2026): cobre o
+// uso do dia a dia e deixa as telas bem mais leves. Pra ver mais, basta
+// mudar as datas ou usar "✕ Limpar". Um lugar só pra mudar o número.
+const DIAS_PERIODO_PADRAO = 10;
+function intervaloPeriodoPadrao() {
+  const fim = nowBrasilia();
+  const inicio = new Date(fim);
+  inicio.setUTCDate(inicio.getUTCDate() - DIAS_PERIODO_PADRAO);
+  return {
+    inicio: inicio.toISOString().split('T')[0],
+    fim: fim.toISOString().split('T')[0],
+  };
+}
+
+// ─── Bibliotecas pesadas carregadas sob demanda ───────────────────────────
+// Antes vinham em <script> fixo no index.html, baixadas em TODA abertura
+// do sistema mesmo sem uso:
+//   • xlsx.full.min.js (SheetJS, ~930 KB / 335 KB com gzip) — só usado ao
+//     exportar/importar planilha;
+//   • jszip.min.js (~95 KB) — só usado ao restaurar/mesclar backup; além
+//     disso vinha do cdnjs (internet): com a internet da fábrica lenta ou
+//     fora, a abertura do sistema ficava esperando por ele. Agora é servido
+//     pelo próprio servidor (public/js/vendor/, mesma versão 3.10.1 do
+//     package.json).
+// Cada uma é injetada na primeira vez que alguém precisa; chamadas
+// seguidas reaproveitam a mesma promessa; se falhar (ex.: sem rede), a
 // próxima tentativa tenta de novo.
-let _promessaXlsx = null;
-function carregarXlsx() {
-  if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
-  if (_promessaXlsx) return _promessaXlsx;
-  _promessaXlsx = new Promise((resolve, reject) => {
+const _promessasScriptVendor = {};
+function _carregarScriptVendor(nomeGlobal, src, rotulo) {
+  if (typeof window[nomeGlobal] !== 'undefined') return Promise.resolve(window[nomeGlobal]);
+  if (_promessasScriptVendor[src]) return _promessasScriptVendor[src];
+  _promessasScriptVendor[src] = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = '/js/vendor/xlsx.full.min.js';
-    script.onload = () => (typeof XLSX !== 'undefined'
-      ? resolve(XLSX)
-      : reject(new Error('Biblioteca de planilhas (XLSX) carregou incompleta.')));
-    script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca de planilhas (XLSX). Verifique a conexão e tente de novo.'));
+    script.src = src;
+    script.onload = () => (typeof window[nomeGlobal] !== 'undefined'
+      ? resolve(window[nomeGlobal])
+      : reject(new Error(`Biblioteca ${rotulo} carregou incompleta.`)));
+    script.onerror = () => reject(new Error(`Não foi possível carregar a biblioteca ${rotulo}. Verifique a conexão e tente de novo.`));
     document.head.appendChild(script);
-  }).catch((e) => { _promessaXlsx = null; throw e; });
-  return _promessaXlsx;
+  }).catch((e) => { delete _promessasScriptVendor[src]; throw e; });
+  return _promessasScriptVendor[src];
+}
+function carregarXlsx() {
+  return _carregarScriptVendor('XLSX', '/js/vendor/xlsx.full.min.js', 'de planilhas (XLSX)');
+}
+function carregarJszip() {
+  return _carregarScriptVendor('JSZip', '/js/vendor/jszip.min.js', 'de arquivos .zip (JSZip)');
 }
 
 window.LW = {
-  carregarXlsx,
+  carregarXlsx, carregarJszip, DIAS_PERIODO_PADRAO, intervaloPeriodoPadrao,
   // Constantes fixas
   TURNO_OPTS,
   M2_POR_PAINEL,

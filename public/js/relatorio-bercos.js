@@ -454,20 +454,18 @@
     }
   }
 
-  // Período padrão ao abrir a tela pela 1ª vez: últimos 30 dias — mesmo
-  // critério de Registro de Baterias e Relatório de Injeção (ver
-  // _intervaloPadrao30Dias em dashboard.js). Antes a tela abria com TODO o
+  // Período padrão ao abrir a tela pela 1ª vez: últimos
+  // LW.DIAS_PERIODO_PADRAO dias — mesmo critério de Registro de Baterias e
+  // Relatório de Injeção (ver intervaloPeriodoPadrao em data.js). Antes a tela abria com TODO o
   // histórico. "✕ Limpar" continua limpando as datas (= todo o período),
   // igual às outras telas.
   function _aplicarPeriodoPadrao() {
     const ini = document.getElementById('rb-data-inicio');
     const fim = document.getElementById('rb-data-fim');
     if (!ini || !fim || ini.value || fim.value) return;
-    const hoje = nowBrasilia();
-    const inicio = new Date(hoje);
-    inicio.setUTCDate(inicio.getUTCDate() - 30);
-    ini.value = inicio.toISOString().split('T')[0];
-    fim.value = hoje.toISOString().split('T')[0];
+    const { inicio, fim: hoje } = LW.intervaloPeriodoPadrao();
+    ini.value = inicio;
+    fim.value = hoje;
   }
 
   function init() {
