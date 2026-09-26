@@ -3,6 +3,7 @@ const fs        = require('fs');
 const path      = require('path');
 const JSZip     = require('jszip');
 const WebSocket = require('ws');
+const zlib      = require('zlib');
 
 // SQLite (better-sqlite3) — Fase 1 da migração JSON → SQL (ver README,
 // seção "Banco de Dados (SQLite)"). Por enquanto só cria o banco/schema;
@@ -18,6 +19,8 @@ const logger = require('./lib/logger');
 // logo abaixo pelas próprias rotas ainda não extraídas deste arquivo, e
 // todayBrasiliaServer/horaMinutoBrasiliaServer são injetadas em
 // notificacoesPush poucas linhas depois.
+// Compressão gzip das respostas (ver lib/compressao-resposta.js).
+const { aplicarCompressao } = require('./lib/compressao-resposta.js')({ zlib });
 const { todayBrasiliaServer, horaMinutoBrasiliaServer, agoraBrasiliaISOServer, numOuNulo } = require('./lib/tempo.js');
 
 const PORT = process.env.PORT || 5000; // env var facilita rodar testes numa porta separada
@@ -411,6 +414,12 @@ const server = http.createServer((req, res) => {
   const [urlPath, queryString] = req.url.split('?');
   const queryParams = new URLSearchParams(queryString || '');
   const modoTeste = queryParams.get('modoTeste') === 'true';
+
+  // ─── Compressão gzip ────────────────────────────────────────────────────
+  // Aplicada ANTES do patch de Cache-Control de /db/ (abaixo), que embrulha
+  // o writeHead já embrulhado por esta — os dois se somam. Detalhes e
+  // motivo em lib/compressao-resposta.js.
+  aplicarCompressao(req, res);
 
   // ─── /db/*.json NUNCA pode ser servido do cache do navegador ───────────
   // Mesmo raciocínio do bloco de Cache-Control lá embaixo (fallback de
