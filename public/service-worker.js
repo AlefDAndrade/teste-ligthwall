@@ -37,12 +37,12 @@
 
 'use strict';
 
-const CACHE_VERSAO = 'lightwall-shell-v2'; // v2: +offline.html/offline-operacao.js/db/config.json (Registro Offline, item 8)
+const CACHE_VERSAO = 'lightwall-shell-v3'; // v3: fontes locais (css/fontes.css + .woff2) no lugar do Google Fonts; v2: +offline.html/offline-operacao.js/db/config.json (Registro Offline, item 8)
 
 // Extensões de arquivo ESTÁTICO que este service worker cuida — qualquer
 // coisa fora desta lista (incluindo TUDO sob /db/) passa direto pra rede,
 // sem nunca ser interceptada.
-const EXTENSOES_ESTATICAS = ['.html', '.js', '.css', '.png', '.svg', '.ico', '.json'];
+const EXTENSOES_ESTATICAS = ['.html', '.js', '.css', '.png', '.svg', '.ico', '.json', '.woff2'];
 // ATENÇÃO: '.json' está na lista só por causa de manifest.json — a
 // exclusão explícita de qualquer coisa sob '/db/' (ver _ehEstatico,
 // abaixo) é o que realmente impede um db/*.json de cair no cache.
@@ -54,6 +54,7 @@ const PRECACHE_URLS = [
   'manifest.json',
   'css/styles.css',
   'css/login.css',
+  'css/fontes.css', // fontes locais — os .woff2 entram no cache conforme são usados
   'icons/icon-192.png',
   'icons/icon-512.png',
   // Registro de Operação Offline (PWA) — plano, item 2/item 8 (README):

@@ -230,7 +230,12 @@ const rotasNotificacoes = require('./lib/rotas/notificacoes.js')({ db, notificac
 const rotasQualidade = require('./lib/rotas/qualidade.js')({ db, lerOperacoesNaoAvaliadas, removerDaFilaNaoAvaliadas, podeEditarArea, negarEdicao });
 const rotasSqlAdmin = require('./lib/rotas/sql-admin.js')({ db, sessao: sessaoOuAdmin, adicionarNaFilaNaoAvaliadas, broadcastDadosSqlExcluidos });
 const rotasConsultas = require('./lib/rotas/consultas.js')({ db });
-const rotasExportarPdf = require('./lib/rotas/exportar-pdf.js')({ db, PRIVATE_DIR, sessaoUsuario, sessao, notificarPdfPronto: notificacoesPush.notificarPdfPronto });
+const rotasExportarPdf = require('./lib/rotas/exportar-pdf.js')({
+  db, PRIVATE_DIR, sessaoUsuario, sessao, notificarPdfPronto: notificacoesPush.notificarPdfPronto,
+  // Endereço pelo qual o Chromium do PDF (mesma máquina) alcança este
+  // servidor — usado pra carregar as fontes locais (ver exportar-pdf.js).
+  urlBaseLocal: `http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}`,
+});
 const rotasSobra = require('./lib/rotas/sobra.js')({ db, fs, path, dirParaModoTeste, podeEditarArea, negarEdicao });
 // Registro de Traço Descartado (Perda) — passo 2 do plano, ver README.
 const rotasTracosDescartados = require('./lib/rotas/tracos-descartados.js')({ db, podeEditarArea, negarEdicao });
@@ -344,6 +349,7 @@ const MIME = {
   '.png':  'image/png',
   '.svg':  'image/svg+xml',
   '.ico':  'image/x-icon',
+  '.woff2': 'font/woff2', // fontes locais (public/fonts, public/vendor/fontawesome)
 };
 
 // ─── HORÁRIO DE BRASÍLIA — ver lib/tempo.js (Fase 19) ─────────────────────
@@ -560,6 +566,12 @@ const server = http.createServer((req, res) => {
     // — fica em private/ —, mas historico.json e afins também se
     // beneficiam da mesma garantia).
     if (urlPath.startsWith('/db/')) headers['Cache-Control'] = 'no-store';
+    // Fontes são sujeitas a CORS: o Chromium da exportação de PDF monta a
+    // página com setContent (origem about:blank) e busca as fontes locais
+    // em http://127.0.0.1:PORTA (ver exportar-pdf.js) — sem este cabeçalho
+    // o navegador recusa a fonte e o PDF sai com a fonte padrão. Arquivos
+    // de fonte são públicos (a tela de login já usa), então '*' é seguro.
+    if (path.extname(caminhoResolvido) === '.woff2') headers['Access-Control-Allow-Origin'] = '*';
     res.writeHead(200, headers);
     res.end(data);
   });

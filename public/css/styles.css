@@ -3,7 +3,11 @@
    Global Styles
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Fontes locais (Barlow, Barlow Condensed, JetBrains Mono, Oswald) — antes
+   vinham do Google Fonts pela internet; ver css/fontes.css. O endereço
+   '/css/fontes.css' também é reescrito pelo servidor na exportação de PDF
+   (lib/rotas/exportar-pdf.js), que embute este arquivo no HTML. */
+@import url('/css/fontes.css');
 
 :root {
   /* Core palette — industrial / concrete */
