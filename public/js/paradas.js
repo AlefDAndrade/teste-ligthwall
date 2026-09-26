@@ -533,14 +533,17 @@
       LW.waitConfig(() => { preencherSelects(); preencherFiltroMotivo(); });
     }
 
-    // Preenche início/fim padrão (últimos 30 dias)
-    const hoje = typeof todayBrasilia === 'function' ? todayBrasilia() : new Date().toISOString().slice(0, 10);
-    const d30  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    // Preenche início/fim padrão — mesmo período das outras telas de
+    // histórico (LW.DIAS_PERIODO_PADRAO dias, hoje 10 — ver
+    // intervaloPeriodoPadrao em data.js; antes eram 30 fixos aqui).
+    const { inicio: dIni, fim: hoje } = (typeof LW !== 'undefined' && typeof LW.intervaloPeriodoPadrao === 'function')
+      ? LW.intervaloPeriodoPadrao()
+      : { inicio: new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10), fim: new Date().toISOString().slice(0, 10) };
     const fi   = document.getElementById('paradas-filtro-inicio');
     const ff   = document.getElementById('paradas-filtro-fim');
-    if (fi) fi.value = d30;
+    if (fi) fi.value = dIni;
     if (ff) ff.value = hoje;
-    _filtros.dataInicio = d30;
+    _filtros.dataInicio = dIni;
     _filtros.dataFim    = hoje;
 
     // Preenche datetime de início com agora

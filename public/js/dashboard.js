@@ -519,7 +519,7 @@
 
     // Mapa temporário para lookup por índice (evita serializar JSON em atributos HTML)
     window._lwRegistroMapTemp = {};
-    tbody.innerHTML = data.map((b, idx) => {
+    const htmlDaOperacao = (b, idx) => {
       window._lwRegistroMapTemp[idx] = b;
       const ppt = b.paineis_por_tipo || {};
       const m2pt = b.m2_por_tipo || {};
@@ -573,8 +573,37 @@
         <td data-col="placas_cimenticia">${b.placas_cimenticia || 0}</td>
         <td data-col="operador_nome">${b.operador_nome ? LW.escaparHtml(b.operador_nome) : '—'}</td>
       </tr>`;
-    }).join('');
+    };
 
+    // Mesmo esquema de lotes do Relatório de Injeção (ver
+    // _mostrarMaisRelatorio): desenha LOTE_REGISTRO operações e o resto
+    // entra pelo botão "Mostrar mais", sem buscar nada de novo. Com o
+    // período padrão (10 dias) quase sempre cabe tudo no 1º lote.
+    // Contagem, ordenação, filtros e exportação continuam sobre TODAS as
+    // operações filtradas.
+    _registroPendente = { data, htmlDaOperacao, proximo: 0, colspanTotal };
+    tbody.innerHTML = '';
+    _mostrarMaisRegistro();
+  }
+
+  const LOTE_REGISTRO = 200;
+  let _registroPendente = null;
+  function _mostrarMaisRegistro() {
+    const tbody = document.getElementById('registro-tbody');
+    const p = _registroPendente;
+    if (!tbody || !p) return;
+    tbody.querySelector('tr.registro-mostrar-mais')?.remove();
+    const fim = Math.min(p.proximo + LOTE_REGISTRO, p.data.length);
+    let html = '';
+    for (let i = p.proximo; i < fim; i++) html += p.htmlDaOperacao(p.data[i], i);
+    p.proximo = fim;
+    const restantes = p.data.length - fim;
+    if (restantes > 0) {
+      html += `<tr class="registro-mostrar-mais"><td colspan="${p.colspanTotal}" style="text-align:center;padding:14px">
+        <button class="btn btn-ghost btn-sm" onclick="LWDash.mostrarMaisRegistro()">Mostrar mais ${Math.min(LOTE_REGISTRO, restantes)} operações (${restantes} restantes)</button>
+      </td></tr>`;
+    }
+    tbody.insertAdjacentHTML('beforeend', html);
     _aplicarVisibilidadeColunasRegistro();
   }
 
@@ -2024,6 +2053,7 @@
     toggleModoEdicaoRelatorio,
     onClickLinhaRelatorio,
     mostrarMaisRelatorio: _mostrarMaisRelatorio,
+    mostrarMaisRegistro: _mostrarMaisRegistro,
     toggleDetalheRelatorio,
     exportCSV: exportXLSX, abrirExportModal, fecharExportModal, onExportPeriodoChange,
     selecionarTodasColunas, atualizarPreviewCount, confirmarExport,
