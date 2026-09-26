@@ -39,6 +39,13 @@
 
   let _cache = [];
   let _modoVisual = false; // false = tabela (padrão), true = grade colorida por bateria
+  // Linhas filtradas mais recentes e se o Modo Visual já foi montado com
+  // elas — o Modo Visual só é montado quando está (ou fica) visível. Antes
+  // era montado SEMPRE junto com a tabela, mesmo escondido: com ~3 meses
+  // de dados (backup de set/2026) a tela chegava a 110 mil elementos,
+  // metade deles invisíveis, e levava ~2,6 s pra abrir num tablet.
+  let _ultimasLinhas = [];
+  let _visualAtualizado = false;
 
   // Alterna 2 classes por Bx (B1/B3/B5... vs B2/B4/B6...) — cada berço
   // ocupa 2 colunas (E/D) inteiras nesta cor, pra ficar fácil ver de
@@ -175,13 +182,15 @@
     const colspanTotal = 3 + MAX_BERCOS * 2; // Data + Montagem + Vazamentos + (E/D de cada berço)
     const filtros = _lerFiltros();
     const linhas = _cache.filter(l => _passaNosFiltros(l, filtros));
+    _ultimasLinhas = linhas;
+    _visualAtualizado = false;
 
     const contagem = document.getElementById('rb-count');
     if (contagem) contagem.textContent = linhas.length ? `${linhas.length} bateria${linhas.length > 1 ? 's' : ''}` : '';
 
     if (!linhas.length) {
       tbody.innerHTML = `<tr><td colspan="${colspanTotal}" style="text-align:center;color:var(--text-3);padding:30px">Nenhum registro encontrado com estes filtros.</td></tr>`;
-      _renderVisual(linhas);
+      _renderVisualSeVisivel();
       return;
     }
 
@@ -201,11 +210,17 @@
     `;
     }).join('');
 
-    // Modo Visual é montado JUNTO (mesmo dado, mesma ordem) mesmo se não
-    // estiver visível agora — assim, alternar o botão "🎨 Modo Visual" só
-    // troca um display:none/'', instantâneo, sem precisar buscar os dados
-    // de novo nem esperar nada.
-    _renderVisual(linhas);
+    // Modo Visual: só é montado se estiver visível agora; se não, fica
+    // marcado como desatualizado e é montado na hora em que o botão
+    // "🎨 Modo Visual" for ligado (ver _aplicarModoVisual). Continua sem
+    // buscar nada na rede — usa as mesmas linhas já filtradas.
+    _renderVisualSeVisivel();
+  }
+
+  function _renderVisualSeVisivel() {
+    if (!_modoVisual || _visualAtualizado) return;
+    _renderVisual(_ultimasLinhas);
+    _visualAtualizado = true;
   }
 
   // Monta 1 card por bateria — resumo (mesmo formato do popover) + grade
@@ -235,9 +250,11 @@
     }).join('');
   }
 
-  // Só alterna o que já está montado (ver render()/_renderVisual, acima) —
-  // nenhuma busca nova, nenhum re-render, troca instantânea.
+  // Alterna tabela/Modo Visual. Ao ligar o Modo Visual pela 1ª vez (ou
+  // depois de uma mudança de filtro), monta os cards com as linhas já
+  // filtradas — nenhuma busca nova na rede.
   function _aplicarModoVisual() {
+    _renderVisualSeVisivel();
     const tableWrap = document.querySelector('#page-relatorio-bercos .table-wrap');
     const visual    = document.getElementById('relatorio-bercos-visual');
     if (tableWrap) tableWrap.style.display = _modoVisual ? 'none' : '';
@@ -437,8 +454,25 @@
     }
   }
 
+  // Período padrão ao abrir a tela pela 1ª vez: últimos 30 dias — mesmo
+  // critério de Registro de Baterias e Relatório de Injeção (ver
+  // _intervaloPadrao30Dias em dashboard.js). Antes a tela abria com TODO o
+  // histórico. "✕ Limpar" continua limpando as datas (= todo o período),
+  // igual às outras telas.
+  function _aplicarPeriodoPadrao() {
+    const ini = document.getElementById('rb-data-inicio');
+    const fim = document.getElementById('rb-data-fim');
+    if (!ini || !fim || ini.value || fim.value) return;
+    const hoje = nowBrasilia();
+    const inicio = new Date(hoje);
+    inicio.setUTCDate(inicio.getUTCDate() - 30);
+    ini.value = inicio.toISOString().split('T')[0];
+    fim.value = hoje.toISOString().split('T')[0];
+  }
+
   function init() {
     _construirThead();
+    _aplicarPeriodoPadrao();
 
     document.getElementById('btn-rb-filtrar')?.addEventListener('click', aplicarFiltros);
     document.getElementById('btn-rb-limpar')?.addEventListener('click', () => {

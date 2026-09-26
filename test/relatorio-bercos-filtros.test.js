@@ -16,6 +16,16 @@ const HASH_ADMIN = crypto.createHash('sha256').update(SENHA_ADMIN, 'utf8').diges
 
 let servidor, dom, window, document;
 
+// A tela abre com os últimos 30 dias (ver _aplicarPeriodoPadrao em
+// relatorio-bercos.js) — as operações "atuais" do teste são registradas
+// 3 dias atrás, e uma operação ANTIGA (60 dias atrás) serve pra conferir
+// que o período padrão a esconde e o "✕ Limpar" a traz de volta.
+function diasAtras(n) {
+  return new Date(Date.now() - 3 * 3600 * 1000 - n * 86400 * 1000).toISOString().split('T')[0];
+}
+const DATA_RECENTE = diasAtras(3);
+const DATA_ANTIGA = diasAtras(60);
+
 function extrairCookie(resposta) {
   const setCookie = resposta.headers.get('set-cookie') || '';
   return setCookie.split(';')[0] || null;
@@ -29,7 +39,7 @@ async function iniciarOperacaoEmAndamento(cookie, idBateria, tipoMontagem) {
   });
 }
 
-async function registrarOperacao(cookie, { id, idBateria, tipoMontagem, comVazamento }) {
+async function registrarOperacao(cookie, { id, idBateria, tipoMontagem, comVazamento, data = DATA_RECENTE }) {
   await iniciarOperacaoEmAndamento(cookie, idBateria, tipoMontagem);
   if (comVazamento) {
     await fetch(`${servidor.baseUrl}/marcar-berco-andamento?deviceId=${DEVICE_ID_TESTE_PADRAO}`, {
@@ -42,9 +52,9 @@ async function registrarOperacao(cookie, { id, idBateria, tipoMontagem, comVazam
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({
-      id, data: '2026-07-10', turno: '1° TURNO', dimensao: 9, capacidade: 20,
+      id, data, turno: '1° TURNO', dimensao: 9, capacidade: 20,
       id_bateria: idBateria, tipo_montagem: tipoMontagem,
-      inicio: '2026-07-10T10:00:00.000Z', fim: '2026-07-10T14:00:00.000Z',
+      inicio: `${data}T10:00:00.000Z`, fim: `${data}T14:00:00.000Z`,
     }),
   });
   assert.equal(resp.status, 200, await resp.text());
@@ -68,6 +78,10 @@ before(async () => {
   await registrarOperacao(cookieAdmin, { id: 'op-filtro-sp-b5', idBateria: 'B5', tipoMontagem: 'SP', comVazamento: false });
   await registrarOperacao(cookieAdmin, { id: 'op-filtro-2p-b6-vazou', idBateria: 'B6', tipoMontagem: '2P', comVazamento: true });
   await registrarOperacao(cookieAdmin, { id: 'op-filtro-2p-b5', idBateria: 'B5', tipoMontagem: '2P', comVazamento: false });
+  // Mesma combinação da op-filtro-sp-b5 (SP/B5, sem vazamento), de
+  // propósito: não muda as opções dos dropdowns nem o resultado dos
+  // filtros abaixo — só o período padrão decide se ela aparece.
+  await registrarOperacao(cookieAdmin, { id: 'op-filtro-antiga', idBateria: 'B5', tipoMontagem: 'SP', comVazamento: false, data: DATA_ANTIGA });
 
   // Garante que não sobrou "operação em andamento" nenhuma antes de abrir
   // a página — sem isso, o WebSocket de sincronização ao vivo (ver
@@ -117,8 +131,19 @@ function limparFiltros() {
   document.getElementById('rb-id-operacao').value = '';
 }
 
-test('sem filtro nenhum, as 3 operações aparecem', () => {
+test('ao abrir, só os últimos 30 dias: as 3 operações recentes aparecem, a antiga não', () => {
   assert.equal(idsVisiveis().length, 3);
+  assert.ok(!idsVisiveis().includes('op-filtro-antiga'));
+  assert.equal(document.getElementById('rb-data-inicio').value, diasAtras(30));
+  assert.equal(document.getElementById('rb-data-fim').value, diasAtras(0));
+});
+
+test('Modo Visual só é montado quando ligado, com as mesmas linhas da tabela', () => {
+  const cards = () => document.querySelectorAll('#relatorio-bercos-visual .card').length;
+  assert.equal(cards(), 0);
+  document.getElementById('btn-rb-modo-visual').click();
+  assert.equal(cards(), 3);
+  document.getElementById('btn-rb-modo-visual').click();
 });
 
 test('dropdown "Tipo de Montagem" foi populado com os valores presentes (SP, 2P)', () => {
@@ -180,11 +205,13 @@ test('combinando filtros (Bateria B5 + Montagem 2P) mostra só a operação que 
   assert.deepEqual(idsVisiveis(), ['op-filtro-2p-b5']);
 });
 
-test('botão "✕ Limpar" reseta todos os filtros novos, voltando a mostrar as 3', () => {
+test('botão "✕ Limpar" reseta todos os filtros, inclusive o período — aparecem as 4, com a antiga', () => {
   document.getElementById('rb-tipo-bateria').value = 'B5';
   document.getElementById('rb-tipo-bateria').dispatchEvent(new window.Event('change'));
   document.getElementById('btn-rb-limpar').click();
-  assert.equal(idsVisiveis().length, 3);
+  assert.equal(idsVisiveis().length, 4);
+  assert.ok(idsVisiveis().includes('op-filtro-antiga'));
+  assert.equal(document.getElementById('rb-data-inicio').value, '');
   assert.equal(document.getElementById('rb-tipo-montagem').value, '');
   assert.equal(document.getElementById('rb-tipo-bateria').value, '');
   assert.equal(document.getElementById('rb-vazamento').value, '');
