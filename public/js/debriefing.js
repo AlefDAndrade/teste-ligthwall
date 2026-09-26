@@ -170,6 +170,7 @@
             // e deve continuar sendo contabilizada no total.
             const reaproveitado = usoIdx > 0;
             tracos.push({
+              id_traco:        traco.id_traco,
               num_traco:       traco.num_traco,
               flow:            valorFinal(traco.flow, true),
               densidade:       valorFinal(traco.densidade, true),
@@ -195,15 +196,27 @@
   }
 
   function calcularCabecalho(estrutura) {
-    // Conta apenas traços NOVOS (não reaproveitados), usando num_traco como
-    // chave de deduplicação. Traços reaproveitados são sobra de um traço já
-    // contabilizado em outra bateria e NÃO devem ser somados novamente.
+    // Conta apenas traços NOVOS (não reaproveitados). Traços reaproveitados
+    // são sobra de um traço já contabilizado em outra bateria e NÃO devem
+    // ser somados novamente.
+    //
+    // A chave de deduplicação é o id_traco (PRIMARY KEY de "tracos", único
+    // de verdade) — antes era o num_traco, que NÃO é garantidamente único
+    // no dia: a base da numeração (state.baseNumTraco, operacao.js) é lida
+    // do contador no 1º traço da operação, mas o contador só avança ao
+    // FINALIZAR — duas operações que se sobrepõem, uma operação iniciada
+    // num dia e finalizada no outro, ou um num_traco editado à mão geram
+    // dois traços diferentes com o mesmo número, e o Set os colapsava num
+    // só (ex.: 17 traços batidos aparecendo como 15 no cabeçalho).
     const tracosUnicos = new Set();
     const temposInjecao = [];
     estrutura.forEach(({ bateria, tracos }) => {
       tracos.forEach(t => {
         if (!t.reaproveitado) {
-          tracosUnicos.add(t.num_traco != null ? String(t.num_traco) : '_' + Math.random());
+          const chave = t.id_traco != null
+            ? 'id:' + t.id_traco
+            : (t.num_traco != null ? 'num:' + t.num_traco : '_' + Math.random());
+          tracosUnicos.add(chave);
         }
       });
       const tempoMin = parseFloat(bateria?.tempo_min);
