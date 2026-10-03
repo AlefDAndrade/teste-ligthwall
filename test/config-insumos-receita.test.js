@@ -116,12 +116,12 @@ test('uma carga de página NOVA (equivalente a F5) aplica a lista de insumos cus
     // de novo no config.json salvo — 3 dos 4 nomes salvos eram Padrão,
     // "Fibra de Vidro" é o único Custom de verdade), Custom depois.
     assert.deepEqual(JSON.parse(JSON.stringify(window.LW.INSUMO_RECEITA_OPTS)), [
-      { nome: 'Cimento', categoria: 'padrao' },
-      { nome: 'Água', categoria: 'padrao' },
-      { nome: 'EPS', categoria: 'padrao' },
-      { nome: 'Superplastificante', categoria: 'padrao' },
-      { nome: 'Incorporador de Ar', categoria: 'padrao' },
-      { nome: 'Fibra de Vidro', categoria: 'custom' },
+      { nome: 'Cimento', categoria: 'padrao', fixo: true },
+      { nome: 'Água', categoria: 'padrao', fixo: true },
+      { nome: 'EPS', categoria: 'padrao', fixo: true },
+      { nome: 'Superplastificante', categoria: 'padrao', fixo: true },
+      { nome: 'Incorporador de Ar', categoria: 'padrao', fixo: true },
+      { nome: 'Fibra de Vidro', categoria: 'custom', fixo: false },
     ]);
   } finally {
     window.close();
@@ -151,11 +151,11 @@ test('fallback (sem config.json customizado): os 5 Padrão vêm com categoria "p
       await new Promise(r => setTimeout(r, 2500));
       const opcoes = JSON.parse(JSON.stringify(window.LW.INSUMO_RECEITA_OPTS));
       assert.deepEqual(opcoes, [
-        { nome: 'Cimento', categoria: 'padrao' },
-        { nome: 'Água', categoria: 'padrao' },
-        { nome: 'EPS', categoria: 'padrao' },
-        { nome: 'Superplastificante', categoria: 'padrao' },
-        { nome: 'Incorporador de Ar', categoria: 'padrao' },
+        { nome: 'Cimento', categoria: 'padrao', fixo: true },
+        { nome: 'Água', categoria: 'padrao', fixo: true },
+        { nome: 'EPS', categoria: 'padrao', fixo: true },
+        { nome: 'Superplastificante', categoria: 'padrao', fixo: true },
+        { nome: 'Incorporador de Ar', categoria: 'padrao', fixo: true },
       ]);
       assert.deepEqual(JSON.parse(JSON.stringify(window.LW.NOMES_INSUMOS_PADRAO)), ['Cimento', 'Água', 'EPS', 'Superplastificante', 'Incorporador de Ar']);
     } finally {

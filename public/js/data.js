@@ -122,9 +122,14 @@ function _normalizarInsumosReceita(bruto) {
     else if (item && typeof item === 'object' && typeof item.nome === 'string') nome = item.nome.trim();
     if (!nome) return;
     const categoria = NOMES_INSUMOS_PADRAO.includes(nome) ? 'padrao' : 'custom';
-    porNome.set(nome, { nome, categoria });
+    // `fixo` (toggle em Configurações → Insumos de Receitas): Custom marcado
+    // como fixo já aparece no formulário de Registrar Operação, sem o "+".
+    // Padrão é sempre fixo (já é assim hoje). Config antigo sem a chave =
+    // não fixo.
+    const fixo = categoria === 'padrao' ? true : !!(item && typeof item === 'object' && item.fixo === true);
+    porNome.set(nome, { nome, categoria, fixo });
   });
-  NOMES_INSUMOS_PADRAO.forEach(nome => porNome.set(nome, { nome, categoria: 'padrao' }));
+  NOMES_INSUMOS_PADRAO.forEach(nome => porNome.set(nome, { nome, categoria: 'padrao', fixo: true }));
   const padrao = NOMES_INSUMOS_PADRAO.map(nome => porNome.get(nome));
   const custom = [...porNome.values()].filter(o => o.categoria === 'custom');
   return [...padrao, ...custom];

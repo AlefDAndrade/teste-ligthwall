@@ -3226,9 +3226,15 @@
         li.innerHTML = _cfgDados.insumosReceita.map((o, i) => `
     <div style="display:flex;align-items:center;gap:12px;background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
       <span style="font-size:.85rem;color:var(--text)">${o.nome}</span>
+      <label title="${o.categoria === 'padrao' ? 'Insumo Padrão é sempre fixo no formulário' : 'Fixo: aparece direto em Registrar Operação, sem precisar clicar em + Adicionar insumo'}"
+        style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:.75rem;color:var(--text-2);cursor:${o.categoria === 'padrao' ? 'not-allowed' : 'pointer'}">
+        Fixo
+        <input type="checkbox" role="switch" ${o.fixo ? 'checked' : ''} ${o.categoria === 'padrao' ? 'disabled' : ''}
+          onchange="cfgToggleInsumoFixo(${i}, this.checked)">
+      </label>
       ${o.categoria === 'padrao'
-        ? '<span style="font-size:.7rem;color:var(--text-3);background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:2px 10px;margin-left:auto">Padrão</span>'
-        : `<button onclick="cfgRemoverInsumo(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;margin-left:auto">✕ Remover</button>`}
+        ? '<span style="font-size:.7rem;color:var(--text-3);background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:2px 10px">Padrão</span>'
+        : `<button onclick="cfgRemoverInsumo(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">✕ Remover</button>`}
     </div>
   `).join('') || '<span style="color:var(--text-3);font-size:.82rem">Nenhum insumo cadastrado.</span>';
       }
@@ -3328,8 +3334,17 @@
         LW.mostrarAlerta('Este insumo já existe.', { tipo: 'aviso' });
         return;
       }
-      _cfgDados.insumosReceita.push({ nome, categoria: 'custom' });
+      _cfgDados.insumosReceita.push({ nome, categoria: 'custom', fixo: false });
       input.value = '';
+      cfgRenderTudo();
+    }
+
+    // Marca/desmarca um insumo Custom como fixo (aparece direto no formulário
+    // de Registrar Operação). Padrão é sempre fixo — no-op pra ele.
+    function cfgToggleInsumoFixo(i, valor) {
+      const alvo = _cfgDados.insumosReceita[i];
+      if (!alvo || alvo.categoria === 'padrao') return;
+      alvo.fixo = !!valor;
       cfgRenderTudo();
     }
 

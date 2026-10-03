@@ -926,6 +926,24 @@
     return ajustes.reduce((s, a) => s + a, parseFloat(insumo.original) || 0);
   }
 
+  // Nomes dos insumos Custom marcados como "fixo" em Configurações → Insumos
+  // de Receitas — entram em todo traço novo sem precisar do "+ Adicionar".
+  function _nomesInsumosCustomFixos() {
+    return (LW.INSUMO_RECEITA_OPTS || [])
+      .filter(o => o.categoria === 'custom' && o.fixo)
+      .map(o => o.nome);
+  }
+
+  // Garante que os Custom fixos existam no traço (campo vazio, obrigatório).
+  // Traço reaproveitado de sobra não muda: a receita dele já está travada.
+  function _garantirInsumosFixos(t) {
+    if (!t || t._reaproveitado) return;
+    if (!t.insumos_custom || typeof t.insumos_custom !== 'object') t.insumos_custom = {};
+    _nomesInsumosCustomFixos().forEach(nome => {
+      if (!t.insumos_custom[nome]) t.insumos_custom[nome] = { original: '', ajustes: [] };
+    });
+  }
+
   // Migra traços antigos (campos _real simples) para nova estrutura com ajustes
   function migrarTraco(t) {
     const insumos = ['cimento', 'agua', 'eps', 'superplast', 'incorporador'];
@@ -938,6 +956,7 @@
     // Insumos CUSTOM (Fase 5) — rascunho salvo no localStorage antes desta
     // feature existir simplesmente não tem a chave; garante que exista.
     if (!t.insumos_custom || typeof t.insumos_custom !== 'object') t.insumos_custom = {};
+    _garantirInsumosFixos(t);
     // Migrar densidade e flow se necessário
     ['densidade', 'flow'].forEach(key => {
       const targetKey = key + '_insumo';
@@ -1181,7 +1200,7 @@
    * Cria a estrutura de um traço novo (sem sobra).
    */
   function _criarEstruturaTraco(num, sugeridoIni) {
-    return {
+    const traco = {
       id: 'traco_' + nowBrasilia().getTime() + '_' + num,
       num,
       berco_ini: sugeridoIni,
@@ -1208,6 +1227,9 @@
       // Campo para rastrear múltiplas operações em que o traço foi usado
       operacoes: [],
     };
+    // Insumos Custom marcados como "fixo" já nascem no traço.
+    _garantirInsumosFixos(traco);
+    return traco;
   }
 
   /**
@@ -2630,7 +2652,7 @@
     // primeiro ajuste, esse insumo já faz parte do histórico do traço
     // (mesma trava de "readonly" que os 5 Padrão já têm), então some o
     // "x" pra não sugerir que dá pra tirar sem mais nem menos.
-    const podeRemover = !t._reaproveitado && !temAjustes;
+    const podeRemover = !t._reaproveitado && !temAjustes && !_nomesInsumosCustomFixos().includes(nome);
     const nomeEscapado = nome.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
     return `
