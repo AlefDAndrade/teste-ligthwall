@@ -1581,12 +1581,6 @@
       // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
       try { await LW.carregarJszip(); } catch (e) { mostrarErroRestaurar(e.message); return; }
 
-      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
-      try { await LW.carregarJszip(); } catch (e) { mostrarErroMesclar(e.message); return; }
-
-      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
-      try { await LW.carregarJszip(); } catch (e) { mostrarErroRestaurarGeral(e.message); return; }
-
       try {
         const zip = await JSZip.loadAsync(file);
         const esperados = Object.keys(RESTAURAR_VALIDACOES);
@@ -1812,6 +1806,9 @@
         mostrarErroMesclar('Selecione um arquivo .zip — o gerado pelo botão "Backup de Dados", na OUTRA instalação.');
         return;
       }
+
+      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
+      try { await LW.carregarJszip(); } catch (e) { mostrarErroMesclar(e.message); return; }
 
       try {
         const zip = await JSZip.loadAsync(file);
@@ -2040,6 +2037,9 @@
         mostrarErroRestaurarGeral('Selecione um arquivo .zip — o gerado pelo botão "Backup Geral".');
         return;
       }
+
+      // JSZip é carregado sob demanda (LW.carregarJszip, data.js).
+      try { await LW.carregarJszip(); } catch (e) { mostrarErroRestaurarGeral(e.message); return; }
 
       try {
         const zip = await JSZip.loadAsync(file);
