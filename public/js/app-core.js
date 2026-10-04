@@ -3229,8 +3229,11 @@
       <label title="${o.categoria === 'padrao' ? 'Insumo Padrão é sempre fixo no formulário' : 'Fixo: aparece direto em Registrar Operação, sem precisar clicar em + Adicionar insumo'}"
         style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:.75rem;color:var(--text-2);cursor:${o.categoria === 'padrao' ? 'not-allowed' : 'pointer'}">
         Fixo
-        <input type="checkbox" role="switch" ${o.fixo ? 'checked' : ''} ${o.categoria === 'padrao' ? 'disabled' : ''}
-          onchange="cfgToggleInsumoFixo(${i}, this.checked)">
+        <span class="switch">
+          <input type="checkbox" role="switch" ${o.fixo ? 'checked' : ''} ${o.categoria === 'padrao' ? 'disabled' : ''}
+            onchange="cfgToggleInsumoFixo(${i}, this.checked)">
+          <span class="switch-slider"></span>
+        </span>
       </label>
       ${o.categoria === 'padrao'
         ? '<span style="font-size:.7rem;color:var(--text-3);background:var(--bg-2);border:1px solid var(--border);border-radius:999px;padding:2px 10px">Padrão</span>'
