@@ -3936,8 +3936,9 @@
             <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h9l6 6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M13 3v6h6"/><line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>Insumos de Receitas</div>
             <p style="font-size:.8rem;color:var(--text-3);margin-bottom:18px;line-height:1.5">
               Catálogo dos insumos usados nas receitas de traço (Cimento, Água, Superplastificante e outros).
-              Adicionar, remover ou renomear aqui é só um registro de referência — os campos de Cimento/Água/EPS/
-              Superplastificante/Incorporador de Ar no formulário de traço continuam fixos, independente desta lista.
+              Marque <strong>Fixo</strong> nos insumos que devem aparecer direto no formulário de Registrar Operação,
+              sem precisar clicar em "+ Adicionar insumo". Cimento, Água, EPS, Superplastificante e Incorporador de Ar
+              são sempre fixos. Clique em <strong>Salvar Configurações</strong> para aplicar.
             </p>
             <div id="cfg-insumos-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
             <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
@@ -3952,6 +3953,13 @@
                 </div>
                 <button class="btn btn-outline-accent" onclick="cfgAdicionarInsumo()">+ Adicionar</button>
               </div>
+            </div>
+
+            <hr class="divider">
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+              <button class="btn btn-ghost" onclick="fecharConfigComConfirmacao()">Cancelar</button>
+              <button class="btn btn-primary" onclick="cfgSalvar()">✓ Salvar Configurações</button>
             </div>
           </div>
           <!-- ========== /SEÇÃO: Insumos de Receitas ========== -->
