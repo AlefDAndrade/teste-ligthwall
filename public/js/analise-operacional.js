@@ -58,6 +58,54 @@
     });
   }
 
+  // ── Média mensal (MM) = Traços totais do período (TT) / Dias do período (DM)
+  // Ex.: TT = 360, DM = 40 → MM = 9.
+  // TT usa a MESMA regra do Debriefing (debriefing.js, calcularCabecalho):
+  // só traços novos (sem os reaproveitados — a partir do 2º uso do traço),
+  // deduplicados por id_traco. NÃO usa a soma de qtd_tracos do histórico,
+  // que inclui os reaproveitados.
+  // DM = dias corridos do período filtrado, extremos inclusos (De 01/06 até
+  // 10/07 = 40 dias), com ou sem produção em cada dia.
+  function contarTracosPeriodo(dadosFiltrados, relatorio) {
+    const idsOperacao = new Set(dadosFiltrados.map(r => r.id).filter(v => v != null));
+    const unicos = new Set();
+    (Array.isArray(relatorio) ? relatorio : []).forEach(traco => {
+      const usos = traco.ultilizado?.operacao || [];
+      usos.forEach((uso, usoIdx) => {
+        if (usoIdx === 0 && idsOperacao.has(uso.id_operacao)) {
+          unicos.add(traco.id_traco != null ? 'id:' + traco.id_traco : 'num:' + traco.num_traco);
+        }
+      });
+    });
+    return unicos.size;
+  }
+
+  function diasNoPeriodo(ini, fim) {
+    if (!ini || !fim) return 0;
+    const [ya, ma, da] = ini.split('-').map(Number);
+    const [yb, mb, db] = fim.split('-').map(Number);
+    const dias = Math.round((Date.UTC(yb, mb - 1, db) - Date.UTC(ya, ma - 1, da)) / 86400000) + 1;
+    return dias > 0 ? dias : 0;
+  }
+
+  function calcularMediaMensal(dadosFiltrados, relatorio, ini, fim) {
+    // Campo De/Até vazio → usa o primeiro/último dia com registro no período.
+    const datas = dadosFiltrados.map(r => r.data).filter(Boolean).sort();
+    const dm = diasNoPeriodo(ini || datas[0], fim || datas[datas.length - 1]);
+    const tt = contarTracosPeriodo(dadosFiltrados, relatorio);
+    return { tt, dm, mm: dm ? tt / dm : 0 };
+  }
+
+  async function carregarRelatorio() {
+    try {
+      const res = await fetch('db/relatorio_injecao.json');
+      return res.ok ? await res.json() : [];
+    } catch (err) {
+      console.error('Erro ao carregar relatorio_injecao.json:', err);
+      return [];
+    }
+  }
+
   // ── Motor principal de KPIs ───────────────────────────────
   function calcularKPIs(dados) {
     const n = dados.length;
@@ -581,6 +629,9 @@
 
     const kpi = calcularKPIs(filtrado);
 
+    const relatorio = await carregarRelatorio();
+    kpi.mediaMensal = calcularMediaMensal(filtrado, relatorio, ini, fim);
+
     renderKPIs(kpi, filtrado);
     renderInsights(kpi, filtrado);
     renderRankBaterias(kpi);
@@ -616,6 +667,11 @@
       ? kpi.rankBaterias.reduce((s,b)=>s+b.tempoMedio*b.ops,0) / kpi.rankBaterias.reduce((s,b)=>s+b.ops,0)
       : 0;
     set('ao-kpi-tempo-bat', fmtMin(tmBat));
+
+    const mm = kpi.mediaMensal;
+    set('ao-kpi-media-mensal', mm && mm.dm ? fmt(mm.mm, 1) : '—');
+    const mmSub = document.getElementById('ao-kpi-media-mensal-sub');
+    if (mmSub) mmSub.textContent = mm && mm.dm ? `${mm.tt} traços ÷ ${mm.dm} dias` : 'traços por dia no período';
 
     // Barra de eficiência
     const ef = document.getElementById('ao-eficiencia-bar');
@@ -860,7 +916,10 @@
     const descricaoPeriodo = (ini || fim)
       ? (ini ? new Date(ini + 'T00:00:00').toLocaleDateString('pt-BR') : 'início') + ' até ' + (fim ? new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR') : 'hoje')
       : 'Todos os registros';
-    const html = _gerarHtmlAoStandalone(dados, descricaoPeriodo);
+    // Média mensal calculada AQUI (precisa do relatório de traços, que não
+    // vai embutido no arquivo exportado) e embutida como número pronto.
+    const mediaMensal = calcularMediaMensal(dados, await carregarRelatorio(), ini, fim);
+    const html = _gerarHtmlAoStandalone(dados, descricaoPeriodo, mediaMensal);
     const nomeBase = `analise_operacional_${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
     return { html, nomeBase };
   }
@@ -899,7 +958,7 @@
   // vem filtrado pelo período ativo (ver exportarInterativo, acima), não
   // o histórico inteiro com uma UI de filtro pra reaplicar depois. Os
   // gráficos continuam interativos (hover funciona, ver TOOLTIP_JS_FONTE).
-  function _gerarHtmlAoStandalone(dados, descricaoPeriodo) {
+  function _gerarHtmlAoStandalone(dados, descricaoPeriodo, mediaMensal) {
     const dadosJson = JSON.stringify(dados).replace(/<\/script/gi, '<\\/script');
 
     return `<!DOCTYPE html>
@@ -924,6 +983,7 @@
       <div class="kpi-card"><div class="kpi-label">Baterias</div><div class="kpi-value" id="ao-kpi-baterias">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Ciclo Médio</div><div class="kpi-value" id="ao-kpi-ciclo" style="font-family:var(--font-mono);font-size:1.3rem">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Tempo Médio/Bateria</div><div class="kpi-value" id="ao-kpi-tempo-bat" style="font-family:var(--font-mono);font-size:1.3rem">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Média Mensal</div><div class="kpi-value accent" id="ao-kpi-media-mensal" style="font-family:var(--font-mono);font-size:1.3rem">—</div><div id="ao-kpi-media-mensal-sub" style="font-size:.72rem;color:var(--text-3);margin-top:4px">traços por dia no período</div></div>
       <div class="kpi-card"><div class="kpi-label">% Atraso</div><div class="kpi-value red" id="ao-kpi-atraso-pct">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Horas Perdidas</div><div class="kpi-value red" id="ao-kpi-horas-perd">—</div></div>
       <div class="kpi-card"><div class="kpi-label">Eficiência Geral</div><div class="kpi-value green" id="ao-kpi-eficiencia">—</div><div style="height:6px;background:var(--border);border-radius:4px;margin-top:6px;overflow:hidden"><div id="ao-eficiencia-bar" style="height:100%;border-radius:4px"></div></div></div>
@@ -966,6 +1026,7 @@
 (function () {
   'use strict';
   const DADOS = ${dadosJson};
+  const MEDIA_MENSAL = ${JSON.stringify(mediaMensal || null)};
   const C = ${JSON.stringify(C)};
   // Paleta fixa cíclica pra Montagem × Atraso (ver comentário em
   // exportarInterativo, acima — sem a cor configurada real aqui).
@@ -1017,6 +1078,7 @@
 
   function render() {
     const kpi = calcularKPIs(DADOS);
+    kpi.mediaMensal = MEDIA_MENSAL;
 
     renderKPIs(kpi, DADOS);
     renderInsights(kpi, DADOS);

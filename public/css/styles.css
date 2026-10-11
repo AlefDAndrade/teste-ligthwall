@@ -3153,6 +3153,10 @@ td.mono {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.dbf-stat-wide {
+  grid-column: 1 / -1;
+}
+
 .dbf-stat {
   display: flex;
   flex-direction: column;

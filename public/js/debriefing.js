@@ -155,8 +155,11 @@
   }
 
   function montarEstrutura(historico, relatorio, data) {
+    // `data` pode ser um dia (YYYY-MM-DD) ou um mês inteiro (YYYY-MM) —
+    // o segundo caso é usado pela Média Mensal (calcularMediaMensal).
+    const ehMes = data.length === 7;
     const baterias = historico
-      .filter(b => b.data === data)
+      .filter(b => ehMes ? (b.data || '').startsWith(data) : b.data === data)
       .sort((a, b) => (a.inicio || '').localeCompare(b.inicio || ''));
 
     return baterias.map(bateria => {
@@ -231,7 +234,30 @@
     return { qtdBaterias, qtdTracos, mediaTracos, tempoMedioInjecao };
   }
 
-  function renderRelatorio(estrutura, data) {
+  /**
+   * Média mensal (MM) = Traços totais no mês (TT) / Dias totais do mês (DM).
+   * Ex.: TT = 60, DM = 30 → MM = 2.
+   * TT usa a MESMA regra do cabeçalho do dia (calcularCabecalho): só traços
+   * novos, sem reaproveitados, deduplicados por id_traco. TT é ACUMULADO do
+   * dia 1 até o dia selecionado (no dia 5 = só os traços dos dias 1 a 5).
+   * DM são os dias corridos do mês INTEIRO (28–31), não só os dias com
+   * produção nem só os dias já passados.
+   * @param {string} data - dia selecionado (YYYY-MM-DD); o mês é derivado dele.
+   */
+  function calcularMediaMensal(historico, relatorio, data) {
+    const [ano, mes] = data.split('-').map(Number);
+    const mesRef = data.slice(0, 7);
+    const historicoAteODia = historico.filter(b => {
+      const d = b.data || '';
+      return d.startsWith(mesRef) && d <= data;
+    });
+    const estruturaMes = montarEstrutura(historicoAteODia, relatorio, mesRef);
+    const tracosMes = calcularCabecalho(estruturaMes).qtdTracos;
+    const diasMes = new Date(ano, mes, 0).getDate();
+    return { tracosMes, diasMes, mediaMensal: tracosMes / diasMes };
+  }
+
+  function renderRelatorio(estrutura, data, mm) {
     const cab = calcularCabecalho(estrutura);
     const [y, m, d] = data.split('-');
     const dataFmt = `${d}/${m}/${y}`;
@@ -256,6 +282,10 @@
       <div class="dbf-stat">
         <span class="dbf-stat-val">${cab.qtdBaterias ? fmtNum(cab.mediaTracos, 1) : '—'}</span>
         <span class="dbf-stat-label">Média/bateria</span>
+      </div>
+      <div class="dbf-stat dbf-stat-wide" title="Traços do dia 1 até o dia selecionado (${mm.tracosMes}) ÷ dias do mês (${mm.diasMes})">
+        <span class="dbf-stat-val">${fmtNum(mm.mediaMensal, 1)}</span>
+        <span class="dbf-stat-label">Média mensal (traços/dia)</span>
       </div>
     </div>`;
 
@@ -559,7 +589,8 @@
         el.innerHTML = renderAvaliacao(stats, data, insightsHtml);
       } else {
         const estrutura = montarEstrutura(historico, relatorio, data);
-        el.innerHTML = renderRelatorio(estrutura, data);
+        const mm = calcularMediaMensal(historico, relatorio, data);
+        el.innerHTML = renderRelatorio(estrutura, data, mm);
       }
     } catch (_) {
       el.innerHTML = '<div class="dbf-empty-state">⚠️ Não foi possível carregar o debriefing.</div>';
