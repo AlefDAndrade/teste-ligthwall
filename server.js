@@ -306,6 +306,15 @@ const rotasOperacaoOffline = require('./lib/rotas/operacao-offline.js')({
   adicionarNaFilaOffline, buscarPorIdTemp, atualizarNaFilaOffline, removerDaFilaOffline, lerFilaOffline,
   rateLimitOffline, logger, sessao: sessaoOuAdmin, db,
   adicionarNaFilaNaoAvaliadas, incrementarContadorTracosHoje,
+  // tipos_montagem.opcoes do config.json — usado ao validar uma operação
+  // offline pra recalcular as placas de 8 mm (lib/rotas/operacao-offline.js).
+  // Lido a cada chamada (config pode mudar em Configurações); null se ilegível.
+  lerMontagemOpcoes: () => {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(DB_DIR, 'config.json'), 'utf8'));
+      return Array.isArray(cfg?.tipos_montagem?.opcoes) ? cfg.tipos_montagem.opcoes : null;
+    } catch (_) { return null; }
+  },
 });
 const ROTAS_EXTRAIDAS = [rotasUsuarios, rotasPerfisCustomizados, rotasParadas, rotasNotificacoes, rotasQualidade, rotasSqlAdmin, rotasConsultas, rotasExportarPdf, rotasSobra, rotasTracosDescartados, rotasSeguranca, rotasExpedicao, rotasOnePageReport, rotasContadorTracos, rotasLogAcesso, rotasOperacaoAndamento, rotasAutenticacao, rotasImportacao, rotasLeituraEAjustes, rotasEdicao, rotasRegistroOperacao, rotasBackup.tentar, rotasBackupDrive.tentar, rotasOperacaoOffline];
 

@@ -3814,6 +3814,8 @@
     function _cfgCardOperacaoOffline(item) {
       const f = item.formRecord || {};
       const qtdTracos = Array.isArray(item.tracos) ? item.tracos.length : 0;
+      // Bateria com espessuras mistas (ex: 9,5 cm + 9 cm) — mesmo selo do Debriefing.
+      const rotuloMisto = LW.rotuloDimensoesMistas(f.capacidade, f.dimensao, f.bercos_dimensoes);
       const recebido = item.recebidoEm ? new Date(item.recebidoEm).toLocaleString('pt-BR') : '—';
       // f.inicio/f.fim seguem a convenção "UTC falso = hora de Brasília"
       // (mesmo raciocínio de _offcParaInputDatetime/dashboard.js, coluna
@@ -3841,6 +3843,7 @@
               <div class="oov-card-titulo">
                 🔋 ${f.id_bateria || '(sem bateria)'}
                 <span class="oov-turno">${f.turno || '—'}</span>
+                ${rotuloMisto ? `<span class="oov-turno" title="Bateria com painéis de espessuras diferentes">${LW.escaparHtml(rotuloMisto)}</span>` : ''}
                 ${corrigidoTag}
               </div>
               <div class="oov-meta">

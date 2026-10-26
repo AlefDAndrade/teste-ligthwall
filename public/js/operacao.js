@@ -3683,7 +3683,7 @@
   // bateria com espessuras mistas — todas juntas (ex: "9,5 cm + 9 cm").
   function _textoCampoDimensao() {
     const dims = LW.dimensoesDistintas(_capacidadeAtual(), state.dimensao, state.bercos_dimensoes);
-    return dims.length > 1 ? dims.join(' + ') : (state.dimensao || '');
+    return dims.length ? dims.join(' + ') : (state.dimensao || '');
   }
 
   function _calcPlacas8mmAtual(capacidade, marcacoes) {
@@ -3864,6 +3864,9 @@
   async function _confirmarModalDimensoes(novaBase, baseAnterior, trabalho) {
     // Berços que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
     const efetivas = trabalho.map(d => (d === baseAnterior ? novaBase : d));
+    // Todos os berços com a MESMA dimensão → ela vira a dimensão padrão da
+    // bateria (senão o registro gravaria `dimensao` diferente de todos os berços).
+    if (efetivas.length && efetivas.every(d => d === efetivas[0])) novaBase = efetivas[0];
 
     if (novaBase !== state.dimensao) {
       state.dimensao = novaBase;

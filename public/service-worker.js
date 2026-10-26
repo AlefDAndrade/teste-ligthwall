@@ -37,7 +37,7 @@
 
 'use strict';
 
-const CACHE_VERSAO = 'lightwall-shell-v3'; // v3: fontes locais (css/fontes.css + .woff2) no lugar do Google Fonts; v2: +offline.html/offline-operacao.js/db/config.json (Registro Offline, item 8)
+const CACHE_VERSAO = 'lightwall-shell-v4'; // v4: +js/placas-8mm.js (placas de 8 mm / dimensão por berço no offline); v3: fontes locais (css/fontes.css + .woff2) no lugar do Google Fonts; v2: +offline.html/offline-operacao.js/db/config.json (Registro Offline, item 8)
 
 // Extensões de arquivo ESTÁTICO que este service worker cuida — qualquer
 // coisa fora desta lista (incluindo TUDO sob /db/) passa direto pra rede,
@@ -62,6 +62,7 @@ const PRECACHE_URLS = [
   // pra montar o formulário (baterias, tipos de montagem, capacidades)
   // sem depender de rede nenhuma.
   'offline.html',
+  'js/placas-8mm.js',
   'js/offline-operacao.js',
   'db/config.json',
 ];
