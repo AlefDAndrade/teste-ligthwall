@@ -305,9 +305,13 @@
       html += `<div class="dbf-bateria-card${clicavel ? ' dbf-bateria-card-clicavel' : ''}"${clicavel ? ` onclick="LWDebriefing.abrirAnaliseFocada('${escapeHtml(String(bateria.id))}')" title="Ver Análise Focada desta operação"` : ''}>`;
       const corMont = LW.corMontagemPorLabel(bateria.tipo_montagem);
       const corTextoMont = corMont.hibrida ? 'var(--text)' : corMont.cor;
+      // Bateria com espessuras diferentes (ex: berços 9,5 cm + 9 cm) — ver
+      // LW.rotuloDimensoesMistas (data.js). null quando a bateria é uniforme.
+      const rotuloMisto = LW.rotuloDimensoesMistas(bateria.capacidade, bateria.dimensao, bateria.bercos_dimensoes);
       html += `<div class="dbf-bateria-head">
         <span class="dbf-bateria-id"> Bateria ${escapeHtml(bateria.id_bateria || '—')}</span>
         <span class="dbf-badge dbf-badge-montagem" style="background:${corMont.bgHorizontal || corMont.bg};color:${corTextoMont};border:1px solid ${corMont.borda}">${escapeHtml(bateria.tipo_montagem || '—')}</span>
+        ${rotuloMisto ? `<span class="dbf-badge dbf-badge-montagem" style="border:1px solid var(--accent);color:var(--accent)" title="Bateria com painéis de espessuras diferentes">${escapeHtml(rotuloMisto)}</span>` : ''}
         <span class="dbf-bateria-horario">${horaBrasilia(bateria.inicio)} → ${horaBrasilia(bateria.fim)}</span>
       </div>`;
       html += `<div class="dbf-bateria-meta">Previsão desemplaque: <strong>${LW.formatDateTime(bateria.desemplaque || LW.calcularDesemplaque(bateria.fim))}</strong></div>`;

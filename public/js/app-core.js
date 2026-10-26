@@ -5035,7 +5035,19 @@
       // por enquanto; _eoAtualizarPreview() é re-chamado assim que a
       // busca (_eoCarregarBercosVisuais) terminar.
       const marcacoes = _eoConverterBercosVisuaisParaMarcacoes(_eoBercosVisuais);
-      return LW.aplicarNaoEnchidosNoCalc(calcBase, tipoMontagem, _eoBercosPersonalizados, marcacoes);
+      const resultado = LW.aplicarNaoEnchidosNoCalc(calcBase, tipoMontagem, _eoBercosPersonalizados, marcacoes);
+      // Placas de 8 mm (painéis de 9,5 cm) — esta tela não edita a dimensão
+      // berço a berço (isso é feito em Registrar Operação, pelo modal ⚙️),
+      // então reaproveita os overrides já gravados no registro original.
+      resultado.placas_cimenticia_8mm = LW.calcPlacas8mm({
+        tipoMontagem,
+        bercosPersonalizados: _eoBercosPersonalizados,
+        capacidade: bercos,
+        dimensaoGeral: _eoDimensao || (_eoRegistroOriginal && _eoRegistroOriginal.dimensao) || '',
+        bercosDimensoes: _eoRegistroOriginal && _eoRegistroOriginal.bercos_dimensoes,
+        marcacoes,
+      });
+      return resultado;
     }
 
     // Converte o formato salvo em bercos_visuais (SQL — ver GET

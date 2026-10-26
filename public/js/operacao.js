@@ -374,7 +374,9 @@
       // acabou de digitar.
       if (!state.dimensaoManual) {
         state.dimensao = bateria.label; // Sincroniza a dimensão automaticamente
-        if ($('op-dimensao')) $('op-dimensao').value = state.dimensao;
+        if ($('op-dimensao')) $('op-dimensao').value = _textoCampoDimensao();
+      } else if ($('op-dimensao')) {
+        $('op-dimensao').value = _textoCampoDimensao();
       }
       // Com override ativo (ver _aplicarNovaCapacidadeBercos, abaixo),
       // mostra o número customizado — com um sinalizador visual (nunca
@@ -573,6 +575,7 @@
       $('op-paineis-total').textContent = '—';
       $('op-m2-total').textContent = '—';
       $('op-placas-cimenticia').textContent = '—';
+      _atualizarResumoPlacasEspessura(null);
       if (elPaineisTipo) elPaineisTipo.innerHTML = '';
       if (elM2Tipo) elM2Tipo.innerHTML = '';
       return;
@@ -588,9 +591,11 @@
     // na hora (ver _registrarOperacaoInterna).
     const marcacoes = (window.LWBateriaAtual && window.LWBateriaAtual.obterMarcacoes) ? window.LWBateriaAtual.obterMarcacoes() : {};
     const r = LW.aplicarNaoEnchidosNoCalc(base, state.tipo_montagem, state.bercos_personalizados, marcacoes);
+    r.placas_cimenticia_8mm = _calcPlacas8mmAtual(bercos, marcacoes);
     $('op-paineis-total').textContent = r.total_paineis;
     $('op-m2-total').textContent = r.m2_total.toFixed(2) + ' m²';
     $('op-placas-cimenticia').textContent = r.placas_cimenticia;
+    _atualizarResumoPlacasEspessura(r);
 
     // Gera os cards de Painéis por tipo (2/P, S/P, 3/P, ... — quantos a montagem tiver)
     const tipos = Object.keys(r.paineis_por_tipo);
@@ -3013,6 +3018,8 @@
       ? LW.calcPaineisPersonalizado(state.bercos_personalizados)
       : LW.calcPaineis(state.tipo_montagem, bercos);
     const calc = LW.aplicarNaoEnchidosNoCalc(calcBase, state.tipo_montagem, state.bercos_personalizados, marcacoes);
+    // Placas de 8 mm (painéis de 9,5 cm) — subconjunto de placas_cimenticia.
+    calc.placas_cimenticia_8mm = _calcPlacas8mmAtual(bercos, marcacoes);
 
     // Data da operação = data do FIM da injeção, não do início — uma
     // operação pausada no dia 1 e retomada/finalizada no dia 2 precisa
@@ -3472,7 +3479,7 @@
     $('op-toggle-teste').checked = !!state.modo_teste;
     $('op-toggle-teste').disabled = state.status !== 'idle';
     $('op-turno').value = state.turno || '1º TURNO';
-    $('op-dimensao').value = state.dimensao || '';
+    $('op-dimensao').value = _textoCampoDimensao();
     // Reflete state.dimensaoManual na aparência — importante num reload
     // (ou ao chegar estado de outro dispositivo via WebSocket): sem isso,
     // o campo sempre voltava a parecer "automático" mesmo numa dimensão
@@ -3480,8 +3487,8 @@
     $('op-dimensao').readOnly = true; // nunca começa destravado num render
     $('op-dimensao').classList.toggle('auto-filled', !state.dimensaoManual);
     if ($('btn-editar-dimensao')) {
-      $('btn-editar-dimensao').textContent = '✏️';
-      $('btn-editar-dimensao').title = 'Definir uma dimensão específica para esta operação';
+      $('btn-editar-dimensao').textContent = '⚙️';
+      $('btn-editar-dimensao').title = 'Configurar a dimensão de cada berço desta bateria';
     }
 
     $('op-montagem').value = state.tipo_montagem || '';
@@ -3664,9 +3671,223 @@
     }
   }
 
+
+  // ── Dimensões por berço + placas de 8 mm ───────────────────────────────
+  // Uma mesma bateria pode misturar espessuras (ex: berços 1-10 = 9,5 cm,
+  // 11-20 = 9 cm). A dimensão geral continua em state.dimensao; o que
+  // difere dela fica em state.bercos_dimensoes (1 item por berço, null =
+  // usa a geral). Berço de 9,5 cm consome placa cimentícia de 8 mm, os
+  // demais 6 mm (regra em LW.dimensaoUsaPlaca8mm, data.js).
+
+  // Texto exibido no campo "Dimensão (Tipo)": a dimensão geral, ou — numa
+  // bateria com espessuras mistas — todas juntas (ex: "9,5 cm + 9 cm").
+  function _textoCampoDimensao() {
+    const dims = LW.dimensoesDistintas(_capacidadeAtual(), state.dimensao, state.bercos_dimensoes);
+    return dims.length > 1 ? dims.join(' + ') : (state.dimensao || '');
+  }
+
+  function _calcPlacas8mmAtual(capacidade, marcacoes) {
+    return LW.calcPlacas8mm({
+      tipoMontagem: state.tipo_montagem,
+      bercosPersonalizados: state.bercos_personalizados,
+      capacidade,
+      dimensaoGeral: state.dimensao,
+      bercosDimensoes: state.bercos_dimensoes,
+      marcacoes,
+    });
+  }
+
+  // Linha extra no card "P cimenticia": só aparece quando a operação
+  // consome alguma placa de 8 mm.
+  function _atualizarResumoPlacasEspessura(r) {
+    const el = $('op-placas-espessura');
+    if (!el) return;
+    const n8 = r ? (r.placas_cimenticia_8mm || 0) : 0;
+    if (!n8) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.textContent = `8 mm: ${n8} · 6 mm: ${Math.max(0, (r.placas_cimenticia || 0) - n8)}`;
+    el.style.display = 'block';
+  }
+
+  let _dimTrab = [];       // cópia de trabalho: dimensão EFETIVA de cada berço (string)
+  let _dimBaseTrab = '';   // dimensão geral de trabalho
+
+  function _dimMarcacoes() {
+    return (window.LWBateriaAtual && window.LWBateriaAtual.obterMarcacoes) ? window.LWBateriaAtual.obterMarcacoes() : {};
+  }
+
+  function _renderModalDimensoes() {
+    const grade = document.getElementById('dim-bercos');
+    if (!grade) return;
+    grade.innerHTML = _dimTrab.map((dim, i) => {
+      const is8 = LW.dimensaoUsaPlaca8mm(dim);
+      const cor = is8 ? 'var(--accent)' : 'var(--text-2)';
+      const bg = is8 ? 'rgba(255,255,255,.06)' : 'transparent';
+      return `<button type="button" class="btn btn-outline-accent btn-sm" data-berco="${i}"
+        style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};background:${bg};color:${cor}">
+        <span style="font-size:.65rem;opacity:.8">Berço ${i + 1}</span>
+        <strong style="font-size:.85rem">${LW.escaparHtml(dim || '—')}</strong>
+      </button>`;
+    }).join('');
+    grade.querySelectorAll('button[data-berco]').forEach(b => {
+      b.addEventListener('click', () => _dimAplicar(Number(b.dataset.berco), Number(b.dataset.berco)));
+    });
+
+    const n8 = LW.calcPlacas8mm({
+      tipoMontagem: state.tipo_montagem, bercosPersonalizados: state.bercos_personalizados,
+      capacidade: _dimTrab.length, dimensaoGeral: _dimBaseTrab, bercosDimensoes: _dimTrab, marcacoes: _dimMarcacoes(),
+    });
+    const resumo = LW.dimensoesDistintas(_dimTrab.length, _dimBaseTrab, _dimTrab)
+      .map(d => `${d}: ${_dimTrab.filter(x => x === d).length} berço(s)`).join(' · ');
+    const el = document.getElementById('dim-resumo');
+    if (el) el.innerHTML = `${LW.escaparHtml(resumo || '—')}<br>Placas de 8 mm: <strong>${n8}</strong>`;
+  }
+
+  // Aplica a dimensão digitada em "Dimensão a aplicar" aos berços de..até (índices 0-based).
+  function _dimAplicar(de, ate) {
+    const valor = LW.formatarDimensaoLive(document.getElementById('dim-valor').value.trim(), true);
+    const erro = document.getElementById('dim-erro');
+    if (!valor) {
+      erro.textContent = 'Digite a dimensão a aplicar (ex: 9,5) antes de clicar nos berços.';
+      erro.style.display = 'block';
+      return;
+    }
+    erro.style.display = 'none';
+    for (let i = Math.max(0, de); i <= Math.min(_dimTrab.length - 1, ate); i++) _dimTrab[i] = valor;
+    _renderModalDimensoes();
+  }
+
+  /**
+   * ⚙️ ao lado de "Dimensão (Tipo)" — abre o modal onde se define a
+   * dimensão padrão da bateria e, berço a berço (ou por faixa De/Até), a
+   * dimensão de cada um. Só grava em `state` ao confirmar.
+   */
+  function abrirModalDimensoes() {
+    const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
+    if (!bateria) {
+      LW.mostrarAlerta('Selecione a bateria antes de configurar as dimensões.', { tipo: 'aviso' });
+      return;
+    }
+    const capacidade = _capacidadeAtual();
+    _dimBaseTrab = state.dimensao || '';
+    _dimTrab = LW.dimensoesEfetivasPorBerco(capacidade, state.dimensao, state.bercos_dimensoes);
+
+    const existente = document.getElementById('modal-dimensoes');
+    if (existente) existente.remove();
+    const modal = document.createElement('div');
+    modal.id = 'modal-dimensoes';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+                  padding:28px;width:620px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:2rem;margin-bottom:6px">⚙️</div>
+          <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);margin:0">Dimensões — Bateria ${LW.escaparHtml(bateria.id)}</h2>
+          <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
+            Digite uma dimensão em "Dimensão a aplicar" e clique nos berços (ou use De/Até). Berços de 9,5 cm usam placa de 8 mm.
+          </p>
+        </div>
+        <div id="dim-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Dimensão padrão da bateria</label>
+            <input type="text" id="dim-base" class="form-input" style="width:130px" inputmode="decimal" value="${LW.escaparHtml(_dimBaseTrab)}">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Dimensão a aplicar</label>
+            <input type="text" id="dim-valor" class="form-input" style="width:130px" inputmode="decimal" placeholder="Ex: 9,5">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">De</label>
+            <input type="number" id="dim-de" class="form-input" style="width:70px" min="1" max="${capacidade}">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Até</label>
+            <input type="number" id="dim-ate" class="form-input" style="width:70px" min="1" max="${capacidade}">
+          </div>
+          <button type="button" id="dim-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
+          <button type="button" id="dim-btn-todos" class="btn btn-outline-accent btn-sm">Todos</button>
+        </div>
+        <div id="dim-resumo" style="font-size:.78rem;color:var(--text-2);margin-bottom:12px;line-height:1.5"></div>
+        <div id="dim-bercos" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px"></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <button type="button" id="dim-btn-restaurar" class="btn btn-ghost btn-sm" title="Todos os berços voltam à dimensão padrão da bateria">↺ Restaurar padrão</button>
+          <div style="display:flex;gap:12px">
+            <button type="button" id="dim-btn-cancelar" class="btn btn-ghost">Cancelar</button>
+            <button type="button" id="dim-btn-confirmar" class="btn btn-primary">Confirmar</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    _renderModalDimensoes();
+
+    const formatarAoDigitar = e => {
+      const input = e.target;
+      const pos = input.selectionStart;
+      const f = LW.formatarDimensaoLive(input.value);
+      if (f !== input.value) { input.value = f; input.setSelectionRange(Math.min(pos, f.length), Math.min(pos, f.length)); }
+    };
+    document.getElementById('dim-base').addEventListener('input', formatarAoDigitar);
+    document.getElementById('dim-valor').addEventListener('input', formatarAoDigitar);
+    document.getElementById('dim-btn-aplicar').addEventListener('click', () => {
+      const de = parseInt(document.getElementById('dim-de').value, 10);
+      const ate = parseInt(document.getElementById('dim-ate').value, 10);
+      if (!de || !ate || de > ate || de < 1 || ate > _dimTrab.length) {
+        const erro = document.getElementById('dim-erro');
+        erro.textContent = `Informe uma faixa válida de berços (1 a ${_dimTrab.length}).`;
+        erro.style.display = 'block';
+        return;
+      }
+      _dimAplicar(de - 1, ate - 1);
+    });
+    document.getElementById('dim-btn-todos').addEventListener('click', () => _dimAplicar(0, _dimTrab.length - 1));
+    document.getElementById('dim-btn-restaurar').addEventListener('click', () => {
+      const base = LW.formatarDimensaoLive(document.getElementById('dim-base').value.trim(), true) || _dimBaseTrab;
+      _dimTrab = _dimTrab.map(() => base);
+      _renderModalDimensoes();
+    });
+    document.getElementById('dim-btn-cancelar').addEventListener('click', () => modal.remove());
+    document.getElementById('dim-btn-confirmar').addEventListener('click', async () => {
+      const novaBase = LW.formatarDimensaoLive(document.getElementById('dim-base').value.trim(), true);
+      if (!novaBase) {
+        const erro = document.getElementById('dim-erro');
+        erro.textContent = 'A dimensão padrão da bateria não pode ficar vazia.';
+        erro.style.display = 'block';
+        return;
+      }
+      const trabalho = [..._dimTrab];
+      const baseAnterior = _dimBaseTrab;
+      modal.remove();
+      await _confirmarModalDimensoes(novaBase, baseAnterior, trabalho);
+    });
+  }
+
+  async function _confirmarModalDimensoes(novaBase, baseAnterior, trabalho) {
+    // Berços que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
+    const efetivas = trabalho.map(d => (d === baseAnterior ? novaBase : d));
+
+    if (novaBase !== state.dimensao) {
+      state.dimensao = novaBase;
+      state.dimensaoManual = true;
+      // Mesma pergunta de sempre ao mudar a dimensão: muda o nº de berços?
+      await _perguntarMudancaBercos();
+    }
+
+    const capacidade = _capacidadeAtual();
+    const redim = Array.from({ length: capacidade }, (_, i) => efetivas[i] || novaBase);
+    const overrides = redim.map(d => (d === state.dimensao ? null : d));
+    state.bercos_dimensoes = overrides.some(Boolean) ? overrides : null;
+
+    updateCapacidade();
+    recalcPaineis();
+    persist();
+    renderAll();
+    updatePendencias();
+  }
+
   // ---- Public API ----
   window.LWOp = {
     init,
+    abrirModalDimensoes,
     aplicarDetalhesBerco,
     // Chamada por bateria-atual.js toda vez que uma marcação "🚫 Não
     // Enchido"/"baixou" muda (clique local, desfazer, sincronização com

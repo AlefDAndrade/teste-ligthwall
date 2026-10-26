@@ -78,6 +78,11 @@ db.exec(`
     total_paineis         INTEGER,
     m2_total              REAL,
     placas_cimenticia     INTEGER,
+    -- Subconjunto de placas_cimenticia (total) que são placas de 8 mm — as
+    -- usadas nos painéis de 9,5 cm (ver calcPlacas8mm, data.js). As de 6 mm
+    -- = placas_cimenticia - placas_cimenticia_8mm. NULL em registros antigos
+    -- (anteriores a esta coluna), que nunca usaram 8 mm.
+    placas_cimenticia_8mm INTEGER,
     -- {tipo: quantidade} / {tipo: m2} serializado — o nº de tipos varia
     -- (Simples/Híbrida = 1-2, Personalizada = quantos tipos a grade usar),
     -- então um dicionário aberto continua sendo a representação certa
@@ -871,6 +876,11 @@ if (!_colunasOperacoes.includes('operador_nome')) {
 if (!_colunasOperacoes.includes('bercos_dimensoes')) {
   db.exec('ALTER TABLE operacoes ADD COLUMN bercos_dimensoes TEXT');
   console.log('[migração] Coluna "bercos_dimensoes" adicionada à tabela operacoes.');
+}
+// placas_cimenticia_8mm — ver comentário na CREATE TABLE operacoes, acima.
+if (!_colunasOperacoes.includes('placas_cimenticia_8mm')) {
+  db.exec('ALTER TABLE operacoes ADD COLUMN placas_cimenticia_8mm INTEGER');
+  console.log('[migração] Coluna "placas_cimenticia_8mm" adicionada à tabela operacoes.');
 }
 // origem_offline/validado_por/validado_em — Registro de Operação Offline,
 // item 6/7 do plano (ver README). Mesmo padrão de migração leve das

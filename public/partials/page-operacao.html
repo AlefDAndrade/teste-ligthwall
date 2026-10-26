@@ -116,8 +116,8 @@
                   <button type="button" id="btn-editar-dimensao"
                     onmousedown="event.preventDefault()"
                     style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
-                    class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica para esta operação"
-                    onclick="LWOp.editarDimensao()">✏️</button>
+                    class="btn btn-outline-accent btn-sm" title="Configurar a dimensão de cada berço desta bateria"
+                    onclick="LWOp.abrirModalDimensoes()">⚙️</button>
                 </div>
               </div>
               <div class="form-group">
@@ -210,6 +210,8 @@
                   P cimenticia</div>
                 <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--green)"
                   id="op-placas-cimenticia">—</div>
+                <!-- Quebra por espessura (8 mm = painéis de 9,5 cm) — só aparece quando há placa de 8 mm -->
+                <div id="op-placas-espessura" style="display:none;font-size:.62rem;color:var(--text-3);margin-top:2px;line-height:1.3"></div>
               </div>
             </div>
           </div>
