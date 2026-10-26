@@ -3622,9 +3622,11 @@
         // tiver um, senão a dimensão geral da operação (é o que a pessoa
         // via no campo ao abrir o modal, ver dimensaoBercoAtual em
         // bateria-atual.js) — só marca como mudança se realmente mudou.
-        const atualDoBerco = (Array.isArray(state.bercos_dimensoes) && state.bercos_dimensoes[numeroBerco - 1])
-          || state.dimensao || '';
-        if (valorFormatado !== atualDoBerco) {
+        const itemAtual = Array.isArray(state.bercos_dimensoes) ? state.bercos_dimensoes[numeroBerco - 1] : null;
+        const atualDoBerco = (itemAtual && typeof itemAtual !== 'object' && itemAtual) || state.dimensao || '';
+        // Berço com dimensões diferentes por lado ({direita, esquerda}) só
+        // se edita pelo ⚙️ (modal de dimensões) — aqui nunca é sobrescrito.
+        if (!(itemAtual && typeof itemAtual === 'object') && valorFormatado !== atualDoBerco) {
           if (!Array.isArray(state.bercos_dimensoes) || state.bercos_dimensoes.length !== capacidade) {
             const atual = Array.isArray(state.bercos_dimensoes) ? state.bercos_dimensoes : [];
             state.bercos_dimensoes = Array.from({ length: capacidade }, (_, i) => atual[i] || null);
@@ -3708,7 +3710,7 @@
     el.style.display = 'block';
   }
 
-  let _dimTrab = [];       // cópia de trabalho: dimensão EFETIVA de cada berço (string)
+  let _dimTrab = [];       // cópia de trabalho: dimensão EFETIVA de cada lado de cada berço [{direita, esquerda}]
   let _dimBaseTrab = '';   // dimensão geral de trabalho
 
   function _dimMarcacoes() {
@@ -3718,32 +3720,44 @@
   function _renderModalDimensoes() {
     const grade = document.getElementById('dim-bercos');
     if (!grade) return;
-    grade.innerHTML = _dimTrab.map((dim, i) => {
+    const meia = (i, lado, rotulo) => {
+      const dim = _dimTrab[i][lado];
       const is8 = LW.dimensaoUsaPlaca8mm(dim);
-      const cor = is8 ? 'var(--accent)' : 'var(--text-2)';
-      const bg = is8 ? 'rgba(255,255,255,.06)' : 'transparent';
-      return `<button type="button" class="btn btn-outline-accent btn-sm" data-berco="${i}"
-        style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};background:${bg};color:${cor}">
-        <span style="font-size:.65rem;opacity:.8">Berço ${i + 1}</span>
-        <strong style="font-size:.85rem">${LW.escaparHtml(dim || '—')}</strong>
+      return `<button type="button" class="btn btn-outline-accent btn-sm" data-berco="${i}" data-lado="${lado}"
+        title="${rotulo} do berço ${i + 1}"
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px;min-width:0;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};color:${is8 ? 'var(--accent)' : 'var(--text-2)'}">
+        <span style="font-size:.58rem;opacity:.8">${rotulo.charAt(0)}</span>
+        <strong style="font-size:.74rem;white-space:nowrap">${LW.escaparHtml(dim || '—')}</strong>
       </button>`;
-    }).join('');
+    };
+    grade.innerHTML = _dimTrab.map((l, i) => `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:5px;display:flex;flex-direction:column;gap:4px">
+        <button type="button" class="btn btn-ghost btn-sm" data-berco="${i}" data-lado="ambos" title="Aplicar nos dois lados do berço ${i + 1}"
+          style="padding:2px 4px;font-size:.7rem">Berço ${i + 1}</button>
+        <div style="display:flex;gap:4px">${meia(i, 'direita', 'Direita')}${meia(i, 'esquerda', 'Esquerda')}</div>
+      </div>`).join('');
     grade.querySelectorAll('button[data-berco]').forEach(b => {
-      b.addEventListener('click', () => _dimAplicar(Number(b.dataset.berco), Number(b.dataset.berco)));
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.berco);
+        _dimAplicar(i, i, b.dataset.lado);
+      });
     });
 
     const n8 = LW.calcPlacas8mm({
       tipoMontagem: state.tipo_montagem, bercosPersonalizados: state.bercos_personalizados,
-      capacidade: _dimTrab.length, dimensaoGeral: _dimBaseTrab, bercosDimensoes: _dimTrab, marcacoes: _dimMarcacoes(),
+      capacidade: _dimTrab.length, dimensaoGeral: _dimBaseTrab,
+      bercosDimensoes: LW.compactarBercosDimensoes(_dimTrab, _dimBaseTrab), marcacoes: _dimMarcacoes(),
     });
-    const resumo = LW.dimensoesDistintas(_dimTrab.length, _dimBaseTrab, _dimTrab)
-      .map(d => `${d}: ${_dimTrab.filter(x => x === d).length} berço(s)`).join(' · ');
+    const todos = _dimTrab.flatMap(l => [l.direita, l.esquerda]);
+    const resumo = LW.dimensoesDistintas(_dimTrab.length, _dimBaseTrab, LW.compactarBercosDimensoes(_dimTrab, _dimBaseTrab))
+      .map(d => `${d}: ${todos.filter(x => x === d).length} painel(is)`).join(' · ');
     const el = document.getElementById('dim-resumo');
     if (el) el.innerHTML = `${LW.escaparHtml(resumo || '—')}<br>Placas de 8 mm: <strong>${n8}</strong>`;
   }
 
-  // Aplica a dimensão digitada em "Dimensão a aplicar" aos berços de..até (índices 0-based).
-  function _dimAplicar(de, ate) {
+  // Aplica a dimensão digitada em "Dimensão a aplicar" aos berços de..até
+  // (índices 0-based), no lado indicado: 'ambos' | 'direita' | 'esquerda'.
+  function _dimAplicar(de, ate, lado) {
     const valor = LW.formatarDimensaoLive(document.getElementById('dim-valor').value.trim(), true);
     const erro = document.getElementById('dim-erro');
     if (!valor) {
@@ -3752,14 +3766,18 @@
       return;
     }
     erro.style.display = 'none';
-    for (let i = Math.max(0, de); i <= Math.min(_dimTrab.length - 1, ate); i++) _dimTrab[i] = valor;
+    for (let i = Math.max(0, de); i <= Math.min(_dimTrab.length - 1, ate); i++) {
+      if (lado !== 'esquerda') _dimTrab[i].direita = valor;
+      if (lado !== 'direita') _dimTrab[i].esquerda = valor;
+    }
     _renderModalDimensoes();
   }
 
   /**
    * ⚙️ ao lado de "Dimensão (Tipo)" — abre o modal onde se define a
    * dimensão padrão da bateria e, berço a berço (ou por faixa De/Até), a
-   * dimensão de cada um. Só grava em `state` ao confirmar.
+   * dimensão de cada um — inclusive de cada LADO (painel) do berço, como
+   * no Tipo de Montagem. Só grava em `state` ao confirmar.
    */
   function abrirModalDimensoes() {
     const bateria = LW.BATERIA_IDS.find(b => b.id === state.id_bateria);
@@ -3769,7 +3787,7 @@
     }
     const capacidade = _capacidadeAtual();
     _dimBaseTrab = state.dimensao || '';
-    _dimTrab = LW.dimensoesEfetivasPorBerco(capacidade, state.dimensao, state.bercos_dimensoes);
+    _dimTrab = LW.dimensoesEfetivasPorLado(capacidade, state.dimensao, state.bercos_dimensoes).map(l => ({ ...l }));
 
     const existente = document.getElementById('modal-dimensoes');
     if (existente) existente.remove();
@@ -3778,12 +3796,12 @@
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
     modal.innerHTML = `
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-                  padding:28px;width:620px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+                  padding:28px;width:680px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
         <div style="text-align:center;margin-bottom:16px">
           <div style="font-size:2rem;margin-bottom:6px">⚙️</div>
           <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);margin:0">Dimensões — Bateria ${LW.escaparHtml(bateria.id)}</h2>
           <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
-            Digite uma dimensão em "Dimensão a aplicar" e clique nos berços (ou use De/Até). Berços de 9,5 cm usam placa de 8 mm.
+            Digite uma dimensão em "Dimensão a aplicar" e clique no berço (os dois lados) ou em Direita/Esquerda (só aquele painel). Painéis de 9,5 cm usam placa de 8 mm.
           </p>
         </div>
         <div id="dim-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
@@ -3804,13 +3822,21 @@
             <label class="form-label">Até</label>
             <input type="number" id="dim-ate" class="form-input" style="width:70px" min="1" max="${capacidade}">
           </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Aplicar em</label>
+            <select id="dim-lado" class="form-input" style="width:110px">
+              <option value="ambos">Ambos</option>
+              <option value="direita">Direita</option>
+              <option value="esquerda">Esquerda</option>
+            </select>
+          </div>
           <button type="button" id="dim-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
           <button type="button" id="dim-btn-todos" class="btn btn-outline-accent btn-sm">Todos</button>
         </div>
         <div id="dim-resumo" style="font-size:.78rem;color:var(--text-2);margin-bottom:12px;line-height:1.5"></div>
-        <div id="dim-bercos" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px"></div>
+        <div id="dim-bercos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:20px"></div>
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <button type="button" id="dim-btn-restaurar" class="btn btn-ghost btn-sm" title="Todos os berços voltam à dimensão padrão da bateria">↺ Restaurar padrão</button>
+          <button type="button" id="dim-btn-restaurar" class="btn btn-ghost btn-sm" title="Todos os painéis voltam à dimensão padrão da bateria">↺ Restaurar padrão</button>
           <div style="display:flex;gap:12px">
             <button type="button" id="dim-btn-cancelar" class="btn btn-ghost">Cancelar</button>
             <button type="button" id="dim-btn-confirmar" class="btn btn-primary">Confirmar</button>
@@ -3828,6 +3854,7 @@
     };
     document.getElementById('dim-base').addEventListener('input', formatarAoDigitar);
     document.getElementById('dim-valor').addEventListener('input', formatarAoDigitar);
+    const ladoSelecionado = () => document.getElementById('dim-lado').value;
     document.getElementById('dim-btn-aplicar').addEventListener('click', () => {
       const de = parseInt(document.getElementById('dim-de').value, 10);
       const ate = parseInt(document.getElementById('dim-ate').value, 10);
@@ -3837,12 +3864,12 @@
         erro.style.display = 'block';
         return;
       }
-      _dimAplicar(de - 1, ate - 1);
+      _dimAplicar(de - 1, ate - 1, ladoSelecionado());
     });
-    document.getElementById('dim-btn-todos').addEventListener('click', () => _dimAplicar(0, _dimTrab.length - 1));
+    document.getElementById('dim-btn-todos').addEventListener('click', () => _dimAplicar(0, _dimTrab.length - 1, ladoSelecionado()));
     document.getElementById('dim-btn-restaurar').addEventListener('click', () => {
       const base = LW.formatarDimensaoLive(document.getElementById('dim-base').value.trim(), true) || _dimBaseTrab;
-      _dimTrab = _dimTrab.map(() => base);
+      _dimTrab = _dimTrab.map(() => ({ direita: base, esquerda: base }));
       _renderModalDimensoes();
     });
     document.getElementById('dim-btn-cancelar').addEventListener('click', () => modal.remove());
@@ -3854,7 +3881,7 @@
         erro.style.display = 'block';
         return;
       }
-      const trabalho = [..._dimTrab];
+      const trabalho = _dimTrab.map(l => ({ ...l }));
       const baseAnterior = _dimBaseTrab;
       modal.remove();
       await _confirmarModalDimensoes(novaBase, baseAnterior, trabalho);
@@ -3862,11 +3889,16 @@
   }
 
   async function _confirmarModalDimensoes(novaBase, baseAnterior, trabalho) {
-    // Berços que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
-    const efetivas = trabalho.map(d => (d === baseAnterior ? novaBase : d));
-    // Todos os berços com a MESMA dimensão → ela vira a dimensão padrão da
-    // bateria (senão o registro gravaria `dimensao` diferente de todos os berços).
-    if (efetivas.length && efetivas.every(d => d === efetivas[0])) novaBase = efetivas[0];
+    // Painéis que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
+    const efetivas = trabalho.map(l => ({
+      direita: l.direita === baseAnterior ? novaBase : l.direita,
+      esquerda: l.esquerda === baseAnterior ? novaBase : l.esquerda,
+    }));
+    // Todos os painéis com a MESMA dimensão → ela vira a dimensão padrão da
+    // bateria (senão o registro gravaria `dimensao` diferente de todos os painéis).
+    if (efetivas.length && efetivas.every(l => l.direita === efetivas[0].direita && l.esquerda === efetivas[0].direita)) {
+      novaBase = efetivas[0].direita;
+    }
 
     if (novaBase !== state.dimensao) {
       state.dimensao = novaBase;
@@ -3876,9 +3908,8 @@
     }
 
     const capacidade = _capacidadeAtual();
-    const redim = Array.from({ length: capacidade }, (_, i) => efetivas[i] || novaBase);
-    const overrides = redim.map(d => (d === state.dimensao ? null : d));
-    state.bercos_dimensoes = overrides.some(Boolean) ? overrides : null;
+    const redim = Array.from({ length: capacidade }, (_, i) => efetivas[i] || { direita: novaBase, esquerda: novaBase });
+    state.bercos_dimensoes = LW.compactarBercosDimensoes(redim, state.dimensao);
 
     updateCapacidade();
     recalcPaineis();

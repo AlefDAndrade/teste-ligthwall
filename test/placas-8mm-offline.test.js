@@ -34,6 +34,15 @@ const CENARIOS = [
   { nome: 'Personalizada com berço separado e vazio, mista', tipoMontagem: 'PERSONALIZADA', capacidade: 4, dimensaoGeral: '9 cm',
     bercosPersonalizados: ['2p', { direita: '2p', esquerda: 'sp' }, null, 'sp'], bercosDimensoes: ['9,5 cm', '9,5 cm', '9,5 cm', null],
     marcacoes: { B1: { direita: 'nao_enchido', tipos: { direita: '2p' } } } },
+  { nome: 'Lados diferentes (só a direita de 9,5 cm), Simples 2/P', tipoMontagem: '2/P', capacidade: 3, dimensaoGeral: '9 cm',
+    bercosDimensoes: [{ direita: '9,5 cm', esquerda: null }, { direita: null, esquerda: '9,5 cm' }, '9,5 cm'] },
+  { nome: 'Lados diferentes, Híbrida com Não Enchido', tipoMontagem: 'HÍBRIDA 2p/sp', capacidade: 3, dimensaoGeral: '9 cm',
+    bercosDimensoes: [{ direita: '9,5 cm', esquerda: null }, { direita: null, esquerda: '9,5 cm' }, { direita: '9,5 cm', esquerda: '9,5 cm' }],
+    marcacoes: { B1: { direita: 'nao_enchido' }, B3: { esquerda: 'nao_enchido' } } },
+  { nome: 'Lados diferentes, Personalizada (berço separado)', tipoMontagem: 'PERSONALIZADA', capacidade: 3, dimensaoGeral: '9 cm',
+    bercosPersonalizados: [{ direita: '2p', esquerda: 'sp' }, '2p', { direita: 'sp', esquerda: '2p' }],
+    bercosDimensoes: [{ direita: '9,5 cm', esquerda: '9,5 cm' }, { direita: null, esquerda: '9,5 cm' }, { direita: '9,5 cm', esquerda: null }],
+    marcacoes: { B2: { esquerda: 'nao_enchido' } } },
   { nome: 'Sem nenhum berço de 9,5 cm', tipoMontagem: '2/P', capacidade: 20, dimensaoGeral: '9 cm' },
 ];
 

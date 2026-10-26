@@ -1647,8 +1647,9 @@ function aplicarNaoEnchidosNoCalc(calc, tipoMontagem, bercosPersonalizados, marc
 // A fábrica usa 2 espessuras de placa cimentícia: 6 mm (padrão) e 8 mm,
 // esta última só nos painéis de 9,5 cm de espessura. Uma mesma bateria
 // pode misturar berços de 9,5 cm e de 9 cm (ex: berços 1-10 = 9,5 cm,
-// 11-20 = 9 cm), então a espessura da placa é decidida BERÇO A BERÇO a
-// partir da dimensão efetiva de cada berço (ver dimensoesEfetivasPorBerco).
+// 11-20 = 9 cm) — e até os 2 lados (painéis) do mesmo berço podem ter
+// espessuras diferentes — então a espessura da placa é decidida PAINEL A PAINEL a
+// partir da dimensão efetiva de cada lado do berço (ver dimensoesEfetivasPorLado).
 // Regra: dimensão em ESPESSURAS_PLACA_8MM_CM → placa de 8 mm; qualquer
 // outra → placa de 6 mm. Se um dia outra espessura passar a usar 8 mm,
 // basta incluí-la nesta lista.
@@ -1668,23 +1669,36 @@ function dimensaoUsaPlaca8mm(dim) {
 }
 
 /**
- * Dimensão efetiva de cada berço (índice 0 = berço 1): o override do
- * berço (bercosDimensoes[i]) quando existe, senão a dimensão geral da
- * operação.
+ * Dimensão de cada LADO (painel) de um berço. Um item de bercos_dimensoes
+ * pode ser: null (usa a dimensão geral), um texto "9,5 cm" (berço inteiro)
+ * ou { direita, esquerda } (cada lado com a sua; lado null = dimensão geral).
  */
-function dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes) {
+function dimensoesPorLadoDoBerco(item, dimensaoGeral) {
+  const geral = dimensaoGeral || '';
+  if (item && typeof item === 'object') {
+    return { direita: item.direita || geral, esquerda: item.esquerda || geral };
+  }
+  const d = item || geral;
+  return { direita: d, esquerda: d };
+}
+
+/**
+ * Dimensão efetiva de cada berço (índice 0 = berço 1), já por lado:
+ * [{ direita, esquerda }, ...]. Veja dimensoesPorLadoDoBerco.
+ */
+function dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes) {
   const over = Array.isArray(bercosDimensoes) ? bercosDimensoes : [];
-  return Array.from({ length: Number(capacidade) || 0 }, (_, i) => over[i] || dimensaoGeral || '');
+  return Array.from({ length: Number(capacidade) || 0 }, (_, i) => dimensoesPorLadoDoBerco(over[i], dimensaoGeral));
 }
 
 /**
  * Dimensões distintas da bateria, na ordem em que aparecem (berço 1 em
- * diante). Mais de 1 item = bateria com espessuras mistas.
+ * diante, direita antes de esquerda). Mais de 1 item = espessuras mistas.
  */
 function dimensoesDistintas(capacidade, dimensaoGeral, bercosDimensoes) {
   const vistas = [];
-  dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes).forEach(d => {
-    if (d && !vistas.includes(d)) vistas.push(d);
+  dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes).forEach(l => {
+    [l.direita, l.esquerda].forEach(d => { if (d && !vistas.includes(d)) vistas.push(d); });
   });
   return vistas;
 }
@@ -1699,24 +1713,49 @@ function rotuloDimensoesMistas(capacidade, dimensaoGeral, bercosDimensoes) {
   return dims.length > 1 ? 'Personalizada / ' + dims.join(' + ') : null;
 }
 
+/** Texto de UM berço: "9,5 cm", ou "Dir. 9,5 cm · Esq. 9 cm" se os lados diferem. */
+function textoDimensaoBerco(item, dimensaoGeral) {
+  const l = dimensoesPorLadoDoBerco(item, dimensaoGeral);
+  if (l.direita === l.esquerda) return l.direita;
+  return `Dir. ${l.direita || '—'} · Esq. ${l.esquerda || '—'}`;
+}
+
+/**
+ * Inverso de dimensoesEfetivasPorLado, pra gravar em bercos_dimensoes de
+ * forma compacta: berço igual à dimensão geral → null; os 2 lados iguais →
+ * texto; lados diferentes → { direita, esquerda } (lado igual à geral = null).
+ * Devolve null se nenhum berço difere da dimensão geral.
+ */
+function compactarBercosDimensoes(porLado, dimensaoGeral) {
+  const itens = (porLado || []).map(l => {
+    if (l.direita === dimensaoGeral && l.esquerda === dimensaoGeral) return null;
+    if (l.direita === l.esquerda) return l.direita;
+    return { direita: l.direita === dimensaoGeral ? null : l.direita, esquerda: l.esquerda === dimensaoGeral ? null : l.esquerda };
+  });
+  return itens.some(Boolean) ? itens : null;
+}
+
 /**
  * Quantas placas cimentícias de 8 mm a operação consome — soma, só dos
- * berços de dimensão 9,5 cm (ver dimensaoUsaPlaca8mm), das placas de cada
- * painel (CIMENTICIA_POR_TIPO, mesma conta de calcPaineis). Respeita os
- * descontos de "🚫 Não Enchido" (marcacoes), igual aplicarNaoEnchidosNoCalc.
- * As de 6 mm = placas_cimenticia (total) − este valor.
+ * painéis de dimensão 9,5 cm (ver dimensaoUsaPlaca8mm), das placas de cada
+ * painel (CIMENTICIA_POR_TIPO, mesma conta de calcPaineis). A dimensão é
+ * decidida POR LADO (painel) do berço. Respeita os descontos de "🚫 Não
+ * Enchido" (marcacoes), igual aplicarNaoEnchidosNoCalc. As de 6 mm =
+ * placas_cimenticia (total) − este valor.
  */
 function calcPlacas8mm({ tipoMontagem, bercosPersonalizados, capacidade, dimensaoGeral, bercosDimensoes, marcacoes }) {
-  const dims = dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes);
-  if (!dims.some(dimensaoUsaPlaca8mm)) return 0;
+  const dims = dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes);
+  if (!dims.some(l => dimensaoUsaPlaca8mm(l.direita) || dimensaoUsaPlaca8mm(l.esquerda))) return 0;
 
   const placasDoTipo = tipo => {
     const c = CIMENTICIA_POR_TIPO[tipo];
     return c && c.leva ? (c.quantidade || 0) : 0;
   };
   let total = 0;
-  dims.forEach((dim, i) => {
-    if (!dimensaoUsaPlaca8mm(dim)) return;
+  dims.forEach((lados, i) => {
+    const d8 = dimensaoUsaPlaca8mm(lados.direita);
+    const e8 = dimensaoUsaPlaca8mm(lados.esquerda);
+    if (!d8 && !e8) return;
     const bercoNum = i + 1;
     // Painéis deste berço, por tipo — mesmas regras de calcPaineis /
     // calcPaineisPersonalizado.
@@ -1736,12 +1775,18 @@ function calcPlacas8mm({ tipoMontagem, bercosPersonalizados, capacidade, dimensa
       const map = MONTAGEM_MAP[tipoMontagem];
       porBerco = (map && map.porBerco) ? map.porBerco : { 'sp': 2 };
     }
-    Object.keys(porBerco).forEach(tipo => { total += (porBerco[tipo] || 0) * placasDoTipo(tipo); });
+    if (d8 && e8) {
+      Object.keys(porBerco).forEach(tipo => { total += (porBerco[tipo] || 0) * placasDoTipo(tipo); });
+    } else {
+      // Só um dos lados é de 8 mm: conta o painel daquele lado (1 por lado).
+      const tipo = _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, d8 ? 'direita' : 'esquerda');
+      if (tipo) total += placasDoTipo(tipo);
+    }
 
-    // Descontos de "Não Enchido" deste berço (cada lado = 1 painel a menos).
+    // Descontos de "Não Enchido": só dos lados que são de 8 mm.
     const doBerco = (marcacoes && (marcacoes['B' + bercoNum] || marcacoes[bercoNum] || marcacoes[String(bercoNum)])) || {};
-    ['direita', 'esquerda'].forEach(lado => {
-      if (doBerco[lado] !== 'nao_enchido') return;
+    [['direita', d8], ['esquerda', e8]].forEach(([lado, is8]) => {
+      if (!is8 || doBerco[lado] !== 'nao_enchido') return;
       const tipo = (doBerco.tipos && doBerco.tipos[lado]) || _tipoDoLadoMontagem(tipoMontagem, bercosPersonalizados, bercoNum, lado);
       if (tipo) total -= placasDoTipo(tipo);
     });
@@ -3316,7 +3361,10 @@ window.LW = {
   formatarDimensaoLive,
   ESPESSURAS_PLACA_8MM_CM,
   dimensaoUsaPlaca8mm,
-  dimensoesEfetivasPorBerco,
+  dimensoesPorLadoDoBerco,
+  dimensoesEfetivasPorLado,
+  textoDimensaoBerco,
+  compactarBercosDimensoes,
   dimensoesDistintas,
   rotuloDimensoesMistas,
   calcPlacas8mm,

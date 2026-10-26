@@ -35,15 +35,24 @@
     return n !== null && ESPESSURAS_PLACA_8MM_CM.some(e => Math.abs(e - n) < 0.001);
   }
 
-  function dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes) {
+  function dimensoesPorLadoDoBerco(item, dimensaoGeral) {
+    const geral = dimensaoGeral || '';
+    if (item && typeof item === 'object') {
+      return { direita: item.direita || geral, esquerda: item.esquerda || geral };
+    }
+    const d = item || geral;
+    return { direita: d, esquerda: d };
+  }
+
+  function dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes) {
     const over = Array.isArray(bercosDimensoes) ? bercosDimensoes : [];
-    return Array.from({ length: Number(capacidade) || 0 }, (_, i) => over[i] || dimensaoGeral || '');
+    return Array.from({ length: Number(capacidade) || 0 }, (_, i) => dimensoesPorLadoDoBerco(over[i], dimensaoGeral));
   }
 
   function dimensoesDistintas(capacidade, dimensaoGeral, bercosDimensoes) {
     const vistas = [];
-    dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes).forEach(d => {
-      if (d && !vistas.includes(d)) vistas.push(d);
+    dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes).forEach(l => {
+      [l.direita, l.esquerda].forEach(d => { if (d && !vistas.includes(d)) vistas.push(d); });
     });
     return vistas;
   }
@@ -51,6 +60,21 @@
   function rotuloDimensoesMistas(capacidade, dimensaoGeral, bercosDimensoes) {
     const dims = dimensoesDistintas(capacidade, dimensaoGeral, bercosDimensoes);
     return dims.length > 1 ? 'Personalizada / ' + dims.join(' + ') : null;
+  }
+
+  function textoDimensaoBerco(item, dimensaoGeral) {
+    const l = dimensoesPorLadoDoBerco(item, dimensaoGeral);
+    if (l.direita === l.esquerda) return l.direita;
+    return 'Dir. ' + (l.direita || '—') + ' · Esq. ' + (l.esquerda || '—');
+  }
+
+  function compactarBercosDimensoes(porLado, dimensaoGeral) {
+    const itens = (porLado || []).map(l => {
+      if (l.direita === dimensaoGeral && l.esquerda === dimensaoGeral) return null;
+      if (l.direita === l.esquerda) return l.direita;
+      return { direita: l.direita === dimensaoGeral ? null : l.direita, esquerda: l.esquerda === dimensaoGeral ? null : l.esquerda };
+    });
+    return itens.some(Boolean) ? itens : null;
   }
 
   // paineis_<tipo>_por_berco → { tipo: qtd } (mesma leitura de data.js)
@@ -69,8 +93,8 @@
    * `marcacoes` = { B1: { direita, esquerda, tipos } } (Não Enchido desconta).
    */
   function calcPlacas8mm({ tipoMontagem, bercosPersonalizados, capacidade, dimensaoGeral, bercosDimensoes, marcacoes, montagemOpcoes }) {
-    const dims = dimensoesEfetivasPorBerco(capacidade, dimensaoGeral, bercosDimensoes);
-    if (!dims.some(dimensaoUsaPlaca8mm)) return 0;
+    const dims = dimensoesEfetivasPorLado(capacidade, dimensaoGeral, bercosDimensoes);
+    if (!dims.some(l => dimensaoUsaPlaca8mm(l.direita) || dimensaoUsaPlaca8mm(l.esquerda))) return 0;
 
     const opcoes = Array.isArray(montagemOpcoes) ? montagemOpcoes : [];
     const cimenticia = {};
@@ -95,8 +119,10 @@
     };
 
     let total = 0;
-    dims.forEach((dim, i) => {
-      if (!dimensaoUsaPlaca8mm(dim)) return;
+    dims.forEach((lados, i) => {
+      const d8 = dimensaoUsaPlaca8mm(lados.direita);
+      const e8 = dimensaoUsaPlaca8mm(lados.esquerda);
+      if (!d8 && !e8) return;
       const bercoNum = i + 1;
       let porBerco = {};
       if (tipoMontagem === TIPO_MONTAGEM_PERSONALIZADA) {
@@ -112,11 +138,16 @@
         const opcao = opcoes.find(o => o.label === tipoMontagem);
         porBerco = opcao ? porBercoDaOpcao(opcao) : { sp: 2 };
       }
-      Object.keys(porBerco).forEach(tipo => { total += (porBerco[tipo] || 0) * placasDoTipo(tipo); });
+      if (d8 && e8) {
+        Object.keys(porBerco).forEach(tipo => { total += (porBerco[tipo] || 0) * placasDoTipo(tipo); });
+      } else {
+        const tipo = tipoDoLado(bercoNum, d8 ? 'direita' : 'esquerda');
+        if (tipo) total += placasDoTipo(tipo);
+      }
 
       const doBerco = (marcacoes && (marcacoes['B' + bercoNum] || marcacoes[bercoNum])) || {};
-      ['direita', 'esquerda'].forEach(lado => {
-        if (doBerco[lado] !== 'nao_enchido') return;
+      [['direita', d8], ['esquerda', e8]].forEach(([lado, is8]) => {
+        if (!is8 || doBerco[lado] !== 'nao_enchido') return;
         const tipo = (doBerco.tipos && doBerco.tipos[lado]) || tipoDoLado(bercoNum, lado);
         if (tipo) total -= placasDoTipo(tipo);
       });
@@ -127,7 +158,10 @@
   return {
     ESPESSURAS_PLACA_8MM_CM,
     dimensaoUsaPlaca8mm,
-    dimensoesEfetivasPorBerco,
+    dimensoesPorLadoDoBerco,
+    dimensoesEfetivasPorLado,
+    textoDimensaoBerco,
+    compactarBercosDimensoes,
     dimensoesDistintas,
     rotuloDimensoesMistas,
     calcPlacas8mm,

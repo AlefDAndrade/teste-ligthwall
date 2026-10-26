@@ -662,11 +662,22 @@
     // berço que ainda não teve a dimensão editada por aqui. Salvar
     // NUNCA mais altera dados.dimensao — só a posição deste berço (ver
     // aplicarDetalhesBerco, operacao.js).
-    const dimensaoBercoAtual = (Array.isArray(dados.bercos_dimensoes) && dados.bercos_dimensoes[numeroBerco - 1])
-      || dados.dimensao || '';
-    const campoDimensao = podeEditar
+    //
+    // O override do berço pode ser um texto ("9,5 cm") OU { direita,
+    // esquerda } (cada painel com a sua dimensão, definido pelo ⚙️ em
+    // Registrar Operação). Com lados diferentes, só mostra os dois valores
+    // — a edição fica pelo ⚙️ (não cabe num campo de texto só).
+    const itemDimBerco = Array.isArray(dados.bercos_dimensoes) ? dados.bercos_dimensoes[numeroBerco - 1] : null;
+    const dimensaoPorLado = !!itemDimBerco && typeof itemDimBerco === 'object';
+    const dimensaoBercoAtual = dimensaoPorLado
+      ? LW.textoDimensaoBerco(itemDimBerco, dados.dimensao)
+      : (itemDimBerco || dados.dimensao || '');
+    const campoDimensao = (podeEditar && !dimensaoPorLado)
       ? `<input type="text" id="ba-det-dimensao" class="form-input" value="${LW.escaparHtml(dimensaoBercoAtual)}" placeholder="Ex: 9,5 cm">`
-      : `<div class="ba-det-valor">${LW.escaparHtml(dimensaoBercoAtual || '—')}</div>`;
+      : `<div class="ba-det-valor">${LW.escaparHtml(dimensaoBercoAtual || '—')}</div>${
+        dimensaoPorLado && podeEditar
+          ? '<div style="font-size:.7rem;color:var(--text-3);margin-top:2px">Lados com dimensões diferentes — edite pelo ⚙️ em Registrar Operação.</div>'
+          : ''}`;
 
     const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num))}` : 'Ainda não definido';
 
@@ -786,7 +797,8 @@
       // operacao.js): só número e vírgula, " cm" adicionado sozinho no
       // final, sem precisar digitar. Mantém a posição do cursor pra não
       // "pular" pro fim do campo a cada tecla.
-      $('ba-det-dimensao').addEventListener('input', e => {
+      // (Sem o campo quando o berço tem dimensões diferentes por lado.)
+      if ($('ba-det-dimensao')) $('ba-det-dimensao').addEventListener('input', e => {
         const input = e.target;
         const cursorPos = input.selectionStart;
         const antes = input.value;
@@ -802,7 +814,7 @@
         // Tipo de Montagem não é mais editável por aqui (ver campoTipo,
         // acima) — só a Dimensão. novoTipo fica null pra
         // aplicarDetalhesBerco (operacao.js) não alterar o tipo.
-        const novaDimensao = $('ba-det-dimensao').value;
+        const novaDimensao = $('ba-det-dimensao') ? $('ba-det-dimensao').value : '';
         if (window.LWOp && typeof window.LWOp.aplicarDetalhesBerco === 'function') {
           window.LWOp.aplicarDetalhesBerco(numeroBerco, null, novaDimensao);
         }

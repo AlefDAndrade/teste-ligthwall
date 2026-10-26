@@ -47,7 +47,8 @@ test('modal ⚙️ offline: 4 berços de 9,5 cm + 4 de 9 cm → campo mostra a m
 
   w.LWOff.abrirModalDimensoes();
   assert.equal(w.document.getElementById('off-modal-dimensoes').style.display, 'flex');
-  assert.equal(w.document.querySelectorAll('#off-dim-bercos button').length, 8);
+  assert.equal(w.document.querySelectorAll('#off-dim-bercos button[data-lado="direita"]').length, 8);
+  assert.equal(w.document.querySelectorAll('#off-dim-bercos button[data-lado="esquerda"]').length, 8);
 
   w.document.getElementById('off-dim-valor').value = '9.5';
   w.document.getElementById('off-dim-de').value = '1';
@@ -90,4 +91,41 @@ test('trocar de bateria descarta as dimensões por berço (outros berços)', asy
   escolher(w, 'off-bateria', '');
   escolher(w, 'off-bateria', 'B9');
   assert.match(w.document.getElementById('off-dimensao').value, /^9 cm \(8 berços\)$/);
+});
+
+test('modal ⚙️ offline: clicar só na Direita de um berço aplica a dimensão num painel só', async () => {
+  const w = await abrirPagina();
+  w.document.getElementById('off-modal-num-inicial').style.display = 'none';
+  escolher(w, 'off-bateria', 'B9');
+  escolher(w, 'off-tipo-montagem', '2/P');
+  w.LWOff.abrirModalDimensoes();
+  w.document.getElementById('off-dim-valor').value = '9,5';
+  w.document.querySelector('#off-dim-bercos button[data-berco="2"][data-lado="direita"]').click();
+  assert.match(w.document.getElementById('off-dim-resumo').textContent, /Placas de 8 mm: 2/);
+  w.LWOff.confirmarModalDimensoes();
+
+  // ordem de aparição: o berço 1 (9 cm) vem antes do painel de 9,5 cm do berço 3
+  assert.match(w.document.getElementById('off-dimensao').value, /^9 cm \+ 9,5 cm \(8 berços\)$/);
+  assert.match(w.document.getElementById('off-placas-espessura').textContent, /8 mm: 2 · 6 mm: 30/);
+  const fr = JSON.parse(w.localStorage.getItem('lw_operacao_offline_pendente')).formRecord;
+  assert.deepEqual(JSON.parse(JSON.stringify(fr.bercos_dimensoes[2])), { direita: '9,5 cm', esquerda: null });
+  assert.equal(fr.bercos_dimensoes.filter(Boolean).length, 1);
+});
+
+test('modal ⚙️ offline: "Aplicar em: Esquerda" + faixa De/Até só mexe nos painéis esquerdos', async () => {
+  const w = await abrirPagina();
+  w.document.getElementById('off-modal-num-inicial').style.display = 'none';
+  escolher(w, 'off-bateria', 'B9');
+  escolher(w, 'off-tipo-montagem', '2/P');
+  w.LWOff.abrirModalDimensoes();
+  w.document.getElementById('off-dim-valor').value = '9,5';
+  w.document.getElementById('off-dim-de').value = '1';
+  w.document.getElementById('off-dim-ate').value = '3';
+  w.document.getElementById('off-dim-lado').value = 'esquerda';
+  w.LWOff.aplicarFaixaDimensoes();
+  w.LWOff.confirmarModalDimensoes();
+  const fr = JSON.parse(w.localStorage.getItem('lw_operacao_offline_pendente')).formRecord;
+  assert.deepEqual(JSON.parse(JSON.stringify(fr.bercos_dimensoes.slice(0, 4))),
+    [{ direita: null, esquerda: '9,5 cm' }, { direita: null, esquerda: '9,5 cm' }, { direita: null, esquerda: '9,5 cm' }, null]);
+  assert.match(w.document.getElementById('off-placas-espessura').textContent, /8 mm: 6 /);
 });

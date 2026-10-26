@@ -389,11 +389,11 @@
     });
   }
 
-  let _dimTrab = [];
+  let _dimTrab = [];   // dimensão EFETIVA de cada lado de cada berço: [{ direita, esquerda }]
   let _dimBase = '';
 
   // Mesma formatação do online (LW.formatarDimensaoLive, data.js): só
-  // dígitos/vírgula, ponto vira vírgula, \" cm\" no final.
+  // dígitos/vírgula, ponto vira vírgula, " cm" no final.
   function formatarDimensao(bruto, final) {
     let v = String(bruto || '').replace(/\s*cm\s*$/i, '').replace(/[^\d,.]/g, '').replace(/\./g, ',');
     const partes = v.split(',');
@@ -405,22 +405,34 @@
   function renderModalDimensoes() {
     const grade = $('off-dim-bercos');
     if (!grade) return;
-    grade.innerHTML = _dimTrab.map((dim, i) => {
+    const meia = (i, lado, rotulo) => {
+      const dim = _dimTrab[i][lado];
       const is8 = LWPlacas8mm.dimensaoUsaPlaca8mm(dim);
-      return `<button type=\"button\" class=\"btn btn-outline-accent btn-sm\" data-berco=\"${i}\"
-        style=\"display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};color:${is8 ? 'var(--accent)' : 'var(--text-2)'}\">
-        <span style=\"font-size:.65rem;opacity:.8\">Berço ${i + 1}</span><strong style=\"font-size:.85rem\">${escaparHtml(dim || '—')}</strong></button>`;
-    }).join('');
+      return `<button type="button" class="btn btn-outline-accent btn-sm" data-berco="${i}" data-lado="${lado}" title="${rotulo} do berço ${i + 1}"
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px;min-width:0;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};color:${is8 ? 'var(--accent)' : 'var(--text-2)'}">
+        <span style="font-size:.58rem;opacity:.8">${rotulo.charAt(0)}</span><strong style="font-size:.74rem;white-space:nowrap">${escaparHtml(dim || '—')}</strong></button>`;
+    };
+    grade.innerHTML = _dimTrab.map((l, i) => `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:5px;display:flex;flex-direction:column;gap:4px">
+        <button type="button" class="btn btn-ghost btn-sm" data-berco="${i}" data-lado="ambos" title="Aplicar nos dois lados do berço ${i + 1}"
+          style="padding:2px 4px;font-size:.7rem">Berço ${i + 1}</button>
+        <div style="display:flex;gap:4px">${meia(i, 'direita', 'Direita')}${meia(i, 'esquerda', 'Esquerda')}</div>
+      </div>`).join('');
     grade.querySelectorAll('button[data-berco]').forEach((b) => {
-      b.addEventListener('click', () => aplicarDimensaoNoModal(Number(b.dataset.berco), Number(b.dataset.berco)));
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.berco);
+        aplicarDimensaoNoModal(i, i, b.dataset.lado);
+      });
     });
+    const compacto = LWPlacas8mm.compactarBercosDimensoes(_dimTrab, _dimBase);
     const n8 = LWPlacas8mm.calcPlacas8mm({
       tipoMontagem: state.tipo_montagem, bercosPersonalizados: state.bercos_personalizados,
-      capacidade: _dimTrab.length, dimensaoGeral: _dimBase, bercosDimensoes: _dimTrab,
+      capacidade: _dimTrab.length, dimensaoGeral: _dimBase, bercosDimensoes: compacto,
       marcacoes: state.bercos_marcados, montagemOpcoes: MONTAGEM_OPCOES,
     });
-    const resumo = LWPlacas8mm.dimensoesDistintas(_dimTrab.length, _dimBase, _dimTrab)
-      .map((d) => `${d}: ${_dimTrab.filter((x) => x === d).length} berço(s)`).join(' · ');
+    const todos = _dimTrab.flatMap((l) => [l.direita, l.esquerda]);
+    const resumo = LWPlacas8mm.dimensoesDistintas(_dimTrab.length, _dimBase, compacto)
+      .map((d) => `${d}: ${todos.filter((x) => x === d).length} painel(is)`).join(' · ');
     $('off-dim-resumo').innerHTML = `${escaparHtml(resumo || '—')}<br>Placas de 8 mm: <strong>${n8}</strong>`;
   }
 
@@ -430,11 +442,15 @@
     el.style.display = msg ? 'block' : 'none';
   }
 
-  function aplicarDimensaoNoModal(de, ate) {
+  // lado: 'ambos' | 'direita' | 'esquerda'; de/ate = índices 0-based de berço.
+  function aplicarDimensaoNoModal(de, ate, lado) {
     const valor = formatarDimensao($('off-dim-valor').value.trim(), true);
     if (!valor) { erroModalDimensoes('Digite a dimensão a aplicar (ex: 9,5) antes de clicar nos berços.'); return; }
     erroModalDimensoes('');
-    for (let i = Math.max(0, de); i <= Math.min(_dimTrab.length - 1, ate); i++) _dimTrab[i] = valor;
+    for (let i = Math.max(0, de); i <= Math.min(_dimTrab.length - 1, ate); i++) {
+      if (lado !== 'esquerda') _dimTrab[i].direita = valor;
+      if (lado !== 'direita') _dimTrab[i].esquerda = valor;
+    }
     renderModalDimensoes();
   }
 
@@ -442,12 +458,13 @@
     const bateria = BATERIA_IDS.find((b) => b.id === state.id_bateria);
     if (!bateria) { mostrarBanner('Selecione a bateria antes de configurar as dimensões.', 'aviso'); return; }
     _dimBase = state.dimensao || '';
-    _dimTrab = LWPlacas8mm.dimensoesEfetivasPorBerco(state.capacidade, state.dimensao, state.bercos_dimensoes);
+    _dimTrab = LWPlacas8mm.dimensoesEfetivasPorLado(state.capacidade, state.dimensao, state.bercos_dimensoes).map((l) => ({ ...l }));
     $('off-dim-titulo').textContent = `Dimensões — Bateria ${bateria.id}`;
     $('off-dim-base').value = _dimBase;
     $('off-dim-valor').value = '';
     $('off-dim-de').value = '';
     $('off-dim-ate').value = '';
+    $('off-dim-lado').value = 'ambos';
     erroModalDimensoes('');
     renderModalDimensoes();
     $('off-modal-dimensoes').style.display = 'flex';
@@ -462,29 +479,32 @@
       erroModalDimensoes(`Informe uma faixa válida de berços (1 a ${_dimTrab.length}).`);
       return;
     }
-    aplicarDimensaoNoModal(de - 1, ate - 1);
+    aplicarDimensaoNoModal(de - 1, ate - 1, $('off-dim-lado').value);
   }
 
-  function aplicarDimensaoTodos() { aplicarDimensaoNoModal(0, _dimTrab.length - 1); }
+  function aplicarDimensaoTodos() { aplicarDimensaoNoModal(0, _dimTrab.length - 1, $('off-dim-lado').value); }
 
   function restaurarPadraoDimensoes() {
     const base = formatarDimensao($('off-dim-base').value.trim(), true) || _dimBase;
-    _dimTrab = _dimTrab.map(() => base);
+    _dimTrab = _dimTrab.map(() => ({ direita: base, esquerda: base }));
     renderModalDimensoes();
   }
 
   function confirmarModalDimensoes() {
     const novaBase = formatarDimensao($('off-dim-base').value.trim(), true);
     if (!novaBase) { erroModalDimensoes('A dimensão padrão da bateria não pode ficar vazia.'); return; }
-    // Berços que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
-    const efetivas = _dimTrab.map((d) => (d === _dimBase ? novaBase : d));
-    // Todos os berços com a MESMA dimensão → ela vira a dimensão padrão.
-    const baseFinal = efetivas.length && efetivas.every((d) => d === efetivas[0]) ? efetivas[0] : novaBase;
+    // Painéis que ainda valiam a dimensão padrão ANTIGA acompanham a nova.
+    const efetivas = _dimTrab.map((l) => ({
+      direita: l.direita === _dimBase ? novaBase : l.direita,
+      esquerda: l.esquerda === _dimBase ? novaBase : l.esquerda,
+    }));
+    // Todos os painéis com a MESMA dimensão → ela vira a dimensão padrão.
+    const tudoIgual = efetivas.length && efetivas.every((l) => l.direita === efetivas[0].direita && l.esquerda === efetivas[0].direita);
+    const baseFinal = tudoIgual ? efetivas[0].direita : novaBase;
     const bateriaAtual = BATERIA_IDS.find((b) => b.id === state.id_bateria);
     state.dimensao = baseFinal;
     state.dimensao_manual = !bateriaAtual || baseFinal !== bateriaAtual.label;
-    const overrides = efetivas.map((d) => (d === baseFinal ? null : d));
-    state.bercos_dimensoes = overrides.some(Boolean) ? overrides : null;
+    state.bercos_dimensoes = LWPlacas8mm.compactarBercosDimensoes(efetivas, baseFinal);
     fecharModalDimensoes();
     atualizarCampoDimensao();
     persist();

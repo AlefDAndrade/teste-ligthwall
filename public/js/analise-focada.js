@@ -456,7 +456,8 @@
     // Dimensão DESTE berço específico — mesmo override individual usado
     // em bateria-atual.js (bercos_dimensoes), só que aqui SÓ pra
     // exibição (sem input, ver campos abaixo).
-    const dimensaoBerco = (Array.isArray(bercosDimensoes) && bercosDimensoes[numeroBerco - 1]) || op.dimensao || '—';
+    // O override pode ser texto ou { direita, esquerda } (painéis diferentes).
+    const dimensaoBerco = LW.textoDimensaoBerco(Array.isArray(bercosDimensoes) ? bercosDimensoes[numeroBerco - 1] : null, op.dimensao) || '—';
     const dataEnchimento = op.inicio ? LW.formatDateTime(op.inicio) : '—';
     const traco = _afTracoDoBerco(tracos, numeroBerco);
     const labelTraco = traco ? `Traço Nº ${LW.escaparHtml(String(traco.num_traco ?? traco.id_traco))}` : 'Não identificado';

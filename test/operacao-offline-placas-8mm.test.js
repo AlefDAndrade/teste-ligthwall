@@ -88,3 +88,11 @@ test('validar offline: item antigo (sem bercos_dimensoes, 9 cm) fica com 0 placa
   const op = await enviarEValidar(payload('OFF-8mm-antigo-' + Date.now(), {}));
   assert.equal(op.placas_cimenticia_8mm, 0);
 });
+
+test('validar offline: dimensão por LADO — só os painéis de 9,5 cm contam (2 painéis × 2 placas = 4)', async () => {
+  const op = await enviarEValidar(payload('OFF-8mm-lados-' + Date.now(), {
+    bercos_dimensoes: [{ direita: '9,5 cm', esquerda: null }, { direita: null, esquerda: '9,5 cm' }, null, null],
+  }));
+  assert.equal(op.placas_cimenticia_8mm, 4);
+  assert.deepEqual(op.bercos_dimensoes[0], { direita: '9,5 cm', esquerda: null });
+});

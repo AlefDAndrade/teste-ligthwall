@@ -303,10 +303,10 @@
   <!-- Dimensão por berço (⚙️ ao lado de "Dimensão") — ver abrirModalDimensoes, offline-operacao.js -->
   <div id="off-modal-dimensoes"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;padding:20px">
-    <div class="card" style="width:620px;max-width:94vw;max-height:90vh;overflow-y:auto;padding:24px">
+    <div class="card" style="width:680px;max-width:94vw;max-height:90vh;overflow-y:auto;padding:24px">
       <h2 id="off-dim-titulo" style="font-family:var(--font-display);font-size:1.15rem;color:var(--accent);margin:0 0 8px">Dimensões</h2>
       <p style="color:var(--text-2);font-size:.8rem;margin:0 0 12px;line-height:1.4">
-        Digite uma dimensão em "Dimensão a aplicar" e clique nos berços (ou use De/Até). Berços de 9,5 cm usam placa de 8 mm.</p>
+        Digite uma dimensão em "Dimensão a aplicar" e clique no berço (os dois lados) ou em Direita/Esquerda (só aquele painel). Painéis de 9,5 cm usam placa de 8 mm.</p>
       <div id="off-dim-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
         <div class="form-group" style="margin:0"><label class="form-label">Dimensão padrão da bateria</label>
@@ -317,11 +317,15 @@
           <input class="form-input" type="number" id="off-dim-de" style="width:70px" min="1"></div>
         <div class="form-group" style="margin:0"><label class="form-label">Até</label>
           <input class="form-input" type="number" id="off-dim-ate" style="width:70px" min="1"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Aplicar em</label>
+          <select class="form-input" id="off-dim-lado" style="width:110px">
+            <option value="ambos">Ambos</option><option value="direita">Direita</option><option value="esquerda">Esquerda</option>
+          </select></div>
         <button type="button" class="btn btn-outline-accent btn-sm" onclick="LWOff.aplicarFaixaDimensoes()">Aplicar</button>
         <button type="button" class="btn btn-outline-accent btn-sm" onclick="LWOff.aplicarDimensaoTodos()">Todos</button>
       </div>
       <div id="off-dim-resumo" style="font-size:.78rem;color:var(--text-2);margin-bottom:12px;line-height:1.5"></div>
-      <div id="off-dim-bercos" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px"></div>
+      <div id="off-dim-bercos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:18px"></div>
       <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <button type="button" class="btn btn-ghost btn-sm" onclick="LWOff.restaurarPadraoDimensoes()">↺ Restaurar padrão</button>
         <div style="display:flex;gap:12px">
