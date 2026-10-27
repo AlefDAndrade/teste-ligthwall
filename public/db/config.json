@@ -90,34 +90,25 @@
         "label": "2/P",
         "modo": "simples",
         "tipo": "2p",
-        "paineis_2p_por_berco": 2,
+        "cor": "#3b85ce",
         "cimenticia": {
           "leva": true,
           "quantidade": 2
         },
-        "corHue": 210
+        "combinacaoAvaliacao": null,
+        "paineis_2p_por_berco": 2
       },
       {
         "label": "S/P",
         "modo": "simples",
         "tipo": "sp",
-        "paineis_sp_por_berco": 2,
+        "cor": "#60ce3b",
         "cimenticia": {
           "leva": false,
           "quantidade": 0
         },
-        "corHue": 105
-      },
-      {
-        "label": "3T",
-        "modo": "simples",
-        "tipo": "3t",
-        "paineis_3t_por_berco": 2,
-        "cimenticia": {
-          "leva": false,
-          "quantidade": 0
-        },
-        "corHue": 53
+        "combinacaoAvaliacao": null,
+        "paineis_sp_por_berco": 2
       },
       {
         "label": "HÍBRIDA 2p/sp",
@@ -128,6 +119,74 @@
         ],
         "paineis_2p_por_berco": 1,
         "paineis_sp_por_berco": 1
+      },
+      {
+        "label": "2/T",
+        "modo": "simples",
+        "tipo": "2t",
+        "cor": "#ae00ff",
+        "cimenticia": {
+          "leva": true,
+          "quantidade": 2
+        },
+        "combinacaoAvaliacao": null,
+        "paineis_2t_por_berco": 2
+      },
+      {
+        "label": "1/T",
+        "modo": "simples",
+        "tipo": "1t",
+        "cor": "#5a4064",
+        "cimenticia": {
+          "leva": true,
+          "quantidade": 2
+        },
+        "combinacaoAvaliacao": {
+          "marcas": [
+            {
+              "shape": "circle",
+              "color": "laranja"
+            },
+            {
+              "shape": "circle",
+              "color": "laranja"
+            },
+            {
+              "shape": "circle",
+              "color": "laranja"
+            }
+          ],
+          "indicadorIndex": 1
+        },
+        "paineis_1t_por_berco": 2
+      },
+      {
+        "label": "3/T",
+        "modo": "simples",
+        "tipo": "3t",
+        "cor": "#9a8f4c",
+        "cimenticia": {
+          "leva": true,
+          "quantidade": 2
+        },
+        "combinacaoAvaliacao": {
+          "marcas": [
+            {
+              "shape": "circle",
+              "color": "amarelo"
+            },
+            {
+              "shape": "circle",
+              "color": "verde"
+            },
+            {
+              "shape": "circle",
+              "color": "amarelo"
+            }
+          ],
+          "indicadorIndex": 1
+        },
+        "paineis_3t_por_berco": 2
       }
     ]
   },
@@ -157,6 +216,65 @@
       "volume": 0.1903
     }
   ],
+  "dispositivosAutorizados": [
+    {
+      "deviceId": "dev_1782433045145_jlsd071r9ur",
+      "nome": "Alef - dev",
+      "autorizadoEm": "2026-07-02T00:59:54.089Z"
+    },
+    {
+      "deviceId": "dev_1782564133217_mpowsuqqhbi",
+      "nome": "Celular Lucas",
+      "autorizadoEm": "2026-07-03T17:30:21.957Z"
+    },
+    {
+      "deviceId": "dev_1784979511707_pj4gxuyceu",
+      "nome": "alef pc",
+      "autorizadoEm": "2026-07-31T14:58:14.783Z"
+    },
+    {
+      "deviceId": "dev_5a815587ba51f62f816791b168715144",
+      "nome": "",
+      "ip": "127.0.0.1",
+      "autorizadoEm": "2026-08-18T23:26:14.119Z"
+    },
+    {
+      "deviceId": "dev_92f138f3c7d5f4b4f0ccde975b3c0517",
+      "nome": "",
+      "ip": "127.0.0.1",
+      "autorizadoEm": "2026-08-20T18:12:16.320Z"
+    },
+    {
+      "deviceId": "dev_4e07429c2c2b7841dba9f952594acb39",
+      "nome": "ra",
+      "ip": "127.0.0.1",
+      "autorizadoEm": "2026-08-20T18:18:43.457Z"
+    },
+    {
+      "deviceId": "dev_3476d6382ec0016cc5931222c52cc2be",
+      "nome": "Celular Lucas",
+      "ip": "127.0.0.1",
+      "autorizadoEm": "2026-08-24T11:35:06.333Z"
+    },
+    {
+      "deviceId": "dev_f38d7d94f09c9454868f43cd39782527",
+      "nome": "injetora",
+      "ip": "127.0.0.1",
+      "autorizadoEm": "2026-09-01T11:29:13.496Z"
+    }
+  ],
+  "paletes": {
+    "direitoPrimeira": 2,
+    "direitoSegunda": 4,
+    "esquerdoPrimeira": 1,
+    "esquerdoSegunda": 3
+  },
+  "paletesOrdem": {
+    "stack1": 3,
+    "stack2": 4,
+    "stack3": 1,
+    "stack4": 2
+  },
   "motivos_parada": {
     "opcoes": [
       "Manutenção Corretiva",
@@ -175,25 +293,37 @@
       "Outro"
     ]
   },
-  "tipos_manutencao": {
-    "opcoes": [
-      "Elétrica",
-      "Mecânica"
-    ]
-  },
-  "prioridades": {
+  "insumos_receita": {
     "opcoes": [
       {
-        "label": "BAIXA",
-        "cor": "var(--green)"
+        "nome": "Cimento",
+        "categoria": "padrao",
+        "fixo": true
       },
       {
-        "label": "MÉDIA",
-        "cor": "var(--accent)"
+        "nome": "Água",
+        "categoria": "padrao",
+        "fixo": true
       },
       {
-        "label": "ALTA",
-        "cor": "var(--red)"
+        "nome": "EPS",
+        "categoria": "padrao",
+        "fixo": true
+      },
+      {
+        "nome": "Superplastificante",
+        "categoria": "padrao",
+        "fixo": true
+      },
+      {
+        "nome": "Incorporador de Ar",
+        "categoria": "padrao",
+        "fixo": true
+      },
+      {
+        "nome": "Fibra",
+        "categoria": "custom",
+        "fixo": true
       }
     ]
   }

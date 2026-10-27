@@ -51,13 +51,11 @@
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Dimensão</label>
           <div style="display:flex;gap:6px;align-items:stretch">
-            <input class="form-input auto-filled" id="eo-dimensao" style="flex:1;min-width:0" readonly
-              onblur="_eoConfirmarDimensaoManual()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+            <input class="form-input auto-filled" id="eo-dimensao" style="flex:1;min-width:0" readonly>
             <button type="button" id="eo-btn-editar-dimensao"
               style="flex:0 0 auto;padding:0 12px;align-items:center;justify-content:center"
-              class="btn btn-outline-accent btn-sm" title="Definir uma dimensão específica para esta operação"
-              onclick="_eoEditarDimensao()">✏️</button>
+              class="btn btn-outline-accent btn-sm" title="Configurar a dimensão de cada berço/painel desta operação"
+              onclick="_eoAbrirModalDimensoes()">⚙️</button>
           </div>
         </div>
       </div>

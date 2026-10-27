@@ -1,9 +1,9 @@
 // ─── test/editar-operacao-modal-dimensao-bercos-visuais.test.js ─────────────
 // Cobertura de UI (jsdom, SPA real) do que test/editar-operacao-dimensao-
 // bercos-visuais.test.js cobre no backend: editar a Dimensão no modal
-// "Editar Operação" (✏️, pergunta se mudou o nº de berços) e o editor
+// "Editar Operação" (⚙️, modal de dimensões; pergunta se mudou o nº de berços) e o editor
 // visual "🔲 Berços — Vazou/Não Enchido" (ver app-core.js:
-// abrirEdicaoOperacao/_eoConfirmarDimensaoManual/_eoAbrirBercosVisuais).
+// abrirEdicaoOperacao/_eoAbrirModalDimensoes/_eoAbrirBercosVisuais).
 //
 // Cenário de referência: bateria B7 (public/db/config.json — 20 berços,
 // dimensão "9 cm"), montagem "S/P".
@@ -120,11 +120,10 @@ test('editar Dimensão + "sim, mudou berços" + novo número: preview mostra cap
   window.LW.mostrarPrompt = async () => '8';
 
   window.LWOp = window.LWOp || {}; // abrirGradeMontagem não é chamado aqui, só existe se Personalizada
-  window._eoEditarDimensao(); // destrava
+  await window._eoAbrirModalDimensoes(); // ⚙️ — abre o modal de dimensões
   const input = document.getElementById('eo-dimensao');
-  input.value = '7,5';
-  input.dispatchEvent(new window.Event('input', { bubbles: true }));
-  window._eoEditarDimensao(); // confirma
+  document.getElementById('dim-base').value = '7,5';
+  document.getElementById('dim-btn-confirmar').click();
   await new Promise(r => setTimeout(r, 200));
 
   assert.equal(input.value, '7,5 cm');
@@ -141,10 +140,9 @@ test('salvarEdicaoOperacao: envia a dimensão manual e a capacidade customizada 
 
   window.LW.mostrarConfirmacao = async () => true;
   window.LW.mostrarPrompt = async () => '8';
-  window._eoEditarDimensao();
-  document.getElementById('eo-dimensao').value = '7,5';
-  document.getElementById('eo-dimensao').dispatchEvent(new window.Event('input', { bubbles: true }));
-  window._eoEditarDimensao();
+  await window._eoAbrirModalDimensoes();
+  document.getElementById('dim-base').value = '7,5';
+  document.getElementById('dim-btn-confirmar').click();
   await new Promise(r => setTimeout(r, 200));
 
   await window.salvarEdicaoOperacao();

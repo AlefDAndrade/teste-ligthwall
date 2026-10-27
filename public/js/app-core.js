@@ -4774,11 +4774,15 @@
 
     // Dimensão manual desta edição — mesmo padrão de state.dimensao/
     // dimensaoManual em Registrar Operação (operacao.js): true depois que
-    // a pessoa confirma um valor digitado à mão (✏️, ver
-    // _eoConfirmarDimensaoManual), impede _eoAtualizarPreview() de
+    // a pessoa define uma dimensão diferente da cadastrada pela bateria (⚙️,
+    // ver _eoAplicarResultadoDimensoes), impede _eoAtualizarPreview() de
     // sobrescrever com o label automático da bateria selecionada.
     let _eoDimensao = '';
     let _eoDimensaoManual = false;
+    // Dimensão por berço/painel (bercos_dimensoes: null | [null | "9,5 cm" | {direita, esquerda}]),
+    // editável pelo ⚙️ (LWDimensoes, modal-dimensoes.js). Cópia de trabalho do
+    // registro original — só vai pro servidor ao clicar "Salvar Alterações".
+    let _eoBercosDimensoes = null;
     // Override do NÚMERO de berços desta operação — mesmo padrão de
     // state.bercos_override (operacao.js): null = usa o `bercos`
     // cadastrado da bateria selecionada. Só recebe valor ao confirmar uma
@@ -4815,6 +4819,9 @@
       const bateriaObjAtual = LW.BATERIA_IDS.find(b => b.id === bateria.id_bateria);
       _eoDimensao = bateria.dimensao || bateriaObjAtual?.label || '';
       _eoDimensaoManual = !!bateria.dimensao && bateria.dimensao !== bateriaObjAtual?.label;
+      _eoBercosDimensoes = Array.isArray(bateria.bercos_dimensoes) && bateria.bercos_dimensoes.some(Boolean)
+        ? JSON.parse(JSON.stringify(bateria.bercos_dimensoes))
+        : null;
       _eoBercosOverride = (bateria.capacidade && bateriaObjAtual && bateria.capacidade !== bateriaObjAtual.bercos)
         ? bateria.capacidade
         : null;
@@ -4828,11 +4835,9 @@
       document.getElementById('eo-erro').style.display = 'none';
 
       const inputDimensao = document.getElementById('eo-dimensao');
-      inputDimensao.value = _eoDimensao;
+      inputDimensao.value = _eoTextoCampoDimensao();
       inputDimensao.readOnly = true;
-      inputDimensao.classList.toggle('auto-filled', !_eoDimensaoManual);
-      const btnEditarDimensao = document.getElementById('eo-btn-editar-dimensao');
-      if (btnEditarDimensao) { btnEditarDimensao.textContent = '✏️'; btnEditarDimensao.title = 'Definir uma dimensão específica para esta operação'; }
+      inputDimensao.classList.toggle('auto-filled', !_eoDimensaoManual && !_eoBercosDimensoes);
 
       document.getElementById('eo-ro-data').textContent = bateria.data ? bateria.data.split('-').reverse().join('/') : '—';
       document.getElementById('eo-ro-inicio').textContent = bateria.inicio ? LW.formatTime(bateria.inicio) : '—';
@@ -4886,6 +4891,7 @@
     function fecharEdicaoOperacao() {
       document.getElementById('editar-operacao-modal').style.display = 'none';
       _eoRegistroOriginal = null;
+      _eoBercosDimensoes = null;
       _eoBercosVisuais = null;
       _eoBercosVisuaisOriginal = null;
     }
@@ -4900,12 +4906,15 @@
     // manualmente pra esta edição.
     function _eoAoMudarBateria() {
       _eoBercosOverride = null;
+      // Outra bateria = outros berços: as dimensões por berço/painel da
+      // bateria anterior não valem mais (redefinir pelo ⚙️, se precisar).
+      _eoBercosDimensoes = null;
       if (!_eoDimensaoManual) {
         const bateriaObj = LW.BATERIA_IDS.find(b => b.id === document.getElementById('eo-id-bateria').value);
         _eoDimensao = bateriaObj?.label || '';
-        const inputDimensao = document.getElementById('eo-dimensao');
-        if (inputDimensao) inputDimensao.value = _eoDimensao;
       }
+      const inputDimensao = document.getElementById('eo-dimensao');
+      if (inputDimensao) inputDimensao.value = _eoTextoCampoDimensao();
       _eoAtualizarCapacidadeBercosVisuais();
       _eoAtualizarPreview();
     }
@@ -4921,55 +4930,71 @@
       return bateriaObj?.bercos || 0;
     }
 
-    // Destrava/confirma o campo Dimensão — mesma interação de Registrar
-    // Operação (ver editarDimensao, operacao.js): 1º clique destrava e
-    // foca, 2º clique (ou Enter/blur) confirma.
-    function _eoEditarDimensao() {
-      const input = document.getElementById('eo-dimensao');
-      const btn = document.getElementById('eo-btn-editar-dimensao');
-      if (!input) return;
-      if (input.readOnly) {
-        input.readOnly = false;
-        input.focus();
-        input.select();
-        if (btn) { btn.textContent = '✓'; btn.title = 'Confirmar esta dimensão'; }
-      } else {
-        _eoConfirmarDimensaoManual();
-      }
+    // Texto do campo "Dimensão": a dimensão padrão, ou — numa operação com
+    // espessuras mistas — todas juntas (ex: "9,5 cm + 9 cm"). Mesma regra de
+    // _textoCampoDimensao (operacao.js).
+    function _eoTextoCampoDimensao() {
+      const dims = LW.dimensoesDistintas(_eoCapacidadeAtual(), _eoDimensao, _eoBercosDimensoes);
+      return dims.length ? dims.join(' + ') : (_eoDimensao || '');
     }
 
-    // Trava o campo de novo e grava o valor digitado como definitivo pra
-    // esta edição — chamado ao clicar de novo no ✓, apertar Enter, ou
-    // sair do campo (blur). Mesmo fluxo de _confirmarDimensaoManual
-    // (operacao.js): dimensão diferente da anterior + bateria já
-    // selecionada -> pergunta se isso mudou o número de berços.
-    async function _eoConfirmarDimensaoManual() {
-      const input = document.getElementById('eo-dimensao');
-      const btn = document.getElementById('eo-btn-editar-dimensao');
-      if (!input || input.readOnly) return; // já estava travado — nada a confirmar
+    // ⚙️ — abre o modal compartilhado de dimensões (modal-dimensoes.js, o
+    // mesmo de Registrar Operação) pra corrigir a dimensão desta operação,
+    // inclusive berço a berço / painel a painel (ex: operações antigas de
+    // 9,5 cm, gravadas como bateria uniforme). Só altera esta edição; quem
+    // grava é salvarEdicaoOperacao().
+    async function _eoAbrirModalDimensoes() {
+      if (!_eoRegistroOriginal) return;
+      const idBateria = document.getElementById('eo-id-bateria').value;
+      if (!idBateria) { LW.mostrarAlerta('Selecione a bateria antes de configurar as dimensões.', { tipo: 'aviso' }); return; }
+      // Marcações de Não Enchido (descontam placas) — garante que já carregaram.
+      if (!_eoBercosVisuais) await _eoCarregarBercosVisuais();
+      const tipoMontagem = document.getElementById('eo-tipo-montagem').value;
+      LWDimensoes.abrir({
+        titulo: idBateria,
+        capacidade: _eoCapacidadeAtual(),
+        dimensaoBase: _eoDimensao,
+        bercosDimensoes: _eoBercosDimensoes,
+        calcularPlacas8mm: ({ capacidade, dimensaoGeral, bercosDimensoes }) => LW.calcPlacas8mm({
+          tipoMontagem,
+          bercosPersonalizados: _eoBercosPersonalizados,
+          capacidade, dimensaoGeral, bercosDimensoes,
+          marcacoes: _eoConverterBercosVisuaisParaMarcacoes(_eoBercosVisuais),
+        }),
+        onConfirmar: _eoAplicarResultadoDimensoes,
+      });
+    }
 
+    async function _eoAplicarResultadoDimensoes({ dimensao, bercosDimensoes }) {
+      if (!_eoRegistroOriginal) return; // modal de edição fechou enquanto este abria
+      const bateriaObj = LW.BATERIA_IDS.find(b => b.id === document.getElementById('eo-id-bateria').value);
       const valorAnterior = _eoDimensao;
-      const valor = LW.formatarDimensaoLive(input.value.trim(), true);
-      input.value = valor;
-      _eoDimensao = valor;
-      _eoDimensaoManual = valor !== '';
-      input.readOnly = true;
-      input.classList.toggle('auto-filled', !_eoDimensaoManual);
-      if (btn) { btn.textContent = '✏️'; btn.title = 'Definir uma dimensão específica para esta operação'; }
-
+      _eoDimensao = dimensao;
+      _eoDimensaoManual = dimensao !== (bateriaObj?.label || '');
       if (!_eoDimensaoManual) {
-        // Volta a automático: some junto qualquer override de berços que
-        // essa dimensão manual tivesse trazido.
+        // Voltou à dimensão cadastrada da bateria: some junto qualquer
+        // override de berços que uma dimensão manual tivesse trazido.
         _eoBercosOverride = null;
         _eoAtualizarCapacidadeBercosVisuais();
-      } else if (valor !== valorAnterior && document.getElementById('eo-id-bateria').value) {
+      } else if (dimensao !== valorAnterior) {
         await _eoPerguntarMudancaBercos();
       }
+      // O nº de berços pode ter mudado acima: ajusta o tamanho do array
+      // (berços novos = dimensão padrão = null).
+      const capacidade = _eoCapacidadeAtual();
+      const redim = Array.isArray(bercosDimensoes)
+        ? Array.from({ length: capacidade }, (_x, i) => bercosDimensoes[i] ?? null)
+        : null;
+      _eoBercosDimensoes = redim && redim.some(Boolean) ? redim : null;
+
+      const input = document.getElementById('eo-dimensao');
+      input.value = _eoTextoCampoDimensao();
+      input.classList.toggle('auto-filled', !_eoDimensaoManual && !_eoBercosDimensoes);
       _eoAtualizarPreview();
     }
 
     // Chamada sempre que uma Dimensão manual É REALMENTE alterada (ver
-    // _eoConfirmarDimensaoManual, acima) — mesmo texto/fluxo de
+    // _eoAplicarResultadoDimensoes, acima) — mesmo texto/fluxo de
     // _perguntarMudancaBercos (operacao.js). O número vira um OVERRIDE só
     // desta edição (_eoBercosOverride), NUNCA mexe no cadastro fixo da
     // bateria em Configurações.
@@ -5039,15 +5064,14 @@
       // busca (_eoCarregarBercosVisuais) terminar.
       const marcacoes = _eoConverterBercosVisuaisParaMarcacoes(_eoBercosVisuais);
       const resultado = LW.aplicarNaoEnchidosNoCalc(calcBase, tipoMontagem, _eoBercosPersonalizados, marcacoes);
-      // Placas de 8 mm (painéis de 9,5 cm) — esta tela não edita a dimensão
-      // berço a berço (isso é feito em Registrar Operação, pelo modal ⚙️),
-      // então reaproveita os overrides já gravados no registro original.
+      // Placas de 8 mm (painéis de 9,5 cm) — usa as dimensões por berço/painel
+      // desta edição (_eoBercosDimensoes, editáveis pelo ⚙️).
       resultado.placas_cimenticia_8mm = LW.calcPlacas8mm({
         tipoMontagem,
         bercosPersonalizados: _eoBercosPersonalizados,
         capacidade: bercos,
         dimensaoGeral: _eoDimensao || (_eoRegistroOriginal && _eoRegistroOriginal.dimensao) || '',
-        bercosDimensoes: _eoRegistroOriginal && _eoRegistroOriginal.bercos_dimensoes,
+        bercosDimensoes: _eoBercosDimensoes,
         marcacoes,
       });
       return resultado;
@@ -5179,7 +5203,7 @@
 
       const calc = _eoCalcularPaineis(tipoMontagem, bercos);
       document.getElementById('eo-preview').innerHTML = `
-        <div>Dimensão: <strong style="color:var(--text)">${_eoDimensao || '—'}</strong></div>
+        <div>Dimensão: <strong style="color:var(--text)">${_eoTextoCampoDimensao() || '—'}</strong></div>
         <div>Berços: <strong style="color:var(--text)">${bercos}${_eoBercosOverride ? ' (customizado)' : ''}</strong></div>
         <div>Painéis Total: <strong style="color:var(--text)">${calc.total_paineis}</strong></div>
         <div>m² Total: <strong style="color:var(--text)">${calc.m2_total.toFixed(2)}</strong></div>
@@ -5226,6 +5250,10 @@
         turno,
         motivo_atraso: motivoAtraso,
         ...(tipoMontagem === LW.TIPO_MONTAGEM_PERSONALIZADA ? { bercos_personalizados: _eoBercosPersonalizados } : {}),
+        // Só entra se mudou (null = sem override, igual a "sem campo" no original) —
+        // senão um registro antigo sem o campo geraria um diff falso na auditoria.
+        ...(JSON.stringify(_eoBercosDimensoes ?? null) !== JSON.stringify(_eoRegistroOriginal.bercos_dimensoes ?? null)
+          ? { bercos_dimensoes: _eoBercosDimensoes ?? null } : {}),
         ...calc,
       };
 
