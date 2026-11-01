@@ -590,6 +590,15 @@ h4 {
   flex-wrap: wrap;
 }
 
+/* Status da operação + botão Pausar/Retomar (fica ao lado do status — ver
+   page-operacao.html). */
+.op-status-banner-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .op-status-triggers {
   display: flex;
   gap: 8px;
@@ -601,6 +610,9 @@ h4 {
   display: flex;
   align-items: center;
   gap: 24px;
+  /* Timer nunca é espremido nem empurrado: quando falta espaço, quem
+     quebra de linha é o lado esquerdo (status + botões). */
+  flex: none;
 }
 
 /* Página de Paradas — formulário de registro (esquerda) + KPIs/gráfico
@@ -2808,20 +2820,45 @@ td.mono {
 /* Berços da receita | berços desejados | fator de ajuste */
 .calc-rec-campos {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
   gap: 12px;
   align-items: end;
 }
 
+.calc-rec-campos-container {
+  display: flex;
+ justify-content: space-between;
+ width: 90%;
+}
+
+.calc-rec-campos-container-quantidade{
+  width: 45%;
+}
+
 .calc-rec-campos .form-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   padding: 8px 10px;
   font-size: 1.1rem;
   font-weight: 700;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* − [ berços ] + ocupa a largura toda da coluna (os da tabela são compactos) */
+.calc-rec-campos .calc-rec-step {
+  display: flex;
+}
+
+.calc-rec-campos .calc-rec-btn-passo {
+  width: 34px;
+  font-size: 1.2rem;
 }
 
 .calc-rec-fator {
-  min-width: 96px;
-  text-align: right;
+  width: 90%;
+  text-align: center;
 }
 
 .calc-rec-fator strong {

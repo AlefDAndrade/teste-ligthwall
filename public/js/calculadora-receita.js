@@ -149,10 +149,13 @@
     const acVal = el('calc-rec-ac-val');
     const acMsg = el('calc-rec-ac-msg');
 
-    // Botão − / + de um insumo (dir = -1 ou 1). Texto vem de COMPONENTES (constante do código).
+    // Botão − / + de um insumo (dir = -1 ou 1). Aponta pro input por id (data-alvo) e
+    // leva o passo em data-passo — o mesmo formato dos botões de berços no partial.
+    // Texto vem de COMPONENTES (constante do código).
     function botaoPasso(c, dir) {
       const acao = dir < 0 ? 'Diminuir' : 'Aumentar';
-      return '<button class="calc-rec-btn-passo" type="button" data-insumo="' + c.id + '" data-dir="' + dir + '"' +
+      return '<button class="calc-rec-btn-passo" type="button" data-alvo="calc-rec-base-' + c.id + '"' +
+        ' data-passo="' + c.passo + '" data-dir="' + dir + '"' +
         ' title="' + acao + ' ' + formatar(c.passo, 3) + '" aria-label="' + acao + ' ' + c.nome + '">' +
         (dir < 0 ? '\u2212' : '+') + '</button>';
     }
@@ -280,17 +283,18 @@
     }
 
     caixa.addEventListener('input', calcular);
-    function ajustarInsumo(btn) {
-      const c = COMPONENTES.find(x => x.id === btn.dataset.insumo);
-      const inp = el('calc-rec-base-' + btn.dataset.insumo);
-      if (!c || !inp) return;
-      inp.value = String(ajustarValor(parseFloat(inp.value), c.passo, Number(btn.dataset.dir)));
+    // Serve aos botões dos insumos e aos de berços: o botão diz qual input mexer e o passo.
+    function ajustarCampo(btn) {
+      const inp = el(btn.dataset.alvo);
+      const passo = parseFloat(btn.dataset.passo);
+      if (!inp || !(passo > 0)) return;
+      inp.value = String(ajustarValor(parseFloat(inp.value), passo, Number(btn.dataset.dir)));
       calcular();
     }
 
     caixa.addEventListener('click', e => {
       const passo = e.target.closest('.calc-rec-btn-passo');
-      if (passo && caixa.contains(passo)) { ajustarInsumo(passo); return; }
+      if (passo && caixa.contains(passo)) { ajustarCampo(passo); return; }
       const btn = e.target.closest('.calc-rec-copy');
       if (btn && caixa.contains(btn)) copiar(btn);
     });

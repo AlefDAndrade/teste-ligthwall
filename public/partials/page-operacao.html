@@ -38,7 +38,15 @@
         <div class="op-info-column">
           <div class="card op-status-card">
             <div class="op-status-left">
-              <div id="status-banner"><span class="badge badge-gray">⬤ Aguardando início</span></div>
+              <!-- Status + Pausar/Retomar lado a lado. O botão é IRMÃO de #status-banner (não filho):
+                   updateStatusBanner() reescreve o innerHTML do banner a cada mudança de estado. -->
+              <div class="op-status-banner-row">
+                <div id="status-banner"><span class="badge badge-gray">⬤ Aguardando início</span></div>
+                <button class="btn btn-ghost btn-sm" id="btn-pausar-operacao" style="display:none"
+                  title="Pausar o cronômetro desta operação (ex: continuar em outro dia)">
+                  ⏸ Pausar
+                </button>
+              </div>
 
               <!-- Trigger Buttons for Floating Panels -->
               <div class="op-status-triggers">
@@ -77,15 +85,34 @@
                       </div>
 
                       <div class="calc-rec-campos">
-                        <div>
-                          <label class="form-label" for="calc-rec-bercos-base">Esta receita enche quantos berços?</label>
-                          <input class="form-input" type="number" id="calc-rec-bercos-base" value="9" min="0.01"
-                            step="any" inputmode="decimal">
-                        </div>
-                        <div>
-                          <label class="form-label" for="calc-rec-bercos-alvo">Quero encher quantos berços?</label>
-                          <input class="form-input" type="number" id="calc-rec-bercos-alvo" value="4" min="0"
-                            step="any" inputmode="decimal">
+                        <div class="calc-rec-campos-container">
+                          <div class="calc-rec-campos-container-quantidade">
+                            <label class="form-label" for="calc-rec-bercos-base">Esta receita enche quantos
+                              berços?</label>
+                            <div class="calc-rec-step">
+                              <button class="calc-rec-btn-passo" type="button" data-alvo="calc-rec-bercos-base"
+                                data-passo="1" data-dir="-1" title="Diminuir 1"
+                                aria-label="Diminuir berços da receita">−</button>
+                              <input class="form-input" type="number" id="calc-rec-bercos-base" value="9" min="0.01"
+                                step="any" inputmode="decimal">
+                              <button class="calc-rec-btn-passo" type="button" data-alvo="calc-rec-bercos-base"
+                                data-passo="1" data-dir="1" title="Aumentar 1"
+                                aria-label="Aumentar berços da receita">+</button>
+                            </div>
+                          </div>
+                          <div class="calc-rec-campos-container-quantidade">
+                            <label class="form-label" for="calc-rec-bercos-alvo">Quero encher quantos berços?</label>
+                            <div class="calc-rec-step">
+                              <button class="calc-rec-btn-passo" type="button" data-alvo="calc-rec-bercos-alvo"
+                                data-passo="1" data-dir="-1" title="Diminuir 1"
+                                aria-label="Diminuir berços desejados">−</button>
+                              <input class="form-input" type="number" id="calc-rec-bercos-alvo" value="4" min="0"
+                                step="any" inputmode="decimal">
+                              <button class="calc-rec-btn-passo" type="button" data-alvo="calc-rec-bercos-alvo"
+                                data-passo="1" data-dir="1" title="Aumentar 1"
+                                aria-label="Aumentar berços desejados">+</button>
+                            </div>
+                          </div>
                         </div>
                         <div class="calc-rec-fator">
                           <span class="form-label">Fator de ajuste</span>
@@ -99,7 +126,8 @@
                           <tr>
                             <th>Insumos</th>
                             <th class="num">Quantidade base</th>
-                            <th class="num calc-rec-col-res">Exata para <strong id="calc-rec-alvo-txt">4</strong> berços</th>
+                            <th class="num calc-rec-col-res">Exata para <strong id="calc-rec-alvo-txt">4</strong> berços
+                            </th>
                           </tr>
                         </thead>
                         <tbody id="calc-rec-body"></tbody>
@@ -117,10 +145,6 @@
                     </div>
                   </div>
                 </div>
-                <button class="btn btn-ghost btn-sm" id="btn-pausar-operacao" style="display:none"
-                  title="Pausar o cronômetro desta operação (ex: continuar em outro dia)">
-                  ⏸ Pausar
-                </button>
               </div>
             </div>
 
@@ -164,11 +188,9 @@
               <div class="form-group">
                 <label class="form-label">Dimensão (Tipo)</label>
                 <div style="display:flex;gap:6px;align-items:stretch">
-                  <input class="form-input auto-filled" id="op-dimensao" readonly
-                    inputmode="decimal"
+                  <input class="form-input auto-filled" id="op-dimensao" readonly inputmode="decimal"
                     placeholder="Definido pela bateria" style="flex:1;min-width:0">
-                  <button type="button" id="btn-editar-dimensao"
-                    onmousedown="event.preventDefault()"
+                  <button type="button" id="btn-editar-dimensao" onmousedown="event.preventDefault()"
                     style="flex:0 0 auto;padding:0 12px;display:flex;align-items:center;justify-content:center"
                     class="btn btn-outline-accent btn-sm" title="Configurar a dimensão de cada berço desta bateria"
                     onclick="LWOp.abrirModalDimensoes()">⚙️</button>
@@ -265,7 +287,8 @@
                 <div style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--green)"
                   id="op-placas-cimenticia">—</div>
                 <!-- Quebra por espessura (8 mm = painéis de 9,5 cm) — só aparece quando há placa de 8 mm -->
-                <div id="op-placas-espessura" style="display:none;font-size:.62rem;color:var(--text-3);margin-top:2px;line-height:1.3"></div>
+                <div id="op-placas-espessura"
+                  style="display:none;font-size:.62rem;color:var(--text-3);margin-top:2px;line-height:1.3"></div>
               </div>
             </div>
           </div>

@@ -234,11 +234,12 @@ test('DOM: o botão do partial abre o popover certo pelo togglePopover do app', 
 });
 
 // ── Botões − / + ────────────────────────────────────────────────────────────
-const botaoPasso = (insumo, dir) =>
-  doc.querySelector('.calc-rec-btn-passo[data-insumo="' + insumo + '"][data-dir="' + dir + '"]');
+const botaoCampo = (idInput, dir) =>
+  doc.querySelector('.calc-rec-btn-passo[data-alvo="' + idInput + '"][data-dir="' + dir + '"]');
+const botaoPasso = (insumo, dir) => botaoCampo('calc-rec-base-' + insumo, dir);
 
 test('DOM: cada insumo tem um botão − e um + ao lado da quantidade base', () => {
-  assert.equal(doc.querySelectorAll('.calc-rec-btn-passo').length, 10);
+  assert.equal(doc.querySelectorAll('#calc-rec-body .calc-rec-btn-passo').length, 10);
   calc.COMPONENTES.forEach(c => {
     assert.ok(botaoPasso(c.id, -1) && botaoPasso(c.id, 1), c.id);
   });
@@ -292,4 +293,76 @@ test('DOM: "Restaurar padrão" desfaz o que os botões mudaram', () => {
   $('calc-rec-resetar').click();
   assert.equal($('calc-rec-base-cimento').value, '1050');
   assert.equal($('calc-rec-base-ar').value, '4.6');
+});
+
+// ── Botões − / + dos campos de berços ───────────────────────────────────────
+
+test('DOM: todo botão − / + aponta pra um input que existe e tem passo positivo', () => {
+  const botoes = doc.querySelectorAll('.calc-rec-btn-passo');
+  assert.equal(botoes.length, 14); // 10 dos insumos + 4 dos berços
+  botoes.forEach(b => {
+    const inp = $(b.dataset.alvo);
+    assert.ok(inp && inp.type === 'number', 'alvo inexistente: ' + b.dataset.alvo);
+    assert.ok(parseFloat(b.dataset.passo) > 0, 'passo inválido em ' + b.dataset.alvo);
+    assert.ok(b.dataset.dir === '-1' || b.dataset.dir === '1');
+    assert.ok(b.getAttribute('aria-label'), 'falta aria-label em ' + b.dataset.alvo);
+  });
+});
+
+test('DOM: os dois campos de berços têm − e +', () => {
+  ['calc-rec-bercos-base', 'calc-rec-bercos-alvo'].forEach(id => {
+    assert.ok(botaoCampo(id, -1) && botaoCampo(id, 1), id);
+  });
+});
+
+test('DOM: + em "Quero encher" sobe 1 berço e o resultado recalcula', () => {
+  botaoCampo('calc-rec-bercos-alvo', 1).click();
+  assert.equal($('calc-rec-bercos-alvo').value, '5');
+  assert.equal($('calc-rec-alvo-txt').textContent, '5');
+  assert.equal($('calc-rec-ex-cimento').textContent, '583,33'); // 1050 * 5/9
+  botaoCampo('calc-rec-bercos-alvo', -1).click();
+  botaoCampo('calc-rec-bercos-alvo', -1).click();
+  assert.equal($('calc-rec-bercos-alvo').value, '3');
+  assert.equal($('calc-rec-ex-cimento').textContent, '350'); // 1050 * 3/9
+});
+
+test('DOM: − em "Esta receita enche" muda o fator (9 → 8 berços: 4/8 = 0,5)', () => {
+  botaoCampo('calc-rec-bercos-base', -1).click();
+  assert.equal($('calc-rec-bercos-base').value, '8');
+  assert.equal($('calc-rec-fator').textContent, '0,5');
+  assert.equal($('calc-rec-ex-cimento').textContent, '525'); // 1050 * 0,5
+});
+
+test('DOM: "Quero encher" para em 0 (receita zerada, sem erro); "Esta receita" em 0 mostra o aviso e volta com +', () => {
+  digitar('calc-rec-bercos-alvo', 1);
+  botaoCampo('calc-rec-bercos-alvo', -1).click();
+  botaoCampo('calc-rec-bercos-alvo', -1).click(); // já em 0: continua 0
+  assert.equal($('calc-rec-bercos-alvo').value, '0');
+  assert.equal($('calc-rec-aviso').hidden, true);
+  assert.equal($('calc-rec-ex-cimento').textContent, '0');
+
+  digitar('calc-rec-bercos-base', 1);
+  botaoCampo('calc-rec-bercos-base', -1).click();
+  assert.equal($('calc-rec-bercos-base').value, '0');
+  assert.equal($('calc-rec-aviso').hidden, false);
+  botaoCampo('calc-rec-bercos-base', 1).click();
+  assert.equal($('calc-rec-bercos-base').value, '1');
+  assert.equal($('calc-rec-aviso').hidden, true);
+});
+
+test('DOM: berço fracionado digitado continua fracionado (4,5 + 1 = 5,5) e campo vazio vira 1', () => {
+  digitar('calc-rec-bercos-alvo', 4.5);
+  botaoCampo('calc-rec-bercos-alvo', 1).click();
+  assert.equal($('calc-rec-bercos-alvo').value, '5.5');
+  digitar('calc-rec-bercos-alvo', '');
+  botaoCampo('calc-rec-bercos-alvo', 1).click();
+  assert.equal($('calc-rec-bercos-alvo').value, '1');
+});
+
+test('DOM: "Restaurar padrão" desfaz o que os botões de berços mudaram', () => {
+  botaoCampo('calc-rec-bercos-base', 1).click();
+  botaoCampo('calc-rec-bercos-alvo', 1).click();
+  $('calc-rec-resetar').click();
+  assert.equal($('calc-rec-bercos-base').value, '9');
+  assert.equal($('calc-rec-bercos-alvo').value, '4');
 });
