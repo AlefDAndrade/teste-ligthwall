@@ -2745,6 +2745,404 @@ td.mono {
 .ao-popover.active {
   display: block;
 }
+
+/* ---- Calculadora de Receita (popover "🧮 Calc. Receita") ----
+   Markup em partials/page-operacao.html; lógica em js/calculadora-receita.js.
+   Tudo escopado em .calc-rec* e feito só com as variáveis do tema, pra
+   funcionar nos temas escuro/claro sem cor fixa.
+   Layout largo e baixo: campos de berços lado a lado no topo e UMA tabela
+   (insumo | base | exata) em vez de duas empilhadas. */
+.calc-rec-wrap {
+  position: relative;
+}
+
+.ao-popover.calc-rec-popover {
+  width: 580px;
+  padding: 14px 16px;
+}
+
+.calc-rec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: .85rem;
+  color: var(--text);
+}
+
+.calc-rec .form-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.calc-rec-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 8px;
+  border-left: 3px solid var(--accent);
+  font-family: var(--font-display);
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.calc-rec-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: .7rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color .15s;
+}
+
+.calc-rec-link:hover {
+  color: var(--accent);
+}
+
+/* Berços da receita | berços desejados | fator de ajuste */
+.calc-rec-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.calc-rec-campos .form-input {
+  padding: 8px 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.calc-rec-fator {
+  min-width: 96px;
+  text-align: right;
+}
+
+.calc-rec-fator strong {
+  display: block;
+  padding: 8px 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.calc-rec-aviso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(239, 68, 68, .3);
+  color: var(--red);
+  font-size: .78rem;
+}
+
+.calc-rec-aviso[hidden] {
+  display: none;
+}
+
+.calc-rec-tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.calc-rec-tabela th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.calc-rec-tabela td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.calc-rec-tabela tr:last-child td {
+  border-bottom: none;
+}
+
+.calc-rec-tabela .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-rec-tabela .form-input {
+  width: 84px;
+  padding: 5px 8px;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* − [ quantidade ] + */
+.calc-rec-step {
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.calc-rec-btn-passo {
+  flex: none;
+  width: 28px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.calc-rec-btn-passo:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.calc-rec-btn-passo:active {
+  transform: scale(.94);
+}
+
+/* Coluna do resultado em destaque (verde) — é o que o operador copia. */
+.calc-rec-col-res {
+  background: rgba(16, 185, 129, .07);
+}
+
+.calc-rec-tabela th.calc-rec-col-res {
+  color: var(--green);
+}
+
+.calc-rec-tabela th.calc-rec-col-res strong {
+  font-size: .8rem;
+}
+
+.calc-rec-tabela td.calc-rec-col-res span {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.calc-rec-rodape {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calc-rec-ac {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  font-size: .72rem;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.calc-rec-ac strong {
+  font-size: .85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.calc-rec-ac-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.calc-rec-ac-sep {
+  opacity: .3;
+}
+
+.calc-rec-ac.ok {
+  background: rgba(16, 185, 129, .1);
+  border-color: rgba(16, 185, 129, .3);
+  color: var(--green);
+}
+
+.calc-rec-ac.ok .calc-rec-ac-dot {
+  background: var(--green);
+}
+
+.calc-rec-ac.ok strong {
+  color: var(--green);
+}
+
+.calc-rec-ac.fora {
+  background: rgba(239, 68, 68, .1);
+  border-color: rgba(239, 68, 68, .3);
+  color: var(--red);
+}
+
+.calc-rec-ac.fora .calc-rec-ac-dot {
+  background: var(--red);
+}
+
+.calc-rec-ac.fora strong {
+  color: var(--red);
+}
+
+.calc-rec-nota {
+  margin: 0;
+  font-size: .66rem;
+  line-height: 1.4;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.calc-rec-copy-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.calc-rec-copy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.calc-rec-copy:hover {
+  color: var(--text);
+  background: var(--bg-3);
+  border-color: var(--border-2);
+}
+
+.calc-rec-copy:active {
+  transform: scale(.92);
+}
+
+.calc-rec-copy svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.calc-rec-copy .calc-rec-ico-ok,
+.calc-rec-copy.ok .calc-rec-ico-copiar {
+  display: none;
+}
+
+.calc-rec-copy.ok .calc-rec-ico-ok {
+  display: block;
+}
+
+.calc-rec-copy.ok {
+  color: var(--green);
+  background: rgba(16, 185, 129, .1);
+  border-color: rgba(16, 185, 129, .3);
+}
+
+/* Tablet e celular: o botão fica longe da borda esquerda e um popover de
+   580px estouraria a tela pela direita — aqui ele ancora no card de status
+   (logo abaixo dele, limitado à largura do card) em vez de no botão, e a
+   seta (que apontaria pro botão) sai. */
+@media (max-width: 900px) {
+  .calc-rec-wrap {
+    position: static;
+  }
+
+  .op-status-card {
+    position: relative;
+  }
+
+  .ao-popover.calc-rec-popover {
+    left: 0;
+    width: 580px;
+    max-width: 100%;
+  }
+
+  .calc-rec-popover::before {
+    display: none;
+  }
+}
+
+/* Celular: 2 campos de berços lado a lado e o fator embaixo; rodapé empilha. */
+@media (max-width: 600px) {
+  .calc-rec-campos {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .calc-rec-fator {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .calc-rec-fator .form-label {
+    margin-bottom: 0;
+  }
+
+  .calc-rec-fator strong {
+    padding: 0;
+  }
+
+  .calc-rec-tabela th,
+  .calc-rec-tabela td {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .calc-rec-tabela .form-input {
+    width: 58px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .calc-rec-step {
+    gap: 3px;
+  }
+
+  .calc-rec-btn-passo {
+    width: 26px;
+  }
+
+  .calc-rec-copy-cell {
+    gap: 4px;
+  }
+
+  .calc-rec-rodape {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ============================================================
    ESTILOS PARA TRAÇOS REAPROVEITADOS
    ============================================================ */

@@ -63,6 +63,60 @@
                     </div>
                   </div>
                 </div>
+                <!-- Calculadora de receita dimensionada — lógica em js/calculadora-receita.js
+                     (preenche as linhas das tabelas e liga os eventos de #calc-rec). -->
+                <div class="calc-rec-wrap">
+                  <button class="btn btn-ghost btn-sm" onclick="LWOp.togglePopover('popover-calc-receita', event)">
+                    🧮 Calc. Receita
+                  </button>
+                  <div id="popover-calc-receita" class="ao-popover calc-rec-popover">
+                    <div class="calc-rec" id="calc-rec">
+                      <div class="calc-rec-h">
+                        <span>Receita dimensionada</span>
+                        <button class="calc-rec-link" id="calc-rec-resetar" type="button">Restaurar padrão</button>
+                      </div>
+
+                      <div class="calc-rec-campos">
+                        <div>
+                          <label class="form-label" for="calc-rec-bercos-base">Esta receita enche quantos berços?</label>
+                          <input class="form-input" type="number" id="calc-rec-bercos-base" value="9" min="0.01"
+                            step="any" inputmode="decimal">
+                        </div>
+                        <div>
+                          <label class="form-label" for="calc-rec-bercos-alvo">Quero encher quantos berços?</label>
+                          <input class="form-input" type="number" id="calc-rec-bercos-alvo" value="4" min="0"
+                            step="any" inputmode="decimal">
+                        </div>
+                        <div class="calc-rec-fator">
+                          <span class="form-label">Fator de ajuste</span>
+                          <strong id="calc-rec-fator">–</strong>
+                        </div>
+                      </div>
+                      <div class="calc-rec-aviso" id="calc-rec-aviso" hidden></div>
+
+                      <table class="calc-rec-tabela">
+                        <thead>
+                          <tr>
+                            <th>Insumos</th>
+                            <th class="num">Quantidade base</th>
+                            <th class="num calc-rec-col-res">Exata para <strong id="calc-rec-alvo-txt">4</strong> berços</th>
+                          </tr>
+                        </thead>
+                        <tbody id="calc-rec-body"></tbody>
+                      </table>
+
+                      <div class="calc-rec-rodape">
+                        <div class="calc-rec-ac" id="calc-rec-ac-box">
+                          <span class="calc-rec-ac-dot"></span>
+                          <span>Relação A/C: <strong id="calc-rec-ac-val">–</strong></span>
+                          <span class="calc-rec-ac-sep">|</span>
+                          <span id="calc-rec-ac-msg">calculando…</span>
+                        </div>
+                        <p class="calc-rec-nota">Valores na unidade da receita original. Toque no ícone para copiar.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <button class="btn btn-ghost btn-sm" id="btn-pausar-operacao" style="display:none"
                   title="Pausar o cronômetro desta operação (ex: continuar em outro dia)">
                   ⏸ Pausar
