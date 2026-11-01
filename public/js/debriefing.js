@@ -283,10 +283,14 @@
         <span class="dbf-stat-val">${cab.qtdBaterias ? fmtNum(cab.mediaTracos, 1) : '—'}</span>
         <span class="dbf-stat-label">Média/bateria</span>
       </div>
-      <div class="dbf-stat dbf-stat-wide" title="Traços do dia 1 até o dia selecionado (${mm.tracosMes}) ÷ dias do mês (${mm.diasMes})">
-        <span class="dbf-stat-val">${fmtNum(mm.mediaMensal, 1)}</span>
-        <span class="dbf-stat-label">Média mensal (traços/dia)</span>
-      </div>
+      <!--
+       vou adicionar esse comentario para me lembrar que estou ocultando essa parte do debriefing.
+       pois foi pedido para não mostrar a media mensal, pois estava confundindo os operadores.
+       <div class="dbf-stat dbf-stat-wide" title="Traços do dia 1 até o dia selecionado (${mm.tracosMes}) ÷ dias do mês (${mm.diasMes})">
+       <span class="dbf-stat-val">${fmtNum(mm.mediaMensal, 1)}</span>
+       <span class="dbf-stat-label">Média mensal (traços/dia)</span>
+       </div>
+       -->
     </div>`;
 
     if (!estrutura.length) {
