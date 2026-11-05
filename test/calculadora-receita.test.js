@@ -51,7 +51,7 @@ test('validarBercos: recusa receita que enche 0/vazio e alvo negativo/vazio', ()
   assert.equal(calc.calcularReceita(BASE_PADRAO, 0, 4).ok, false);
 });
 
-test('avaliarAC: faixa ideal 0,35–0,40 (limites incluídos)', () => {
+test('avaliarAC: faixa ideal 0.35–0.40 (limites incluídos)', () => {
   assert.equal(calc.avaliarAC(1000, 350).situacao, 'ideal');
   assert.equal(calc.avaliarAC(1000, 375).situacao, 'ideal');
   assert.equal(calc.avaliarAC(1000, 400).situacao, 'ideal');
@@ -67,12 +67,11 @@ test('avaliarAC: sem cimento (ou água negativa/vazia) não calcula', () => {
   assert.equal(calc.avaliarAC(1000, 0).valido, true); // água 0 é válido (A/C = 0 → "abaixo")
 });
 
-test('formatar: pt-BR; sem milhar quando for pra copiar', () => {
-  assert.equal(calc.formatar(1050, 2), '1.050');
-  assert.equal(calc.formatar(1050, 2, false), '1050');
-  assert.equal(calc.formatar(1050 * 4 / 9, 2), '466,67');
-  assert.equal(calc.formatar(4 / 9, 4), '0,4444');
-  assert.equal(calc.formatar(2333.333333, 2, false), '2333,33');
+test('formatar: ponto decimal e sem separador de milhar', () => {
+  assert.equal(calc.formatar(1050, 2), '1050');
+  assert.equal(calc.formatar(1050 * 4 / 9, 2), '466.67');
+  assert.equal(calc.formatar(4 / 9, 4), '0.4444');
+  assert.equal(calc.formatar(2333.333333, 2), '2333.33');
   assert.equal(calc.formatar(5, 2), '5');
 });
 
@@ -125,10 +124,10 @@ test('DOM: monta 1 linha por insumo (base + resultado), com o cálculo padrão j
   assert.equal($('calc-rec-body').querySelectorAll('tr').length, 5);
   assert.equal(doc.querySelectorAll('#calc-rec-body input').length, 5);
   assert.equal(doc.querySelectorAll('#calc-rec-body .calc-rec-copy').length, 5);
-  assert.equal($('calc-rec-fator').textContent, '0,4444');
+  assert.equal($('calc-rec-fator').textContent, '0.4444');
   assert.equal($('calc-rec-alvo-txt').textContent, '4');
-  assert.equal($('calc-rec-ex-cimento').textContent, '466,67');
-  assert.equal($('calc-rec-ex-eps').textContent, '11,11');
+  assert.equal($('calc-rec-ex-cimento').textContent, '466.67');
+  assert.equal($('calc-rec-ex-eps').textContent, '11.11');
   assert.equal($('calc-rec-aviso').hidden, true);
 });
 
@@ -137,10 +136,10 @@ test('DOM: montar é idempotente (2ª chamada não duplica linhas nem eventos)',
   assert.equal($('calc-rec-body').querySelectorAll('tr').length, 5);
 });
 
-test('DOM: mudar o alvo recalcula; milhar aparece na tela mas NÃO no texto copiado', () => {
+test('DOM: mudar o alvo recalcula; tela e texto copiado iguais, sem milhar', () => {
   digitar('calc-rec-bercos-alvo', 9);
   assert.equal($('calc-rec-fator').textContent, '1');
-  assert.equal($('calc-rec-ex-cimento').textContent, '1.050');
+  assert.equal($('calc-rec-ex-cimento').textContent, '1050');
   assert.equal($('calc-rec-ex-cimento').dataset.copiar, '1050');
   assert.equal($('calc-rec-ex-agua').dataset.copiar, '425');
 });
@@ -160,7 +159,7 @@ test('DOM: berços da receita inválido mostra o aviso e limpa o resultado', () 
 
   digitar('calc-rec-bercos-base', 9); // corrigiu → volta ao normal
   assert.equal($('calc-rec-aviso').hidden, true);
-  assert.equal($('calc-rec-ex-cimento').textContent, '466,67');
+  assert.equal($('calc-rec-ex-cimento').textContent, '466.67');
 });
 
 test('DOM: indicador A/C — ideal (verde), fora (vermelho) e sem cimento', () => {
@@ -169,15 +168,15 @@ test('DOM: indicador A/C — ideal (verde), fora (vermelho) e sem cimento', () =
   digitar('calc-rec-base-cimento', 1000);
   digitar('calc-rec-base-agua', 375);
   assert.ok(box.classList.contains('ok'));
-  assert.equal($('calc-rec-ac-val').textContent, '0,38');
-  assert.equal($('calc-rec-ac-msg').textContent, 'Ideal (0,35 a 0,40)');
+  assert.equal($('calc-rec-ac-val').textContent, '0.38');
+  assert.equal($('calc-rec-ac-msg').textContent, 'Ideal (0.35 a 0.40)');
 
   digitar('calc-rec-base-agua', 300);
   assert.ok(box.classList.contains('fora') && !box.classList.contains('ok'));
-  assert.equal($('calc-rec-ac-msg').textContent, 'Abaixo do ideal (0,35 a 0,40)');
+  assert.equal($('calc-rec-ac-msg').textContent, 'Abaixo do ideal (0.35 a 0.40)');
 
   digitar('calc-rec-base-agua', 500);
-  assert.equal($('calc-rec-ac-msg').textContent, 'Acima do ideal (0,35 a 0,40)');
+  assert.equal($('calc-rec-ac-msg').textContent, 'Acima do ideal (0.35 a 0.40)');
 
   digitar('calc-rec-base-cimento', 0);
   assert.ok(!box.classList.contains('ok') && !box.classList.contains('fora'));
@@ -192,7 +191,7 @@ test('DOM: "Restaurar padrão" devolve receita base, berços e resultado', () =>
   assert.equal($('calc-rec-bercos-base').value, '9');
   assert.equal($('calc-rec-bercos-alvo').value, '4');
   assert.equal($('calc-rec-base-cimento').value, '1050');
-  assert.equal($('calc-rec-ex-cimento').textContent, '466,67');
+  assert.equal($('calc-rec-ex-cimento').textContent, '466.67');
 });
 
 test('DOM: botão de copiar manda o valor SEM milhar pra área de transferência e dá feedback sem trocar o SVG', async () => {
@@ -248,7 +247,7 @@ test('DOM: cada insumo tem um botão − e um + ao lado da quantidade base', () 
 test('DOM: + aumenta o insumo pelo passo e o resultado recalcula na hora', () => {
   botaoPasso('cimento', 1).click();
   assert.equal($('calc-rec-base-cimento').value, '1060');
-  assert.equal($('calc-rec-ex-cimento').textContent, '471,11'); // 1060 * 4/9
+  assert.equal($('calc-rec-ex-cimento').textContent, '471.11'); // 1060 * 4/9
   botaoPasso('cimento', -1).click();
   botaoPasso('cimento', -1).click();
   assert.equal($('calc-rec-base-cimento').value, '1040');
@@ -277,7 +276,7 @@ test('DOM: mexer na água pelos botões atualiza o indicador A/C', () => {
   botaoPasso('agua', 1).click(); // 400 → ainda ideal
   botaoPasso('agua', 1).click(); // 405 → 0,405 acima
   assert.ok($('calc-rec-ac-box').classList.contains('fora'));
-  assert.equal($('calc-rec-ac-msg').textContent, 'Acima do ideal (0,35 a 0,40)');
+  assert.equal($('calc-rec-ac-msg').textContent, 'Acima do ideal (0.35 a 0.40)');
 });
 
 test('DOM: botões − / + não disparam o copiar nem mexem nos berços', () => {
@@ -319,7 +318,7 @@ test('DOM: + em "Quero encher" sobe 1 berço e o resultado recalcula', () => {
   botaoCampo('calc-rec-bercos-alvo', 1).click();
   assert.equal($('calc-rec-bercos-alvo').value, '5');
   assert.equal($('calc-rec-alvo-txt').textContent, '5');
-  assert.equal($('calc-rec-ex-cimento').textContent, '583,33'); // 1050 * 5/9
+  assert.equal($('calc-rec-ex-cimento').textContent, '583.33'); // 1050 * 5/9
   botaoCampo('calc-rec-bercos-alvo', -1).click();
   botaoCampo('calc-rec-bercos-alvo', -1).click();
   assert.equal($('calc-rec-bercos-alvo').value, '3');
@@ -329,7 +328,7 @@ test('DOM: + em "Quero encher" sobe 1 berço e o resultado recalcula', () => {
 test('DOM: − em "Esta receita enche" muda o fator (9 → 8 berços: 4/8 = 0,5)', () => {
   botaoCampo('calc-rec-bercos-base', -1).click();
   assert.equal($('calc-rec-bercos-base').value, '8');
-  assert.equal($('calc-rec-fator').textContent, '0,5');
+  assert.equal($('calc-rec-fator').textContent, '0.5');
   assert.equal($('calc-rec-ex-cimento').textContent, '525'); // 1050 * 0,5
 });
 

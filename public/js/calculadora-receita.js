@@ -57,19 +57,19 @@
   // ── Funções puras (sem DOM) ─────────────────────────────────
 
   /**
-   * Número no padrão pt-BR. `agrupar:false` tira o separador de milhar —
-   * usado no texto COPIADO: "1.050" colado num campo numérico do app seria
-   * lido como 1,05; "1050" não deixa dúvida.
+   * Número com ponto como separador decimal e SEM separador de milhar
+   * (ex.: 1050.5). Sem milhar, "1.050" não se confunde com 1,05 — e o mesmo
+   * texto serve para exibir e para copiar/colar num campo numérico.
    */
-  function formatar(valor, casas, agrupar = true) {
-    return valor.toLocaleString('pt-BR', {
+  function formatar(valor, casas) {
+    return valor.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: casas,
-      useGrouping: agrupar,
+      useGrouping: false,
     });
   }
 
-  const duasCasas = v => v.toFixed(2).replace('.', ',');
+  const duasCasas = v => v.toFixed(2);
 
   /** Casas decimais de um número (pela sua representação em texto). */
   function decimaisDe(n) {
@@ -229,7 +229,7 @@
       COMPONENTES.forEach(c => {
         const s = el('calc-rec-ex-' + c.id);
         s.textContent = formatar(r.itens[c.id], c.dec);
-        s.dataset.copiar = formatar(r.itens[c.id], c.dec, false);
+        s.dataset.copiar = formatar(r.itens[c.id], c.dec);
       });
     }
 
