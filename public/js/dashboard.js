@@ -925,7 +925,9 @@
       // Para insumos, soma-se tudo
       const total = ajustes.reduce((s, a) => s + (parseFloat(a) || 0), original);
       if (val.original === '' && ajustes.length === 0) return '—';
-      return total;
+      // Arredonda pra matar o ruído de ponto flutuante (430.6 + 0.6 dá
+      // 431.20000000000005) — vale pra tela, ordenação e exportação.
+      return Math.round(total * 1000) / 1000;
     }
     return val;
   }

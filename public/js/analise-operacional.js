@@ -1097,29 +1097,27 @@
   }
 
   // ── Init / boot ───────────────────────────────────────────
+  // Período padrão do filtro de data desta tela (dias para trás, a partir de
+  // hoje). Separado de LW.DIAS_PERIODO_PADRAO (10 dias), usado por Registro
+  // de Baterias, Relatório de Injeção e Relatório de Berços.
+  const DIAS_PERIODO_ANALISE_OPERACIONAL = 30;
+
   async function init() {
     // Ativa o estado de carregamento visual
     document.getElementById('ao-loading').style.display = 'block';
 
-    // Busca só pra pré-preencher os filtros de data com o intervalo real
-    // dos dados (1º registro → mais recente) — render(), chamado no final,
-    // busca os dados de novo (sempre fresco, ver comentário lá); não dá pra
-    // reaproveitar esta busca porque render() já filtra pelo que for
-    // digitado nos campos de data, que ainda não existe neste ponto.
-    let all = [];
-    try {
-      const res = await fetch('db/historico.json');
-      if (res.ok) all = await res.json();
-    } catch (e) { /* render(), abaixo, trata a falha de novo e mostra o estado vazio */ }
-
-    // Prefill datas
-    if (all.length) {
-      const dates = all.map(r=>r.data).filter(Boolean).sort();
-      const ini = document.getElementById('ao-data-inicio');
-      const fim = document.getElementById('ao-data-fim');
-      if (ini && !ini.value) ini.value = dates[0];
-      if (fim && !fim.value) fim.value = dates[dates.length-1];
-    }
+    // Sempre que a tela abre, o filtro de data começa nos últimos 30 dias:
+    // de 30 dias atrás até hoje (Brasília) — em vez de pegar todo o período
+    // disponível no histórico. render(), chamado no final, busca os dados
+    // (sempre fresco, ver comentário lá) e filtra por estas datas. O usuário
+    // continua podendo mudar "De"/"Até" e clicar em Filtrar.
+    const fimPadrao = nowBrasilia();
+    const iniPadrao = new Date(fimPadrao);
+    iniPadrao.setUTCDate(iniPadrao.getUTCDate() - DIAS_PERIODO_ANALISE_OPERACIONAL);
+    const iniEl0 = document.getElementById('ao-data-inicio');
+    const fimEl0 = document.getElementById('ao-data-fim');
+    if (iniEl0) iniEl0.value = iniPadrao.toISOString().split('T')[0];
+    if (fimEl0) fimEl0.value = fimPadrao.toISOString().split('T')[0];
 
     const btn = document.getElementById('btn-ao-filtrar');
     if (btn) btn.addEventListener('click', render);
