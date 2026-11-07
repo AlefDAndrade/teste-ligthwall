@@ -90,6 +90,7 @@ async function registrarOperacaoAntiga(idOp) {
 }
 
 const esperar = (ms = 200) => new Promise(r => setTimeout(r, ms));
+const ligarSeparados = () => document.getElementById('dim-btn-modo-separado').click();
 const celula = (berco, lado) => document.querySelector(`#dim-bercos button[data-berco="${berco}"][data-lado="${lado}"]`);
 const buscar = async (idOp) => (await fetch(`${servidor.baseUrl}/db/historico.json`).then(r => r.json())).find(o => o.id === idOp);
 
@@ -151,6 +152,7 @@ test('corrigir por PAINEL: só o lado direito do berço 1 e o esquerdo do berço
 
   await window._eoAbrirModalDimensoes();
   document.getElementById('dim-valor').value = '9,5';
+  ligarSeparados();
   celula(0, 'direita').click();
   celula(1, 'esquerda').click();
   document.getElementById('dim-btn-confirmar').click();
@@ -186,6 +188,7 @@ test('reabrir a edição de uma operação já corrigida: o modal traz as dimens
   await esperar(150);
   assert.equal(document.getElementById('eo-dimensao').value, '9 cm + 9,5 cm');
   await window._eoAbrirModalDimensoes();
+  ligarSeparados();
   assert.match(celula(2, 'direita').textContent, /9,5 cm/);
   assert.match(celula(2, 'esquerda').textContent, /9,5 cm/);
   document.getElementById('dim-btn-restaurar').click();

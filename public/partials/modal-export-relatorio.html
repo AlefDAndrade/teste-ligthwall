@@ -62,7 +62,8 @@
         <span id="expr-preview-count" style="font-size:.82rem;color:var(--text-3)"></span>
         <div style="display:flex;gap:10px">
           <button class="btn btn-ghost" onclick="LWDash.fecharExportModalRelatorio()">Cancelar</button>
-          <button class="btn btn-primary" onclick="LWDash.confirmarExportRelatorio()">⬇ Baixar Excel (.xlsx)</button>
+          <button class="btn btn-ghost" onclick="LWDash.confirmarExportRelatorio(false)">⬇ Sem os ajustes</button>
+          <button class="btn btn-primary" onclick="LWDash.confirmarExportRelatorio(true)">⬇ Com os ajustes</button>
         </div>
       </div>
 

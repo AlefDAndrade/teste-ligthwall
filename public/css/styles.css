@@ -1849,6 +1849,18 @@ td.mono {
   white-space: nowrap;
 }
 
+.relatorio-ajusteN-original td {
+  background: rgba(255, 255, 255, .03);
+}
+
+.relatorio-ajusteN-original .relatorio-ajusteN-num {
+  color: var(--text-2);
+}
+
+.relatorio-ajusteN-de {
+  color: var(--text-3);
+}
+
 .relatorio-ajusteN-vazio {
   color: var(--text-3);
   font-family: var(--font-mono);

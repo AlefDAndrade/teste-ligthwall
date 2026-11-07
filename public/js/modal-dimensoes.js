@@ -19,6 +19,11 @@
   let trabalho = [];   // dimensão EFETIVA de cada lado de cada berço: [{ direita, esquerda }]
   let baseTrab = '';   // dimensão geral (padrão da bateria) de trabalho
   let opcoes = null;   // opções da abertura atual (ver abrir)
+  // "🔀 Berços Separados" (mesma ideia da Montagem Personalizada, ver
+  // operacao.js): desligado = 1 botão por berço (aplica nos 2 lados);
+  // ligado = cada berço vira 2 metades (Direito/Esquerdo) clicáveis
+  // separadamente. Sempre começa desligado.
+  let modoSeparado = false;
 
   const el = id => document.getElementById(id);
 
@@ -31,25 +36,51 @@
     });
   }
 
+  // Texto curto de um berço no modo "inteiro": a dimensão, ou as duas
+  // ("9 cm / 9,5 cm") se os lados são diferentes.
+  function textoBerco(lados) {
+    const dir = lados.direita || '—';
+    const esq = lados.esquerda || '—';
+    return dir === esq ? dir : `${dir} / ${esq}`;
+  }
+
   function renderizar() {
     const grade = el('dim-bercos');
     if (!grade) return;
-    const meia = (i, lado, rotulo) => {
-      const dim = trabalho[i][lado];
-      const is8 = LW.dimensaoUsaPlaca8mm(dim);
-      return `<button type="button" class="btn btn-outline-accent btn-sm" data-berco="${i}" data-lado="${lado}"
-        title="${rotulo} do berço ${i + 1}"
-        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 2px;min-width:0;border-color:${is8 ? 'var(--accent)' : 'var(--border)'};color:${is8 ? 'var(--accent)' : 'var(--text-2)'}">
-        <span style="font-size:.58rem;opacity:.8">${rotulo.charAt(0)}</span>
-        <strong style="font-size:.74rem;white-space:nowrap">${LW.escaparHtml(dim || '—')}</strong>
-      </button>`;
-    };
-    grade.innerHTML = trabalho.map((_l, i) => `
-      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:5px;display:flex;flex-direction:column;gap:4px">
-        <button type="button" class="btn btn-ghost btn-sm" data-berco="${i}" data-lado="ambos" title="Aplicar nos dois lados do berço ${i + 1}"
-          style="padding:2px 4px;font-size:.7rem">Berço ${i + 1}</button>
-        <div style="display:flex;gap:4px">${meia(i, 'direita', 'Direita')}${meia(i, 'esquerda', 'Esquerda')}</div>
-      </div>`).join('');
+    // Painel de 8 mm (9,5 cm) fica destacado na cor de destaque — é a
+    // particularidade da Dimensão (na Montagem o destaque é a cor do tipo).
+    const estilo8 = is8 => `border:1px solid ${is8 ? 'var(--accent)' : 'var(--border)'};color:${is8 ? 'var(--accent)' : 'var(--text-2)'}`;
+
+    if (modoSeparado) {
+      // Cada berço = 2 metades clicáveis (Direito em cima / Esquerdo
+      // embaixo) — mesmo visual da grade "Berços Separados" da Montagem.
+      grade.innerHTML = trabalho.map((lados, i) => {
+        const numero = String(i + 1).padStart(2, '0');
+        const metade = (lado, rotulo, titulo, ultima) => {
+          const dim = lados[lado];
+          const is8 = LW.dimensaoUsaPlaca8mm(dim);
+          return `<button type="button" data-berco="${i}" data-lado="${lado}" title="${titulo}"
+            style="display:block;width:100%;padding:5px 4px;font-size:.7rem;text-align:center;cursor:pointer;border:0;${ultima ? '' : 'border-bottom:1px solid var(--border);'}
+                   background:var(--bg-2);color:${is8 ? 'var(--accent)' : 'var(--text-2)'}">
+            ${rotulo}: ${LW.escaparHtml(dim || '—')}
+          </button>`;
+        };
+        return `
+        <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          <div style="font-size:.68rem;text-align:center;padding:2px 0;background:var(--bg-2);color:var(--text-3)">B${numero}</div>
+          ${metade('direita', 'D', 'Direito', false)}${metade('esquerda', 'E', 'Esquerdo', true)}
+        </div>`;
+      }).join('');
+    } else {
+      grade.innerHTML = trabalho.map((lados, i) => {
+        const numero = String(i + 1).padStart(2, '0');
+        const is8 = LW.dimensaoUsaPlaca8mm(lados.direita) || LW.dimensaoUsaPlaca8mm(lados.esquerda);
+        return `<button type="button" data-berco="${i}" data-lado="ambos" title="Aplicar nos dois lados do berço ${i + 1}"
+          style="padding:8px 4px;border-radius:var(--radius);font-size:.74rem;text-align:center;cursor:pointer;background:var(--bg-2);${estilo8(is8)}">
+          B${numero}<br><strong>${LW.escaparHtml(textoBerco(lados))}</strong>
+        </button>`;
+      }).join('');
+    }
     grade.querySelectorAll('button[data-berco]').forEach(b => {
       b.addEventListener('click', () => {
         const i = Number(b.dataset.berco);
@@ -73,7 +104,8 @@
   }
 
   // Aplica a dimensão digitada em "Dimensão a aplicar" aos berços de..até
-  // (índices 0-based), no lado indicado: 'ambos' | 'direita' | 'esquerda'.
+  // (índices 0-based), no lado indicado: 'ambos' | 'direita' | 'esquerda'
+  // ('direita'/'esquerda' só vêm do clique numa metade, com "Berços Separados" ligado).
   function aplicar(de, ate, lado) {
     const valor = LW.formatarDimensaoLive(el('dim-valor').value.trim(), true);
     if (!valor) {
@@ -108,6 +140,7 @@
     opcoes = o;
     baseTrab = o.dimensaoBase || '';
     trabalho = LW.dimensoesEfetivasPorLado(o.capacidade, o.dimensaoBase, o.bercosDimensoes).map(l => ({ ...l }));
+    modoSeparado = false; // sempre começa desligado, como na Montagem Personalizada
 
     const existente = el('modal-dimensoes');
     if (existente) existente.remove();
@@ -116,16 +149,25 @@
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px';
     modal.innerHTML = `
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-                  padding:28px;width:680px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="font-size:2rem;margin-bottom:6px">⚙️</div>
-          <h2 style="font-family:var(--font-display);font-size:1.2rem;color:var(--accent);margin:0">Dimensões — Bateria ${LW.escaparHtml(o.titulo || '')}</h2>
+                  padding:32px;width:560px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)">
+        <div style="text-align:center;margin-bottom:18px">
+          <div style="font-size:2.2rem;margin-bottom:8px">⚙️</div>
+          <h2 style="font-family:var(--font-display);font-size:1.25rem;color:var(--accent);margin:0">Dimensões — Bateria ${LW.escaparHtml(o.titulo || '')}</h2>
           <p style="color:var(--text-2);font-size:.8rem;margin-top:8px;line-height:1.4">
-            Digite uma dimensão em "Dimensão a aplicar" e clique no berço (os dois lados) ou em Direita/Esquerda (só aquele painel). Painéis de 9,5 cm usam placa de 8 mm.
+            Digite uma dimensão em "Dimensão a aplicar" e clique nos berços — ou use "De/Até" ou "Todos" para aplicar de uma vez. Berço com 2 dimensões diferentes? Ligue "🔀 Berços Separados" abaixo. Painéis de 9,5 cm usam placa de 8 mm.
           </p>
         </div>
+
         <div id="dim-erro" style="display:none;color:var(--red);font-size:.82rem;margin-bottom:10px"></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+
+        <div style="margin-bottom:12px">
+          <button type="button" id="dim-btn-modo-separado" class="btn btn-outline-accent btn-sm"
+            title="Liga/desliga a divisão de CADA berço em 2 metades (Direito/Esquerdo) clicáveis independentemente — para berços com 2 dimensões diferentes">
+            🔀 Berços Separados: Desligado
+          </button>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap">
           <div class="form-group" style="margin:0">
             <label class="form-label">Dimensão padrão da bateria</label>
             <input type="text" id="dim-base" class="form-input" style="width:130px" inputmode="decimal" value="${LW.escaparHtml(baseTrab)}">
@@ -134,27 +176,25 @@
             <label class="form-label">Dimensão a aplicar</label>
             <input type="text" id="dim-valor" class="form-input" style="width:130px" inputmode="decimal" placeholder="Ex: 9,5">
           </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap">
           <div class="form-group" style="margin:0">
             <label class="form-label">De</label>
-            <input type="number" id="dim-de" class="form-input" style="width:70px" min="1" max="${o.capacidade}">
+            <input type="number" id="dim-de" class="form-input" style="width:80px" min="1" max="${o.capacidade}">
           </div>
           <div class="form-group" style="margin:0">
             <label class="form-label">Até</label>
-            <input type="number" id="dim-ate" class="form-input" style="width:70px" min="1" max="${o.capacidade}">
-          </div>
-          <div class="form-group" style="margin:0">
-            <label class="form-label">Aplicar em</label>
-            <select id="dim-lado" class="form-input" style="width:110px">
-              <option value="ambos">Ambos</option>
-              <option value="direita">Direita</option>
-              <option value="esquerda">Esquerda</option>
-            </select>
+            <input type="number" id="dim-ate" class="form-input" style="width:80px" min="1" max="${o.capacidade}">
           </div>
           <button type="button" id="dim-btn-aplicar" class="btn btn-outline-accent btn-sm">Aplicar</button>
-          <button type="button" id="dim-btn-todos" class="btn btn-outline-accent btn-sm">Todos</button>
+          <button type="button" id="dim-btn-todos" class="btn btn-outline-accent btn-sm"
+            title="Aplica a dimensão em todos os berços">✅ Todos</button>
         </div>
+
         <div id="dim-resumo" style="font-size:.78rem;color:var(--text-2);margin-bottom:12px;line-height:1.5"></div>
-        <div id="dim-bercos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:20px"></div>
+        <div id="dim-bercos" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px"></div>
+
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <button type="button" id="dim-btn-restaurar" class="btn btn-ghost btn-sm" title="Todos os painéis voltam à dimensão padrão da bateria">↺ Restaurar padrão</button>
           <div style="display:flex;gap:12px">
@@ -174,16 +214,24 @@
     };
     el('dim-base').addEventListener('input', formatarAoDigitar);
     el('dim-valor').addEventListener('input', formatarAoDigitar);
+    el('dim-btn-modo-separado').addEventListener('click', () => {
+      modoSeparado = !modoSeparado;
+      const btn = el('dim-btn-modo-separado');
+      btn.textContent = `🔀 Berços Separados: ${modoSeparado ? 'Ligado' : 'Desligado'}`;
+      btn.classList.toggle('btn-accent', modoSeparado);
+      btn.classList.toggle('btn-outline-accent', !modoSeparado);
+      renderizar();
+    });
     el('dim-btn-aplicar').addEventListener('click', () => {
       const de = parseInt(el('dim-de').value, 10);
       const ate = parseInt(el('dim-ate').value, 10);
-      if (!de || !ate || de > ate || de < 1 || ate > trabalho.length) {
-        mostrarErro(`Informe uma faixa válida de berços (1 a ${trabalho.length}).`);
+      if (!de || !ate || de < 1 || ate < de || ate > trabalho.length) {
+        mostrarErro(`Informe um intervalo válido (de 1 até ${trabalho.length}).`);
         return;
       }
-      aplicar(de - 1, ate - 1, el('dim-lado').value);
+      aplicar(de - 1, ate - 1, 'ambos');
     });
-    el('dim-btn-todos').addEventListener('click', () => aplicar(0, trabalho.length - 1, el('dim-lado').value));
+    el('dim-btn-todos').addEventListener('click', () => aplicar(0, trabalho.length - 1, 'ambos'));
     el('dim-btn-restaurar').addEventListener('click', () => {
       const base = LW.formatarDimensaoLive(el('dim-base').value.trim(), true) || baseTrab;
       trabalho = trabalho.map(() => ({ direita: base, esquerda: base }));

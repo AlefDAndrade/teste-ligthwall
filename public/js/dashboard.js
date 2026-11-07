@@ -1080,6 +1080,24 @@
     { nome: 'incorporador', label: 'Incorp. de Ar', unidade: 'kg' },
   ];
 
+  // Converte pra número; '' / null / undefined / NaN → null.
+  function _numOuNull(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+
+  // Célula de leitura N de densidade/flow no formato "anterior → atual"
+  // (anterior = leitura N-1, ou o original quando N é a primeira). Sem
+  // valor anterior conhecido (original não informado), mostra só o atual.
+  function _fmtLeituraComAnterior(leituras, i, original) {
+    if (leituras[i] === undefined) return '—';
+    const atual = _fmtNumDetalhe(leituras[i]);
+    const anterior = i === 0 ? original : _numOuNull(leituras[i - 1]);
+    if (anterior === null) return atual;
+    return `<span class="relatorio-ajusteN-de">${_fmtNumDetalhe(anterior)}</span> → ${atual}`;
+  }
+
   // Monta a mini tabela unificada (insumos por evento + densidade/flow por
   // leitura). `leiturasExtras` é { densidade: [...], flow: [...] } — listas
   // já em ORDEM (ver l.densidade.ajustes/l.flow.ajustes, ambos no formato
@@ -1096,6 +1114,11 @@
 
     const densidadeLeituras = (leiturasExtras && leiturasExtras.densidade) || [];
     const flowLeituras = (leiturasExtras && leiturasExtras.flow) || [];
+    // Valor ORIGINAL (planejado) de densidade/flow — ponto de partida das
+    // leituras. Sem ele o histórico só mostrava o resultado final de cada
+    // ajuste (ex: "Flow 40"), sem dizer de quanto veio (ex: 33).
+    const densidadeOriginal = _numOuNull(leiturasExtras && leiturasExtras.densidadeOriginal);
+    const flowOriginal = _numOuNull(leiturasExtras && leiturasExtras.flowOriginal);
     const maxLinhas = Math.max(eventos.length, densidadeLeituras.length, flowLeituras.length);
     if (!maxLinhas) return null;
 
@@ -1112,7 +1135,23 @@
       eventos.flatMap(aj => Object.keys(aj?.insumos_custom || {}))
     )];
 
+    // Linha "Original" no topo — só quando há coluna de densidade/flow
+    // visível E o respectivo original foi informado.
+    const mostrarOriginalDens = densidadeLeituras.length > 0 && densidadeOriginal !== null;
+    const mostrarOriginalFlow = flowLeituras.length > 0 && flowOriginal !== null;
     const linhas = [];
+    if (mostrarOriginalDens || mostrarOriginalFlow) {
+      const celulasVazias = '<td class="relatorio-ajusteN-vazio">—</td>'
+        .repeat(colunasInsumo.length + nomesCustom.length);
+      linhas.push(`
+        <tr class="relatorio-ajusteN-original">
+          <td class="relatorio-ajusteN-num">Original</td>
+          <td class="relatorio-ajusteN-quando">—</td>
+          ${celulasVazias}
+          ${densidadeLeituras.length ? `<td class="mono">${mostrarOriginalDens ? _fmtNumDetalhe(densidadeOriginal) : '—'}</td>` : ''}
+          ${flowLeituras.length ? `<td class="mono">${mostrarOriginalFlow ? _fmtNumDetalhe(flowOriginal) : '—'}</td>` : ''}
+        </tr>`);
+    }
     for (let i = 0; i < maxLinhas; i++) {
       const aj = eventos[i];
       const celulasInsumo = colunasInsumo.map(def => {
@@ -1130,10 +1169,10 @@
       }).join('');
 
       const celulaDensidade = densidadeLeituras.length
-        ? `<td class="mono">${densidadeLeituras[i] !== undefined ? _fmtNumDetalhe(densidadeLeituras[i]) : '—'}</td>`
+        ? `<td class="mono">${_fmtLeituraComAnterior(densidadeLeituras, i, densidadeOriginal)}</td>`
         : '';
       const celulaFlow = flowLeituras.length
-        ? `<td class="mono">${flowLeituras[i] !== undefined ? _fmtNumDetalhe(flowLeituras[i]) : '—'}</td>`
+        ? `<td class="mono">${_fmtLeituraComAnterior(flowLeituras, i, flowOriginal)}</td>`
         : '';
 
       linhas.push(`
@@ -1172,6 +1211,11 @@
       : [];
   }
 
+  // Valor original (planejado) de um campo "resultado" { original, ajustes }.
+  function _originalDoCampo(valorBruto) {
+    return (valorBruto && typeof valorBruto === 'object') ? valorBruto.original : null;
+  }
+
   // Monta o painel completo de detalhamento de reajustes pra um traço `l`.
   // entradaAjustes (opcional) é a entrada de ajustes_tracos.json pra este
   // id_traco, se existir — buscada uma única vez em renderRelatorio().
@@ -1185,6 +1229,8 @@
     const leiturasExtras = {
       densidade: _leiturasDoCampo(l.densidade),
       flow: _leiturasDoCampo(l.flow),
+      densidadeOriginal: _originalDoCampo(l.densidade),
+      flowOriginal: _originalDoCampo(l.flow),
     };
 
     const tabela = _construirTabelaAjustesPorEvento(entradaAjustes, leiturasExtras);
@@ -1713,6 +1759,48 @@
     { campo: 'obs', header: 'Observações', padrao: true },
   ];
 
+  // Colunas EXTRAS da exportação "Com os ajustes" — sempre anexadas ao final
+  // das colunas escolhidas no modal. Cada célula é um texto com o caminho
+  // completo (original → ajustes), já que um traço pode ter N ajustes e
+  // o número de colunas da planilha precisa ser fixo.
+  const EXPORT_COLUNAS_INJECAO_AJUSTES = [
+    { campo: 'hist_densidade', header: 'Histórico Densidade' },
+    { campo: 'hist_flow', header: 'Histórico Flow' },
+    { campo: 'hist_insumos', header: 'Ajustes de Insumos' },
+  ];
+
+  // Densidade/Flow (leituras): "33 → 40 → 38" (original → leituras). Vazio
+  // se o traço nunca foi reajustado — nesse caso a coluna normal já diz tudo.
+  function _historicoResultadoExport(valorBruto) {
+    if (!valorBruto || typeof valorBruto !== 'object' || !Array.isArray(valorBruto.ajustes) || !valorBruto.ajustes.length) return '';
+    const original = _numOuNull(valorBruto.original);
+    const sequencia = [...(original !== null ? [original] : []), ...valorBruto.ajustes.map(Number)];
+    return sequencia.map(v => _fmtNumDetalhe(v)).join(' → ');
+  }
+
+  // Insumos + tempo de batida (padrão e custom) que tiveram ajuste:
+  // "Cimento: 100kg → +5kg → +3kg → 108kg | Água: ..." (mesma lógica do
+  // painel de detalhe na tela). Vazio se nenhum insumo foi reajustado.
+  function _historicoInsumosExport(l) {
+    const itens = _CAMPOS_DETALHE_RELATORIO
+      .filter(def => !def.resultado)
+      .map(def => ({ def, bruto: l[def.campo] }));
+    Object.entries(l.insumos_custom || {}).forEach(([nome, bruto]) => {
+      itens.push({ def: { campo: nome, label: nome, unidade: 'kg', resultado: false }, bruto });
+    });
+    return itens.map(({ def, bruto }) => {
+      if (!bruto || typeof bruto !== 'object' || !Array.isArray(bruto.ajustes) || !bruto.ajustes.length) return null;
+      const original = _numOuNull(bruto.original);
+      const final = bruto.ajustes.reduce((soma, a) => soma + (parseFloat(a) || 0), original ?? 0);
+      const passos = bruto.ajustes.map(a => {
+        const n = parseFloat(a);
+        return (n >= 0 ? '+' : '') + _fmtValorDetalhe(def, n);
+      });
+      const caminho = [...(original !== null ? [_fmtValorDetalhe(def, original)] : []), ...passos, _fmtValorDetalhe(def, final)];
+      return `${def.label}: ${caminho.join(' → ')}`;
+    }).filter(Boolean).join(' | ');
+  }
+
   /**
    * "Achata" relatorio_injecao.json em 1 linha por (traço × uso) — mesma
    * expansão já feita em renderRelatorio() pra exibição na tela (um traço
@@ -1720,7 +1808,7 @@
    * {original, ajustes} pro valor TOTAL exibido na tabela (via _valRel),
    * em vez do original sozinho.
    */
-  function _gerarLinhasExportRelatorio(linhas) {
+  function _gerarLinhasExportRelatorio(linhas, comAjustes = false) {
     const out = [];
     (linhas || []).forEach(l => {
       const usos = (l.ultilizado?.operacao && l.ultilizado.operacao.length) ? l.ultilizado.operacao : [{}];
@@ -1757,6 +1845,13 @@
           incorporador: valorOuReciclado(_valRel(l.incorporador_real)),
           tempo_batida_seg: tempoTotal,
           obs: (op.obs !== undefined ? op.obs : l.obs) || '',
+          // Histórico é do TRAÇO (texto, não soma) — repetido em todo uso
+          // do traço reaproveitado, diferente do insumo acima.
+          ...(comAjustes ? {
+            hist_densidade: _historicoResultadoExport(l.densidade),
+            hist_flow: _historicoResultadoExport(l.flow),
+            hist_insumos: _historicoInsumosExport(l),
+          } : {}),
         });
       });
     });
@@ -1816,7 +1911,10 @@
     if (el) el.textContent = qtdLinhasExport + ' registros · ' + qtdCols + ' colunas selecionadas';
   }
 
-  async function confirmarExportRelatorio() {
+  // comAjustes === true → anexa as colunas de EXPORT_COLUNAS_INJECAO_AJUSTES
+  // (histórico de ajustes); qualquer outro valor → exportação sem ajustes.
+  async function confirmarExportRelatorio(comAjustes) {
+    comAjustes = comAjustes === true;
     const linhas = await LW.getRelatorioInjecao();
     let dados = linhas;
     let sufixo = 'completo';
@@ -1833,8 +1931,12 @@
       return el && el.checked;
     });
     if (!colsSel.length) { LW.mostrarAlerta('Selecione ao menos uma coluna.', { tipo: 'aviso' }); return; }
+    if (comAjustes) {
+      colsSel.push(...EXPORT_COLUNAS_INJECAO_AJUSTES);
+      sufixo += '_com_ajustes';
+    }
 
-    const linhasExport = _gerarLinhasExportRelatorio(dados);
+    const linhasExport = _gerarLinhasExportRelatorio(dados, comAjustes);
     await gerarDownloadXLSX(linhasExport, colsSel, sufixo, { nomeAba: 'Traços', prefixoArquivo: 'lightwall_relatorio_injecao_' });
     fecharExportModalRelatorio();
   }
