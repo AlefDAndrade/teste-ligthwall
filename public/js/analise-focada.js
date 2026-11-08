@@ -840,10 +840,28 @@
         return `<div>${label}: <strong ${cor}>${valor === null || valor === undefined ? '—' : valor + (unidade ? ' ' + unidade : '')}</strong></div>`;
       }).join('');
 
+      // Linha "Original" no topo dos ajustes — mesma regra do painel de
+      // detalhe do Relatório de Injeção (_construirTabelaAjustesPorEvento,
+      // dashboard.js): só aparece quando há leitura de densidade/flow nos
+      // ajustes E o respectivo valor original (planejado) foi informado.
+      const _origNum = v => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
+      const densidadeOriginal = _origNum(t.original && t.original.densidade);
+      const flowOriginal = _origNum(t.original && t.original.flow);
+      const mostrarOriginalDens = densidadeLeituras.length > 0 && densidadeOriginal !== null;
+      const mostrarOriginalFlow = flowLeituras.length > 0 && flowOriginal !== null;
+      const linhaOriginalHtml = (mostrarOriginalDens || mostrarOriginalFlow)
+        ? `<div class="af-ajuste-linha">
+             <strong>Original</strong>
+             ${mostrarOriginalDens ? `<span>Densidade ${_fmtLeitura(densidadeOriginal, 0)} kg/m³</span>` : ''}
+             ${mostrarOriginalFlow ? `<span>Flow ${_fmtLeitura(flowOriginal, 1)}</span>` : ''}
+           </div>`
+        : '';
+
       const ajustesHtml = semAjuste
         ? `<div class="af-sem-ajuste">Receita sem ajuste.</div>`
         : `<div class="af-ajustes-wrap">
              <div class="af-ajustes-titulo">${numLinhas} ajuste${numLinhas > 1 ? 's' : ''} de receita</div>
+             ${linhaOriginalHtml}
              ${Array.from({ length: numLinhas }, (_, i) => {
                const a = t.ajustes[i];
                const dens = densidadeLeituras[i];
