@@ -2781,6 +2781,22 @@
       </div>`;
   }
 
+  // Ajuste de Traço (popover no cabeçalho de "Traços de Injeção" — ver
+  // ajuste-traco.js): mantém o flow e a densidade MEDIDOS do traço aberto
+  // prontos pra ferramenta. Vale o valor ATUAL de cada um (totalInsumo: o
+  // último ajuste vence; sem ajuste, o original). Sem `forcar`, só repassa
+  // se a leitura mudou — ver LWAjusteTraco.preencherLeitura.
+  function _sincronizarAjusteTraco(forcar) {
+    if (!window.LWAjusteTraco) return;
+    const t = state.tracos[expandedTracoIndex];
+    if (!t) return;
+    window.LWAjusteTraco.preencherLeitura({
+      rotulo: 'Traço ' + t.num,
+      flowMm: totalInsumo(t.flow_insumo, 'flow'),
+      densidade: totalInsumo(t.densidade_insumo, 'densidade'),
+    }, forcar);
+  }
+
   function renderTracos() {
     const container = $('tracos-container');
     if (!container) return;
@@ -2915,6 +2931,8 @@
     });
 
     container.innerHTML = html;
+    // Troca de traço, traço novo/removido, Ajuste de Receita gravado…
+    _sincronizarAjusteTraco();
   }
 
   function updatePendencias() {
@@ -3800,6 +3818,8 @@
         insumo.original = value;
       }
       persist();
+      // Flow/densidade digitados no traço → o Ajuste de Traço já fica com a leitura nova.
+      if (field === 'flow_insumo' || field === 'densidade_insumo') _sincronizarAjusteTraco();
       // Cimento/água mudaram → atualiza só o mini-card de Relação A/C
       // (sem re-renderizar o traço inteiro, que tiraria o foco do campo
       // que a pessoa está digitando).
@@ -3918,6 +3938,8 @@
       const wasActive = el.classList.contains('active');
       document.querySelectorAll('.ao-popover').forEach(p => p.classList.remove('active'));
       if (!wasActive) el.classList.add('active');
+      // Ao abrir o Ajuste de Traço, sempre parte da leitura atual do traço aberto.
+      if (!wasActive && id === 'popover-ajuste-traco') _sincronizarAjusteTraco(true);
     },
     closeModal() {
       $('success-modal').style.display = 'none';

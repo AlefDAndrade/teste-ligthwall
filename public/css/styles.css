@@ -3192,6 +3192,325 @@ td.mono {
   }
 }
 
+/* ---- Ajuste de Traço (popover "🎯 Ajuste de Traço") ----
+   Markup em partials/page-operacao.html (cabeçalho do card "Traços de
+   Injeção"); lógica em js/ajuste-traco.js. Tudo escopado em .ajt* e feito
+   só com as variáveis do tema, pra funcionar em todos os temas sem cor fixa
+   (o âmbar dos avisos segue o mesmo rgba(245,158,11) dos outros avisos). */
+.ajt-wrap {
+  position: relative;
+  /* Empurra o botão pra ponta direita e deixa o título junto da barrinha azul
+     (sem isso o space-between do .card-title centraliza o título). */
+  margin-left: auto;
+}
+
+/* O botão fica na ponta direita do cabeçalho: o popover abre alinhado pela
+   direita (e a seta acompanha), em vez de sair pela borda da tela. */
+.ao-popover.ajt-popover {
+  left: auto;
+  right: 0;
+  width: 440px;
+  max-width: calc(100vw - 56px);
+  padding: 14px 16px;
+  /* O cabeçalho .card-title, onde o popover mora, deixa o texto em
+     caixa-alta, espaçado e apagado — aqui volta ao texto normal. */
+  font-family: var(--font-body);
+  font-size: .85rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  color: var(--text);
+}
+
+.ao-popover.ajt-popover::before {
+  left: auto;
+  right: 20px;
+}
+
+/* A rolagem fica aqui dentro (não no popover) pra não cortar a seta. */
+.ajt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(70vh, 620px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.ajt-h {
+  padding-left: 8px;
+  border-left: 3px solid var(--accent);
+  font-family: var(--font-display);
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.ajt-grade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ajt-grade .form-label,
+.ajt .form-group > .form-label {
+  display: block;
+  margin-bottom: 0;
+}
+
+.ajt .form-input {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+}
+
+.ajt .ajt-campo-grande {
+  padding: 9px 10px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.ajt-nota {
+  margin: 0;
+  font-size: .72rem;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* De onde vieram flow/densidade (traço aberto) — some quando vazio. */
+.ajt-origem {
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg-3);
+  color: var(--text);
+}
+
+.ajt-origem:empty {
+  display: none;
+}
+
+.ajt-resultado {
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+}
+
+.ajt-status {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ajt-status.ajt-ok {
+  color: var(--green);
+}
+
+.ajt-status.ajt-ruim {
+  color: var(--red);
+}
+
+.ajt-aviso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: rgba(245, 158, 11, .12);
+  border: 1px solid rgba(245, 158, 11, .3);
+  color: var(--accent);
+  font-size: .76rem;
+}
+
+/* Os th/td globais (styles.css) são pensados pras tabelas grandes de relatório:
+   th em caixa-alta, com 33px de padding e sem quebra de linha; td centralizado.
+   Aqui a tabela é pequena e de leitura corrida, então volta tudo ao normal. */
+.ajt-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+
+.ajt-tabela th,
+.ajt-tabela td {
+  padding: 7px 4px;
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  text-align: left;
+  vertical-align: top;
+  font-family: var(--font-body);
+  font-size: .82rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+
+.ajt-tabela th {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ajt-tabela td {
+  color: var(--text);
+}
+
+.ajt-tabela tr:first-child th,
+.ajt-tabela tr:first-child td {
+  border-top: none;
+}
+
+/* Tabela de doses: a quantidade fica na coluna da direita, alinhada à direita. */
+.ajt-doses td:last-child {
+  text-align: right;
+}
+
+.ajt-tabela th .ajt-nota {
+  font-weight: 400;
+}
+
+.ajt-tabela thead tr {
+  background: none;
+}
+
+.ajt-tabela thead th {
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.ajt-dose {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ajt-dose small {
+  font-family: var(--font-body);
+  font-size: .75rem;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+/* Régua: faixa-alvo (verde), leitura atual (anel) e previsão (ponto azul). */
+.ajt-medidor {
+  margin: 12px 0 4px;
+}
+
+.ajt-medidor-trilho {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-2);
+}
+
+.ajt-medidor-faixa {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(16, 185, 129, .25);
+}
+
+.ajt-medidor-atual,
+.ajt-medidor-previsto {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+}
+
+.ajt-medidor-atual {
+  border: 2px solid var(--text-2);
+  background: var(--bg-card);
+}
+
+.ajt-medidor-previsto {
+  background: var(--accent);
+}
+
+.ajt-medidor-legenda {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0 0;
+  font-size: .76rem;
+  color: var(--text-2);
+}
+
+.ajt-medidor-legenda b {
+  color: var(--text);
+}
+
+.ajt-detalhes {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 8px 12px;
+}
+
+.ajt-detalhes[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ajt-detalhes > summary {
+  cursor: pointer;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ajt-detalhes > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ajt-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ajt-csv {
+  width: 100%;
+  height: 100px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+}
+
+.ajt-csv[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ajt-medidor-atual,
+  .ajt-medidor-previsto {
+    transition: left .25s;
+  }
+}
+
+/* Celular: um campo por linha. */
+@media (max-width: 480px) {
+  .ajt-grade {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ============================================================
    ESTILOS PARA TRAÇOS REAPROVEITADOS
    ============================================================ */

@@ -310,6 +310,113 @@
           <div class="card">
             <div class="card-title" style="justify-content:space-between">
               <span>Traços de Injeção</span>
+              <!-- Ajuste de traço: sugere o que adicionar a partir do flow e da densidade medidos —
+                   lógica em js/ajuste-traco.js (monta o resultado, o registro e a calibração em #ajt). -->
+              <div class="ajt-wrap">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-ajuste-traco"
+                  title="Sugere o que adicionar ao traço a partir do flow e da densidade medidos"
+                  onclick="LWOp.togglePopover('popover-ajuste-traco', event)">
+                  🎯 Ajuste de Traço
+                </button>
+                <div id="popover-ajuste-traco" class="ao-popover ajt-popover">
+                  <div class="ajt" id="ajt">
+                    <div class="ajt-h">
+                      <span>Ajuste de traço</span>
+                    </div>
+                    <p class="ajt-nota">Informe a leitura medida e o alvo. A ferramenta sugere o que adicionar.</p>
+                    <!-- De onde vieram flow/densidade: preenchidos sozinhos com os do traço aberto (operacao.js). -->
+                    <p class="ajt-nota ajt-origem" id="ajt-origem"></p>
+
+                    <div class="ajt-grade">
+                      <div class="form-group">
+                        <label class="form-label" for="ajt-flow">Flow medido (cm)</label>
+                        <input class="form-input ajt-campo-grande" id="ajt-flow" data-calc="1" inputmode="decimal"
+                          placeholder="45">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="ajt-dens">Densidade medida (kg/m³)</label>
+                        <input class="form-input ajt-campo-grande" id="ajt-dens" data-calc="1" inputmode="decimal"
+                          placeholder="440">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="ajt-alvo-flow">Alvo de flow</label>
+                        <input class="form-input" id="ajt-alvo-flow" data-calc="1" inputmode="decimal" value="38">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="ajt-alvo-dens">Alvo de densidade</label>
+                        <input class="form-input" id="ajt-alvo-dens" data-calc="1" inputmode="decimal" value="450">
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="ajt-cimento-base">Cimento do traço (kg) — use o valor real se o
+                        traço for reduzido</label>
+                      <input class="form-input" id="ajt-cimento-base" data-calc="1" inputmode="decimal" value="1050">
+                    </div>
+
+                    <div class="ajt-resultado" id="ajt-resultado"></div>
+
+                    <details class="ajt-detalhes">
+                      <summary>Registrar resultado do ajuste</summary>
+                      <p class="ajt-nota">Preencha a leitura depois do ajuste e o que foi realmente usado. Isso alimenta
+                        a calibração.</p>
+                      <div class="ajt-grade">
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-depois-flow">Flow depois</label>
+                          <input class="form-input" id="ajt-depois-flow" inputmode="decimal">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-depois-dens">Densidade depois</label>
+                          <input class="form-input" id="ajt-depois-dens" inputmode="decimal">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-uso-cimento">Cimento (kg)</label>
+                          <input class="form-input" id="ajt-uso-cimento" inputmode="decimal" value="0">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-uso-agua">Água (kg)</label>
+                          <input class="form-input" id="ajt-uso-agua" inputmode="decimal" value="0">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-uso-sp">Superplast. (kg)</label>
+                          <input class="form-input" id="ajt-uso-sp" inputmode="decimal" value="0">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label" for="ajt-uso-eps">EPS (kg)</label>
+                          <input class="form-input" id="ajt-uso-eps" inputmode="decimal" value="0">
+                        </div>
+                      </div>
+                      <button type="button" class="btn btn-outline-accent btn-sm" id="ajt-btn-salvar">Salvar
+                        registro</button>
+                      <p class="ajt-nota" id="ajt-msg"></p>
+                    </details>
+
+                    <details class="ajt-detalhes">
+                      <summary>Registro e exportação</summary>
+                      <table class="ajt-tabela" id="ajt-registro"></table>
+                      <div class="ajt-acoes">
+                        <button type="button" class="btn btn-ghost btn-sm" id="ajt-btn-csv">Gerar CSV</button>
+                        <button type="button" class="btn btn-ghost btn-sm" id="ajt-btn-limpar">Limpar registro</button>
+                      </div>
+                      <textarea class="form-textarea ajt-csv" id="ajt-csv" readonly hidden></textarea>
+                    </details>
+
+                    <details class="ajt-detalhes">
+                      <summary>Calibração</summary>
+                      <p class="ajt-nota">Valores iniciais medidos em 198 ajustes (jun–nov/2026), por kg com
+                        cimento-base de 1050 kg. São indicativos. O efeito do EPS no flow e a dose de SP vêm de prática
+                        de campo.</p>
+                      <div class="ajt-grade" id="ajt-params"></div>
+                      <div class="ajt-acoes">
+                        <button type="button" class="btn btn-ghost btn-sm" id="ajt-btn-calibrar">Calibrar com o
+                          registro</button>
+                        <button type="button" class="btn btn-ghost btn-sm" id="ajt-btn-restaurar">Restaurar
+                          padrão</button>
+                      </div>
+                      <p class="ajt-nota" id="ajt-msg-calibracao"></p>
+                    </details>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="traco-section" id="tracos-container"></div>
             <button class="traco-add-btn mt-4" id="btn-add-traco">
